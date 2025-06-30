@@ -1,53 +1,47 @@
-// Импортируем только то, что нужно для отображения карточек плагинов
+/**
+ * test-harness.js
+ * 
+ * Главный скрипт для нашего UI (index.html).
+ * Его задачи:
+ * 1. Найти и отобразить все доступные плагины.
+ * 2. Собрать и инициализировать глобальный объект `window.hostApi`,
+ *    который будет использоваться мостом к Python.
+ */
+
+// Импортируем все необходимые модули
 import { getAvailablePlugins } from './core/plugin-manager.js';
 import { createPluginCard } from './ui/PluginCard.js';
+import { hostApi } from './core/host-api.js'; // <-- ВАЖНО: импортируем наш API-мост
 
-// --- Глобальная ЗАГЛУШКА для Host-API ---
-// Это критически важная часть. Наш Pyodide-мост (mcp-bridge.js) ищет
-// глобальный объект `window.hostApi`, чтобы передать его в Python.
-// Мы создаем этот объект здесь, чтобы все работало.
-window.hostApi = {
-    /**
-     * Отправляет сообщение от Python-плагина в наш UI-чат.
-     */
-    sendMessageToChat: (message) => {
-        const chatLog = document.getElementById('chat-log');
-        if (!chatLog) return; // Защита на случай, если элемент чата не найден
+// --- Инициализация глобального Host-API ---
+// Мы комбинируем API из разных частей:
+// 1. Берем за основу `hostApi` из `core/host-api.js` - он содержит
+//    функцию `getActivePageContent`, которая умеет общаться с background.js.
+window.hostApi = hostApi;
 
-        // Очищаем стартовое сообщение "Ожидание...", если это первое сообщение
-        if (chatLog.textContent === 'Ожидание запуска плагина...') {
-            chatLog.textContent = '';
-        }
+// 2. Добавляем (или переопределяем) функцию `sendMessageToChat`.
+//    Эта функция должна быть здесь, потому что только этот скрипт имеет
+//    прямой доступ к DOM-элементам `index.html`.
+window.hostApi.sendMessageToChat = (message) => {
+    const chatLog = document.getElementById('chat-log');
+    if (!chatLog) return; // Защита на случай, если элемент чата не найден
 
-        const messageElement = document.createElement('div');
-        // Формируем красивое сообщение для лога
-        messageElement.textContent = `[PY] [${new Date().toLocaleTimeString()}] ${message.content}`;
-        chatLog.appendChild(messageElement);
-        // Автоматически прокручиваем лог вниз, чтобы видеть последние сообщения
-        chatLog.scrollTop = chatLog.scrollHeight;
-    },
-    
-    /**
-     * Имитирует получение данных с веб-страницы.
-     * Возвращает Promise, как это делал бы настоящий асинхронный API.
-     */
-    getActivePageContent: async (selectors) => {
-        console.log('[Host-API заглушка] Python запросил контент страницы с селекторами:', selectors);
-        // Имитируем небольшую сетевую задержку для реалистичности
-        await new Promise(r => setTimeout(r, 200)); 
-        // Возвращаем тестовые данные
-        return {
-            title: "Заголовок из ЗАГЛУШКИ",
-            price: "9999 RUB",
-            reviews_count: 123
-        };
+    // Очищаем стартовое сообщение, если это первое сообщение от плагина
+    if (chatLog.textContent.includes('Ожидание запуска плагина...')) {
+        chatLog.textContent = '';
     }
+
+    const messageElement = document.createElement('div');
+    // Формируем красивое сообщение для лога
+    messageElement.textContent = `[PY] [${new Date().toLocaleTimeString()}] ${message.content}`;
+    chatLog.appendChild(messageElement);
+    // Автоматически прокручиваем лог вниз
+    chatLog.scrollTop = chatLog.scrollHeight;
 };
 
 console.log('Тестовый стенд инициализирован.');
 
-
-// --- Основная функция для отображения карточек плагинов ---
+// --- Основная логика отображения плагинов ---
 const pluginsListContainer = document.getElementById('plugins-list');
 
 async function displayPlugins() {
@@ -69,6 +63,5 @@ async function displayPlugins() {
     }
 }
 
-
-// --- Запускаем отображение плагинов при загрузке страницы ---
+// Запускаем отображение плагинов при загрузке страницы
 displayPlugins();

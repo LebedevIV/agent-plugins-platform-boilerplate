@@ -1,5 +1,8 @@
-importScripts('https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js');
-
+// --- ▼▼▼ ИЗМЕНЕНИЕ ЗДЕСЬ ▼▼▼ ---
+// Старый путь: importScripts('https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js');
+// Новый, локальный путь:
+importScripts('../pyodide/pyodide.js'); 
+// --- ▲▲▲ КОНЕЦ ИЗМЕНЕНИЯ ▲▲▲ ---
 let pyodide;
 const callPromises = new Map();
 

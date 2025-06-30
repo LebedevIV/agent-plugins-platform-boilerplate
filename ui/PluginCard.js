@@ -1,3 +1,10 @@
+/**
+ * ui/PluginCard.js
+ * 
+ * Отвечает за создание DOM-элемента (карточки) для одного плагина.
+ * Также вешает на карточку обработчик клика для запуска плагина.
+ */
+
 import { runTool } from '../bridge/mcp-bridge.js';
 
 export function createPluginCard(plugin) {
@@ -6,9 +13,15 @@ export function createPluginCard(plugin) {
 
     const icon = document.createElement('img');
     icon.className = 'plugin-icon';
-    icon.src = plugin.iconUrl;
+    
+    // --- ИСПРАВЛЕНИЕ ПУТИ К ИКОНКЕ ---
+    // Наша сборка копирует папку 'public' целиком в 'dist'.
+    // Поэтому все пути к ресурсам из нее должны начинаться с 'public/'.
+    icon.src = `public/plugins/${plugin.id}/${plugin.icon}`;
+
     icon.alt = `${plugin.name} icon`;
     icon.onerror = () => {
+        // Запасная иконка, если основная не загрузилась
         icon.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23ccc"><path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-2 .9-2 2v3.81l-1.46 1.46c-.19.19-.3.44-.3.71V17c0 .55.45 1 1 1h3v3c0 1.1.9 2 2 2h3.81l1.46 1.46c.19.19.44.3.71.3H17c.55 0 1-.45 1-1v-3h3c1.1 0 2-.9 2-2v-3.81l1.46-1.46c.19-.19.3-.44.3-.71V12c0-.55-.45-1-1-1z"/></svg>`;
     };
     
@@ -52,7 +65,6 @@ export function createPluginCard(plugin) {
             );
             console.log(`✅ УСПЕХ от плагина ${plugin.name}:`);
             console.log(result);
-            alert(`Плагин ${plugin.name} успешно выполнен! Результат в консоли (F12).`);
         } catch (error) {
             console.error(`❌ ОШИБКА от плагина ${plugin.name}:`, error);
             alert(`Ошибка при выполнении плагина ${plugin.name}. Подробности в консоли (F12).`);

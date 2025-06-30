@@ -3,17 +3,19 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-"scripts": {
-  "dev": "vite",
-  "build": "vite build"
-},
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "live-server": "^1.2.2"
+    "live-server": "^1.2.2",
+    "pyodide": "^0.27.7"
   },
   "devDependencies": {
-    "vite": "^7.0.0"
+    "vite": "^7.0.0",
+    "vite-plugin-static-copy": "^3.1.0"
   }
 }
