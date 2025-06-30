@@ -1,15 +1,19 @@
 {
-  "name": "agent-plugins-platform",
+  "name": "agent-plugins-platform-legacy",
   "version": "1.0.0",
-  "description": "An open-source platform for building secure, powerful, AI-driven browser plugins.",
+  "description": "",
   "main": "index.js",
-  "scripts": {
-    "dev": "vite"
-  },
+"scripts": {
+  "dev": "vite",
+  "build": "vite build"
+},
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "dependencies": {
+    "live-server": "^1.2.2"
+  },
   "devDependencies": {
-    "vite": "^5.3.3"
+    "vite": "^7.0.0"
   }
 }
