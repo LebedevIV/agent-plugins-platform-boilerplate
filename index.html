@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>APP Test Harness</title>
+    <link rel="stylesheet" href="/ui/PluginCard.css">
+    <style>
+        body { font-family: sans-serif; padding: 2em; background-color: #f9f9f9; }
+    </style>
+</head>
+<body>
+    <h1>Тестовый стенд для Agent-Plugins-Platform</h1>
+    <p>Кликни на карточку плагина, чтобы запустить его.</p>
+    <p>Открой консоль разработчика (F12), чтобы увидеть логи.</p>
+
+    <hr>
+    <h2>Найденные плагины:</h2>
+    <div id="plugins-list" style="background: #f0f0f0; padding: 1em; border-radius: 5px;">
+        Загрузка...
+    </div>
+    <hr>
+
+    <!-- ▼▼▼ НАЧАЛО НОВОГО БЛОКА ▼▼▼ -->
+    <h2>Лог выполнения плагина:</h2>
+    <div id="chat-log" style="background: #333; color: #f0f0f0; padding: 1em; border-radius: 5px; height: 200px; overflow-y: auto; font-family: monospace;">
+        Ожидание запуска плагина...
+    </div>
+    <!-- ▲▲▲ КОНЕЦ НОВОГО БЛОКА ▲▲▲ -->
+     
+    <script type="module" src="/test-harness.js"></script>
+</body>
+</html>

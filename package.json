@@ -1,0 +1,15 @@
+{
+  "name": "agent-plugins-platform",
+  "version": "1.0.0",
+  "description": "An open-source platform for building secure, powerful, AI-driven browser plugins.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "vite": "^5.3.3"
+  }
+}
