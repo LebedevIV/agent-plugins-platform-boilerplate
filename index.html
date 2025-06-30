@@ -3,30 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <title>APP Test Harness</title>
+    <!-- Подключаем стили для карточек плагинов -->
     <link rel="stylesheet" href="/ui/PluginCard.css">
     <style>
-        body { font-family: sans-serif; padding: 2em; background-color: #f9f9f9; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            padding: 2em; 
+            background-color: #f7f7f7; 
+            color: #333;
+            line-height: 1.6;
+        }
+        h1, h2 {
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        hr {
+            border: none;
+            border-top: 1px solid #eee;
+            margin: 2em 0;
+        }
     </style>
 </head>
 <body>
     <h1>Тестовый стенд для Agent-Plugins-Platform</h1>
-    <p>Кликни на карточку плагина, чтобы запустить его.</p>
-    <p>Открой консоль разработчика (F12), чтобы увидеть логи.</p>
+    <p>Кликни на карточку плагина, чтобы запустить его и увидеть лог выполнения в "чате" ниже.</p>
+    <p>Открой консоль разработчика (F12) для более детальной информации.</p>
 
     <hr>
     <h2>Найденные плагины:</h2>
-    <div id="plugins-list" style="background: #f0f0f0; padding: 1em; border-radius: 5px;">
+    <div id="plugins-list" style="background: #fff; padding: 1em; border: 1px solid #e0e0e0; border-radius: 8px;">
         Загрузка...
     </div>
     <hr>
 
-    <!-- ▼▼▼ НАЧАЛО НОВОГО БЛОКА ▼▼▼ -->
     <h2>Лог выполнения плагина:</h2>
-    <div id="chat-log" style="background: #333; color: #f0f0f0; padding: 1em; border-radius: 5px; height: 200px; overflow-y: auto; font-family: monospace;">
+    <div id="chat-log" style="background: #2d2d2d; color: #f0f0f0; padding: 1em; border-radius: 8px; height: 250px; overflow-y: auto; font-family: 'Courier New', Courier, monospace; font-size: 0.9em;">
         Ожидание запуска плагина...
     </div>
-    <!-- ▲▲▲ КОНЕЦ НОВОГО БЛОКА ▲▲▲ -->
-     
+    
+    <!-- Подключаем наш главный скрипт как модуль -->
     <script type="module" src="/test-harness.js"></script>
 </body>
 </html>
