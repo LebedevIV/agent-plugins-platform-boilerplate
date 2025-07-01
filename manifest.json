@@ -17,21 +17,25 @@
     "service_worker": "background.js",
     "type": "module"
   },
+  
   "action": {
     "default_title": "Открыть Панель Управления APP",
-    "default_icon": "public/logo.png"
+    "default_icon": "logo.svg" 
   },
+
   "icons": {
-    "128": "public/logo.png"
+    "128": "logo.svg"
   },
+
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
   },
+
   "web_accessible_resources": [
     {
       "resources": [
         "plugins/*",
-        "logo.png"
+        "logo.svg" 
       ],
       "matches": [
         "<all_urls>"
