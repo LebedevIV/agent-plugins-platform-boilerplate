@@ -2,49 +2,93 @@
  * src/background.ts
  * 
  * Фоновый скрипт (Service Worker) нашего расширения.
- * Он обрабатывает запросы от UI и выполняет действия с помощью chrome.* API,
- * а также управляет поведением иконки расширения.
+ * Он является "мозгом" Host-API, обрабатывая запросы от UI,
+ * выполняя привилегированные действия (например, доступ к вкладкам)
+ * и управляя поведением иконки расширения.
  */
 
-console.log("APP Background Script Loaded (v0.3.0).");
+console.log("APP Background Script Loaded (v0.4.1).");
 
 //================================================================//
-//  1. РЕАЛИЗАЦИЯ HOST API (ДЛЯ ВЗАИМОДЕЙСТВИЯ С PYTHON)
+//  1. РЕАЛИЗАЦИЯ HOST API
 //================================================================//
 
+/**
+ * Объект, содержащий логику для всех инструментов, доступных в Host-API.
+ */
 const hostApiImpl = {
   /**
-   * Выполняет скрипт на указанной вкладке для получения ее содержимого.
-   * @param tabId ID вкладки, на которой нужно выполнить скрипт.
+   * Получает базовый контент (заголовок и весь текст) со страницы.
+   * @param tabId ID вкладки для анализа.
    */
   async getActivePageContent(tabId: number): Promise<any> {
     try {
-      console.log(`[Background] Выполняем executeScript для вкладки ${tabId}...`);
+      console.log(`[Background] Выполняем getActivePageContent для вкладки ${tabId}...`);
       const results = await chrome.scripting.executeScript({
         target: { tabId: tabId },
-        // Эта функция будет сериализована, отправлена на страницу и выполнена там.
         func: () => ({
           title: document.title,
-          content: document.body.innerText.substring(0, 5000) // Ограничиваем объем.
+          content: document.body.innerText, // innerText здесь подходит для общего контента.
         }),
       });
 
-      if (results && results[0] && results[0].result) {
-        console.log(`[Background] Успешно получили контент со вкладки ${tabId}.`);
+      if (results && results[0]) {
         return results[0].result;
-      } else {
-        console.warn(`[Background] Не получили результат от executeScript для вкладки ${tabId}.`);
-        return { error: "Could not retrieve content from the page." };
       }
+      return { error: "Could not retrieve content." };
     } catch (e: any) {
-      console.error(`[Background] Ошибка при выполнении executeScript для вкладки ${tabId}:`, e);
+      console.error(`[Background] Ошибка в getActivePageContent:`, e);
       return { error: e.message };
     }
   },
+
+  /**
+   * Находит элементы по CSS-селектору и извлекает их текст или атрибут.
+   * @param tabId ID целевой вкладки.
+   * @param options Опции парсинга, например { selector: 'h2', attribute: 'innerText' }
+   */
+  async getElements(tabId: number, options: { selector: string; attribute: string }): Promise<any> {
+    try {
+      console.log(`[Background] Выполняем getElements для вкладки ${tabId} с селектором "${options.selector}"`);
+      
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: tabId },
+        // Передаем опции как аргумент в функцию, которая будет выполнена на странице
+        args: [options],
+        func: (opts) => {
+          // Этот код выполняется в контексте целевой веб-страницы
+          const elements = document.querySelectorAll(opts.selector);
+
+          // Превращаем NodeList в массив и извлекаем данные для каждого элемента
+          return Array.from(elements).map(el => {
+            // Используем textContent для более надежного извлечения всего текста
+            // внутри элемента, игнорируя CSS стили (например, display: none).
+            if (opts.attribute === 'textContent' || opts.attribute === 'innerText') {
+              return (el as HTMLElement).textContent?.trim() || ''; // .trim() для удаления лишних пробелов
+            }
+            if (opts.attribute === 'innerHTML') {
+                return el.innerHTML;
+            }
+            // В противном случае, пытаемся получить указанный атрибут (href, src, data-*, и т.д.)
+            return el.getAttribute(opts.attribute);
+          });
+        },
+      });
+
+      // executeScript всегда возвращает массив, нам нужен первый результат
+      if (results && results[0]) {
+        return results[0].result;
+      }
+      return []; // Если ничего не найдено, возвращаем пустой массив
+    } catch (e: any) {
+      console.error(`[Background] Ошибка в getElements:`, e);
+      return { error: e.message };
+    }
+  }
 };
 
 //================================================================//
-//  2. СЛУШАТЕЛЬ СООБЩЕНИЙ ОТ UI
+//  2. ГЛАВНЫЙ СЛУШАТЕЛЬ СООБЩЕНИЙ
 //================================================================//
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -54,35 +98,37 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   const { command, data, targetTabId } = request;
-  
   console.log(`[Background] Получена команда '${command}' для вкладки ${targetTabId}.`);
 
+  // Маршрутизация команды к соответствующей функции в hostApiImpl
   if (command === "getActivePageContent") {
-    // Используем ID вкладки, который нам явно передали в сообщении.
     if (!targetTabId) {
-      sendResponse({ error: "Target tab ID was not provided in the message." });
-      return; 
+      sendResponse({ error: "Target tab ID was not provided." });
+      return;
     }
-
     hostApiImpl.getActivePageContent(targetTabId).then(sendResponse);
-    
-    // Возвращаем `true` для асинхронного ответа.
-    return true;
+    return true; // Сообщаем Chrome, что ответ будет асинхронным
+  }
+  
+  if (command === "getElements") {
+    if (!targetTabId) {
+      sendResponse({ error: "Target tab ID was not provided." });
+      return;
+    }
+    hostApiImpl.getElements(targetTabId, data).then(sendResponse);
+    return true; // Сообщаем Chrome, что ответ будет асинхронным
   }
 
-  // Обработка неизвестных команд
+  // Если команда не найдена
   sendResponse({ error: `Unknown command: ${command}` });
 });
 
-
 //================================================================//
-//  3. ОБРАБОТЧИК КЛИКА ПО ИКОНКЕ РАСШИРЕНИЯ (НОВЫЙ КОД)
+//  3. ОБРАБОТЧИК КЛИКА ПО ИКОНКЕ РАСШИРЕНИЯ
 //================================================================//
 
 chrome.action.onClicked.addListener((tab) => {
-  // URL нашей главной страницы управления. 
-  // `chrome.runtime.getURL` создает полный, правильный путь к файлу
-  // внутри расширения, например: chrome-extension://<ID>/index.html
+  // URL нашей главной страницы управления.
   const platformPageUrl = chrome.runtime.getURL('index.html');
 
   // Ищем, не открыта ли уже наша страница, чтобы не создавать дубликаты.

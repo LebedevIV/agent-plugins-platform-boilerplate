@@ -1,19 +1,22 @@
 {
     "name": "Ozon Product Page Analyzer",
-    "description": "A workflow that fetches content from the active page and passes it to a Python script for analysis.",
+    "description": "A workflow that fetches all H2 headings from a page and sends them to Python.",
     "steps": [
       {
-        "id": "get_page_content",
-        "tool": "host.getActivePageContent",
-        "description": "Получаем базовый контент (title, innerText) с целевой страницы."
+        "id": "get_all_headings",
+        "tool": "host.getElements",
+        "description": "Получаем все заголовки <h2> со страницы.",
+        "input": {
+          "selector": "h2",
+          "attribute": "innerText"
+        }
       },
       {
-        "id": "analyze_in_python",
-        "tool": "python.analyze_product_data",
-        "description": "Отправляем полученный контент в Python для детального анализа.",
+        "id": "analyze_headings_in_python",
+        "tool": "python.analyze_headings",
+        "description": "Отправляем список заголовков в Python для анализа.",
         "input": {
-          "page_title": "{{steps.get_page_content.output.title}}",
-          "page_content_text": "{{steps.get_page_content.output.content}}"
+          "headings_list": "{{steps.get_all_headings.output}}"
         }
       }
     ]
