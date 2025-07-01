@@ -1,72 +1,67 @@
 /**
  * core/workflow-engine.js
  * 
- * Движок для выполнения декларативных воркфлоу, описанных в workflow.json.
+ * Движок для выполнения декларативных воркфлоу.
  */
 
-// Импортируем наш обновленный мост для вызова Python-инструментов.
-import { runPythonTool } from '../bridge/mcp-bridge.js';
+import { runPythonTool } from '../bridge/mcp-bridge.js'; // <-- ИСПРАВЛЕНИЕ: Добавляем импорт
+import { createRunLogger } from '../ui/log-manager.js';
 
-/**
- * Главная функция запуска воркфлоу.
- * @param {string} pluginId - Идентификатор плагина (имя папки).
- */
 export async function runWorkflow(pluginId) {
-  console.log(`[WorkflowEngine] ▶️ Запуск воркфлоу для плагина: ${pluginId}`);
+    window.activeWorkflowLogger = createRunLogger(`Воркфлоу плагина: ${pluginId}`);
+    const logger = window.activeWorkflowLogger;
+
+  logger.addMessage('ENGINE', `▶️ Запуск воркфлоу...`);
   
-  const workflow = await loadWorkflowDefinition(pluginId);
+  document.querySelector('.tab-button[data-tab="logs"]')?.click();
+
+  const workflow = await loadWorkflowDefinition(pluginId, logger);
   if (!workflow) return;
 
-  const context = {
-    steps: {}
-  };
+  const context = { steps: {}, logger: logger };
 
   for (const step of workflow.steps) {
-    console.log(`[WorkflowEngine] ➡️ Выполнение шага: ${step.id} (инструмент: ${step.tool})`);
-
+    logger.addMessage('ENGINE', `➡️ Выполнение шага: ${step.id} (инструмент: ${step.tool})`);
     try {
       const toolInput = resolveInputs(step.input, context);
       let output;
+      const [toolType, toolName] = step.tool.split('.');
 
-      if (step.tool.startsWith('host.')) {
-        const toolName = step.tool.split('.')[1];
+      if (toolType === 'host') {
         if (window.hostApi && typeof window.hostApi[toolName] === 'function') {
-          output = await window.hostApi[toolName](toolInput);
+          output = await window.hostApi[toolName](toolInput, context);
         } else {
-          throw new Error(`Host tool "${toolName}" не найден в window.hostApi.`);
+          throw new Error(`Host tool "${toolName}" не найден.`);
         }
-      } else if (step.tool.startsWith('python.')) {
-        const toolName = step.tool.split('.')[1];
-        // Делаем реальный вызов через наш обновленный мост
+      } else if (toolType === 'python') {
+        // Мы пока не передаем контекст в Python, сделаем это следующим шагом
         output = await runPythonTool(pluginId, toolName, toolInput);
       } else {
         throw new Error(`Неизвестный тип инструмента: ${step.tool}`);
       }
-
       context.steps[step.id] = { output };
-      console.log(`[WorkflowEngine] ✅ Шаг ${step.id} выполнен. Результат:`, output);
-
+      logger.addMessage('ENGINE', `✅ Шаг ${step.id} выполнен.`);
     } catch (error) {
-      console.error(`[WorkflowEngine] ❌ Ошибка на шаге ${step.id}:`, error);
+      logger.addMessage('ERROR', `❌ Ошибка на шаге ${step.id}: ${error.message}`);
+      console.error(`[WorkflowEngine] Детали ошибки:`, error);
       return;
     }
   }
-
-  console.log(`[WorkflowEngine] 🏁 Воркфлоу для плагина ${pluginId} успешно завершен.`);
-  console.log('[WorkflowEngine] Итоговый контекст:', context);
+  logger.addMessage('ENGINE', `🏁 Воркфлоу успешно завершен.`);
 }
 
-// ... остальные вспомогательные функции (loadWorkflowDefinition, resolveInputs, getContextValue) без изменений ...
 
-async function loadWorkflowDefinition(pluginId) {
+
+// --- Вспомогательные функции ---
+
+async function loadWorkflowDefinition(pluginId, logger) {
   try {
     const response = await fetch(`public/plugins/${pluginId}/workflow.json`);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     return await response.json();
   } catch (error) {
-    console.error(`[WorkflowEngine] Не удалось загрузить workflow.json для плагина ${pluginId}:`, error);
+    logger.addMessage('ERROR', `Не удалось загрузить workflow.json: ${error.message}`);
+    console.error(`[WorkflowEngine] Ошибка загрузки workflow.json для ${pluginId}:`, error);
     return null;
   }
 }

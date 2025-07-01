@@ -27,17 +27,17 @@ function initializeCommunication() {
         const { type, callId, result, error, func, args } = event.data;
 
         if (type === 'host_call') {
-            // Worker просит нас вызвать функцию из hostApi
+            // Worker просит нас вызвать функцию из hostApi.
+            // На данный момент это только sendMessageToChat.
             if (window.hostApi && typeof window.hostApi[func] === 'function') {
-                const finalArgs = args.map(arg => (typeof arg?.toJs === 'function') ? arg.toJs({ dict_converter: Object.fromEntries }) : arg);
-                
-                Promise.resolve(window.hostApi[func](...finalArgs))
-                    .then(hostResult => {
-                        // Отправляем результат обратно только если он нужен
-                    });
+                // Аргументы уже должны быть нативными JS-объектами,
+                // так как pyodide-worker сам их конвертирует перед отправкой.
+                Promise.resolve(window.hostApi[func](...args));
+            } else {
+                 console.error(`[MCP-Bridge] Host-функция "${func}" не найдена в window.hostApi.`);
             }
         } else if (type === 'complete' || type === 'error') {
-            // Worker вернул финальный результат или ошибку
+            // Worker вернул финальный результат или ошибку для вызова инструмента.
             const promise = promises.get(callId);
             if (promise) {
                 if (type === 'complete') {
