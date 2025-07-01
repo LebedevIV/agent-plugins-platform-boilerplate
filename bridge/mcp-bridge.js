@@ -1,48 +1,69 @@
+/**
+ * bridge/mcp-bridge.js
+ * 
+ * Отвечает за общение основного потока с Pyodide Web Worker.
+ */
+
 let pyodideWorker;
 const promises = new Map();
 
 function initializeWorker() {
     if (pyodideWorker) return;
-    pyodideWorker = new Worker(new URL('./pyodide-worker.js', import.meta.url));
 
-    pyodideWorker.onmessage = async (event) => {
+    // --- ▼▼▼ ИЗМЕНЕНИЕ ЗДЕСЬ ▼▼▼ ---
+    // Убираем `{ type: 'module' }`. Загружаем воркер как классический скрипт.
+    pyodideWorker = new Worker(new URL('./pyodide-worker.js', import.meta.url));
+    // --- ▲▲▲ КОНЕЦ ИЗМЕНЕНИЯ ▲▲▲ ---
+
+    pyodideWorker.onmessage = (event) => {
         const { type, callId, result, error, func, args } = event.data;
 
-        switch (type) {
-            case 'host_call':
-                if (window.hostApi && typeof window.hostApi[func] === 'function') {
-                    const finalArgs = args.map(arg => (typeof arg?.toJs === 'function') ? arg.toJs() : arg);
-                    const hostResult = await window.hostApi[func](...finalArgs);
-                    if (callId && hostResult !== undefined) {
-                        pyodideWorker.postMessage({ type: 'host_result', callId, result: hostResult });
-                    }
+        if (type === 'host_call') {
+            if (window.hostApi && typeof window.hostApi[func] === 'function') {
+                const finalArgs = args.map(arg => (typeof arg?.toJs === 'function') ? arg.toJs({ dict_converter: Object.fromEntries }) : arg);
+                
+                Promise.resolve(window.hostApi[func](...finalArgs))
+                    .then(hostResult => {
+                        if (callId && hostResult !== undefined) {
+                            pyodideWorker.postMessage({ type: 'host_result', callId, result: hostResult });
+                        }
+                    });
+            }
+        } else if (type === 'complete' || type === 'error') {
+            const promise = promises.get(callId);
+            if (promise) {
+                if (type === 'complete') {
+                    promise.resolve(result);
+                } else {
+                    promise.reject(new Error(error));
                 }
-                break;
-            
-            case 'complete':
-            case 'error':
-                const promise = promises.get(callId);
-                if (promise) {
-                    type === 'complete' ? promise.resolve(result) : promise.reject(new Error(error));
-                    promises.delete(callId);
-                }
-                break;
+                promises.delete(callId);
+            }
         }
     };
 }
 
-// ▼▼▼ ВОТ ОНО, НЕДОСТАЮЩЕЕ СЛОВО! ▼▼▼
-export async function runTool(pluginId, toolName, toolInput) {
+/**
+ * Вызывает конкретную функцию (инструмент) в Python-скрипте плагина.
+ */
+export async function runPythonTool(pluginId, toolName, toolInput) {
     initializeWorker();
-    const callId = `tool_run_${Date.now()}_${Math.random()}`;
-    const pyScriptUrl = `/plugins/${pluginId}/mcp_server.py`;
+    
+    const callId = `py_tool_run_${Date.now()}_${Math.random()}`;
+    
+    const pyScriptUrl = `public/plugins/${pluginId}/mcp_server.py`;
     const response = await fetch(pyScriptUrl);
-    if (!response.ok) throw new Error(`Script not found: ${response.status}`);
+    if (!response.ok) throw new Error(`Python script for plugin ${pluginId} not found at ${pyScriptUrl}`);
     const pythonCode = await response.text();
-    const mcpRequest = { id: `req_${Date.now()}`, tool: toolName, input: toolInput };
 
     return new Promise((resolve, reject) => {
         promises.set(callId, { resolve, reject });
-        pyodideWorker.postMessage({ type: 'run_python', callId, pythonCode, mcpRequest });
+        pyodideWorker.postMessage({
+            type: 'run_python_tool',
+            callId,
+            pythonCode,
+            toolName,
+            toolInput
+        });
     });
 }

@@ -1,39 +1,41 @@
 {
   "manifest_version": 3,
   "name": "Agent-Plugins-Platform (APP)",
-  "version": "0.2.1", 
+  "version": "0.3.1",
   "description": "A browser extension for running sandboxed Python plugins.",
+  
   "permissions": [
     "scripting",
-    "activeTab"
+    "activeTab" 
   ],
+
   "host_permissions": [
     "<all_urls>"
   ],
+
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
   "action": {
-    "default_popup": "index.html",
-    "default_title": "APP Test Harness",
-    "default_icon": "logo.png" 
+    "default_title": "Открыть Панель Управления APP",
+    "default_icon": "public/logo.png"
   },
   "icons": {
-    "128": "logo.png"
+    "128": "public/logo.png"
   },
-
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
-      },
-
+  },
   "web_accessible_resources": [
     {
       "resources": [
         "plugins/*",
         "logo.png"
       ],
-      "matches": ["<all_urls>"]
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ]
 }

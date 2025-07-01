@@ -1,0 +1,20 @@
+{
+    "name": "Ozon Product Page Analyzer",
+    "description": "A workflow that fetches content from the active page and passes it to a Python script for analysis.",
+    "steps": [
+      {
+        "id": "get_page_content",
+        "tool": "host.getActivePageContent",
+        "description": "Получаем базовый контент (title, innerText) с целевой страницы."
+      },
+      {
+        "id": "analyze_in_python",
+        "tool": "python.analyze_product_data",
+        "description": "Отправляем полученный контент в Python для детального анализа.",
+        "input": {
+          "page_title": "{{steps.get_page_content.output.title}}",
+          "page_content_text": "{{steps.get_page_content.output.content}}"
+        }
+      }
+    ]
+  }

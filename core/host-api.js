@@ -1,50 +1,46 @@
 /**
  * core/host-api.js
- * 
- * API-мост для связи Python-кода с браузером.
- * Его главная задача — предоставить асинхронную функцию getActivePageContent.
  */
 
 export const hostApi = {
-    /**
-     * Получает контент с активной в данный момент страницы.
-     * Определяет, запущен ли код в контексте расширения, и действует соответственно.
-     */
     getActivePageContent: async (selectors) => {
-        // Проверяем, доступны ли API расширений Chrome.
         if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
-            // Мы работаем как расширение.
-            console.log('[Host-API Bridge] Контекст расширения найден. Ищем активную вкладку...');
+            console.log('[Host-API Bridge] Контекст расширения найден. Ищем целевую вкладку...');
             
-            // ШАГ 1: Явно запрашиваем у Chrome информацию об активной вкладке в текущем окне.
-            // Это самый надежный способ получить ID цели для наших действий.
-            const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-            if (!activeTab || !activeTab.id) {
-                // Это может произойти, если попап открыт, но нет активного окна (например, все свернуто).
-                console.error("[Host-API Bridge] Не удалось найти активную вкладку.");
-                throw new Error("Не удалось найти активную вкладку.");
+            const allTabsInWindow = await chrome.tabs.query({ currentWindow: true });
+            const selfUrl = chrome.runtime.getURL('index.html');
+            const targetTab = allTabsInWindow.find(tab => 
+                tab.url !== selfUrl && (tab.url?.startsWith('http') || tab.url?.startsWith('https'))
+            );
+            
+            if (!targetTab || !targetTab.id) {
+                console.error("[Host-API Bridge] Не удалось найти подходящую целевую вкладку (откройте любой сайт).");
+                alert("Ошибка: Не найдена вкладка для анализа. Пожалуйста, откройте любой сайт (например, wikipedia.org) в этом же окне.");
+                throw new Error("Не удалось найти подходящую целевую вкладку.");
             }
             
-            console.log(`[Host-API Bridge] Активная вкладка найдена: ID ${activeTab.id}. Отправка запроса в background.ts.`);
+            // --- ▼▼▼ УЛУЧШЕННЫЙ ЛОГ ▼▼▼ ---
+            console.log(`[Host-API Bridge] Целевая вкладка найдена: ID ${targetTab.id}, URL: "${targetTab.url}". Отправка запроса...`);
+            // --- ▲▲▲ КОНЕЦ УЛУЧШЕННОГО ЛОГА ▲▲▲ ---
 
-            // ШАГ 2: Отправляем сообщение фоновому скрипту, передавая ID цели.
             return new Promise((resolve, reject) => {
                 chrome.runtime.sendMessage(
                     {
                         source: "app-host-api",
                         command: "getActivePageContent",
-                        targetTabId: activeTab.id, // Явно передаем ID вкладки.
+                        targetTabId: targetTab.id,
                         data: selectors
                     },
                     (response) => {
                         if (chrome.runtime.lastError) {
-                            console.error('[Host-API Bridge] Ошибка связи с background.ts:', chrome.runtime.lastError.message);
                             return reject(new Error(chrome.runtime.lastError.message));
                         }
                         if (response.error) {
-                            console.error('[Host-API Bridge] Ошибка от background.ts:', response.error);
-                            return reject(new Error(response.error));
+                            // --- ▼▼▼ УЛУЧШЕННЫЙ ЛОГ ОШИБКИ ▼▼▼ ---
+                            const errorMsg = `Ошибка от background.ts при работе с URL "${targetTab.url}": ${response.error}`;
+                            console.error(`[Host-API Bridge] ${errorMsg}`);
+                            return reject(new Error(errorMsg));
+                            // --- ▲▲▲ КОНЕЦ УЛУЧШЕННОГО ЛОГА ОШИБКИ ▲▲▲ ---
                         }
                         
                         console.log('[Host-API Bridge] Получен РЕАЛЬНЫЙ ответ от background.ts:', response);
@@ -54,20 +50,13 @@ export const hostApi = {
             });
 
         } else {
-            // Мы работаем на сервере разработки (vite), где chrome.* API недоступны.
-            // Возвращаем тестовые данные, чтобы можно было вести разработку UI.
             console.warn('[Host-API Bridge] Контекст расширения недоступен. Возвращаем мок-данные.');
-            await new Promise(r => setTimeout(r, 200)); // Имитация задержки.
+            await new Promise(r => setTimeout(r, 200));
             return {
                 title: "ЗАГЛУШКА (режим разработки)",
-                content: "Это контент, полученный из заглушки в core/host-api.js, так как chrome.runtime недоступен.",
+                content: "Это контент из заглушки.",
             };
         }
     },
-
-    /**
-     * Эта функция является частью контракта API, но ее реализация
-     * будет добавлена в `window.hostApi` из файла `test-harness.js`.
-     */
     sendMessageToChat: (message) => {}
 };

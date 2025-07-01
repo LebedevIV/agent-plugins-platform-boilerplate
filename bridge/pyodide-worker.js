@@ -1,67 +1,59 @@
-// --- ▼▼▼ ИЗМЕНЕНИЕ ЗДЕСЬ ▼▼▼ ---
-// Старый путь: importScripts('https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js');
-// Новый, локальный путь:
-importScripts('../pyodide/pyodide.js'); 
-// --- ▲▲▲ КОНЕЦ ИЗМЕНЕНИЯ ▲▲▲ ---
+/**
+ * bridge/pyodide-worker.js
+ * 
+ * Web Worker, в котором живет Pyodide.
+ */
+
+importScripts('../pyodide/pyodide.js');
+
 let pyodide;
-const callPromises = new Map();
 
 async function initializePyodide() {
+    if (pyodide) return;
     console.log("[Worker] ⏳ Initializing Pyodide...");
     pyodide = await loadPyodide();
-    // Создаем прокси-объект, который будет доступен в Python как `js`
+
     pyodide.globals.set('js', {
-        sendMessageToChat_bridge: (message) => {
-             return new Promise(resolve => {
-                self.postMessage({ type: 'host_call', func: 'sendMessageToChat', args: [message.toJs({ dict_converter: Object.fromEntries })] });
-                resolve();
-            });
-        },
-        getActivePageContent_bridge: (selectors) => {
-            const callId = `call_${Date.now()}_${Math.random()}`;
-            self.postMessage({ type: 'host_call', callId, func: 'getActivePageContent', args: [selectors.toJs({ dict_converter: Object.fromEntries })] });
-            return new Promise(resolve => {
-                callPromises.set(callId, resolve);
-            });
+        sendMessageToChat: (message) => {
+            const jsMessage = message.toJs({ dict_converter: Object.fromEntries });
+            self.postMessage({ type: 'host_call', func: 'sendMessageToChat', args: [jsMessage] });
         }
     });
     console.log("[Worker] ✅ Pyodide loaded.");
 }
+
 const pyodideReadyPromise = initializePyodide();
 
 self.onmessage = async (event) => {
     await pyodideReadyPromise;
-    const { type, callId, result, pythonCode, mcpRequest } = event.data;
+    const { type, callId } = event.data;
 
-    switch (type) {
-        case 'host_result':
-            const promiseResolver = callPromises.get(callId);
-            if (promiseResolver) {
-                promiseResolver(result);
-                callPromises.delete(callId);
+    if (type === 'run_python_tool') {
+        const { pythonCode, toolName, toolInput } = event.data;
+        try {
+            await pyodide.runPythonAsync(pythonCode);
+
+            const toolFunc = pyodide.globals.get(toolName);
+            if (!toolFunc) {
+                throw new Error(`Python function "${toolName}" not found in script.`);
             }
-            break;
 
-        case 'run_python':
-            try {
-                pyodide.setStdin({ stdin: () => JSON.stringify(mcpRequest) + '\n' });
-                let capturedResult = '';
-                pyodide.setStdout({ batched: (str) => { capturedResult += str + '\n'; } });
-                
-                // ▼▼▼ ГЛАВНОЕ ИЗМЕНЕНИЕ ▼▼▼
-                // Сначала просто выполняем код, чтобы ОПРЕДЕЛИТЬ функции
-                await pyodide.runPythonAsync(pythonCode);
-                // А теперь "достаем" главную функцию и "ждем" ее
-                const mainFunc = pyodide.globals.get('main');
-                await mainFunc();
-                // ▲▲▲ КОНЕЦ ГЛАВНОГО ИЗМЕНЕНИЯ ▲▲▲
+            // --- ▼▼▼ РЕШАЮЩЕЕ ИЗМЕНЕНИЕ ▼▼▼ ---
+            
+            // Вместо всех сложных манипуляций, просто вызываем Python-функцию напрямую,
+            // передавая ей JS-объект. Pyodide сам преобразует его в kwargs.
+            const resultProxy = await toolFunc(toolInput);
+            
+            // --- ▲▲▲ КОНЕЦ ИЗМЕНЕНИЯ ▲▲▲ ---
 
-                const resultJson = JSON.parse(capturedResult.trim());
-                if (resultJson.error) { throw new Error(resultJson.error); }
-                self.postMessage({ type: 'complete', callId, result: resultJson.result });
-            } catch (e) {
-                self.postMessage({ type: 'error', callId, error: e.message });
-            }
-            break;
+            const result = resultProxy.toJs({ dict_converter: Object.fromEntries });
+            resultProxy.destroy();
+
+            self.postMessage({ type: 'complete', callId, result });
+
+        } catch (e) {
+            console.error(`[Worker] Error executing Python tool "${toolName}":`, e);
+            self.postMessage({ type: 'error', callId, error: e.message });
+        }
     }
 };
