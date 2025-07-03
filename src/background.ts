@@ -93,9 +93,7 @@ const hostApiImpl = {
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // Игнорируем сообщения, которые не относятся к нашему API.
-  if (request.source !== "app-host-api") {
-    return;
-  }
+  if (request.source !== "app-host-api") return;
 
   const { command, data, targetTabId } = request;
   console.log(`[Background] Получена команда '${command}' для вкладки ${targetTabId}.`);
@@ -119,6 +117,30 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // Сообщаем Chrome, что ответ будет асинхронным
   }
 
+  if (command === "host_fetch") {
+    const url = data.url;
+    console.log(`[Background] Выполняем делегированный fetch для: ${url}`);
+    
+    fetch(url)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(jsonData => {
+            // --- ▼▼▼ КЛЮЧЕВОЕ ИЗМЕНЕНИЕ ▼▼▼ ---
+            // Успешный ответ. Просто отправляем данные.
+            sendResponse(jsonData);
+            // --- ▲▲▲ КОНЕЦ ИЗМЕНЕНИЯ ▲▲▲ ---
+        })
+        .catch(err => {
+            // Ошибочный ответ. Отправляем объект с полем error.
+            sendResponse({ error: true, error_message: err.message });
+        });
+        
+    return true; // Асинхронный ответ
+  }
   // Если команда не найдена
   sendResponse({ error: `Unknown command: ${command}` });
 });

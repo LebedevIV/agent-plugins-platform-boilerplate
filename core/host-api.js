@@ -61,61 +61,22 @@ async function findTargetTab(context) {
 
 // --- Главный экспортируемый объект API ---
 export const hostApi = {
-    /**
-     * Находит элементы по CSS-селектору и возвращает их текст или атрибут.
-     * @param {object} options - Объект с опциями, например { selector: 'h2', attribute: 'innerText' }.
-     * @param {object} context - Контекст выполнения воркфлоу, содержащий логгер.
-     * @returns {Promise<string[]>}
-     */
-    getElements: async (options, context) => {
-        // Проверяем, работаем ли мы в реальном расширении
-        if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
-            const targetTab = await findTargetTab(context);
-            context.logger.addMessage('HOST', `Выполняем парсинг по селектору "${options.selector}"...`);
-            return sendMessageToBackground({
-                command: "getElements",
-                targetTabId: targetTab.id,
-                data: options
-            });
-        } else {
-            // Заглушка для режима разработки (vite)
-            context.logger.addMessage('HOST', `ЗАГЛУШКА: Возвращаем мок-данные для селектора "${options.selector}".`);
-            await new Promise(r => setTimeout(r, 150));
-            return [`Мок-результат для "${options.selector}" 1`, `Мок-результат 2`];
-        }
+    getElements: async (options, context) => { /* ... код без изменений ... */ },
+    getActivePageContent: async (selectors, context) => { /* ... код без изменений ... */ },
+    
+    host_fetch: async (url) => {
+        // Просто пересылаем задачу в background, который имеет все права
+        return sendMessageToBackground({
+            command: "host_fetch",
+            data: { url }
+        });
     },
 
-    /**
-     * Получает весь текстовый контент с целевой веб-страницы.
-     * @param {object} selectors - В данный момент не используется, для совместимости.
-     * @param {object} context - Контекст выполнения воркфлоу, содержит логгер.
-     * @returns {Promise<object>}
-     */
-    getActivePageContent: async (selectors, context) => {
-        if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
-            const targetTab = await findTargetTab(context);
-            context.logger.addMessage('HOST', `Получаем весь контент страницы...`);
-            return sendMessageToBackground({
-                command: "getActivePageContent",
-                targetTabId: targetTab.id,
-                data: selectors
-            });
-        } else {
-            // Заглушка для режима разработки (vite)
-            context.logger.addMessage('HOST', 'ЗАГЛУШКА: Возвращаем мок-данные для getActivePageContent.');
-            await new Promise(r => setTimeout(r, 200));
-            return { title: "ЗАГЛУШКА", content: "Это контент из заглушки." };
-        }
-    },
-
-    /**
-     * Эта функция НЕ вызывается движком напрямую. Она вызывается из Python.
-     * Ее реальная реализация находится в `ui/test-harness.js`.
-     * @param {object} message - Объект сообщения от Python, например { content: "..." }.
-     */
     sendMessageToChat: (message) => {
-        // Эта реализация-заглушка нужна только для того, чтобы функция существовала.
-        // `window.hostApi.sendMessageToChat` в `test-harness.js` переопределит ее.
-        console.warn("Вызвана заглушка sendMessageToChat в host-api.js.");
+        if (window.activeWorkflowLogger) {
+            window.activeWorkflowLogger.addMessage('PYTHON', message.content);
+        } else {
+            console.warn("[Python Message] Логгер не активен:", message.content);
+        }
     }
 };

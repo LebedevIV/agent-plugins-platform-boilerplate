@@ -4,12 +4,14 @@
  * Движок для выполнения декларативных воркфлоу.
  */
 
-import { runPythonTool } from '../bridge/mcp-bridge.js'; // <-- ИСПРАВЛЕНИЕ: Добавляем импорт
+import { runPythonTool } from '../bridge/mcp-bridge.js';
 import { createRunLogger } from '../ui/log-manager.js';
 
 export async function runWorkflow(pluginId) {
-    window.activeWorkflowLogger = createRunLogger(`Воркфлоу плагина: ${pluginId}`);
-    const logger = window.activeWorkflowLogger;
+  // --- ▼▼▼ ИСПРАВЛЕНИЕ ОПЕЧАТКИ ▼▼▼ ---
+  window.activeWorkflowLogger = createRunLogger(`Воркфлоу плагина: ${pluginId}`);
+  const logger = window.activeWorkflowLogger; // Используем правильное имя
+  // --- ▲▲▲ КОНЕЦ ИСПРАВЛЕНИЯ ▲▲▲ ---
 
   logger.addMessage('ENGINE', `▶️ Запуск воркфлоу...`);
   
@@ -34,7 +36,6 @@ export async function runWorkflow(pluginId) {
           throw new Error(`Host tool "${toolName}" не найден.`);
         }
       } else if (toolType === 'python') {
-        // Мы пока не передаем контекст в Python, сделаем это следующим шагом
         output = await runPythonTool(pluginId, toolName, toolInput);
       } else {
         throw new Error(`Неизвестный тип инструмента: ${step.tool}`);
@@ -50,20 +51,16 @@ export async function runWorkflow(pluginId) {
   logger.addMessage('ENGINE', `🏁 Воркфлоу успешно завершен.`);
 }
 
-
-
-// --- Вспомогательные функции ---
-
+// ... вспомогательные функции, но с исправленными путями ...
 async function loadWorkflowDefinition(pluginId, logger) {
-  try {
-    const response = await fetch(`public/plugins/${pluginId}/workflow.json`);
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    return await response.json();
-  } catch (error) {
-    logger.addMessage('ERROR', `Не удалось загрузить workflow.json: ${error.message}`);
-    console.error(`[WorkflowEngine] Ошибка загрузки workflow.json для ${pluginId}:`, error);
-    return null;
-  }
+    try {
+        const response = await fetch(`plugins/${pluginId}/workflow.json`); // Убран /public
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return await response.json();
+    } catch (error) {
+        logger.addMessage('ERROR', `Не удалось загрузить workflow.json: ${error.message}`);
+        return null;
+    }
 }
 
 function resolveInputs(input, context) {

@@ -9,7 +9,7 @@ export function createPluginCard(plugin) {
     const icon = document.createElement('img');
     icon.className = 'plugin-icon';
     if (plugin.icon) {
-        icon.src = `public/plugins/${plugin.id}/${plugin.icon}`;
+        icon.src = `plugins/${plugin.id}/${plugin.icon}`; // Убран /public
     }
     icon.alt = `${plugin.name} icon`;
     icon.onerror = () => { icon.src = `data:image/svg+xml;utf8,...`; }; // SVG-код заглушки

@@ -1,23 +1,13 @@
 {
-    "name": "Ozon Product Page Analyzer",
-    "description": "A workflow that fetches all H2 headings from a page and sends them to Python.",
-    "steps": [
-      {
-        "id": "get_all_headings",
-        "tool": "host.getElements",
-        "description": "Получаем все заголовки <h2> со страницы.",
-        "input": {
-          "selector": "h2",
-          "attribute": "innerText"
-        }
-      },
-      {
-        "id": "analyze_headings_in_python",
-        "tool": "python.analyze_headings",
-        "description": "Отправляем список заголовков в Python для анализа.",
-        "input": {
-          "headings_list": "{{steps.get_all_headings.output}}"
-        }
-      }
-    ]
-  }
+  "name": "World Time Checker (via Host API)",
+  "description": "Uses the platform's Host API to fetch the current time.",
+  "pythonDependencies": [],
+  "steps": [
+    {
+      "id": "get_world_time_via_host",
+      "tool": "python.fetch_current_time",
+      "description": "Calls a Python function that asks the Host to fetch data from a time API.",
+      "input": { "timezone": "Europe/Moscow" }
+    }
+  ]
+}
