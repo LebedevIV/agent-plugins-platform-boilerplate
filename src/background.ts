@@ -117,30 +117,40 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // Сообщаем Chrome, что ответ будет асинхронным
   }
 
-  if (command === "host_fetch") {
-    const url = data.url;
-    console.log(`[Background] Выполняем делегированный fetch для: ${url}`);
-    
-    fetch(url)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(jsonData => {
-            // --- ▼▼▼ КЛЮЧЕВОЕ ИЗМЕНЕНИЕ ▼▼▼ ---
-            // Успешный ответ. Просто отправляем данные.
-            sendResponse(jsonData);
-            // --- ▲▲▲ КОНЕЦ ИЗМЕНЕНИЯ ▲▲▲ ---
-        })
-        .catch(err => {
-            // Ошибочный ответ. Отправляем объект с полем error.
-            sendResponse({ error: true, error_message: err.message });
-        });
-        
-    return true; // Асинхронный ответ
-  }
+// ... в функции chrome.runtime.onMessage.addListener ...
+
+if (command === "host_fetch") {
+  const url = data.url;
+  console.log(`[Background] Выполняем делегированный fetch для: ${url}`);
+  
+  // --- ▼▼▼ ИЗМЕНЕНИЕ: Самый простой fetch ▼▼▼ ---
+  fetch(url)
+      .then(response => {
+          // Мы должны вручную проверять `ok` статус, так как fetch
+          // не считает 404 или 500 ошибкой, которая попадает в .catch()
+          if (!response.ok) {
+              // Создаем свою ошибку, чтобы она была поймана в .catch()
+              throw new Error(`HTTP error! Status: ${response.status}`);
+          }
+          // Если все хорошо, парсим JSON
+          return response.json();
+      })
+      .then(jsonData => {
+          // Успешный ответ
+          const successResponse = { error: false, data: jsonData };
+          console.log('[Background] Успех, отправляю:', successResponse);
+          sendResponse(successResponse);
+      })
+      .catch(err => {
+          // Ловим и сетевые ошибки, и ошибки статуса
+          const errorResponse = { error: true, error_message: err.message };
+          console.error('[Background] Ошибка, отправляю:', errorResponse);
+          sendResponse(errorResponse);
+      });
+  // --- ▲▲▲ КОНЕЦ ИЗМЕНЕНИЯ ▲▲▲ ---
+      
+  return true; // Сообщаем Chrome, что ответ будет асинхронным
+}
   // Если команда не найдена
   sendResponse({ error: `Unknown command: ${command}` });
 });

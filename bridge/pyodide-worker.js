@@ -1,6 +1,5 @@
 /**
  * bridge/pyodide-worker.js
- * 
  * Финальная версия: обрабатывает async Python-функции.
  */
 importScripts('../pyodide/pyodide.js');
@@ -34,10 +33,18 @@ self.onmessage = async (event) => {
     const { type, callId } = event.data;
 
     if (type === 'host_result') {
+        console.log('[Worker] Получен ответ от хоста:', event.data);
         const promise = hostCallPromises.get(callId);
         if (promise) {
-            if (event.data.error) promise.reject(new Error(event.data.error));
-            else promise.resolve(event.data.result);
+            if (event.data.error) {
+                promise.reject(new Error(event.data.error));
+            } else {
+                // --- ▼▼▼ КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ ▼▼▼ ---
+                // Мы должны передать в Python ВЕСЬ объект event.data.result,
+                // чтобы он мог быть преобразован в JsProxy.
+                promise.resolve(pyodide.toPy(event.data.result));
+                // --- ▲▲▲ КОНЕЦ ИСПРАВЛЕНИЯ ▲▲▲ ---
+            }
             hostCallPromises.delete(callId);
         }
     } else if (type === 'run_python_tool') {
@@ -47,11 +54,7 @@ self.onmessage = async (event) => {
             const toolFunc = pyodide.globals.get(toolName);
             if (!toolFunc) throw new Error(`Python-функция "${toolName}" не найдена.`);
             
-            // --- ▼▼▼ ГЛАВНОЕ ИЗМЕНЕНИЕ: МЫ ЖДЕМ РЕЗУЛЬТАТ ASYNC-ФУНКЦИИ ▼▼▼ ---
-            // Pyodide автоматически обрабатывает `async def` и возвращает Promise.
             const resultProxy = await toolFunc(toolInput);
-            // --- ▲▲▲ КОНЕЦ ИЗМЕНЕНИЯ ▲▲▲ ---
-
             const result = resultProxy.toJs({ dict_converter: Object.fromEntries });
             resultProxy.destroy();
 

@@ -28,21 +28,25 @@ async def fetch_current_time(input_data: Any) -> Dict[str, Any]:
     try:
         js.sendMessageToChat({"content": f"Python: Ожидаю (await) ответ от хоста..."}) # type: ignore
         
-        # 3. Вызываем JS-функцию `host_fetch` и с помощью `await` ждем, 
-        #    пока нижележащий JavaScript Promise будет выполнен.
-        response_proxy = await js.host_fetch(api_url)
+        # 3. КЛЮЧЕВОЙ МОМЕНТ:
+        #    - `js.host_fetch(api_url)` возвращает JS Promise, который в Python видится как PyodideFuture.
+        #    - `await` дожидается выполнения этого Promise.
+        #    - Pyodide автоматически конвертирует результат (JS-объект) в Python-объект (dict).
+        #    - Поэтому мы сразу получаем готовый словарь, и .to_py() больше не нужен.
+        response_dict = await js.host_fetch(api_url)
         
-        # 4. Когда Promise выполнен, мы получаем результат (все еще как PyProxy)
-        #    и теперь можем безопасно конвертировать его в настоящий Python-словарь.
-        response_dict = response_proxy.to_py()
+        # 4. Логируем то, что получили, для отладки
+        js.sendMessageToChat({"content": f"Python: Получен ответ от хоста: {response_dict}"}) # type: ignore
 
-        # 5. Проверяем, не вернул ли хост ошибку в структурированном виде
-        #    (например, если fetch провалился).
-        if isinstance(response_dict, dict) and response_dict.get("error"):
-             raise Exception(response_dict.get("error_message", "Неизвестная ошибка от хоста"))
+        # 5. Проверяем, что результат действительно является словарем
+        if not isinstance(response_dict, dict):
+            raise Exception(f"Хост вернул не словарь, а {type(response_dict)}")
         
-        # 6. Обрабатываем успешный результат
-        #    На этом этапе мы уверены, что `response_dict` - это успешный JSON от API.
+        # 6. Проверяем, не вернул ли хост ошибку в структурированном виде
+        if response_dict.get("error"):
+             raise Exception(response_dict.get("error_message", "Неизвестная ошибка от хоста"))
+
+        # 7. Обрабатываем успешный результат
         time_data = response_dict.get("data")
         if not time_data:
             raise Exception("В ответе от хоста отсутствует ключ 'data'")
@@ -51,7 +55,7 @@ async def fetch_current_time(input_data: Any) -> Dict[str, Any]:
         summary = f"Python: Запрос успешен! Текущее время в {timezone}: {current_time}"
         js.sendMessageToChat({"content": summary}) # type: ignore
         
-        # 7. Возвращаем финальный результат движку воркфлоу
+        # 8. Возвращаем финальный результат движку воркфлоу
         return {
             "status": "success",
             "data": time_data
