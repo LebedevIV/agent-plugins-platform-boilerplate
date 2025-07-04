@@ -13,37 +13,108 @@ console.log("APP Background Script Loaded (v0.9.0 - Resilient Fetch).");
 //  1. РЕАЛИЗАЦИЯ HOST API
 //================================================================//
 
+// ================================================================ //
+// Адаптивный Механизм Запросов v2.0
+// ================================================================ //
+
 /**
- * Новая, отказоустойчивая функция для выполнения сетевых запросов.
- * Делает несколько попыток с увеличивающейся задержкой при сетевых сбоях.
+ * Извлекает хостнейм из строки URL.
+ * @param url - Строка URL.
+ * @returns Хостнейм или null, если URL некорректен.
+ */
+function getHostname(url: string): string | null {
+    try {
+        return new URL(url).hostname;
+    } catch (e) {
+        console.error("[Background] Некорректный URL:", url);
+        return null;
+    }
+}
+
+/**
+ * Сохраняет номер успешной попытки для данного хоста.
+ * @param hostname - Хост, для которого сохраняется статистика.
+ * @param attempt - Номер попытки (1-based), на которой запрос удался.
+ */
+async function saveSuccessfulAttempt(hostname: string, attempt: number): Promise<void> {
+    try {
+        const result = await chrome.storage.local.get("fetch_stats");
+        const stats = result.fetch_stats || {};
+        if (!stats[hostname]) {
+            stats[hostname] = [];
+        }
+        stats[hostname].push(attempt);
+        // Опционально: можно ограничить размер массива, чтобы он не рос бесконечно
+        // stats[hostname] = stats[hostname].slice(-100);
+        await chrome.storage.local.set({ "fetch_stats": stats });
+    } catch (e) {
+        console.error("[Background] Не удалось сохранить статистику запросов:", e);
+    }
+}
+
+/**
+ * "Адаптивный Механизм Запросов v2.0"
+ * Выполняет сетевые запросы с адаптивным количеством попыток и проверкой сети.
  * @param url - URL для запроса.
  * @param options - Опции для fetch.
- * @param retries - Количество попыток.
- * @param delay - Начальная задержка в миллисекундах.
+ * @param initialDelay - Начальная задержка в мс.
  */
-async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 10, delay = 500) {
-  for (let i = 0; i < retries; i++) {
-      try {
-          console.log(`[Background] Попытка #${i + 1} для fetch: ${url}`);
-          const response = await fetch(url, options);
-          if (!response.ok) {
-              // Если статус 4xx или 5xx, это ошибка сервера, повторять бессмысленно.
-              throw new Error(`HTTP error! Status: ${response.status}`);
-          }
-          return await response.json(); // Успех!
-      } catch (error) {
-          // Ловим сетевые ошибки (Failed to fetch, ERR_CONNECTION_CLOSED)
-          const isLastAttempt = i === retries - 1;
-          console.warn(`[Background] Ошибка на попытке #${i + 1}:`, error.message);
-          if (isLastAttempt) {
-              // Если это была последняя попытка, пробрасываем ошибку дальше.
-              console.error(`[Background] Все ${retries} попыток провалились. Сдаюсь.`);
-              throw error;
-          }
-          // Ждем перед следующей попыткой, увеличивая задержку (экспоненциальный рост)
-          await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
-      }
-  }
+async function fetchWithRetry(url: string, options: RequestInit = {}, initialDelay = 500) {
+    const hostname = getHostname(url);
+    if (!hostname) {
+        throw new Error("Некорректный URL для выполнения запроса.");
+    }
+
+    // 1. Адаптивный расчет количества попыток
+    const statsData = await chrome.storage.local.get("fetch_stats");
+    const hostStats: number[] = statsData.fetch_stats?.[hostname] || [];
+    const maxAttemptFromStats = hostStats.length > 0 ? Math.max(...hostStats) : 0;
+    const retries = hostStats.length > 0 ? Math.max(10, maxAttemptFromStats + 5) : 10;
+
+    console.log(`[Background] Адаптивный fetch для ${hostname}. Попыток: ${retries}. Статистика: [${hostStats.join(', ')}]`);
+
+    for (let i = 0; i < retries; i++) {
+        const attemptNum = i + 1;
+        try {
+            console.log(`[Background] Попытка #${attemptNum}/${retries} для: ${url}`);
+            const response = await fetch(url, options);
+
+            // Ошибки уровня HTTP (4xx, 5xx) не считаются сетевыми сбоями, прекращаем попытки.
+            if (!response.ok) {
+                throw new Error(`HTTP ошибка! Статус: ${response.status}`);
+            }
+
+            // Успех! Сохраняем статистику и возвращаем результат.
+            await saveSuccessfulAttempt(hostname, attemptNum);
+            console.log(`[Background] Успех на попытке #${attemptNum} для ${hostname}.`);
+            return await response.json();
+
+        } catch (error: any) {
+            console.warn(`[Background] Ошибка на попытке #${attemptNum}:`, error.message);
+
+            // 2. Проверка сетевого подключения после 5 неудач
+            if (attemptNum === 5) {
+                console.log("[Background] 5 попыток не удалось. Проверяем сетевое подключение...");
+                try {
+                    await fetch("https://www.google.com", { method: 'HEAD', mode: 'no-cors' });
+                    console.log("[Background] Тест сети пройден. Продолжаем попытки.");
+                } catch (networkTestError) {
+                    console.error("[Background] Тест сети провалился. Прерываем запрос.", networkTestError);
+                    throw new Error("Проблема с сетевым подключением");
+                }
+            }
+
+            // Если это последняя попытка, выбрасываем ошибку.
+            if (attemptNum === retries) {
+                console.error(`[Background] Все ${retries} попыток для ${url} провалились. Сдаюсь.`);
+                throw error;
+            }
+
+            // Экспоненциальная задержка перед следующей попыткой
+            const delay = initialDelay * Math.pow(2, i);
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
 }
 
 /**
@@ -140,18 +211,22 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       hostApiImpl.getElements(targetTabId, data).then(sendResponse);
       return true;
 
-    case "host_fetch":
-      const url = data.url;
-      console.log(`[Background] Получена задача на отказоустойчивый fetch для: ${url}`);
-      // Вызываем нашу новую умную функцию
-      fetchWithRetry(url)
-          .then(jsonData => {
-              sendResponse({ error: false, data: jsonData });
-          })
-          .catch(err => {
-              sendResponse({ error: true, error_message: err.message });
-          });
-      return true;
+      case "host_fetch":
+        const url = data.url;
+        console.log(`[Background] Получена задача на отказоустойчивый fetch для: ${url}`);
+        
+        // Оборачиваем вызов в try...catch, чтобы поймать ошибки до самого fetch
+        (async () => {
+            try {
+                const jsonData = await fetchWithRetry(url);
+                sendResponse({ error: false, data: jsonData });
+            } catch (err: any) {
+                console.error('[Background] КРИТИЧЕСКАЯ ОШИБКА в fetchWithRetry:', err);
+                sendResponse({ error: true, error_message: err.message });
+            }
+        })();
+        
+        return true; // Асинхронный ответ
 
     default:
       sendResponse({ error: `Unknown command: ${command}` });
