@@ -32,7 +32,7 @@ function getHostname(url: string): string | null {
 }
 
 /**
- * Сохраняет номер успешной попытки для данного хоста.
+ * Сохраняет данные об успешной попытке для данного хоста.
  * @param hostname - Хост, для которого сохраняется статистика.
  * @param attempt - Номер попытки (1-based), на которой запрос удался.
  */
@@ -43,13 +43,35 @@ async function saveSuccessfulAttempt(hostname: string, attempt: number): Promise
         if (!stats[hostname]) {
             stats[hostname] = [];
         }
-        stats[hostname].push(attempt);
+        
+        const attemptData = {
+            successful_attempt_number: attempt,
+            success_timestamp: Math.floor(Date.now() / 1000)
+        };
+
+        stats[hostname].push(attemptData);
         // Опционально: можно ограничить размер массива, чтобы он не рос бесконечно
         // stats[hostname] = stats[hostname].slice(-100);
         await chrome.storage.local.set({ "fetch_stats": stats });
     } catch (e) {
         console.error("[Background] Не удалось сохранить статистику запросов:", e);
     }
+}
+
+/**
+ * Проверяет, является ли объект валидной записью статистики.
+ * Обеспечивает обратную совместимость и устойчивость к поврежденным данным.
+ * @param statObject - Объект для проверки.
+ * @returns true, если объект валиден, иначе false.
+ */
+function isValidStatObject(statObject: any): statObject is { successful_attempt_number: number, success_timestamp: number } {
+    return (
+        statObject &&
+        typeof statObject === 'object' &&
+        !Array.isArray(statObject) && // Убедимся, что это не массив
+        typeof statObject.successful_attempt_number === 'number' &&
+        typeof statObject.success_timestamp === 'number'
+    );
 }
 
 /**
@@ -67,11 +89,16 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, initialDel
 
     // 1. Адаптивный расчет количества попыток
     const statsData = await chrome.storage.local.get("fetch_stats");
-    const hostStats: number[] = statsData.fetch_stats?.[hostname] || [];
-    const maxAttemptFromStats = hostStats.length > 0 ? Math.max(...hostStats) : 0;
-    const retries = hostStats.length > 0 ? Math.max(10, maxAttemptFromStats + 5) : 10;
+    const hostStats: any[] = statsData.fetch_stats?.[hostname] || [];
+    
+    // Фильтруем статистику, чтобы отсеять невалидные или устаревшие записи.
+    const validHostStats = hostStats.filter(isValidStatObject);
 
-    console.log(`[Background] Адаптивный fetch для ${hostname}. Попыток: ${retries}. Статистика: [${hostStats.join(', ')}]`);
+    const attemptNumbers = validHostStats.map(s => s.successful_attempt_number);
+    const maxAttemptFromStats = attemptNumbers.length > 0 ? Math.max(...attemptNumbers) : 0;
+    const retries = validHostStats.length > 0 ? Math.max(10, maxAttemptFromStats + 5) : 10;
+
+    console.log(`[Background] Адаптивный fetch для ${hostname}. Попыток: ${retries}. Валидная статистика (номера попыток): [${attemptNumbers.join(', ')}]`);
 
     for (let i = 0; i < retries; i++) {
         const attemptNum = i + 1;
@@ -104,10 +131,35 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, initialDel
                 }
             }
 
-            // Если это последняя попытка, выбрасываем ошибку.
+            // Если это последняя попытка, запускаем финальную логику.
             if (attemptNum === retries) {
-                console.error(`[Background] Все ${retries} попыток для ${url} провалились. Сдаюсь.`);
-                throw error;
+                console.error(`[Background] Все ${retries} попыток для ${url} провалились. Запускаем финальную проверку.`);
+                
+                // Новая логика: проверяем сеть и, если она в порядке, даем совет от LLM.
+                try {
+                    // Проверяем, доступен ли интернет в принципе.
+                    await fetch("https://www.google.com", { method: 'HEAD', mode: 'no-cors' });
+                    
+                    // Если тест сети прошел, значит, проблема на стороне сервера.
+                    console.log("[Background] Сеть в порядке. Проблема, вероятно, на стороне сервера. Запрашиваем совет у LLM...");
+                    
+                    // Передаем только валидную статистику
+                    const advice = await hostApiImpl.getPredictiveConnectionAdvice({ hostname, stats: validHostStats });
+                    const enhancedError = new Error(
+                        `Сервис '${hostname}' недоступен после ${retries} попыток. Рекомендация: ${advice}`
+                    );
+                    throw enhancedError;
+
+                } catch (finalError: any) {
+                    // Если мы сами сгенерировали ошибку с советом, перебрасываем ее.
+                    if (finalError.message.includes("Рекомендация:")) {
+                        throw finalError;
+                    }
+                    
+                    // Если же провалился тест сети, значит, проблема у пользователя.
+                    console.error("[Background] Финальный тест сети провалился. Проблема с локальным подключением.");
+                    throw new Error(`Все ${retries} попыток провалились, и проверка сети не удалась. Проверьте ваше интернет-соединение.`);
+                }
             }
 
             // Экспоненциальная задержка перед следующей попыткой
@@ -118,9 +170,111 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, initialDel
 }
 
 /**
+ * Чистая функция для анализа массива статистики соединений.
+ * @param stats - Массив объектов статистики.
+ * @returns Объект с анализом по часам и дням недели.
+ */
+const analyze = (stats: { successful_attempt_number: number, success_timestamp: number }[]) => {
+    const hourlyAttempts = new Array(24).fill(0);
+    const dailyAttempts = new Array(7).fill(0);
+
+    stats.forEach(stat => {
+        const date = new Date(stat.success_timestamp * 1000);
+        const hour = date.getHours();
+        const day = date.getDay(); // 0 = Sunday, 1 = Monday, ...
+
+        hourlyAttempts[hour]++;
+        dailyAttempts[day]++;
+    });
+
+    // Для простоты возвращаем общее количество успешных попыток по срезам.
+    // В реальном приложении здесь могла бы быть более сложная логика для вычисления "среднего".
+    return {
+        bestHours: hourlyAttempts,
+        bestDays: dailyAttempts,
+    };
+};
+
+
+/**
  * Объект, содержащий логику для всех инструментов, доступных в Host-API.
  */
 const hostApiImpl = {
+  /**
+   * (Имитация) Получает предиктивные рекомендации от LLM по поводу соединения.
+   * @param hostname Имя хоста.
+   * @param stats Собранная статистика по попыткам.
+   */
+  async getPredictiveConnectionAdvice({ hostname, stats }: { hostname: string, stats: any[] }): Promise<string> {
+    console.log(`[Background] Запрос рекомендаций LLM для ${hostname}`);
+
+    // 1. Формирование промпта для LLM
+    const prompt = `
+      Анализ стабильности соединения для хоста: ${hostname}.
+      
+      Вот история успешных подключений (в формате JSON):
+      ${JSON.stringify(stats, null, 2)}
+
+      Основываясь на этих данных, дай краткий (1-2 предложения) совет пользователю.
+      Когда лучше всего пробовать подключиться? Есть ли какие-то паттерны?
+      Например: "Лучшее время для подключения - рабочие часы, особенно после обеда. Избегайте подключения ранним утром."
+      Ответ должен быть только текстом совета, без лишних фраз.
+    `;
+
+    console.log("[Background] Сформированный промпт для LLM:", prompt);
+
+    // 2. Плейсхолдер для вызова LLM API
+    // =======================================================================
+    // TODO: ВСТАВИТЬ РЕАЛЬНЫЙ ВЫЗОВ LLM API (GEMINI FLASH) ЗДЕСЬ
+    // Примерный код:
+    // const apiKey = 'YOUR_GEMINI_API_KEY';
+    // const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash:generateContent?key=${apiKey}`;
+    // const response = await fetch(apiUrl, {
+    //   method: 'POST',
+    //   headers: { 'Content-Type': 'application/json' },
+    //   body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+    // });
+    // const data = await response.json();
+    // const advice = data.candidates[0].content.parts[0].text;
+    // return advice;
+    // =======================================================================
+    
+    // 3. Возвращаем моковый (заранее заготовленный) ответ
+    const mockAdvice = "По нашим данным, соединение с этим сервисом наиболее стабильно в будние дни после полудня. Попробуйте повторить запрос в это время.";
+    
+    // Имитируем небольшую задержку, как при реальном API вызове
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    console.log("[Background] Моковый ответ от LLM:", mockAdvice);
+    return mockAdvice;
+  },
+
+  /**
+   * Анализирует статистику соединений для заданного хоста.
+   * @param hostname Имя хоста для анализа.
+   */
+  async analyzeConnectionStats({ hostname }: { hostname: string }): Promise<any> {
+    try {
+      console.log(`[Background] Анализ статистики для: ${hostname}`);
+      const result = await chrome.storage.local.get("fetch_stats");
+      const stats: any[] = result.fetch_stats?.[hostname] || [];
+      
+      // Фильтруем статистику перед анализом
+      const validStats = stats.filter(isValidStatObject);
+
+      if (validStats.length === 0) {
+        return { bestHours: new Array(24).fill(0), bestDays: new Array(7).fill(0), message: "Статистика отсутствует или невалидна." };
+      }
+
+      // Используем чистую функцию для анализа
+      return analyze(validStats);
+
+    } catch (e: any) {
+      console.error(`[Background] Ошибка в analyzeConnectionStats:`, e);
+      return { error: e.message };
+    }
+  },
+
   /**
    * Получает базовый контент (заголовок и весь текст) со страницы.
    * @param tabId ID вкладки для анализа.
@@ -227,6 +381,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         })();
         
         return true; // Асинхронный ответ
+
+    case "analyzeConnectionStats":
+      if (!data || !data.hostname) {
+        sendResponse({ error: "Hostname was not provided." });
+        return false;
+      }
+      hostApiImpl.analyzeConnectionStats(data).then(sendResponse);
+      return true;
 
     default:
       sendResponse({ error: `Unknown command: ${command}` });
