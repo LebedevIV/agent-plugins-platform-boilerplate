@@ -10,6 +10,15 @@ body {
   #app-container {
     max-width: 960px;
     margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+  
+  main {
+    flex-grow: 1;
+    display: flex; /* Чтобы дочерние flex-элементы работали */
+    min-height: 0; /* Исправление для вложенных flex-контейнеров */
   }
   
   header {
@@ -150,13 +159,24 @@ body {
     border: 1px solid #444;
     border-radius: 4px;
     padding: 15px;
-    height: 400px;
+    /* height: 400px;  Удалено для гибкого макета */
     overflow-y: auto;
     font-family: 'Courier New', Courier, monospace;
     font-size: 14px;
     color: #d4d4d4;
     white-space: pre-wrap; /* чтобы переносить строки */
     word-wrap: break-word; /* чтобы переносить длинные строки без пробелов */
+  }
+  
+  #logs.tab-content {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  #chat-log {
+    flex-grow: 1;
+    overflow-y: auto;
   }
 
   /* --- Стили для системы логирования --- */
@@ -201,3 +221,52 @@ body {
     white-space: pre-wrap;
     word-break: break-all;
   }
+/* Styles for the workflow result block */
+.log-result-container {
+    border: 1px solid #4a4a50;
+    border-radius: 5px;
+    margin: 10px 0;
+    background-color: #2c2c30;
+}
+
+.log-result-header {
+    padding: 10px;
+    background-color: #3a3a40;
+    cursor: pointer;
+    position: relative;
+    border-bottom: 1px solid #4a4a50;
+}
+
+.log-result-header::before {
+    content: '▶';
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 12px;
+    color: #666;
+}
+
+.log-result-header.expanded::before {
+    content: '▼';
+}
+
+.log-result-body {
+    display: none;
+    padding: 10px;
+    border-top: 1px solid #e0e0e0;
+}
+
+.log-result-body.visible {
+    display: block;
+}
+
+.log-result-body pre {
+    background-color: #2d2d2d;
+    color: #f1f1f1;
+    padding: 10px;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: monospace;
+}

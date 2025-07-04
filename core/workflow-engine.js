@@ -48,6 +48,14 @@ export async function runWorkflow(pluginId) {
       return;
     }
   }
+
+  // Отображаем финальный результат
+  const lastStep = workflow.steps[workflow.steps.length - 1];
+  if (lastStep && context.steps[lastStep.id]) {
+    const finalResult = context.steps[lastStep.id].output;
+    logger.renderResult(lastStep.id, finalResult);
+  }
+
   logger.addMessage('ENGINE', `🏁 Воркфлоу успешно завершен.`);
 }
 
