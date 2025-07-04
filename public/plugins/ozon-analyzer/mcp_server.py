@@ -1,10 +1,30 @@
-from typing import Any, Dict
+from typing import Any, Dict, Protocol, runtime_checkable
 
 # Никаких `requests` или `pyodide_http`. Вся работа с сетью делегирована.
 # `js` - это глобальный объект, который предоставляет Pyodide для вызова
 # JavaScript-функций, определенных в `pyodide-worker.js`.
 # Мы используем `# type: ignore`, чтобы редактор не ругался на неопределенный `js`.
+# --- ▼▼▼ НОВЫЙ КОД: ОБЪЯВЛЕНИЕ "КОНТРАКТА" ДЛЯ `js` ▼▼▼ ---
 
+# `runtime_checkable` позволяет использовать `isinstance` с этим протоколом.
+@runtime_checkable
+class JsBridge(Protocol):
+    """
+    Описывает структуру нашего JavaScript-моста для статического анализатора.
+    Pyright будет знать, что у объекта `js` есть эти методы.
+    """
+    def sendMessageToChat(self, message: Dict[str, Any]) -> None:
+        ... # Многоточие означает, что реализации здесь нет.
+    
+    def host_fetch(self, url: str) -> Any: # Возвращает PyodideFuture, но для простоты Any
+        ...
+
+# Объявляем переменную `js` для анализатора.
+# В реальной среде Pyodide эта строка будет проигнорирована,
+# так как глобальная переменная `js` уже будет существовать.
+js: JsBridge
+
+# --- ▲▲▲ КОНЕЦ НОВОГО КОДА ▲▲▲ ---
 # --- Наш главный асинхронный инструмент ---
 
 async def fetch_current_time(input_data: Any) -> Dict[str, Any]:

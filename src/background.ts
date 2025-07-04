@@ -7,11 +7,44 @@
  * и управляя поведением иконки расширения.
  */
 
-console.log("APP Background Script Loaded (v0.4.1).");
+console.log("APP Background Script Loaded (v0.9.0 - Resilient Fetch).");
 
 //================================================================//
 //  1. РЕАЛИЗАЦИЯ HOST API
 //================================================================//
+
+/**
+ * Новая, отказоустойчивая функция для выполнения сетевых запросов.
+ * Делает несколько попыток с увеличивающейся задержкой при сетевых сбоях.
+ * @param url - URL для запроса.
+ * @param options - Опции для fetch.
+ * @param retries - Количество попыток.
+ * @param delay - Начальная задержка в миллисекундах.
+ */
+async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 10, delay = 500) {
+  for (let i = 0; i < retries; i++) {
+      try {
+          console.log(`[Background] Попытка #${i + 1} для fetch: ${url}`);
+          const response = await fetch(url, options);
+          if (!response.ok) {
+              // Если статус 4xx или 5xx, это ошибка сервера, повторять бессмысленно.
+              throw new Error(`HTTP error! Status: ${response.status}`);
+          }
+          return await response.json(); // Успех!
+      } catch (error) {
+          // Ловим сетевые ошибки (Failed to fetch, ERR_CONNECTION_CLOSED)
+          const isLastAttempt = i === retries - 1;
+          console.warn(`[Background] Ошибка на попытке #${i + 1}:`, error.message);
+          if (isLastAttempt) {
+              // Если это была последняя попытка, пробрасываем ошибку дальше.
+              console.error(`[Background] Все ${retries} попыток провалились. Сдаюсь.`);
+              throw error;
+          }
+          // Ждем перед следующей попыткой, увеличивая задержку (экспоненциальный рост)
+          await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
+      }
+  }
+}
 
 /**
  * Объект, содержащий логику для всех инструментов, доступных в Host-API.
@@ -28,7 +61,7 @@ const hostApiImpl = {
         target: { tabId: tabId },
         func: () => ({
           title: document.title,
-          content: document.body.innerText, // innerText здесь подходит для общего контента.
+          content: document.body.innerText,
         }),
       });
 
@@ -45,41 +78,32 @@ const hostApiImpl = {
   /**
    * Находит элементы по CSS-селектору и извлекает их текст или атрибут.
    * @param tabId ID целевой вкладки.
-   * @param options Опции парсинга, например { selector: 'h2', attribute: 'innerText' }
+   * @param options Опции парсинга.
    */
   async getElements(tabId: number, options: { selector: string; attribute: string }): Promise<any> {
     try {
       console.log(`[Background] Выполняем getElements для вкладки ${tabId} с селектором "${options.selector}"`);
-      
       const results = await chrome.scripting.executeScript({
         target: { tabId: tabId },
-        // Передаем опции как аргумент в функцию, которая будет выполнена на странице
         args: [options],
         func: (opts) => {
-          // Этот код выполняется в контексте целевой веб-страницы
           const elements = document.querySelectorAll(opts.selector);
-
-          // Превращаем NodeList в массив и извлекаем данные для каждого элемента
           return Array.from(elements).map(el => {
-            // Используем textContent для более надежного извлечения всего текста
-            // внутри элемента, игнорируя CSS стили (например, display: none).
             if (opts.attribute === 'textContent' || opts.attribute === 'innerText') {
-              return (el as HTMLElement).textContent?.trim() || ''; // .trim() для удаления лишних пробелов
+              return (el as HTMLElement).textContent?.trim() || '';
             }
             if (opts.attribute === 'innerHTML') {
                 return el.innerHTML;
             }
-            // В противном случае, пытаемся получить указанный атрибут (href, src, data-*, и т.д.)
             return el.getAttribute(opts.attribute);
           });
         },
       });
 
-      // executeScript всегда возвращает массив, нам нужен первый результат
       if (results && results[0]) {
         return results[0].result;
       }
-      return []; // Если ничего не найдено, возвращаем пустой массив
+      return [];
     } catch (e: any) {
       console.error(`[Background] Ошибка в getElements:`, e);
       return { error: e.message };
@@ -92,67 +116,47 @@ const hostApiImpl = {
 //================================================================//
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  // Игнорируем сообщения, которые не относятся к нашему API.
+  // Ваш вариант `return;` правильнее для краткости. Я вернул его.
   if (request.source !== "app-host-api") return;
 
   const { command, data, targetTabId } = request;
-  console.log(`[Background] Получена команда '${command}' для вкладки ${targetTabId}.`);
+  console.log(`[Background] Получена команда '${command}' для вкладки ${targetTabId || 'N/A'}.`);
 
-  // Маршрутизация команды к соответствующей функции в hostApiImpl
-  if (command === "getActivePageContent") {
-    if (!targetTabId) {
-      sendResponse({ error: "Target tab ID was not provided." });
-      return;
-    }
-    hostApiImpl.getActivePageContent(targetTabId).then(sendResponse);
-    return true; // Сообщаем Chrome, что ответ будет асинхронным
+  // Маршрутизация команд
+  switch (command) {
+    case "getActivePageContent":
+      if (!targetTabId) {
+        sendResponse({ error: "Target tab ID was not provided." });
+        return false;
+      }
+      hostApiImpl.getActivePageContent(targetTabId).then(sendResponse);
+      return true;
+
+    case "getElements":
+      if (!targetTabId) {
+        sendResponse({ error: "Target tab ID was not provided." });
+        return false;
+      }
+      hostApiImpl.getElements(targetTabId, data).then(sendResponse);
+      return true;
+
+    case "host_fetch":
+      const url = data.url;
+      console.log(`[Background] Получена задача на отказоустойчивый fetch для: ${url}`);
+      // Вызываем нашу новую умную функцию
+      fetchWithRetry(url)
+          .then(jsonData => {
+              sendResponse({ error: false, data: jsonData });
+          })
+          .catch(err => {
+              sendResponse({ error: true, error_message: err.message });
+          });
+      return true;
+
+    default:
+      sendResponse({ error: `Unknown command: ${command}` });
+      return false;
   }
-  
-  if (command === "getElements") {
-    if (!targetTabId) {
-      sendResponse({ error: "Target tab ID was not provided." });
-      return;
-    }
-    hostApiImpl.getElements(targetTabId, data).then(sendResponse);
-    return true; // Сообщаем Chrome, что ответ будет асинхронным
-  }
-
-// ... в функции chrome.runtime.onMessage.addListener ...
-
-if (command === "host_fetch") {
-  const url = data.url;
-  console.log(`[Background] Выполняем делегированный fetch для: ${url}`);
-  
-  // --- ▼▼▼ ИЗМЕНЕНИЕ: Самый простой fetch ▼▼▼ ---
-  fetch(url)
-      .then(response => {
-          // Мы должны вручную проверять `ok` статус, так как fetch
-          // не считает 404 или 500 ошибкой, которая попадает в .catch()
-          if (!response.ok) {
-              // Создаем свою ошибку, чтобы она была поймана в .catch()
-              throw new Error(`HTTP error! Status: ${response.status}`);
-          }
-          // Если все хорошо, парсим JSON
-          return response.json();
-      })
-      .then(jsonData => {
-          // Успешный ответ
-          const successResponse = { error: false, data: jsonData };
-          console.log('[Background] Успех, отправляю:', successResponse);
-          sendResponse(successResponse);
-      })
-      .catch(err => {
-          // Ловим и сетевые ошибки, и ошибки статуса
-          const errorResponse = { error: true, error_message: err.message };
-          console.error('[Background] Ошибка, отправляю:', errorResponse);
-          sendResponse(errorResponse);
-      });
-  // --- ▲▲▲ КОНЕЦ ИЗМЕНЕНИЯ ▲▲▲ ---
-      
-  return true; // Сообщаем Chrome, что ответ будет асинхронным
-}
-  // Если команда не найдена
-  sendResponse({ error: `Unknown command: ${command}` });
 });
 
 //================================================================//
@@ -160,19 +164,14 @@ if (command === "host_fetch") {
 //================================================================//
 
 chrome.action.onClicked.addListener((tab) => {
-  // URL нашей главной страницы управления.
   const platformPageUrl = chrome.runtime.getURL('index.html');
-
-  // Ищем, не открыта ли уже наша страница, чтобы не создавать дубликаты.
   chrome.tabs.query({ url: platformPageUrl }, (tabs) => {
     if (tabs.length > 0) {
-      // Если вкладка найдена, активируем ее и ее окно.
       chrome.tabs.update(tabs[0].id!, { active: true });
       if (tabs[0].windowId) {
           chrome.windows.update(tabs[0].windowId, { focused: true });
       }
     } else {
-      // Если вкладка не найдена, создаем новую.
       chrome.tabs.create({ url: platformPageUrl });
     }
   });
