@@ -1,0 +1,13 @@
+{
+  "name": "World Time Checker (via Host API)",
+  "description": "Uses the platform's Host API to fetch the current time.",
+  "pythonDependencies": [],
+  "steps": [
+    {
+      "id": "get_world_time_via_host",
+      "tool": "python.fetch_current_time",
+      "description": "Calls a Python function that asks the Host to fetch data from a time API.",
+      "input": { "timezone": "Europe/Moscow" }
+    }
+  ]
+}
