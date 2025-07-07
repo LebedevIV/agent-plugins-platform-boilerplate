@@ -1,0 +1,12 @@
+{
+  "name": "Google Helper",
+  "version": "1.0.0",
+  "description": "Помощник для работы с Google сервисами",
+  "author": "APP Team",
+  "main_server": "mcp_server.py",
+  "host_permissions": [
+    "*://*.google.com/*",
+    "*://*.google.ru/*"
+  ],
+  "icon": "icon.svg"
+} 

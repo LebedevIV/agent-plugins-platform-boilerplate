@@ -21,15 +21,15 @@ const packageJson = JSON.parse(readFileSync('./package.json', 'utf8'));
 const manifest = {
   manifest_version: 3,
   default_locale: 'en',
-  name: '__MSG_extensionName__',
+  name: 'Agent Plugins Platform',
   browser_specific_settings: {
     gecko: {
-      id: 'example@example.com',
+      id: 'agent-plugins@example.com',
       strict_min_version: '109.0',
     },
   },
   version: packageJson.version,
-  description: '__MSG_extensionDescription__',
+  description: 'Browser extension for Python plugin execution using Pyodide and MCP protocol',
   host_permissions: ['<all_urls>'],
   permissions: ['storage', 'scripting', 'tabs', 'notifications', 'sidePanel'],
   options_page: 'options/index.html',
@@ -38,7 +38,6 @@ const manifest = {
     type: 'module',
   },
   action: {
-    default_popup: 'popup/index.html',
     default_icon: 'icon-34.png',
   },
   chrome_url_overrides: {
@@ -72,7 +71,16 @@ const manifest = {
   devtools_page: 'devtools/index.html',
   web_accessible_resources: [
     {
-      resources: ['*.js', '*.css', '*.svg', 'icon-128.png', 'icon-34.png'],
+      resources: [
+        '*.js', 
+        '*.css', 
+        '*.svg', 
+        'icon-128.png', 
+        'icon-34.png',
+        'plugins/*',
+        'pyodide/*',
+        'wheels/*'
+      ],
       matches: ['*://*/*'],
     },
   ],

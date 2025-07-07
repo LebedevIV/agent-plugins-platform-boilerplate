@@ -1,26 +1,129 @@
 .App {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
   text-align: center;
-  height: 100%;
-  padding: 1rem;
-}
-
-.App-logo {
-  height: 50vmin;
-  margin-bottom: 1rem;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .App-header {
-  height: 100%;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #f8f9fa;
   display: flex;
-  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.header-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.theme-toggle-btn,
+.settings-btn {
+  background: none;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #374151;
+  display: flex;
   align-items: center;
   justify-content: center;
-  font-size: calc(10px + 2vmin);
+}
+
+.theme-toggle-btn:hover,
+.settings-btn:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+  transform: scale(1.05);
+}
+
+.theme-toggle-btn:active,
+.settings-btn:active {
+  transform: scale(0.95);
+}
+
+.App-logo {
+  height: 40px;
+  pointer-events: none;
+  margin-bottom: 8px;
+}
+
+.side-panel-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.plugins-section {
+  padding: 16px;
+  border-bottom: 1px solid #e0e0e0;
+  flex-shrink: 0;
+}
+
+.plugins-section h3 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.plugins-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.logs-section {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Dark theme adjustments */
+.App.bg-gray-800 .App-header {
+  background: #374151;
+  border-bottom-color: #4b5563;
+}
+
+.App.bg-gray-800 .theme-toggle-btn,
+.App.bg-gray-800 .settings-btn {
+  border-color: #6b7280;
+  color: #f3f4f6;
+}
+
+.App.bg-gray-800 .theme-toggle-btn:hover,
+.App.bg-gray-800 .settings-btn:hover {
+  background: #4b5563;
+  border-color: #9ca3af;
+}
+
+.App.bg-gray-800 .plugins-section h3 {
+  color: #f3f4f6;
+}
+
+.App.bg-gray-800 .plugins-section {
+  border-bottom-color: #4b5563;
+}
+
+/* Responsive adjustments */
+@media (max-width: 400px) {
+  .App-header {
+    padding: 12px;
+  }
+  
+  .plugins-section {
+    padding: 12px;
+  }
+  
+  .App-logo {
+    height: 32px;
+  }
 }
 
 code {

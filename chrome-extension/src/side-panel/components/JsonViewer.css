@@ -1,0 +1,120 @@
+.json-viewer-container {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.json-viewer-controls {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #2a2a2a;
+  border-bottom: 1px solid #333;
+}
+
+.json-viewer-search {
+  flex: 1;
+  background: #333;
+  border: 1px solid #555;
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.json-viewer-search::placeholder {
+  color: #999;
+}
+
+.json-viewer-controls button {
+  background: #555;
+  border: 1px solid #777;
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 3px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.json-viewer-controls button:hover {
+  background: #666;
+}
+
+.json-viewer-content {
+  padding: 8px 12px;
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.json-viewer-node {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
+.json-viewer-toggle {
+  cursor: pointer;
+  color: #888;
+  font-weight: bold;
+  user-select: none;
+  min-width: 12px;
+}
+
+.json-viewer-toggle:hover {
+  color: #fff;
+}
+
+.json-viewer-key {
+  color: #9cdcfe;
+  font-weight: 600;
+}
+
+.json-viewer-value {
+  color: #ce9178;
+}
+
+.json-viewer-value.string {
+  color: #ce9178;
+}
+
+.json-viewer-value.number {
+  color: #b5cea8;
+}
+
+.json-viewer-value.boolean {
+  color: #569cd6;
+}
+
+.json-viewer-value.null {
+  color: #569cd6;
+  font-style: italic;
+}
+
+.json-viewer-children {
+  flex: 1;
+}
+
+.json-viewer-copy-button {
+  background: #444;
+  border: 1px solid #666;
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  cursor: pointer;
+  margin-left: 8px;
+}
+
+.json-viewer-copy-button:hover {
+  background: #555;
+}
+
+.json-viewer-copy-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+} 

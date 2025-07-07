@@ -1,0 +1,14 @@
+{
+  "name": "time_test",
+  "description": "Тестовый плагин для проверки запросов времени",
+  "steps": [
+    {
+      "name": "get_time",
+      "description": "Получить текущее время",
+      "method": "get_time",
+      "params": {
+        "timezone": "Europe/Moscow"
+      }
+    }
+  ]
+} 

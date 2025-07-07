@@ -1,0 +1,58 @@
+{
+  "options": {
+    "title": "Agent-Plugins-Platform",
+    "subtitle": "Панель управления плагинами",
+    "tabs": {
+      "plugins": "Плагины",
+      "settings": "Настройки"
+    },
+    "plugins": {
+      "title": "Доступные плагины",
+      "loading": "Загрузка плагинов...",
+      "error": "Ошибка загрузки плагинов",
+      "version": "v{version}",
+      "details": {
+        "title": "Детали плагина",
+        "version": "Версия",
+        "description": "Описание",
+        "mainServer": "Основной сервер",
+        "hostPermissions": "Разрешения хостов",
+        "permissions": "Разрешения",
+        "selectPlugin": "Выберите плагин из списка слева."
+      }
+    },
+    "settings": {
+      "title": "Настройки Платформы",
+      "aiKeys": {
+        "title": "API Ключи нейросетей",
+        "fixedKeys": {
+          "geminiFlash": "Google Gemini (Flash) - Базовый анализ",
+          "gemini25": "Gemini 2.5 Pro - Глубокий анализ"
+        },
+        "customKeys": {
+          "title": "Пользовательские API ключи",
+          "addButton": "+ Добавить новый ключ",
+          "namePlaceholder": "Введите название ключа",
+          "keyPlaceholder": "Введите API ключ"
+        },
+        "status": {
+          "configured": "Настроен",
+          "notConfigured": "Не настроен",
+          "testing": "Тестирование..."
+        },
+        "badges": {
+          "free": "Бесплатный"
+        },
+        "actions": {
+          "save": "Сохранить все ключи",
+          "test": "Тестировать подключения"
+        },
+        "messages": {
+          "saved": "Настройки сохранены!",
+          "saveError": "Ошибка при сохранении настроек",
+          "testComplete": "Тестирование завершено!"
+        }
+      }
+    }
+  }
+} 
