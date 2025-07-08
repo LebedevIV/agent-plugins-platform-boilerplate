@@ -27,55 +27,49 @@ export const IDELayout: React.FC<IDELayoutProps> = ({
 }) => {
   const { t } = useTranslations(locale);
   const layoutRef = useRef<HTMLDivElement>(null);
-  const leftWidth = 250; // Fixed left panel width
-  const [rightWidth, setRightWidth] = useState(300);
-  const [isDraggingRight, setIsDraggingRight] = useState(false);
+  const leftWidth = 250; // фиксированная ширина
+  const [rightRatio, setRightRatio] = useState(0.5); // доля правой колонки (0.5 = 50%)
+  const [isDragging, setIsDragging] = useState(false);
 
-  // Handle resize events
+  // Обработка resize
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (layoutRef.current && isDraggingRight) {
+      if (layoutRef.current && isDragging) {
         const rect = layoutRef.current.getBoundingClientRect();
-        const totalWidth = rect.width;
-        const mouseX = e.clientX - rect.left;
-
-        // Calculate new widths based on mouse position
-        const newRightWidth = Math.max(200, Math.min(400, totalWidth - mouseX - leftWidth));
-        const newMiddleWidth = totalWidth - leftWidth - newRightWidth;
-
-        // Ensure middle section has minimum width
-        if (newMiddleWidth >= 300) {
-          setRightWidth(newRightWidth);
-        }
+        const total = rect.width - leftWidth;
+        let x = e.clientX - rect.left - leftWidth;
+        // Ограничения
+        const min = 300;
+        const max = total - 300;
+        x = Math.max(min, Math.min(x, max));
+        setRightRatio((total - x) / total);
       }
     };
-
     const handleMouseUp = () => {
-      setIsDraggingRight(false);
+      setIsDragging(false);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
-
-    if (isDraggingRight) {
+    if (isDragging) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
       document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
     }
-
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDraggingRight, leftWidth]);
+  }, [isDragging]);
+
+  // Вычисляем ширины
+  const getGridTemplate = () => {
+    const total = `calc(100vw - ${leftWidth}px)`;
+    return `${leftWidth}px calc(${total} * ${1 - rightRatio}) 6px calc(${total} * ${rightRatio})`;
+  };
 
   return (
-    <div
-      className="ide-layout"
-      ref={layoutRef}
-      style={{
-        gridTemplateColumns: `${leftWidth}px 1fr ${rightWidth}px`,
-      }}>
+    <div className="ide-layout" ref={layoutRef} style={{ gridTemplateColumns: getGridTemplate() }}>
       <aside className="ide-sidebar-left">
         <header>
           <button onClick={onGithubClick} className="logo-button">
@@ -96,17 +90,15 @@ export const IDELayout: React.FC<IDELayoutProps> = ({
           </button>
         </nav>
       </aside>
-
       <main className="ide-main-content">{children}</main>
-
-      {/* Right resize handle */}
+      {/* Резайзер */}
       <button
         className="resize-handle"
-        onMouseDown={() => setIsDraggingRight(true)}
+        onMouseDown={() => setIsDragging(true)}
         aria-label="Resize panels"
         type="button"
+        tabIndex={0}
       />
-
       <aside className="ide-sidebar-right">
         <PluginDetails selectedPlugin={selectedPlugin} locale={locale} onUpdateSetting={onUpdatePluginSetting} />
       </aside>

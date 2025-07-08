@@ -29,9 +29,10 @@ code {
 .ide-layout {
   display: grid;
   height: 100vh;
-  gap: 1px;
+  gap: 0;
   background-color: #2d3748;
   position: relative;
+  grid-template-rows: 1fr;
 }
 
 /* Resizable panels */
@@ -46,14 +47,11 @@ code {
   border: none;
   padding: 0;
   outline: none;
+  background-clip: content-box;
 }
 
-.resize-handle:hover {
+.resize-handle:hover, .resize-handle:active {
   background-color: rgba(99, 179, 237, 0.5);
-}
-
-.resize-handle:active {
-  background-color: rgba(99, 179, 237, 0.8);
 }
 
 /* Left Sidebar */
@@ -132,6 +130,7 @@ code {
   color: #2d3748;
   padding: 1.5rem;
   overflow-y: auto;
+  min-width: 300px;
 }
 
 .tab-content {
@@ -201,7 +200,9 @@ code {
 .ide-sidebar-right {
   background-color: #1a202c;
   color: #e2e8f0;
-  padding: 1rem;
+  min-width: 300px;
+  max-width: 100vw;
+  overflow-y: auto;
   border-left: 1px solid #4a5568;
 }
 
