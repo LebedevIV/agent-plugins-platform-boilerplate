@@ -16,6 +16,8 @@ interface IDELayoutProps {
   onUpdatePluginSetting?: (pluginId: string, setting: string, value: boolean) => Promise<void>;
 }
 
+const STORAGE_KEY = 'options-right-ratio';
+
 export const IDELayout: React.FC<IDELayoutProps> = ({
   children,
   activeTab,
@@ -28,8 +30,18 @@ export const IDELayout: React.FC<IDELayoutProps> = ({
   const { t } = useTranslations(locale);
   const layoutRef = useRef<HTMLDivElement>(null);
   const leftWidth = 250; // фиксированная ширина
-  const [rightRatio, setRightRatio] = useState(0.5); // доля правой колонки (0.5 = 50%)
+  // Инициализация из localStorage
+  const [rightRatio, setRightRatio] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    const num = saved ? parseFloat(saved) : 0.5;
+    return isNaN(num) ? 0.5 : Math.max(0.1, Math.min(num, 0.9));
+  });
   const [isDragging, setIsDragging] = useState(false);
+
+  // Сохраняем rightRatio в localStorage при изменении
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, rightRatio.toString());
+  }, [rightRatio]);
 
   // Обработка resize
   useEffect(() => {
