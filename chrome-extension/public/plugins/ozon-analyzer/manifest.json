@@ -1,0 +1,24 @@
+{
+  "name": "Ozon Analyzer",
+  "version": "1.0.0",
+  "description": "Анализатор товаров Ozon с проверкой соответствия описания и состава",
+  "author": "APP Team",
+  "main_server": "mcp_server.py",
+  "host_permissions": [
+    "*://*.ozon.ru/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "icon": "icon.svg",
+  "permissions": ["activeTab", "scripting"],
+  "ai_models": {
+    "basic_analysis": "gemini-flash",
+    "detailed_comparison": "gemini-pro",
+    "deep_analysis": "gemini-25",
+    "scraping_fallback": "gemini-flash"
+  },
+  "settings": {
+    "enable_deep_analysis": true,
+    "auto_request_deep_analysis": true
+  }
+}

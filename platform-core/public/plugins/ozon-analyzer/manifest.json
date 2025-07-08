@@ -1,0 +1,11 @@
+{
+  "name": "Ozon Product Analyzer",
+  "version": "0.1.0",
+  "description": "Analyzes product cards and reviews on ozon.ru to identify quality.",
+  "author": "APP Team",
+  "main_server": "mcp_server.py",
+  "host_permissions": [
+    "*://*.ozon.ru/*"
+  ],
+  "icon": "icon.svg"
+}

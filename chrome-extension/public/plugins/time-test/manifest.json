@@ -1,0 +1,8 @@
+{
+  "name": "Time Test",
+  "version": "1.0.0",
+  "description": "Тестовый плагин для проверки запросов к серверу времени",
+  "main_server": "mcp_server.py",
+  "host_permissions": ["*://*.worldtimeapi.org/*"],
+  "permissions": ["activeTab", "scripting"]
+} 
