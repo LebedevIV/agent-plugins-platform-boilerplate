@@ -1,3 +1,7 @@
+# ВАЖНО: Страница настроек платформы
+- Исходный код страницы настроек находится в папке: agent-plugins-platform-boilerplate/pages/options/
+- Основной макет страницы: agent-plugins-platform-boilerplate/pages/options/index.html
+
 # Active Context: Agent-Plugins-Platform
 
 ## Current Work Focus
@@ -32,15 +36,17 @@
 ## Next Steps
 
 ### Immediate Actions (Next 1-2 sessions)
-1. **Complete Memory Bank**: Finish creating `progress.md` and `.cursorrules`
-2. **Deep Code Review**: Analyze core implementation files
-   - `core/plugin-manager.js`
-   - `core/host-api.js`
-   - `core/workflow-engine.js`
-   - `bridge/mcp-bridge.js`
-   - `bridge/pyodide-worker.js`
-3. **Plugin Analysis**: Study existing `ozon-analyzer` plugin implementation
-4. **Build System Review**: Understand Vite configuration and build process
+1. **Complete Memory Bank**: ✅ Finished creating comprehensive memory bank system
+2. **Context Preservation System**: ✅ Created commands for saving and restoring context
+3. **Deep Code Review**: Analyze core implementation files
+   - `platform-core/core/plugin-manager.js`
+   - `platform-core/core/host-api.js`
+   - `platform-core/core/workflow-engine.js`
+   - `platform-core/bridge/mcp-bridge.js`
+   - `platform-core/bridge/pyodide-worker.js`
+4. **Plugin Analysis**: Study existing `ozon-analyzer` plugin implementation
+5. **Build System Review**: Understand Vite configuration and build process
+6. **Test Migration**: Verify all components work after migration to futures branch
 
 ### Short-term Goals (Next 1-2 weeks)
 1. **Development Environment Setup**: Ensure local development works
@@ -132,4 +138,67 @@
 1. What is the roadmap for platform evolution?
 2. How should the project balance features vs stability?
 3. What are the key differentiators from competitors?
-4. How should the open-source strategy be structured? 
+4. How should the open-source strategy be structured?
+
+# Контекст разработки: Страница настроек платформы
+
+- Вся логика и страница настроек платформы теперь находятся в проекте `agent-plugins-platform-boilerplate` (директория: `agent-plugins-platform-boilerplate/pages/options/` и интеграция через `platform-core`).
+- Старый проект в корне (`agent-plugins-platform`) больше не актуален, используется только как источник для интеграции.
+- Для сборки используйте:
+  ```bash
+  cd agent-plugins-platform-boilerplate && rm -rf dist && pnpm run build
+  ```
+- В базовый шаблон boilerplate вносить минимум изменений: по возможности использовать импорты и интеграцию через папку `platform-core`, а не менять код шаблона напрямую.
+
+## Правила версионирования и контроля обновлений
+- Версия расширения должна храниться в package.json и автоматически попадать в manifest (chrome-extension/manifest.ts).
+- Версия расширения обязательно отображается в интерфейсе options/index.html (например, в шапке или футере), чтобы пользователь мог убедиться в успешном обновлении.
+- После каждого релиза/изменения версии проверять, что новая версия видна в UI и соответствует package.json.
+- Версия должна автоматически увеличиваться (инкремент patch или minor) при каждом билде, чтобы всегда можно было отследить обновление и протестировать свежую сборку.
+- Для ручного управления версией используйте скрипт bash-scripts/update_version.sh:
+  - Без аргументов или с patch — увеличивает patch (0.5.0 → 0.5.1)
+  - С minor — увеличивает minor (0.5.1 → 0.6.0, patch=0)
+  - С major — увеличивает major (0.6.0 → 1.0.0, minor=0, patch=0)
+  - Можно явно задать версию: ./update_version.sh 2.0.0 
+
+# Narrative & Lessons Learned
+
+## Achievements
+- Полная миграция логики и структуры в новый boilerplate с сохранением чистоты архитектуры.
+- Внедрение автоматического версионирования и контроля обновлений через UI.
+- Реализация динамического UI для страницы настроек с сохранением состояния плагинов.
+- Консолидация и стандартизация memory-bank для прозрачности и передачи знаний.
+
+## Ошибки и важные находки
+- Класс selected в index.html может приводить к нежелательному выделению карточек — всегда проверяйте статические классы.
+- Важно не дублировать memory-bank: используйте только одну актуальную директорию.
+- Для LLM: всегда ищите исходники страниц и правила в папке agent-plugins-platform-boilerplate/memory-bank.
+
+## Рекомендации для LLM и разработчиков
+- Перед началом работы всегда читайте этот файл и progress.md для восстановления контекста.
+- Для обновления версии используйте команды из user-commands.md (см. ниже).
+- Для восстановления memory-bank в новом проекте — просто скопируйте всю папку memory-bank и обновите .cursor-rules.json.
+- Не удаляйте важные исторические решения и выводы — они помогают избежать повторения ошибок.
+
+## Правило инициативы и критического мышления
+- AI-ассистент всегда должен проявлять инициативу, предлагать улучшения, конструктивно критиковать и выражать своё мнение перед выполнением задачи, если это может повысить качество результата или избежать ошибок.
+
+## Система сохранения и восстановления контекста ✅
+
+### Созданные инструменты
+- **USER_COMMANDS.md** (в корне): Простые команды для пользователя
+- **user-commands.md** (в memory-bank): Технические инструкции для AI-ассистентов
+- **session-log.md**: История сессий разработки
+- **Команды сохранения**: Автоматическое сохранение контекста в конце сессии
+- **Команды восстановления**: Полное восстановление контекста для любой LLM
+
+### Ключевые возможности
+1. **Сохранение контекста**: Команды для фиксации достижений, решений и планов
+2. **Восстановление контекста**: Пошаговые инструкции для любой LLM модели
+3. **Миграция между проектами**: Перенос memory-bank в новые проекты
+4. **История сессий**: Отслеживание прогресса и важных решений
+
+### Использование
+- В конце сессии: выполнить команды сохранения из user-commands.md
+- В новом чате: использовать команды восстановления для любой LLM
+- При миграции: скопировать memory-bank и обновить .cursor-rules.json 

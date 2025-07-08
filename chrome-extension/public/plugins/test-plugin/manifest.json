@@ -1,0 +1,12 @@
+{
+  "name": "Test Plugin",
+  "version": "1.0.0",
+  "description": "Тестовый плагин для демонстрации sidebar",
+  "author": "APP Team",
+  "main_server": "mcp_server.py",
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "permissions": ["activeTab", "scripting"],
+  "icon": "icon.svg"
+} 

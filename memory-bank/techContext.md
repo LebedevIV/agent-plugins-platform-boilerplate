@@ -1,3 +1,6 @@
+[!NOTE]
+> Актуальная информация о расположении и сборке страницы настроек платформы — см. раздел "Контекст разработки: Страница настроек платформы" в `activeContext.md`.
+
 # Technical Context: Agent-Plugins-Platform
 
 ## Technology Stack

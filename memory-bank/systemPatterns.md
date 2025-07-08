@@ -1,3 +1,6 @@
+[!NOTE]
+> Актуальная информация о расположении и сборке страницы настроек платформы — см. раздел "Контекст разработки: Страница настроек платформы" в `activeContext.md`.
+
 # System Patterns: Agent-Plugins-Platform
 
 ## Architecture Overview

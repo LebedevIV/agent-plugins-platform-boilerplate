@@ -1,0 +1,11 @@
+{
+  "extends": "../../packages/tsconfig/base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@src/*": ["src/*"]
+    },
+    "types": ["chrome", "node", "./tailwind.d.ts"]
+  },
+  "include": ["src", "tailwind.config.ts", "build.mts"]
+}
