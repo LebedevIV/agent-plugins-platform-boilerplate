@@ -28,7 +28,6 @@ code {
 /* IDE Layout */
 .ide-layout {
   display: grid;
-  grid-template-columns: 250px 1fr 300px;
   height: 100vh;
   gap: 1px;
   background-color: #2d3748;
@@ -37,27 +36,24 @@ code {
 
 /* Resizable panels */
 .resize-handle {
-  position: absolute;
   width: 6px;
   height: 100%;
   cursor: col-resize;
   background-color: transparent;
   z-index: 100;
   transition: background-color 0.2s;
+  user-select: none;
+  border: none;
+  padding: 0;
+  outline: none;
 }
 
 .resize-handle:hover {
   background-color: rgba(99, 179, 237, 0.5);
 }
 
-.resize-handle.left {
-  left: 250px;
-  transform: translateX(-50%);
-}
-
-.resize-handle.right {
-  right: 300px;
-  transform: translateX(50%);
+.resize-handle:active {
+  background-color: rgba(99, 179, 237, 0.8);
 }
 
 /* Left Sidebar */
