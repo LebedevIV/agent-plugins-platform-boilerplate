@@ -1,5 +1,22 @@
 # Progress: Agent-Plugins-Platform
 
+## Recent Integration Updates
+
+### Boilerplate Integration ✅
+- **Architecture Reorganization**: Core components centralized in `platform-core` directory
+- **Alias System**: Implemented `@platform-core` and `@platform-public` aliases
+- **Clean Boilerplate**: Base structure remains clean with imports from platform-core
+- **Documentation**: Updated README.md and created PLUGIN_DEVELOPMENT.md guide
+- **Directory Cleanup**: Removed duplicate directories (`core`, `bridge`, `ui`, `pages`)
+- **Typescript Support**: Improved typing and modernized component structure
+
+### Integration Benefits
+- **Improved Development Experience**: Modern toolchain with Vite, TypeScript, React
+- **Better Modularity**: Clear separation between platform core and UI components
+- **Simplified Maintenance**: Centralized platform logic for easier updates
+- **Enhanced Plugin Development**: Structured environment for plugin creation
+- **Modern Architecture**: Following current best practices for browser extension development
+
 ## What Works
 
 ### Core Infrastructure ✅

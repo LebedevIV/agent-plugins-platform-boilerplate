@@ -1,11 +1,11 @@
-# Agent-Plugins-Platform Legacy
+# Agent-Plugins-Platform
 
 ![Status](https://img.shields.io/badge/status-functional-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.11+-blue.svg)
 ![JavaScript](https://img.shields.io/badge/javascript-ES6+-yellow.svg)
 
-**Модуль для запуска Python кода в браузере через Pyodide с поддержкой MCP (Model Context Protocol)**
+**Платформа для запуска Python кода в браузере через Pyodide с поддержкой MCP (Model Context Protocol)**
 
 Этот проект представляет собой готовое решение для интеграции Python в браузерные расширения и веб-приложения. Он позволяет выполнять Python код в изолированной среде WebAssembly, используя Pyodide, и предоставляет удобный мост между JavaScript и Python через MCP протокол.
 
@@ -20,37 +20,49 @@
 
 ## 🏗️ Архитектура
 
+Проект был реорганизован с использованием современного boilerplate. Вся бизнес-логика платформы централизована в директории `agent-plugins-platform-boilerplate/platform-core/`.
+
 ```
-├── core/           # Основная логика
-│   ├── plugin-manager.js    # Управление плагинами
-│   └── host-api.js          # API для взаимодействия с браузером
-├── bridge/         # Мост между JS и Python
-│   ├── pyodide-worker.js    # WebWorker с Pyodide
-│   └── mcp-bridge.js        # MCP протокол
-├── public/plugins/ # Python плагины
-│   └── ozon-analyzer/       # Пример плагина
-└── ui/            # Пользовательский интерфейс
+agent-plugins-platform-boilerplate/
+├── platform-core/          # Централизованная логика платформы
+│   ├── core/               # Основная бизнес-логика
+│   │   ├── plugin-manager.js    # Управление плагинами
+│   │   ├── host-api.js          # API для взаимодействия с браузером
+│   │   └── workflow-engine.js   # Обработка рабочих процессов
+│   ├── bridge/              # Мост между JS и Python
+│   │   ├── pyodide-worker.js    # WebWorker с Pyodide
+│   │   ├── mcp-bridge.js        # MCP протокол
+│   │   └── worker-manager.js    # Управление WebWorker'ами
+│   ├── public/              # Публичные ресурсы платформы
+│   │   ├── plugins/             # Python плагины
+│   │   └── ...
+│   └── ui/                  # UI компоненты платформы
+├── pages/                  # Страницы расширения (options, popup и т.д.)
+├── packages/               # Общие пакеты и утилиты
+├── public/                 # Статические ресурсы
+└── ...                     # Другие файлы и директории boilerplate
 ```
 
 ## 📦 Установка и запуск
 
 ```bash
 # Клонирование репозитория
-git clone https://github.com/LebedevIV/agent-plugins-platform-legacy.git
-cd agent-plugins-platform-legacy
+git clone https://github.com/your-username/agent-plugins-platform.git
+cd agent-plugins-platform
 
 # Установка зависимостей
 npm install
 
-# Запуск тестового стенда
+# Запуск в режиме разработки
 npm run dev
-```
 
-Откройте `http://localhost:5173` в браузере для доступа к тестовому стенду.
+# Сборка проекта
+npm run build
+```
 
 ## 🔧 Создание плагина
 
-1. Создайте папку в `public/plugins/your-plugin/`
+1. Создайте папку в `agent-plugins-platform-boilerplate/public/plugins/your-plugin/`
 2. Добавьте `manifest.json`:
 ```json
 {
@@ -80,6 +92,29 @@ async def main():
     result = await your_function(request.get("input", {}))
     sys.stdout.write(json.dumps({"result": result}) + '\n')
 ```
+
+## 🧩 Интеграция с boilerplate
+
+В проекте используется современный подход к интеграции через алиасы:
+
+- `@platform-core` — для доступа к основной логике, мосту, хукам и UI компонентам
+- `@platform-public` — для доступа к публичным ресурсам (плагинам, Pyodide, wheels)
+
+Пример импорта:
+```js
+import { PluginManager } from '@platform-core/core/plugin-manager.js';
+import { PluginsTab } from '@platform-core/pages/options/src/components/PluginsTab';
+```
+
+## 🔗 Полезные ссылки
+
+- [MCP Protocol](https://github.com/mcpwithoutmcp/mcp) - Стандарт протокола Model Context Protocol
+- [Pyodide](https://pyodide.org/en/stable/) - Python в WebAssembly
+- [WebWorker API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API) - Документация по WebWorker
+
+## 📝 Лицензия
+
+MIT License
 
 ## 🌟 Примеры использования
 
@@ -126,10 +161,6 @@ content = await js.getActivePageContent_bridge({"title": "h1"})
 - Улучшать API моста
 - Оптимизировать производительность
 - Расширять функциональность
-
-## 📄 Лицензия
-
-MIT License - см. файл [LICENSE](LICENSE) для деталей.
 
 ## 🙏 Благодарности
 
