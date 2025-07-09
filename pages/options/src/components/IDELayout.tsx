@@ -80,12 +80,27 @@ export const IDELayout: React.FC<IDELayoutProps> = ({
     return `${leftWidth}px calc(${total} * ${1 - rightRatio}) 6px calc(${total} * ${rightRatio})`;
   };
 
+  // Версия расширения
+  const [extVersion, setExtVersion] = useState('__EXT_VERSION__');
+  useEffect(() => {
+    try {
+      const manifest = chrome.runtime.getManifest();
+      setExtVersion(manifest.version || '__EXT_VERSION__');
+    } catch (error) {
+      console.warn('Failed to get extension version:', error);
+      setExtVersion('__EXT_VERSION__');
+    }
+  }, []);
+
   return (
     <div className="ide-layout" ref={layoutRef} style={{ gridTemplateColumns: getGridTemplate() }}>
       <aside className="ide-sidebar-left">
         <header>
           <button onClick={onGithubClick} className="logo-button">
-            <h1>{t('options.title')}</h1>
+            <h1 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {t('options.title')}
+              <span style={{ fontSize: '0.9em', color: '#a0aec0', marginLeft: 8 }}>v{extVersion}</span>
+            </h1>
           </button>
           <p>{t('options.subtitle')}</p>
         </header>
