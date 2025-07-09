@@ -447,62 +447,103 @@ code {
 }
 
 /* Dark Theme Support */
-.App.bg-gray-800 .ide-layout {
-  background-color: #1a202c;
+:root {
+  --color-bg-light: #f7fafc;
+  --color-bg-light-alt: #e2e8f0;
+  --color-text-light: #1a202c;
+  --color-text-light-secondary: #4a5568;
+  --color-link-light: #2563eb;
+  --color-heading-light: #1a202c;
+
+  --color-bg-dark: #1a202c;
+  --color-bg-dark-alt: #2d3748;
+  --color-text-dark: #e2e8f0;
+  --color-text-dark-secondary: #a0aec0;
+  --color-link-dark: #63b3ed;
+  --color-heading-dark: #f7fafc;
 }
 
-.App.bg-gray-800 .ide-sidebar-left {
-  background-color: #2d3748;
-  border-right-color: #4a5568;
+.theme-light .ide-layout {
+  background-color: var(--color-bg-light);
+}
+.theme-light .ide-sidebar-left,
+.theme-light .ide-sidebar-right {
+  background-color: var(--color-bg-light-alt);
+  color: var(--color-text-light);
+  border-color: #cbd5e1;
+}
+.theme-light .ide-main-content {
+  background-color: var(--color-bg-light);
+  color: var(--color-text-light);
+}
+.theme-light .plugin-item {
+  background-color: #fff;
+  border-color: #e2e8f0;
+  color: var(--color-text-light);
+}
+.theme-light .plugin-item.selected {
+  background-color: #ebf8ff;
+  border-color: #3182ce;
+}
+.theme-light .plugin-details h2,
+.theme-light .plugin-details h3 {
+  color: var(--color-heading-light);
+}
+.theme-light .plugin-details p,
+.theme-light .plugin-details li {
+  color: var(--color-text-light-secondary);
+}
+.theme-light a {
+  color: var(--color-link-light);
 }
 
-.App.bg-gray-800 .ide-main-content {
-  background-color: #2d3748;
-  color: #e2e8f0;
+.theme-dark .ide-layout {
+  background-color: var(--color-bg-dark);
 }
-
-.App.bg-gray-800 .ide-sidebar-right {
-  background-color: #2d3748;
-  border-left-color: #4a5568;
+.theme-dark .ide-sidebar-left,
+.theme-dark .ide-sidebar-right {
+  background-color: var(--color-bg-dark-alt);
+  color: var(--color-text-dark);
+  border-color: #4a5568;
 }
-
-.App.bg-gray-800 .plugin-item {
+.theme-dark .ide-main-content {
+  background-color: var(--color-bg-dark-alt);
+  color: var(--color-text-dark);
+}
+.theme-dark .plugin-item {
   background-color: #4a5568;
   border-color: #718096;
-  color: #e2e8f0;
+  color: var(--color-text-dark);
 }
-
-.App.bg-gray-800 .plugin-item:hover {
-  border-color: #63b3ed;
-  background-color: #2d3748;
-}
-
-.App.bg-gray-800 .plugin-item.selected {
+.theme-dark .plugin-item.selected {
   background-color: #2c5282;
   border-color: #63b3ed;
 }
-
-.App.bg-gray-800 .settings-section {
-  background-color: #4a5568;
-  border-color: #718096;
-  color: #e2e8f0;
+.theme-dark .plugin-details h2,
+.theme-dark .plugin-details h3 {
+  color: var(--color-heading-dark);
+}
+.theme-dark .plugin-details p,
+.theme-dark .plugin-details li {
+  color: var(--color-text-dark-secondary);
+}
+.theme-dark a {
+  color: var(--color-link-dark);
 }
 
-.App.bg-gray-800 .ai-key-item {
-  background-color: #2d3748;
-  border-color: #718096;
+/* Theme toggle button */
+.theme-toggle-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 50%;
+  transition: background 0.2s;
+  color: #fbbf24;
+  box-shadow: none;
 }
-
-.App.bg-gray-800 .ai-key-input input,
-.App.bg-gray-800 .key-name-input {
-  background-color: #1a202c;
-  border-color: #718096;
-  color: #e2e8f0;
-}
-
-.App.bg-gray-800 .ai-key-input input:focus,
-.App.bg-gray-800 .key-name-input:focus {
-  border-color: #63b3ed;
+.theme-toggle-btn:hover {
+  background: rgba(251, 191, 36, 0.1);
 }
 
 /* Responsive Design */
@@ -718,4 +759,37 @@ code {
 
 .App.bg-gray-800 .plugin-details .detail-section ul li {
   color: #e2e8f0 !important;
+}
+
+.theme-light .plugin-details ul,
+.theme-light .plugin-details li {
+  color: rgb(74, 85, 104);
+}
+
+.theme-light .toggle-label {
+  color: var(--color-heading-light);
+}
+
+.theme-light .plugin-details p > strong {
+  color: rgb(49, 130, 206);
+}
+
+.theme-light .plugins-list .plugin-info p {
+  color: var(--color-text-light-secondary);
+}
+
+.theme-dark .plugins-list .plugin-info p {
+  color: var(--color-text-dark);
+}
+
+.theme-light .ide-sidebar-left header h1 {
+  color: var(--color-heading-light);
+}
+
+.theme-light .ide-sidebar-left header p {
+  color: var(--color-text-light-secondary);
+}
+
+.theme-light .tab-button {
+  color: var(--color-text-light-secondary);
 }
