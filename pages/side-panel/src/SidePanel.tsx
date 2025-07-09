@@ -1,12 +1,9 @@
-import { ErrorDisplay } from './components/ErrorDisplay';
-import { LoadingSpinner } from './components/LoadingSpinner';
 import { LogManager, createRunLogger } from './components/LogManager';
 import { PluginControlPanel } from './components/PluginControlPanel';
 import { ToastNotifications } from './components/ToastNotifications';
-import { withErrorBoundary } from './components/withErrorBoundary';
-import { withSuspense } from './components/withSuspense';
+import { withErrorBoundary, withSuspense } from '@extension/shared';
 import { exampleThemeStorage } from '@extension/storage';
-import { cn } from '@extension/ui';
+import { cn, ErrorDisplay, LoadingSpinner } from '@extension/ui';
 import { useState, useEffect, useCallback } from 'react';
 import type { Plugin, PluginCard } from './components/PluginCard';
 import type { PanelView } from './components/PluginControlPanel';
