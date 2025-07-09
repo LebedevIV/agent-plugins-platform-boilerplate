@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
-import { cn } from '@extension/ui';
-import { Plugin } from '../hooks/usePlugins';
 import { useTranslations } from '../hooks/useTranslations';
+import { cn } from '@extension/ui';
+import { useEffect } from 'react';
+import type { Plugin } from '../hooks/usePlugins';
+import type React from 'react';
 
 interface PluginsTabProps {
   plugins: Plugin[];
@@ -20,10 +21,10 @@ export const PluginsTab: React.FC<PluginsTabProps> = ({
   loading,
   error,
   locale = 'en',
-  onUpdatePluginSetting
+  onUpdatePluginSetting,
 }) => {
   const { t } = useTranslations(locale);
-  
+
   // Select first plugin if nothing is selected
   useEffect(() => {
     if (plugins.length > 0 && !selectedPlugin) {
@@ -31,8 +32,7 @@ export const PluginsTab: React.FC<PluginsTabProps> = ({
     }
   }, [plugins, selectedPlugin, onSelectPlugin]);
 
-  console.log('[PluginsTab] plugins:', plugins);
-  console.log('[PluginsTab] loading:', loading, 'error:', error);
+  // Убираем лишние логи для предотвращения бесконечных циклов
 
   if (loading) return <p>Загрузка...</p>;
   if (error) return <p>Ошибка: {error}</p>;
@@ -51,14 +51,21 @@ export const PluginsTab: React.FC<PluginsTabProps> = ({
 
   const renderPlugins = () => {
     try {
-      return plugins.map((plugin) => {
+      return plugins.map(plugin => {
         const enabled = plugin.settings?.enabled ?? true;
         return (
-          <div 
+          <div
             key={plugin.id}
             className={cn('plugin-item', selectedPlugin?.id === plugin.id && 'selected')}
             onClick={() => handlePluginClick(plugin)}
-          >
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handlePluginClick(plugin);
+              }
+            }}
+            role="button"
+            tabIndex={0}>
             <div className="plugin-info">
               <h3>{plugin.name}</h3>
               <p>{plugin.description}</p>
@@ -73,8 +80,7 @@ export const PluginsTab: React.FC<PluginsTabProps> = ({
                 onClick={e => {
                   e.stopPropagation();
                   onUpdatePluginSetting(plugin.id, 'enabled', !enabled);
-                }}
-              >
+                }}>
                 {enabled ? 'Отключить' : 'Включить'}
               </button>
             )}
@@ -90,9 +96,7 @@ export const PluginsTab: React.FC<PluginsTabProps> = ({
   return (
     <>
       <h2>{t('options.plugins.title')}</h2>
-      <div className="plugins-list">
-        {renderPlugins()}
-      </div>
+      <div className="plugins-list">{renderPlugins()}</div>
     </>
   );
-}; 
+};

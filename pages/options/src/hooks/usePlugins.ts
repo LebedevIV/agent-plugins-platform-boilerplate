@@ -140,21 +140,30 @@ const usePlugins = () => {
     };
 
     fetchPlugins();
-  }, [pluginSettings]); // Зависимость только от pluginSettings
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- Убираем зависимость от pluginSettings для предотвращения бесконечного цикла
 
   // Обновляем выбранный плагин при изменении настроек
   useEffect(() => {
     if (selectedPlugin && pluginSettings) {
-      const updatedPlugin = {
-        ...selectedPlugin,
-        settings: pluginSettings[selectedPlugin.id] || {
-          enabled: true,
-          autorun: false,
-        },
+      const currentSettings = pluginSettings[selectedPlugin.id] || {
+        enabled: true,
+        autorun: false,
       };
-      setSelectedPlugin(updatedPlugin);
+
+      // Проверяем, действительно ли настройки изменились
+      const settingsChanged =
+        selectedPlugin.settings?.enabled !== currentSettings.enabled ||
+        selectedPlugin.settings?.autorun !== currentSettings.autorun;
+
+      if (settingsChanged) {
+        const updatedPlugin = {
+          ...selectedPlugin,
+          settings: currentSettings,
+        };
+        setSelectedPlugin(updatedPlugin);
+      }
     }
-  }, [pluginSettings, selectedPlugin]);
+  }, [pluginSettings, selectedPlugin?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- Зависим только от pluginSettings и ID выбранного плагина
 
   const selectPlugin = useCallback((plugin: Plugin) => {
     console.log('[usePlugins] Selecting plugin:', plugin);
