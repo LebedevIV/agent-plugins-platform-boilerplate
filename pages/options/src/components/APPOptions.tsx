@@ -3,7 +3,7 @@ import { PROJECT_URL_OBJECT } from '@extension/shared';
 import { useAIKeys, usePlugins, useTabs, useTranslations } from '../hooks';
 import { IDELayout, PluginsTab, SettingsTab } from './index';
 
-export const APPOptions: React.FC = () => {
+export const APPOptions: React.FC<{ isLight: boolean }> = ({ isLight }) => {
   // Определяем язык из браузера или используем английский по умолчанию
   const browserLocale = chrome.i18n?.getUILanguage?.() || 'en';
   const locale = browserLocale.startsWith('ru') ? 'ru' : 'en';
@@ -43,6 +43,7 @@ export const APPOptions: React.FC = () => {
       onGithubClick={handleGithubClick}
       locale={locale}
       onUpdatePluginSetting={updatePluginSetting}
+      isLight={isLight}
     >
       {isActiveTab('plugins') && (
         <PluginsTab

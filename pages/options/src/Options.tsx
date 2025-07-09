@@ -27,8 +27,8 @@ const Options = () => {
   const goGithubSite = () => chrome.tabs.create(PROJECT_URL_OBJECT);
 
   return (
-    <div className="App" id="app-container">
-      <APPOptions />
+    <div className={cn('App', isLight ? 'bg-slate-50' : 'bg-gray-800')} id="app-container">
+      <APPOptions isLight={isLight} />
     </div>
   );
 };

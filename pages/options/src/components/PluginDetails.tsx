@@ -50,6 +50,7 @@ export const PluginDetails: React.FC<PluginDetailsProps> = ({ selectedPlugin, lo
   return (
     <div className="plugin-details">
       <h2>{t('options.plugins.details.title')}</h2>
+      <div className="details-header-divider"></div>
       <div className="plugin-detail-content active">
         <div className="detail-section">
           <h3>{selectedPlugin.name}</h3>
@@ -117,17 +118,6 @@ export const PluginDetails: React.FC<PluginDetailsProps> = ({ selectedPlugin, lo
           <p>{selectedPlugin.description}</p>
         </div>
 
-        {selectedPlugin.manifest?.permissions && (
-          <div className="detail-section">
-            <h3>Разрешения</h3>
-            <ul>
-              {selectedPlugin.manifest.permissions.map((permission: string, idx: number) => (
-                <li key={idx}>{permission}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
         {/* Сайты/домены, на которых работает плагин */}
         {hostPermissions.length > 0 && (
           <div className="detail-section">
@@ -135,6 +125,17 @@ export const PluginDetails: React.FC<PluginDetailsProps> = ({ selectedPlugin, lo
             <ul>
               {hostPermissions.map((host: string, idx: number) => (
                 <li key={idx}>{host}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {selectedPlugin.manifest?.permissions && (
+          <div className="detail-section">
+            <h3>Разрешения</h3>
+            <ul>
+              {selectedPlugin.manifest.permissions.map((permission: string, idx: number) => (
+                <li key={idx}>{permission}</li>
               ))}
             </ul>
           </div>

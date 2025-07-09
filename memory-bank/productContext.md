@@ -70,3 +70,9 @@ Agent-Plugins-Platform provides a secure, standardized way to run Python code di
 - **Developer-friendly**: Standardized MCP protocol and tooling
 - **Performance**: WebAssembly-based Python execution
 - **Ecosystem**: Leverages Python's rich AI/ML libraries 
+
+## Переиспользуемые утилиты
+- patternToRegExp: преобразует host_permissions Chrome в корректные RegExp для фильтрации плагинов по URL. Используется в сайдпанели и может быть интегрирован в shared-утилиты.
+
+## Кладбище ошибок
+- Вести список типовых ошибок (например, некорректная фильтрация по паттернам, проблемы с <all_urls>, ошибки в регулярках) и их решений для ускорения отладки и обучения новых участников команды. 
