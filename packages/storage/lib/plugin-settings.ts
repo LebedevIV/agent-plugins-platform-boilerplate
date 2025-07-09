@@ -30,7 +30,7 @@ export const pluginSettingsStorage = createStorage<PluginSettingsState>(
   {},
   {
     storageEnum: StorageEnum.Local,
-    liveUpdate: true,
+    liveUpdate: false, // Отключаем liveUpdate чтобы избежать бесконечных циклов
   }
 );
 
