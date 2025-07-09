@@ -232,7 +232,7 @@ code {
 
 .plugin-details ul {
   margin: 0.5rem 0;
-  padding-left: 1rem;
+  padding-left: 0;
 }
 
 .plugin-details li {
@@ -541,6 +541,7 @@ code {
 .plugin-detail-content.active {
   display: block;
   padding-left: 24px;
+  padding-right: 24px;
 }
 
 .detail-section {
@@ -676,7 +677,7 @@ code {
 }
 
 .setting-item {
-  padding-left: 12px;
+  /* padding-left удалён, используется значение по умолчанию */
 }
 
 .plugin-details .detail-section p,
@@ -684,6 +685,7 @@ code {
   text-align: left;
 }
 
-.plugin-details .detail-section {
-  padding-left: 16px;
+.plugin-details .detail-section ul {
+  text-align: left;
+  /* padding-left удалён, используется значение по умолчанию */
 }
