@@ -633,13 +633,14 @@ code {
   top: 3px;
   width: 16px;
   height: 16px;
-  background: #fff;
+  background: #1976d2; /* синий кружок по умолчанию */
   border-radius: 50%;
-  transition: transform 0.2s;
+  transition: transform 0.2s, background 0.2s;
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 .toggle-switch input[type="checkbox"]:checked + .toggle-slider:before {
   transform: translateX(18px);
+  background: #fff; /* светлый кружок при включении */
 }
 .toggle-label {
   font-size: 14px;
