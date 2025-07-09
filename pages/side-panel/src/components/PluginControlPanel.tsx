@@ -1,3 +1,4 @@
+import { PluginDetails } from './PluginDetails';
 import { useState, useRef, useEffect } from 'react';
 import type { Plugin } from './PluginCard';
 import type React from 'react';
@@ -14,6 +15,7 @@ interface PluginControlPanelProps {
   onStop: () => void;
   onClose: () => void;
   onSendMessage?: (message: string) => void;
+  onUpdateSetting?: (pluginId: string, setting: string, value: boolean) => Promise<void>;
 }
 
 export type PanelView = 'chat' | 'details';
@@ -29,6 +31,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   onStop,
   onClose,
   onSendMessage,
+  onUpdateSetting,
 }) => {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<Array<{ id: string; text: string; isUser: boolean; timestamp: Date }>>([]);
@@ -187,22 +190,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
 
       <div className="panel-content">
         {currentView === 'details' ? (
-          <div className="details-view">
-            <div className="detail-item">
-              <span className="detail-label">Версия:</span>
-              <span className="detail-value">{plugin.version || plugin.manifest?.version || '1.0.0'}</span>
-            </div>
-            <div className="detail-item">
-              <span className="detail-label">Описание:</span>
-              <span className="detail-value">
-                {plugin.description || plugin.manifest?.description || 'Описание недоступно'}
-              </span>
-            </div>
-            <div className="detail-item">
-              <span className="detail-label">ID:</span>
-              <span className="detail-value">{plugin.id}</span>
-            </div>
-          </div>
+          <PluginDetails plugin={plugin} onUpdateSetting={onUpdateSetting} />
         ) : (
           <div className="chat-view">
             <div className="chat-messages" style={{ height: `calc(100% - ${inputHeight}px - 8px)` }}>
