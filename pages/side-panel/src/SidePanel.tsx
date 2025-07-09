@@ -86,7 +86,7 @@ const SidePanel = () => {
     // Открываем панель управления вместо прямого запуска
     setSelectedPlugin(plugin);
     setShowControlPanel(true);
-    setPanelView('details');
+    setPanelView('chat'); // По умолчанию открываем вкладку "Чат"
   };
 
   const handleStartPlugin = async () => {
@@ -151,7 +151,7 @@ const SidePanel = () => {
   const handleClosePanel = () => {
     setShowControlPanel(false);
     setSelectedPlugin(null);
-    setPanelView('details');
+    setPanelView('chat'); // Сбрасываем на "Чат" при закрытии
   };
 
   const clearLogs = () => {

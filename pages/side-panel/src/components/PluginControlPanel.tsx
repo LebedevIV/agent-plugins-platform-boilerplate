@@ -33,6 +33,21 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   const [messages, setMessages] = useState<Array<{id: string, text: string, isUser: boolean, timestamp: Date}>>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Состояние "остановлен"
+  const [stopped, setStopped] = useState(false);
+
+  useEffect(() => {
+    if (!isRunning) setStopped(false);
+  }, [isRunning]);
+
+  const handleStart = () => {
+    setStopped(false);
+    onStart();
+  };
+  const handleStop = () => {
+    setStopped(true);
+    onStop();
+  };
 
   const pluginName = plugin.name || plugin.manifest?.name || plugin.id;
 
@@ -151,36 +166,39 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
               )}
               <div ref={messagesEndRef} />
             </div>
-            
-            <div className="chat-input">
-              <input
-                ref={inputRef}
-                type="text"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Введите сообщение..."
-                className="message-input"
-              />
-              <button 
-                onClick={handleSendMessage}
-                disabled={!message.trim()}
-                className="send-btn"
-                title="Отправить сообщение"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="22" y1="2" x2="11" y2="13"></line>
-                  <polygon points="22,2 15,22 11,13 2,9"></polygon>
-                </svg>
-              </button>
-            </div>
           </div>
         )}
       </div>
 
+      {/* Нескрываемое поле ввода для чата */}
+      {currentView === 'chat' && (
+        <div className="chat-input">
+          <input
+            ref={inputRef}
+            type="text"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Введите сообщение..."
+            className="message-input"
+          />
+          <button 
+            onClick={handleSendMessage}
+            disabled={!message.trim()}
+            className="send-btn"
+            title="Отправить сообщение"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22,2 15,22 11,13 2,9"></polygon>
+            </svg>
+          </button>
+        </div>
+      )}
+
       <div className="panel-controls">
-        {!isRunning ? (
-          <button className="control-btn start-btn full-width" onClick={onStart} title="Запустить плагин">
+        {!isRunning || stopped ? (
+          <button className="control-btn start-btn full-width" onClick={handleStart} title="Запустить плагин">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polygon points="5,3 19,12 5,21"></polygon>
             </svg>
@@ -201,7 +219,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
               </svg>
               {isPaused ? 'Старт' : 'Пауза'}
             </button>
-            <button className="control-btn stop-btn" onClick={onStop} title="Остановить плагин">
+            <button className="control-btn stop-btn" onClick={handleStop} title="Остановить плагин">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
               </svg>
