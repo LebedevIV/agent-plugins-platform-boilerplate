@@ -241,6 +241,11 @@ code {
   color: #a0aec0;
 }
 
+.plugin-details h2 {
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
 /* Settings */
 .settings-container {
   max-width: 800px;
@@ -686,6 +691,31 @@ code {
 }
 
 .plugin-details .detail-section ul {
-  text-align: left;
-  /* padding-left удалён, используется значение по умолчанию */
+  font-size: 0.875rem;
+  color: #4a5568;
+  line-height: 1.4;
+  margin: 0.5rem 0;
+  padding-left: 0;
+}
+
+.plugin-details .detail-section li {
+  font-size: 0.875rem;
+  color: #e2e8f0;
+  margin: 0.25rem 0;
+}
+
+.details-header-divider {
+  border-bottom: 1px solid #4a5568;
+  margin-bottom: 1.5rem;
+  margin-top: 0.5rem;
+  width: 100%;
+}
+
+.App.bg-gray-800 .plugin-details .detail-section ul,
+.App.bg-gray-800 .plugin-details .detail-section li {
+  color: #e2e8f0 !important;
+}
+
+.App.bg-gray-800 .plugin-details .detail-section ul li {
+  color: #e2e8f0 !important;
 }
