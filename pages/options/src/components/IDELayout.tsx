@@ -1,9 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { cn } from '@extension/ui';
-import { TabType } from '../hooks/useTabs';
-import { Plugin } from '../hooks/usePlugins';
 import { PluginDetails } from './PluginDetails';
 import { useTranslations } from '../hooks/useTranslations';
+import { cn } from '@extension/ui';
+import { useState, useRef, useEffect } from 'react';
+import type { Plugin } from '../hooks/usePlugins';
+import type { TabType } from '../hooks/useTabs';
+import type React from 'react';
 
 interface IDELayoutProps {
   children: React.ReactNode;
@@ -15,6 +16,8 @@ interface IDELayoutProps {
   onUpdatePluginSetting?: (pluginId: string, setting: string, value: boolean) => Promise<void>;
 }
 
+const STORAGE_KEY = 'options-right-ratio';
+
 export const IDELayout: React.FC<IDELayoutProps> = ({
   children,
   activeTab,
@@ -22,100 +25,110 @@ export const IDELayout: React.FC<IDELayoutProps> = ({
   selectedPlugin,
   onGithubClick,
   locale = 'en',
-  onUpdatePluginSetting
+  onUpdatePluginSetting,
 }) => {
   const { t } = useTranslations(locale);
   const layoutRef = useRef<HTMLDivElement>(null);
-  const [leftWidth, setLeftWidth] = useState(250);
-  const [rightWidth, setRightWidth] = useState(300);
-  const [isDraggingLeft, setIsDraggingLeft] = useState(false);
-  const [isDraggingRight, setIsDraggingRight] = useState(false);
+  const leftWidth = 250; // фиксированная ширина
+  // Инициализация из localStorage
+  const [rightRatio, setRightRatio] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    const num = saved ? parseFloat(saved) : 0.5;
+    return isNaN(num) ? 0.5 : Math.max(0.1, Math.min(num, 0.9));
+  });
+  const [isDragging, setIsDragging] = useState(false);
 
-  // Handle resize events
+  // Сохраняем rightRatio в localStorage при изменении
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, rightRatio.toString());
+  }, [rightRatio]);
+
+  // Обработка resize
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (layoutRef.current && (isDraggingLeft || isDraggingRight)) {
+      if (layoutRef.current && isDragging) {
         const rect = layoutRef.current.getBoundingClientRect();
-        const totalWidth = rect.width;
-        
-        if (isDraggingLeft) {
-          const newLeftWidth = Math.max(150, Math.min(e.clientX - rect.left, totalWidth - rightWidth - 300));
-          setLeftWidth(newLeftWidth);
-        }
-        
-        if (isDraggingRight) {
-          const newRightWidth = Math.max(200, Math.min(totalWidth - leftWidth - 300, totalWidth - e.clientX + rect.left));
-          setRightWidth(newRightWidth);
-        }
+        const total = rect.width - leftWidth;
+        let x = e.clientX - rect.left - leftWidth;
+        // Ограничения
+        const min = 300;
+        const max = total - 300;
+        x = Math.max(min, Math.min(x, max));
+        setRightRatio((total - x) / total);
       }
     };
-
     const handleMouseUp = () => {
-      setIsDraggingLeft(false);
-      setIsDraggingRight(false);
+      setIsDragging(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
     };
-
-    if (isDraggingLeft || isDraggingRight) {
+    if (isDragging) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
     }
-
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDraggingLeft, isDraggingRight, leftWidth, rightWidth]);
+  }, [isDragging]);
+
+  // Вычисляем ширины
+  const getGridTemplate = () => {
+    const total = `calc(100vw - ${leftWidth}px)`;
+    return `${leftWidth}px calc(${total} * ${1 - rightRatio}) 6px calc(${total} * ${rightRatio})`;
+  };
+
+  // Версия расширения
+  const [extVersion, setExtVersion] = useState('__EXT_VERSION__');
+  useEffect(() => {
+    try {
+      const manifest = chrome.runtime.getManifest();
+      setExtVersion(manifest.version || '__EXT_VERSION__');
+    } catch (error) {
+      console.warn('Failed to get extension version:', error);
+      setExtVersion('__EXT_VERSION__');
+    }
+  }, []);
 
   return (
-    <div 
-      className="ide-layout" 
-      ref={layoutRef}
-      style={{
-        gridTemplateColumns: `${leftWidth}px 1fr ${rightWidth}px`
-      }}
-    >
+    <div className="ide-layout" ref={layoutRef} style={{ gridTemplateColumns: getGridTemplate() }}>
       <aside className="ide-sidebar-left">
         <header>
           <button onClick={onGithubClick} className="logo-button">
-            <h1>{t('options.title')}</h1>
+            <h1 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {t('options.title')}
+              <span style={{ fontSize: '0.9em', color: '#a0aec0', marginLeft: 8 }}>v{extVersion}</span>
+            </h1>
           </button>
           <p>{t('options.subtitle')}</p>
         </header>
         <nav className="tab-nav">
-          <button 
+          <button
             className={cn('tab-button', activeTab === 'plugins' && 'active')}
-            onClick={() => onTabChange('plugins')}
-          >
+            onClick={() => onTabChange('plugins')}>
             {t('options.tabs.plugins')}
           </button>
-          <button 
+          <button
             className={cn('tab-button', activeTab === 'settings' && 'active')}
-            onClick={() => onTabChange('settings')}
-          >
+            onClick={() => onTabChange('settings')}>
             {t('options.tabs.settings')}
           </button>
         </nav>
       </aside>
-
-      {/* Left resize handle */}
-      <div 
-        className="resize-handle left"
-        onMouseDown={() => setIsDraggingLeft(true)}
+      <main className="ide-main-content">{children}</main>
+      {/* Резайзер */}
+      <button
+        className="resize-handle"
+        onMouseDown={() => setIsDragging(true)}
+        aria-label="Resize panels"
+        type="button"
+        tabIndex={0}
       />
-
-      <main className="ide-main-content">
-        {children}
-      </main>
-
-      {/* Right resize handle */}
-      <div 
-        className="resize-handle right"
-        onMouseDown={() => setIsDraggingRight(true)}
-      />
-
       <aside className="ide-sidebar-right">
         <PluginDetails selectedPlugin={selectedPlugin} locale={locale} onUpdateSetting={onUpdatePluginSetting} />
       </aside>
     </div>
   );
-}; 
+};

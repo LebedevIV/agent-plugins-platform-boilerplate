@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Plugin } from '../hooks/usePlugins';
 import { useTranslations } from '../hooks/useTranslations';
 import { cn } from '@extension/ui';
+import { useState } from 'react';
+import type { Plugin } from '../hooks/usePlugins';
+import type React from 'react';
 
 interface PluginDetailsProps {
   selectedPlugin: Plugin | null;
@@ -9,17 +10,11 @@ interface PluginDetailsProps {
   onUpdateSetting?: (pluginId: string, setting: string, value: boolean) => Promise<void>;
 }
 
-export const PluginDetails: React.FC<PluginDetailsProps> = ({ 
-  selectedPlugin, 
-  locale = 'en',
-  onUpdateSetting
-}) => {
+export const PluginDetails: React.FC<PluginDetailsProps> = ({ selectedPlugin, locale = 'en', onUpdateSetting }) => {
   const { t } = useTranslations(locale);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
-  
-  console.log('[PluginDetails] selectedPlugin:', selectedPlugin);
-  console.log('[PluginDetails] selectedPlugin.manifest:', selectedPlugin?.manifest);
-  console.log('[PluginDetails] host_permissions:', selectedPlugin?.manifest?.host_permissions);
+
+  // Убираем лишние логи для предотвращения бесконечных циклов
 
   if (!selectedPlugin || typeof selectedPlugin !== 'object') {
     return (
@@ -32,15 +27,12 @@ export const PluginDetails: React.FC<PluginDetailsProps> = ({
 
   // Получаем настройки плагина или устанавливаем значения по умолчанию
   const settings = selectedPlugin.settings || { enabled: true, autorun: false };
-  
+
   // Универсальный поиск host_permissions
-  const hostPermissions = 
-    selectedPlugin.manifest?.host_permissions || 
-    selectedPlugin.host_permissions || 
-    [];
-  
-  console.log('[PluginDetails] final hostPermissions:', hostPermissions);
-  
+  const hostPermissions = selectedPlugin.manifest?.host_permissions || selectedPlugin.host_permissions || [];
+
+  // Убираем лишние логи для предотвращения бесконечных циклов
+
   // Обработчик изменения настроек
   const handleSettingChange = async (setting: string, value: boolean) => {
     if (onUpdateSetting) {
@@ -61,43 +53,47 @@ export const PluginDetails: React.FC<PluginDetailsProps> = ({
       <div className="plugin-detail-content active">
         <div className="detail-section">
           <h3>{selectedPlugin.name}</h3>
-          <p><strong>Версия:</strong> v{selectedPlugin.version}</p>
           <p>
-            <strong>Статус:</strong> 
+            <strong>Версия:</strong> v{selectedPlugin.version}
+          </p>
+          <p>
+            <strong>Статус:</strong>
             <span className={cn('status-badge', settings.enabled ? 'status-active' : 'status-inactive')}>
               {settings.enabled ? 'Активен' : 'Неактивен'}
             </span>
           </p>
-          <p><strong>Автор:</strong> {selectedPlugin.manifest?.author || 'Не указан'}</p>
-          <p><strong>Последнее обновление:</strong> {selectedPlugin.manifest?.last_updated || 'Неизвестно'}</p>
+          <p>
+            <strong>Автор:</strong> {selectedPlugin.manifest?.author || 'Не указан'}
+          </p>
+          <p>
+            <strong>Последнее обновление:</strong> {selectedPlugin.manifest?.last_updated || 'Неизвестно'}
+          </p>
         </div>
-        
+
         {/* Настройки плагина */}
         <div className="detail-section">
           <h3>Настройки плагина</h3>
           <div className="setting-item">
             <label className="toggle-switch">
-              <input 
-                type="checkbox" 
+              <input
+                type="checkbox"
                 checked={settings.enabled}
-                disabled={isUpdating === 'enabled'} 
-                onChange={(e) => handleSettingChange('enabled', e.target.checked)}
+                disabled={isUpdating === 'enabled'}
+                onChange={e => handleSettingChange('enabled', e.target.checked)}
               />
               <span className="toggle-slider"></span>
               <span className="toggle-label">Включен</span>
             </label>
-            <p className="setting-description">
-              Управляет активностью плагина. Отключение делает плагин неактивным.
-            </p>
+            <p className="setting-description">Управляет активностью плагина. Отключение делает плагин неактивным.</p>
           </div>
-          
+
           <div className="setting-item">
             <label className="toggle-switch">
-              <input 
-                type="checkbox" 
+              <input
+                type="checkbox"
                 checked={settings.autorun}
-                disabled={isUpdating === 'autorun' || !settings.enabled} 
-                onChange={(e) => handleSettingChange('autorun', e.target.checked)}
+                disabled={isUpdating === 'autorun' || !settings.enabled}
+                onChange={e => handleSettingChange('autorun', e.target.checked)}
               />
               <span className="toggle-slider"></span>
               <span className="toggle-label">Автоматический запуск</span>
@@ -107,12 +103,12 @@ export const PluginDetails: React.FC<PluginDetailsProps> = ({
             </p>
           </div>
         </div>
-        
+
         <div className="detail-section">
           <h3>Описание</h3>
           <p>{selectedPlugin.description}</p>
         </div>
-        
+
         {selectedPlugin.manifest?.permissions && (
           <div className="detail-section">
             <h3>Разрешения</h3>
@@ -123,7 +119,7 @@ export const PluginDetails: React.FC<PluginDetailsProps> = ({
             </ul>
           </div>
         )}
-        
+
         {/* Сайты/домены, на которых работает плагин */}
         {hostPermissions.length > 0 && (
           <div className="detail-section">
@@ -135,17 +131,16 @@ export const PluginDetails: React.FC<PluginDetailsProps> = ({
             </ul>
           </div>
         )}
-        
+
         <div className="plugin-actions">
-          <button 
-            className={cn("btn", settings.enabled ? "btn-secondary" : "btn-primary")}
+          <button
+            className={cn('btn', settings.enabled ? 'btn-secondary' : 'btn-primary')}
             onClick={() => handleSettingChange('enabled', !settings.enabled)}
-            disabled={isUpdating === 'enabled'}
-          >
+            disabled={isUpdating === 'enabled'}>
             {settings.enabled ? 'Отключить' : 'Включить'}
           </button>
         </div>
       </div>
     </div>
   );
-}; 
+};

@@ -28,36 +28,30 @@ code {
 /* IDE Layout */
 .ide-layout {
   display: grid;
-  grid-template-columns: 250px 1fr 300px;
   height: 100vh;
-  gap: 1px;
+  gap: 0;
   background-color: #2d3748;
   position: relative;
+  grid-template-rows: 1fr;
 }
 
 /* Resizable panels */
 .resize-handle {
-  position: absolute;
   width: 6px;
   height: 100%;
   cursor: col-resize;
   background-color: transparent;
   z-index: 100;
   transition: background-color 0.2s;
+  user-select: none;
+  border: none;
+  padding: 0;
+  outline: none;
+  background-clip: content-box;
 }
 
-.resize-handle:hover {
+.resize-handle:hover, .resize-handle:active {
   background-color: rgba(99, 179, 237, 0.5);
-}
-
-.resize-handle.left {
-  left: 250px;
-  transform: translateX(-50%);
-}
-
-.resize-handle.right {
-  right: 300px;
-  transform: translateX(50%);
 }
 
 /* Left Sidebar */
@@ -136,6 +130,7 @@ code {
   color: #2d3748;
   padding: 1.5rem;
   overflow-y: auto;
+  min-width: 300px;
 }
 
 .tab-content {
@@ -205,7 +200,9 @@ code {
 .ide-sidebar-right {
   background-color: #1a202c;
   color: #e2e8f0;
-  padding: 1rem;
+  min-width: 300px;
+  max-width: 100vw;
+  overflow-y: auto;
   border-left: 1px solid #4a5568;
 }
 

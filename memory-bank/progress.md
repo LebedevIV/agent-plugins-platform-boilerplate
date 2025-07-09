@@ -192,4 +192,74 @@
 - **Active Users**: Target 10,000+ monthly active users
 - **Developer Community**: Target 100+ contributors
 - **Market Adoption**: Target 1% of browser extension market
-- **Revenue Potential**: Target $100K+ annual revenue 
+- **Revenue Potential**: Target $100K+ annual revenue
+
+## Development Commands
+
+### Essential Commands
+```bash
+# Переход в директорию проекта
+cd /home/igor/Документы/Проекты/agent-plugins-platform
+
+# Быстрая пересборка проекта (очистка + сборка)
+rm -rf dist && pnpm run build
+
+# Разработка с hot reload
+pnpm run dev
+
+# Сборка для продакшена
+pnpm run build
+
+# Очистка всех артефактов сборки
+pnpm run clean
+
+# Запуск тестов
+pnpm run test
+
+# Линтинг и форматирование
+pnpm run lint
+pnpm run format
+```
+
+### Git Workflow
+```bash
+# Добавить все изменения
+git add .
+
+# Создать коммит
+git commit -m "feat: описание изменений"
+
+# Отправить в репозиторий
+git push
+
+# Пропустить pre-commit hooks (если нужно)
+git commit --no-verify -m "feat: описание изменений"
+```
+
+### Extension Management
+```bash
+# Перезагрузка extension в браузере
+# 1. Открыть chrome://extensions/
+# 2. Найти extension
+# 3. Нажать кнопку "Обновить" или переключить toggle
+
+# Очистка кэша extension
+# 1. chrome://extensions/
+# 2. Найти extension
+# 3. Нажать "Подробности"
+# 4. Нажать "Очистить данные"
+```
+
+### Troubleshooting
+```bash
+# Если сборка не работает - полная очистка
+rm -rf node_modules dist .turbo
+pnpm install
+pnpm run build
+
+# Если проблемы с TypeScript
+pnpm run type-check
+
+# Если проблемы с ESLint
+pnpm run lint:fix
+``` 
