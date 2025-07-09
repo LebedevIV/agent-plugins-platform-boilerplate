@@ -188,6 +188,13 @@ const usePlugins = () => {
       // После успешного обновления в background, обновляем локальный state
       await updatePluginSettings(pluginId, { [setting]: value });
 
+      // Синхронизируем массив plugins мгновенно
+      setPlugins(prevPlugins =>
+        prevPlugins.map(plugin =>
+          plugin.id === pluginId ? { ...plugin, settings: { ...plugin.settings, [setting]: value } } : plugin,
+        ),
+      );
+
       console.log(`[usePlugins] Updated plugin setting for ${pluginId}:`, setting, '=', value);
       return true;
     } catch (error) {

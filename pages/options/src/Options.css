@@ -540,6 +540,7 @@ code {
 
 .plugin-detail-content.active {
   display: block;
+  padding-left: 24px;
 }
 
 .detail-section {
@@ -676,4 +677,13 @@ code {
 
 .setting-item {
   padding-left: 12px;
+}
+
+.plugin-details .detail-section p,
+.plugin-details .detail-section ul {
+  text-align: left;
+}
+
+.plugin-details .detail-section {
+  padding-left: 16px;
 }
