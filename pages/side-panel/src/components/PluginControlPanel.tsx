@@ -1,8 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Plugin } from './PluginCard';
+import { useState, useRef, useEffect } from 'react';
+import type { Plugin } from './PluginCard';
+import type React from 'react';
 import './PluginControlPanel.css';
-
-export type PanelView = 'details' | 'chat';
 
 interface PluginControlPanelProps {
   plugin: Plugin;
@@ -17,6 +16,8 @@ interface PluginControlPanelProps {
   onSendMessage?: (message: string) => void;
 }
 
+export type PanelView = 'chat' | 'details';
+
 export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   plugin,
   currentView,
@@ -27,12 +28,15 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   onPause,
   onStop,
   onClose,
-  onSendMessage
+  onSendMessage,
 }) => {
   const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState<Array<{id: string, text: string, isUser: boolean, timestamp: Date}>>([]);
+  const [messages, setMessages] = useState<Array<{ id: string; text: string; isUser: boolean; timestamp: Date }>>([]);
+  const [inputHeight, setInputHeight] = useState(60); // Начальная высота поля ввода
+  const [isResizing, setIsResizing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const resizeRef = useRef<HTMLDivElement>(null);
   // Состояние "остановлен"
   const [stopped, setStopped] = useState(false);
 
@@ -59,23 +63,83 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   // Фокус на поле ввода при открытии чата
   useEffect(() => {
     if (currentView === 'chat') {
-      setTimeout(() => inputRef.current?.focus(), 100);
+      setTimeout(() => textareaRef.current?.focus(), 100);
     }
   }, [currentView]);
 
+  // Автоматическое изменение высоты textarea
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setMessage(e.target.value);
+
+    // Автоматическое изменение высоты
+    const textarea = e.target;
+    textarea.style.height = 'auto';
+    const newHeight = Math.min(Math.max(textarea.scrollHeight, 60), 200); // Минимум 60px, максимум 200px
+    textarea.style.height = `${newHeight}px`;
+    setInputHeight(newHeight);
+  };
+
+  // Обработка изменения размера разделителя
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+  };
+
+  useEffect(() => {
+    const handleResizeMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+
+      const container = document.querySelector('.chat-view') as HTMLElement;
+      if (!container) return;
+
+      const containerRect = container.getBoundingClientRect();
+      const newHeight = containerRect.bottom - e.clientY;
+      const minHeight = 100; // Минимальная высота чата
+      const maxHeight = containerRect.height - 80; // Максимальная высота чата
+
+      if (newHeight >= minHeight && newHeight <= maxHeight) {
+        setInputHeight(containerRect.height - newHeight);
+      }
+    };
+
+    const handleResizeEnd = () => {
+      setIsResizing(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleResizeMove);
+      document.addEventListener('mouseup', handleResizeEnd);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleResizeMove);
+      document.removeEventListener('mouseup', handleResizeEnd);
+    };
+  }, [isResizing]);
+
   const handleSendMessage = () => {
     if (!message.trim()) return;
-    
+
     const newMessage = {
       id: Date.now().toString(),
       text: message.trim(),
       isUser: true,
-      timestamp: new Date()
+      timestamp: new Date(),
     };
-    
+
     setMessages(prev => [...prev, newMessage]);
     setMessage('');
-    
+
+    // Сброс высоты textarea
+    if (textareaRef.current) {
+      textareaRef.current.style.height = '60px';
+      setInputHeight(60);
+    }
+
     // Вызываем callback для обработки сообщения
     onSendMessage?.(newMessage.text);
   };
@@ -91,11 +155,11 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     <div className="plugin-control-panel">
       <div className="panel-header">
         <div className="plugin-info">
-          <img 
+          <img
             className="plugin-icon"
             src={plugin.iconUrl || `plugins/${plugin.id}/${plugin.icon || 'icon.svg'}`}
             alt={`${pluginName} icon`}
-            onError={(e) => {
+            onError={e => {
               const firstChar = pluginName.charAt(0) || 'P';
               e.currentTarget.src = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><rect width='24' height='24' fill='%23e0e0e0'/><text x='12' y='12' text-anchor='middle' dy='.3em' font-family='Arial' font-size='8' fill='%23999'>${firstChar.toUpperCase()}</text></svg>`;
             }}
@@ -111,17 +175,13 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       </div>
 
       <div className="panel-tabs">
-        <button 
-          className={`tab-btn${currentView === 'details' ? ' active' : ''}`}
-          onClick={() => onViewChange('details')}
-        >
-          Детали
-        </button>
-        <button 
-          className={`tab-btn${currentView === 'chat' ? ' active' : ''}`}
-          onClick={() => onViewChange('chat')}
-        >
+        <button className={`tab-btn${currentView === 'chat' ? 'active' : ''}`} onClick={() => onViewChange('chat')}>
           Чат
+        </button>
+        <button
+          className={`tab-btn${currentView === 'details' ? 'active' : ''}`}
+          onClick={() => onViewChange('details')}>
+          Детали
         </button>
       </div>
 
@@ -134,7 +194,9 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
             </div>
             <div className="detail-item">
               <span className="detail-label">Описание:</span>
-              <span className="detail-value">{plugin.description || plugin.manifest?.description || 'Описание недоступно'}</span>
+              <span className="detail-value">
+                {plugin.description || plugin.manifest?.description || 'Описание недоступно'}
+              </span>
             </div>
             <div className="detail-item">
               <span className="detail-label">ID:</span>
@@ -143,7 +205,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
           </div>
         ) : (
           <div className="chat-view">
-            <div className="chat-messages">
+            <div className="chat-messages" style={{ height: `calc(100% - ${inputHeight}px - 8px)` }}>
               {messages.length === 0 ? (
                 <div className="chat-placeholder">
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -153,48 +215,77 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
                   <p className="chat-hint">Напишите сообщение, чтобы начать общение</p>
                 </div>
               ) : (
-                messages.map((msg) => (
-                  <div key={msg.id} className={`chat-message${msg.isUser ? ' user' : ' bot'}`}>
-                    <div className="message-content">
-                      <span className="message-text">{msg.text}</span>
-                      <span className="message-time">
-                        {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
+                <div className="messages-container">
+                  {messages.map(msg => (
+                    <div key={msg.id} className={`chat-message${msg.isUser ? 'user' : 'bot'}`}>
+                      <div className="message-content">
+                        <span className="message-text">{msg.text}</span>
+                        <span className="message-time">
+                          {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+                  <div ref={messagesEndRef} />
+                </div>
               )}
-              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Разделитель с возможностью изменения размера */}
+            <div
+              ref={resizeRef}
+              className="chat-resizer"
+              onMouseDown={handleResizeStart}
+              title="Изменить размер поля ввода"
+              role="button"
+              tabIndex={0}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  // handleResizeStart ожидает MouseEvent, но для a11y просто вызываем setIsResizing(true)
+                  setIsResizing(true);
+                  document.body.style.cursor = 'ns-resize';
+                  document.body.style.userSelect = 'none';
+                }
+              }}>
+              <div className="resize-handle">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="8" y1="6" x2="21" y2="6"></line>
+                  <line x1="8" y1="12" x2="21" y2="12"></line>
+                  <line x1="8" y1="18" x2="21" y2="18"></line>
+                  <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                  <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                  <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                </svg>
+              </div>
+            </div>
+
+            {/* Многострочное поле ввода */}
+            <div className="chat-input" style={{ height: `${inputHeight}px` }}>
+              <textarea
+                ref={textareaRef}
+                value={message}
+                onChange={handleTextareaChange}
+                onKeyPress={handleKeyPress}
+                placeholder="Введите сообщение... (Shift+Enter для новой строки)"
+                className="message-textarea"
+                rows={1}
+                style={{ height: `${inputHeight}px` }}
+              />
+              <button
+                onClick={handleSendMessage}
+                disabled={!message.trim()}
+                className="send-btn"
+                title="Отправить сообщение">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22,2 15,22 11,13 2,9"></polygon>
+                </svg>
+              </button>
             </div>
           </div>
         )}
       </div>
-
-      {/* Нескрываемое поле ввода для чата */}
-      {currentView === 'chat' && (
-        <div className="chat-input">
-          <input
-            ref={inputRef}
-            type="text"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Введите сообщение..."
-            className="message-input"
-          />
-          <button 
-            onClick={handleSendMessage}
-            disabled={!message.trim()}
-            className="send-btn"
-            title="Отправить сообщение"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="22" y1="2" x2="11" y2="13"></line>
-              <polygon points="22,2 15,22 11,13 2,9"></polygon>
-            </svg>
-          </button>
-        </div>
-      )}
 
       <div className="panel-controls">
         {!isRunning || stopped ? (
@@ -206,7 +297,10 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
           </button>
         ) : (
           <div className="control-buttons-group">
-            <button className="control-btn pause-btn" onClick={onPause} title={isPaused ? "Возобновить" : "Приостановить"}>
+            <button
+              className="control-btn pause-btn"
+              onClick={onPause}
+              title={isPaused ? 'Возобновить' : 'Приостановить'}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 {isPaused ? (
                   <polygon points="5,3 19,12 5,21"></polygon>
@@ -230,4 +324,4 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       </div>
     </div>
   );
-}; 
+};
