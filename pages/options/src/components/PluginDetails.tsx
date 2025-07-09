@@ -82,9 +82,13 @@ export const PluginDetails: React.FC<PluginDetailsProps> = ({ selectedPlugin, lo
                 onChange={e => handleSettingChange('enabled', e.target.checked)}
               />
               <span className="toggle-slider"></span>
-              <span className="toggle-label">Включен</span>
+              <span className="toggle-label">
+                Включен
+                <span className="info-icon" title="Управляет активностью плагина. Отключение делает плагин неактивным.">
+                  i
+                </span>
+              </span>
             </label>
-            <p className="setting-description">Управляет активностью плагина. Отключение делает плагин неактивным.</p>
           </div>
 
           <div className="setting-item">
@@ -96,11 +100,15 @@ export const PluginDetails: React.FC<PluginDetailsProps> = ({ selectedPlugin, lo
                 onChange={e => handleSettingChange('autorun', e.target.checked)}
               />
               <span className="toggle-slider"></span>
-              <span className="toggle-label">Автоматический запуск</span>
+              <span className="toggle-label">
+                Автоматический запуск
+                <span
+                  className="info-icon"
+                  title="Если включено, плагин будет автоматически запускаться на подходящих страницах.">
+                  i
+                </span>
+              </span>
             </label>
-            <p className="setting-description">
-              Если включено, плагин будет автоматически запускаться на подходящих страницах.
-            </p>
           </div>
         </div>
 
@@ -132,14 +140,7 @@ export const PluginDetails: React.FC<PluginDetailsProps> = ({ selectedPlugin, lo
           </div>
         )}
 
-        <div className="plugin-actions">
-          <button
-            className={cn('btn', settings.enabled ? 'btn-secondary' : 'btn-primary')}
-            onClick={() => handleSettingChange('enabled', !settings.enabled)}
-            disabled={isUpdating === 'enabled'}>
-            {settings.enabled ? 'Отключить' : 'Включить'}
-          </button>
-        </div>
+        {/* Удалён блок plugin-actions с кнопкой включения/отключения */}
       </div>
     </div>
   );
