@@ -278,3 +278,23 @@ graph TD
   PluginControlPanel --> PluginDetails
   PluginControlPanel --> |"panel-tabs (Чат/Детали)"| Tabs
 ``` 
+
+---
+
+# Текущие установки проекта
+
+- **Способ связи с GitHub:** SSH (origin = git@github.com:LebedevIV/agent-plugins-platform-boilerplate.git)
+- **Ветка разработки:** feature/sidebar-plugin-filter-by-domain (ответвлена от develop)
+- **Стратегия коммитов:**
+  - Перед коммитом всегда git add только изменённых файлов
+  - Коммиты осмысленные, с кратким описанием сути изменений
+  - После коммита — push в соответствующую feature-ветку
+- **Пуш:** только после успешного коммита, с установкой upstream для новых веток
+- **Платформа:** Linux (Manjaro), shell: bash
+- **Основной UI-фреймворк:** React + TypeScript
+- **Стилизация:** CSS-модули, Tailwind, кастомные CSS-файлы
+- **Папка для документации и контекста:** memory-bank/
+- **Важные правила:**
+  - Все изменения в develop — только через feature-ветки
+  - Вся архитектурная и UI-логика фиксируется в memory-bank/activeContext.md
+  - Взаимосвязи компонентов поддерживаются в актуальном состоянии (mermaid-схемы) 
