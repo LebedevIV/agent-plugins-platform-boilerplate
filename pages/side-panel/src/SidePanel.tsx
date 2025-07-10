@@ -1,4 +1,3 @@
-import { LogManager, createRunLogger } from './components/LogManager';
 import { PluginControlPanel } from './components/PluginControlPanel';
 import { ToastNotifications } from './components/ToastNotifications';
 import { PluginCard } from '../../../packages/ui/lib/components/PluginCard';
@@ -17,7 +16,6 @@ const SidePanel = () => {
   const [panelView, setPanelView] = useState<PanelView>('chat');
   const [runningPlugin, setRunningPlugin] = useState<string | null>(null);
   const [pausedPlugin, setPausedPlugin] = useState<string | null>(null);
-  const [logRuns, setLogRuns] = useState<Array<{ id: string; title: string; logs: string[] }>>([]);
   const [toasts, setToasts] = useState<Array<{ id: string; message: string; type: 'success' | 'error' | 'warning' }>>(
     [],
   );
@@ -130,15 +128,15 @@ const SidePanel = () => {
 
     try {
       const pluginName = selectedPlugin.name || selectedPlugin.manifest?.name || selectedPlugin.id;
-      const logger = createRunLogger(`workflow-${selectedPlugin.id}`, `Воркфлоу плагина: ${pluginName}`);
+      // const logger = createRunLogger(`workflow-${selectedPlugin.id}`, `Воркфлоу плагина: ${pluginName}`); // Удалено
 
       await chrome.runtime.sendMessage({
         type: 'RUN_WORKFLOW',
         pluginId: selectedPlugin.id,
       });
 
-      const run = logger.getRun();
-      setLogRuns(prev => [run, ...prev]);
+      // const run = logger.getRun(); // Удалено
+      // setLogRuns(prev => [run, ...prev]); // Удалено
 
       addToastWithDeps(`Плагин ${pluginName} запущен`, 'success');
     } catch (error) {
@@ -185,10 +183,6 @@ const SidePanel = () => {
     setShowControlPanel(false);
     setSelectedPlugin(null);
     setPanelView('chat'); // Сбрасываем на "Чат" при закрытии
-  };
-
-  const clearLogs = () => {
-    setLogRuns([]);
   };
 
   // Функция для обновления настроек плагина
@@ -296,10 +290,7 @@ const SidePanel = () => {
             ))}
           </div>
         </section>
-
-        <section className="logs-section">
-          <LogManager runs={logRuns} onClear={clearLogs} />
-        </section>
+        {/* Удалена секция с LogManager */}
       </main>
 
       {/* Панель управления плагином */}

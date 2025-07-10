@@ -48,6 +48,12 @@ export const PluginCard: React.FC<PluginCardProps> = ({
     }
   };
 
+  // Клик по кнопке не должен вызывать onClick карточки
+  const handleToggleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    onToggle?.(!enabled);
+  };
+
   return (
     <div
       className={`plugin-card${selected ? 'selected' : ''}${compact ? 'compact' : ''}`}
@@ -58,12 +64,12 @@ export const PluginCard: React.FC<PluginCardProps> = ({
       style={{
         display: 'flex',
         alignItems: 'center',
-        padding: compact ? 8 : 16,
+        padding: compact ? 8 : 20,
         borderRadius: 10,
         border: selected ? '2px solid #3b82f6' : '1px solid #e5e7eb',
         background: selected ? '#f0f6ff' : '#fff',
         cursor: onClick ? 'pointer' : 'default',
-        marginBottom: 12,
+        marginBottom: 16,
       }}>
       <img
         className="plugin-card-icon"
@@ -113,30 +119,43 @@ export const PluginCard: React.FC<PluginCardProps> = ({
             </span>
           )}
           {showToggle && (
-            <label
-              className="toggle-switch"
-              style={{ margin: 0 }}
-              aria-label={enabled ? 'Отключить плагин' : 'Включить плагин'}>
-              <input
-                type="checkbox"
-                checked={enabled}
-                onChange={e => onToggle?.(e.target.checked)}
-                style={{ display: 'none' }}
-              />
-              <span className="toggle-slider" style={{ width: 36, height: 20, marginRight: 0 }}></span>
-            </label>
+            <button
+              className={`plugin-toggle-btn${enabled ? 'enabled' : 'disabled'}`}
+              onClick={handleToggleClick}
+              aria-label={enabled ? 'Отключить плагин' : 'Включить плагин'}
+              style={{
+                minWidth: 110,
+                padding: '8px 18px',
+                fontSize: 15,
+                fontWeight: 600,
+                borderRadius: 8,
+                border: 'none',
+                background: enabled ? '#ef4444' : '#10b981',
+                color: '#fff',
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+                marginLeft: 8,
+                boxShadow: enabled ? '0 2px 8px rgba(239,68,68,0.08)' : '0 2px 8px rgba(16,185,129,0.08)',
+              }}>
+              {enabled ? 'Отключить' : 'Включить'}
+            </button>
           )}
         </div>
         {!compact && description && (
           <div
             className="plugin-card-desc"
             style={{
-              fontSize: 14,
+              fontSize: 15,
               color: '#555',
-              marginTop: 4,
+              marginTop: 6,
               overflow: 'hidden',
+              display: '-webkit-box',
+              WebkitLineClamp: 3,
+              WebkitBoxOrient: 'vertical',
+              lineHeight: 1.4,
+              maxHeight: 62,
               textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
+              whiteSpace: 'normal',
             }}>
             {description}
           </div>
