@@ -178,3 +178,7 @@ UI Components
 - Worker lifecycle management
 - Garbage collection optimization
 - Memory leak prevention 
+
+## Взаимосвязи UI-компонентов и CSS
+- `PluginCard.tsx` (UI-компонент) зависит от `PluginCard.css` (классы должны совпадать по синтаксису).
+- Ошибки в формировании className (например, отсутствие пробела между базовым классом и модификатором) приводят к полной потере стилей, даже если CSS-файл корректен. 

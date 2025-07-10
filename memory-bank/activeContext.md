@@ -138,7 +138,7 @@
 1. What is the roadmap for platform evolution?
 2. How should the project balance features vs stability?
 3. What are the key differentiators from competitors?
-4. How should the open-source strategy be structured?
+4. How should the open-source strategy be structured? 
 
 # Контекст разработки: Страница настроек платформы
 
@@ -247,6 +247,11 @@ function patternToRegExp(pattern: string): RegExp | null {
 ### Ошибка: <all_urls> не работает
 - Причина: Неправильная регулярка для <all_urls>.
 - Решение: patternToRegExp возвращает /^https?:\/\/.+/ для <all_urls>.
+
+### Ошибка: Стили не применялись к статусу и кнопке в карточке плагина
+- **Причина:** Классы формировались без пробела (`status-badgestatus-active` вместо `status-badge status-active`).
+- **Решение:** Исправлено формирование className с пробелом между базовым классом и модификатором в PluginCard.tsx.
+- **Best practice:** Всегда используйте пробел между базовым классом и модификатором в className для совместимости с CSS. Проверяйте итоговый HTML на наличие склеенных классов.
 
 ## Рекомендации по ведению memory-bank
 - Фиксировать все утилиты, которые могут быть полезны в других частях платформы.

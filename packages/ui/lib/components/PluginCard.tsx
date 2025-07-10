@@ -105,13 +105,13 @@ export const PluginCard: React.FC<PluginCardProps> = ({
           </div>
           <div className="plugin-card-controls">
             {showStatus && (
-              <span className={`status-badge${enabled ? 'status-active' : 'status-inactive'}`}>
+              <span className={`status-badge ${enabled ? 'status-active' : 'status-inactive'}`}>
                 {status || (enabled ? 'Активен' : 'Неактивен')}
               </span>
             )}
             {showToggle && (
               <button
-                className={`plugin-toggle-btn${enabled ? 'enabled' : 'disabled'}`}
+                className={`plugin-toggle-btn ${enabled ? 'enabled' : 'disabled'}`}
                 onClick={handleToggleClick}
                 aria-label={enabled ? 'Отключить плагин' : 'Включить плагин'}>
                 {enabled ? 'Отключить' : 'Включить'}
