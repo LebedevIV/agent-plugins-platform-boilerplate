@@ -1,5 +1,5 @@
+import { PluginCard } from '../../../../packages/ui/lib/components/PluginCard';
 import { useTranslations } from '../hooks/useTranslations';
-import { cn } from '@extension/ui';
 import { useEffect } from 'react';
 import type { Plugin } from '../hooks/usePlugins';
 import type React from 'react';
@@ -54,37 +54,21 @@ export const PluginsTab: React.FC<PluginsTabProps> = ({
       return plugins.map(plugin => {
         const enabled = plugin.settings?.enabled ?? true;
         return (
-          <div
+          <PluginCard
             key={plugin.id}
-            className={cn('plugin-item', selectedPlugin?.id === plugin.id && 'selected')}
+            id={plugin.id}
+            name={plugin.name}
+            version={plugin.version}
+            description={plugin.description}
+            icon={plugin.icon}
+            iconUrl={plugin.iconUrl}
+            enabled={enabled}
+            selected={selectedPlugin?.id === plugin.id}
             onClick={() => handlePluginClick(plugin)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                handlePluginClick(plugin);
-              }
-            }}
-            role="button"
-            tabIndex={0}>
-            <div className="plugin-info">
-              <h3>{plugin.name}</h3>
-              <p>{plugin.description}</p>
-              <span className="plugin-version">v{plugin.version}</span>
-              <span className={cn('status-badge', enabled ? 'status-active' : 'status-inactive')}>
-                {enabled ? 'Активен' : 'Неактивен'}
-              </span>
-            </div>
-            {onUpdatePluginSetting && (
-              <button
-                className={cn('btn', enabled ? 'btn-secondary' : 'btn-primary')}
-                onClick={e => {
-                  e.stopPropagation();
-                  onUpdatePluginSetting(plugin.id, 'enabled', !enabled);
-                }}>
-                {enabled ? 'Отключить' : 'Включить'}
-              </button>
-            )}
-          </div>
+            onToggle={
+              onUpdatePluginSetting ? enabled => onUpdatePluginSetting(plugin.id, 'enabled', enabled) : undefined
+            }
+          />
         );
       });
     } catch (e) {

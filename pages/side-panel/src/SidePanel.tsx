@@ -1,7 +1,7 @@
 import { LogManager, createRunLogger } from './components/LogManager';
-import { PluginCard } from './components/PluginCard';
 import { PluginControlPanel } from './components/PluginControlPanel';
 import { ToastNotifications } from './components/ToastNotifications';
+import { PluginCard } from '../../../packages/ui/lib/components/PluginCard';
 import { withErrorBoundary, withSuspense, useStorage } from '@extension/shared';
 import { exampleThemeStorage } from '@extension/storage';
 import { cn, ErrorDisplay, LoadingSpinner } from '@extension/ui';
@@ -282,10 +282,16 @@ const SidePanel = () => {
             {plugins.filter(isPluginAllowedOnHost).map(plugin => (
               <PluginCard
                 key={plugin.id}
-                plugin={plugin}
-                isSelected={selectedPlugin?.id === plugin.id}
-                isRunning={runningPlugin === plugin.id}
+                id={plugin.id}
+                name={plugin.name}
+                version={plugin.version}
+                description={plugin.description}
+                icon={plugin.icon}
+                iconUrl={plugin.iconUrl}
+                enabled={plugin.settings?.enabled ?? true}
+                selected={selectedPlugin?.id === plugin.id}
                 onClick={() => handlePluginClick(plugin)}
+                onToggle={enabled => handleUpdatePluginSetting(plugin.id, 'enabled', enabled)}
               />
             ))}
           </div>
