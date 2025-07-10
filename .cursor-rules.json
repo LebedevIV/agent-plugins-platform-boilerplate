@@ -1,10 +1,9 @@
 {
-    "rules": [
-      { "name": "Project Brief", "context": { "url": { "url": "https://gist.github.com/LebedevIV/0a20b9aa7dd00c9d91a975e25d72bdc8/raw/4dbda2ff6cb22409d117d2380c017339c2652e2f/projectbrief.md", "type": "context" } } },
-      { "name": "Product Context", "context": { "url": { "url": "https://gist.github.com/LebedevIV/0a20b9aa7dd00c9d91a975e25d72bdc8/raw/4dbda2ff6cb22409d117d2380c017339c2652e2f/productContext.md", "type": "context" } } },
-      { "name": "Tech Context", "context": { "url": { "url": "https://gist.github.com/LebedevIV/0a20b9aa7dd00c9d91a975e25d72bdc8/raw/4dbda2ff6cb22409d117d2380c017339c2652e2f/techContext.md", "type": "context" } } },
-      { "name": "System Patterns & Graveyard", "context": { "url": { "url": "https://gist.github.com/LebedevIV/0a20b9aa7dd00c9d91a975e25d72bdc8/raw/4dbda2ff6cb22409d117d2380c017339c2652e2f/systemPatterns.md", "type": "context" } } },
-      { "name": "Progress", "context": { "url": { "url": "https://gist.github.com/LebedevIV/0a20b9aa7dd00c9d91a975e25d72bdc8/raw/4dbda2ff6cb22409d117d2380c017339c2652e2f/progress.md", "type": "context" } } },
-      { "name": "Active Context", "context": { "url": { "url": "https://gist.github.com/LebedevIV/0a20b9aa7dd00c9d91a975e25d72bdc8/raw/4dbda2ff6cb22409d117d2380c017339c2652e2f/activeContext.md", "type": "context" } } }
+  "on_command": {
+    "Восстанови контекст": [
+      "Прочитать все файлы в директории memory-bank и USER_COMMANDS.md",
+      "Сделать краткое резюме ключевых положений, правил, пользовательских требований и текущего статуса проекта",
+      "Использовать эту информацию для всех последующих ответов и действий"
     ]
   }
+}
