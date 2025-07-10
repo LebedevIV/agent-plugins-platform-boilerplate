@@ -86,60 +86,38 @@ export const PluginCard: React.FC<PluginCardProps> = ({
         }}
       />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span
-            className="plugin-card-name"
-            style={{
-              fontWeight: 600,
-              fontSize: compact ? 15 : 18,
-              color: '#222',
-              flex: 1,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}>
-            {name}
-          </span>
-          <span className="plugin-card-version" style={{ fontSize: 13, color: '#888', marginRight: 8 }}>
-            v{version}
-          </span>
-          {showStatus && (
+        <div className="plugin-card-content">
+          <div className="plugin-card-main">
             <span
-              className={`status-badge${enabled ? 'status-active' : 'status-inactive'}`}
+              className="plugin-card-name"
               style={{
-                fontSize: 12,
-                fontWeight: 500,
-                borderRadius: 6,
-                padding: '2px 8px',
-                background: enabled ? '#059669' : '#9ca3af',
-                color: '#fff',
-                marginRight: 8,
-              }}>
-              {status || (enabled ? 'Активен' : 'Неактивен')}
-            </span>
-          )}
-          {showToggle && (
-            <button
-              className={`plugin-toggle-btn${enabled ? 'enabled' : 'disabled'}`}
-              onClick={handleToggleClick}
-              aria-label={enabled ? 'Отключить плагин' : 'Включить плагин'}
-              style={{
-                minWidth: 110,
-                padding: '8px 18px',
-                fontSize: 15,
                 fontWeight: 600,
-                borderRadius: 8,
-                border: 'none',
-                background: enabled ? '#ef4444' : '#10b981',
-                color: '#fff',
-                cursor: 'pointer',
-                transition: 'background 0.2s',
-                marginLeft: 8,
-                boxShadow: enabled ? '0 2px 8px rgba(239,68,68,0.08)' : '0 2px 8px rgba(16,185,129,0.08)',
+                fontSize: compact ? 15 : 18,
+                color: '#222',
+                flex: 1,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
               }}>
-              {enabled ? 'Отключить' : 'Включить'}
-            </button>
-          )}
+              {name}
+            </span>
+            <span className="plugin-card-version">v{version}</span>
+          </div>
+          <div className="plugin-card-controls">
+            {showStatus && (
+              <span className={`status-badge${enabled ? 'status-active' : 'status-inactive'}`}>
+                {status || (enabled ? 'Активен' : 'Неактивен')}
+              </span>
+            )}
+            {showToggle && (
+              <button
+                className={`plugin-toggle-btn${enabled ? 'enabled' : 'disabled'}`}
+                onClick={handleToggleClick}
+                aria-label={enabled ? 'Отключить плагин' : 'Включить плагин'}>
+                {enabled ? 'Отключить' : 'Включить'}
+              </button>
+            )}
+          </div>
         </div>
         {!compact && description && (
           <div

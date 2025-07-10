@@ -68,4 +68,118 @@
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+}
+
+.plugin-card-header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.plugin-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.plugin-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.plugin-card-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.plugin-card-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.plugin-card-version {
+  font-size: 13px;
+  color: #888;
+  margin-right: 8px;
+}
+
+.status-badge {
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+  padding: 2px 8px;
+  color: #fff;
+  margin-right: 8px;
+}
+.status-badge.status-active {
+  background: rgb(72, 187, 120);
+}
+.status-badge.status-inactive {
+  background: #9ca3af;
+}
+
+.plugin-toggle-btn {
+  min-width: 110px;
+  padding: 2px 8px;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.2s;
+  margin-left: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.plugin-toggle-btn.enabled {
+  background: #9ca3af;
+}
+.plugin-toggle-btn.disabled {
+  background: rgb(72, 187, 120);
+}
+
+/* При узкой ширине - все в одну строку */
+@media (max-width: 480px) {
+  .plugin-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .plugin-card-content {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .plugin-card-main {
+    flex: 1;
+    min-width: 0;
+  }
+  .plugin-card-controls {
+    flex-shrink: 0;
+  }
+  .plugin-toggle-btn {
+    width: auto;
+    margin-left: 0;
+  }
+}
+
+/* При очень узкой ширине - вертикальное расположение */
+@media (max-width: 320px) {
+  .plugin-card-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .plugin-card-controls {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .plugin-toggle-btn {
+    width: 100%;
+  }
 } 
