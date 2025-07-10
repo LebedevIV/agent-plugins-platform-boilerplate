@@ -1,11 +1,12 @@
 import { LogManager, createRunLogger } from './components/LogManager';
+import { PluginCard } from './components/PluginCard';
 import { PluginControlPanel } from './components/PluginControlPanel';
 import { ToastNotifications } from './components/ToastNotifications';
-import { withErrorBoundary, withSuspense } from '@extension/shared';
+import { withErrorBoundary, withSuspense, useStorage } from '@extension/shared';
 import { exampleThemeStorage } from '@extension/storage';
 import { cn, ErrorDisplay, LoadingSpinner } from '@extension/ui';
 import { useState, useEffect, useCallback } from 'react';
-import type { Plugin, PluginCard } from './components/PluginCard';
+import type { Plugin } from './components/PluginCard';
 import type { PanelView } from './components/PluginControlPanel';
 import './SidePanel.css';
 
@@ -21,7 +22,7 @@ const SidePanel = () => {
     [],
   );
   const [currentTabUrl, setCurrentTabUrl] = useState<string | null>(null);
-  const { value: isLight } = exampleThemeStorage.use();
+  const { isLight } = useStorage(exampleThemeStorage);
 
   // Функции для работы с уведомлениями
   const removeToast = useCallback((id: string) => {
