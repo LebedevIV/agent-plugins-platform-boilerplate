@@ -45,6 +45,21 @@ const SidePanel = () => {
     getCurrentTabUrl();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    // Функция для обновления URL
+    const updateUrl = () => getCurrentTabUrl();
+
+    // Слушатели событий Chrome
+    chrome.tabs.onActivated.addListener(updateUrl);
+    chrome.tabs.onUpdated.addListener(updateUrl);
+
+    // Очистка слушателей при размонтировании
+    return () => {
+      chrome.tabs.onActivated.removeListener(updateUrl);
+      chrome.tabs.onUpdated.removeListener(updateUrl);
+    };
+  }, []);
+
   const getCurrentTabUrl = async () => {
     try {
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
