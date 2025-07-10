@@ -178,11 +178,15 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       </div>
 
       <div className="panel-tabs">
-        <button className={`tab-btn${currentView === 'chat' ? 'active' : ''}`} onClick={() => onViewChange('chat')}>
+        <button
+          className={`tab-btn${currentView === 'chat' ? 'active' : ''}`}
+          style={{ width: currentView === 'chat' ? '33.33%' : '66.66%' }}
+          onClick={() => onViewChange('chat')}>
           Чат
         </button>
         <button
           className={`tab-btn${currentView === 'details' ? 'active' : ''}`}
+          style={{ width: currentView === 'details' ? '33.33%' : '66.66%' }}
           onClick={() => onViewChange('details')}>
           Детали
         </button>
