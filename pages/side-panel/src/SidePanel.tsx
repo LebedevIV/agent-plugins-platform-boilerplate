@@ -1,13 +1,33 @@
-import { PluginControlPanel } from './components/PluginControlPanel';
-import { ToastNotifications } from './components/ToastNotifications';
-import { PluginCard } from '../../../packages/ui/lib/components/PluginCard';
-import { withErrorBoundary, withSuspense, useStorage } from '@extension/shared';
-import { exampleThemeStorage } from '@extension/storage';
-import { cn, ErrorDisplay, LoadingSpinner } from '@extension/ui';
+// === Локальные компоненты для сайдпанели (React, TypeScript) ===
+import { PluginControlPanel } from './components/PluginControlPanel'; // Панель управления выбранным плагином
+import { ToastNotifications } from './components/ToastNotifications'; // Всплывающие уведомления
+// === Общие/shared утилиты и хуки (используются во всех частях расширения) ===
+import { withErrorBoundary, withSuspense, useStorage } from '@extension/shared'; // HOC для обработки ошибок, Suspense и хук для работы с хранилищем
+import { exampleThemeStorage } from '@extension/storage'; // Пример хранилища для темы
+import { cn, ErrorDisplay, LoadingSpinner } from '@extension/ui'; // Утилита для классов, компонент ошибки и спиннер
+import { PluginCard } from '@extension/ui/lib/components/PluginCard'; // Общий компонент карточки плагина (React)
+// === React хуки ===
 import { useState, useEffect, useCallback } from 'react';
-import type { Plugin } from './components/PluginCard';
-import type { PanelView } from './components/PluginControlPanel';
+// === Типы для локальных компонентов ===
+import type { PanelView } from './components/PluginControlPanel'; // Тип для переключения вкладок панели управления
 import './SidePanel.css';
+// === Локальное определение типа Plugin (используется только в этой панели) ===
+type Plugin = {
+  id: string;
+  name: string;
+  version: string;
+  description?: string;
+  icon?: string;
+  iconUrl?: string;
+  manifest?: Record<string, unknown>; // Лучше избегать any, используем Record
+  host_permissions?: string[];
+  settings?: {
+    enabled?: boolean;
+    autorun?: boolean;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
 
 const SidePanel = () => {
   const [plugins, setPlugins] = useState<Plugin[]>([]);
@@ -16,9 +36,7 @@ const SidePanel = () => {
   const [panelView, setPanelView] = useState<PanelView>('chat');
   const [runningPlugin, setRunningPlugin] = useState<string | null>(null);
   const [pausedPlugin, setPausedPlugin] = useState<string | null>(null);
-  const [toasts, setToasts] = useState<Array<{ id: string; message: string; type: 'success' | 'error' | 'warning' }>>(
-    [],
-  );
+  const [toasts, setToasts] = useState<Toast[]>([]);
   const [currentTabUrl, setCurrentTabUrl] = useState<string | null>(null);
   const { isLight } = useStorage(exampleThemeStorage);
 
@@ -27,11 +45,22 @@ const SidePanel = () => {
     setToasts(prev => prev.filter(toast => toast.id !== id));
   }, []);
 
+  // Исправляем типы для Toast
+  // Предположим, что Toast выглядит так:
+  type Toast = {
+    id: string;
+    message: string;
+    type: 'success' | 'error' | 'warning';
+    duration: number;
+    timestamp: number;
+  };
+
+  // Исправляем addToastWithDeps, убираем 'info', добавляем duration/timestamp
   const addToastWithDeps = useCallback(
-    (message: string, type: 'success' | 'error' | 'warning' = 'info', duration: number = 3000) => {
+    (message: string, type: 'success' | 'error' | 'warning' = 'success', duration: number = 3000) => {
       const id = Date.now().toString();
-      const newToast = { id, message, type };
-      setToasts(prev => [...prev, newToast]);
+      const newToast: Toast = { id, message, type, duration, timestamp: Date.now() };
+      setToasts((prev: Toast[]) => [...prev, newToast]);
 
       setTimeout(() => {
         removeToast(id);
@@ -94,7 +123,9 @@ const SidePanel = () => {
   };
 
   const isPluginAllowedOnHost = (plugin: Plugin) => {
-    const hostPermissions = plugin.manifest?.host_permissions || plugin.host_permissions || [];
+    const hostPermissions: string[] = Array.isArray(plugin.manifest?.host_permissions)
+      ? (plugin.manifest?.host_permissions as string[])
+      : plugin.host_permissions || [];
     const url = currentTabUrl || window.location.href;
     console.log('[SidePanel] Проверка плагина', plugin.name, 'host_permissions:', hostPermissions, 'url:', url);
     return hostPermissions.some((pattern: string) => {
@@ -201,7 +232,7 @@ const SidePanel = () => {
   };
 
   // Функция для обновления настроек плагина
-  const handleUpdatePluginSetting = async (pluginId: string, setting: string, value: boolean) => {
+  const handleUpdatePluginSetting = async (pluginId: string, setting: string, value: boolean): Promise<void> => {
     try {
       // Отправляем сообщение в background script для обновления настроек
       const response = await chrome.runtime.sendMessage({
@@ -247,7 +278,6 @@ const SidePanel = () => {
 
       console.log(`[SidePanel] Updated plugin setting for ${pluginId}:`, setting, '=', value);
       addToastWithDeps(`Настройка плагина обновлена`, 'success');
-      return true;
     } catch (error) {
       console.error(`[SidePanel] Failed to update plugin setting for ${pluginId}:`, error);
       addToastWithDeps(`Ошибка обновления настройки плагина`, 'error');
@@ -300,7 +330,9 @@ const SidePanel = () => {
                 enabled={plugin.settings?.enabled ?? true}
                 selected={selectedPlugin?.id === plugin.id}
                 onClick={() => handlePluginClick(plugin)}
-                onToggle={enabled => handleUpdatePluginSetting(plugin.id, 'enabled', enabled)}
+                onToggle={async (enabled: boolean): Promise<void> => {
+                  await handleUpdatePluginSetting(plugin.id, 'enabled', enabled);
+                }}
               />
             ))}
           </div>

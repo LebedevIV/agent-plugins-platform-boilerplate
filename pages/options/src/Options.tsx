@@ -1,14 +1,13 @@
 import '@src/Options.css';
-import { t } from '@extension/i18n';
-import { PROJECT_URL_OBJECT, useStorage, withErrorBoundary, withSuspense } from '@extension/shared';
+import '../../../packages/ui/lib/components/PluginCard.css';
+import { useStorage, withErrorBoundary, withSuspense } from '@extension/shared';
 import { exampleThemeStorage } from '@extension/storage';
-import { cn, ErrorDisplay, LoadingSpinner, ToggleButton } from '@extension/ui';
+import { cn, ErrorDisplay, LoadingSpinner } from '@extension/ui';
 import { useEffect } from 'react';
 import { APPOptions } from './components/APPOptions';
 
 const Options = () => {
   const { isLight } = useStorage(exampleThemeStorage);
-  const logo = isLight ? 'options/logo_horizontal.svg' : 'options/logo_horizontal_dark.svg';
 
   useEffect(() => {
     // Log for debugging
@@ -23,8 +22,6 @@ const Options = () => {
       console.log('Extension ID:', chrome.runtime.id);
     }
   }, []);
-
-  const goGithubSite = () => chrome.tabs.create(PROJECT_URL_OBJECT);
 
   return (
     <div className={cn('App', isLight ? 'bg-slate-50' : 'bg-gray-800')} id="app-container">

@@ -138,7 +138,7 @@ export const PluginDetails: React.FC<PluginDetailsProps> = ({ selectedPlugin, lo
                 <li key={idx}>{permission}</li>
               ))}
             </ul>
-          </div>
+        </div>
         )}
 
         {/* Удалён блок plugin-actions с кнопкой включения/отключения */}

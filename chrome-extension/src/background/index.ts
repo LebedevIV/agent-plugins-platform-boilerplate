@@ -2,6 +2,7 @@ import 'webextension-polyfill';
 import { exampleThemeStorage, pluginSettingsStorage, getPluginSettings } from '@extension/storage';
 import { getAvailablePlugins } from '@platform-core/core/plugin-manager.js';
 import { runWorkflow } from '@platform-core/core/workflow-engine.js';
+import { pluginChatApi, ChatMessage } from './plugin-chat-api';
 
 // Только стандартное поведение: панель открывается/закрывается глобально по клику на иконку
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
@@ -48,6 +49,14 @@ const updatePluginSetting = async (pluginId: string, setting: string, value: boo
 
   console.log(`[background] Updated plugin setting for ${pluginId}:`, setting, '=', value);
   return { success: true };
+};
+
+const broadcastChatUpdate = function(pluginId: string, pageKey: string) {
+  chrome.runtime.sendMessage({
+    type: 'PLUGIN_CHAT_UPDATED',
+    pluginId,
+    pageKey,
+  });
 };
 
 // Обработчики сообщений для работы с плагинами
@@ -117,6 +126,42 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         console.error('[background] Error getting plugin settings:', error);
         sendResponse({ error: error.message });
       });
+    return true;
+  }
+
+  // === Работа с чатами плагинов ===
+  if (message.type === 'GET_PLUGIN_CHAT') {
+    const { pluginId, pageKey } = message;
+    const chatKey = `${pluginId}::${pageKey}`;
+    pluginChatApi.getOrLoadChat(chatKey).then(chat => {
+      sendResponse(chat || null);
+    });
+    return true;
+  }
+
+  if (message.type === 'SAVE_PLUGIN_CHAT_MESSAGE') {
+    const { pluginId, pageKey, message: msg } = message;
+    pluginChatApi.saveMessage(pluginId, pageKey, msg as ChatMessage).then(() => {
+      sendResponse({ success: true });
+      broadcastChatUpdate(pluginId, pageKey);
+    });
+    return true;
+  }
+
+  if (message.type === 'DELETE_PLUGIN_CHAT') {
+    const { pluginId, pageKey } = message;
+    pluginChatApi.deleteChat(pluginId, pageKey).then(() => {
+      sendResponse({ success: true });
+      broadcastChatUpdate(pluginId, pageKey);
+    });
+    return true;
+  }
+
+  if (message.type === 'LIST_PLUGIN_CHATS') {
+    const { pluginId } = message;
+    pluginChatApi.listChatsForPlugin(pluginId).then(chats => {
+      sendResponse(chats);
+    });
     return true;
   }
 
