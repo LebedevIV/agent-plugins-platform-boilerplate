@@ -253,3 +253,28 @@ function patternToRegExp(pattern: string): RegExp | null {
 - Вести раздел с типовыми ошибками и их решениями (кладбище ошибок).
 - Добавлять примеры использования и тесты для утилит.
 - Обновлять контекст при изменении архитектуры или бизнес-логики. 
+
+# Взаимосвязи компонентов: SidePanel (Agent Plugins Platform)
+
+- **SidePanel** — основной контейнер сайдпанели.
+    - **PluginCard** — карточки плагинов (список)
+    - **PluginControlPanel** — панель управления выбранным плагином
+        - **Tabs** (panel-tabs, tab-btn) — вкладки "Чат" и "Детали"
+            - **ChatView** — чат с плагином
+            - **PluginDetails** — детали и настройки плагина
+    - **ToastNotifications** — всплывающие уведомления
+
+```mermaid
+graph TD
+  SidePanel
+  PluginControlPanel
+  PluginDetails
+  PluginCard
+  ToastNotifications
+
+  SidePanel --> PluginControlPanel
+  SidePanel --> PluginCard
+  SidePanel --> ToastNotifications
+  PluginControlPanel --> PluginDetails
+  PluginControlPanel --> |"panel-tabs (Чат/Детали)"| Tabs
+``` 
