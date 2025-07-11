@@ -12,10 +12,14 @@ interface ExtensionMessage {
   value?: boolean;
   pageKey?: string;
   draftText?: string;
-  message?: ChatMessage;
+  message?: ChatMessage | string;
   source?: string;
   command?: string;
   data?: unknown;
+  // Для логов:
+  level?: 'info' | 'success' | 'error' | 'warning' | 'debug';
+  stepId?: string;
+  logData?: unknown;
 }
 
 // Только стандартное поведение: панель открывается/закрывается глобально по клику на иконку
@@ -65,12 +69,34 @@ const updatePluginSetting = async (pluginId: string, setting: string, value: boo
   return { success: true };
 };
 
-const broadcastChatUpdate = function (pluginId: string, pageKey: string) {
+// Функция для оповещения об обновлении чата
+const broadcastChatUpdate = (pluginId: string, pageKey: string) => {
   chrome.runtime.sendMessage({
     type: 'PLUGIN_CHAT_UPDATED',
     pluginId,
     pageKey,
   });
+};
+
+// === ХРАНИЛИЩЕ ЛОГОВ ===
+type PluginLogEntry = {
+  timestamp: number;
+  pluginId: string;
+  pageKey?: string;
+  level: 'info' | 'success' | 'error' | 'warning' | 'debug';
+  stepId?: string;
+  message: string;
+  data?: unknown;
+};
+
+const pluginLogs: Record<string, PluginLogEntry[]> = {};
+
+const addPluginLog = (log: Omit<PluginLogEntry, 'timestamp'>) => {
+  const key = log.pluginId;
+  if (!pluginLogs[key]) pluginLogs[key] = [];
+  pluginLogs[key].push({ ...log, timestamp: Date.now() });
+  // Ограничим размер лога (например, 500 записей на плагин)
+  if (pluginLogs[key].length > 500) pluginLogs[key].shift();
 };
 
 // Обработчики сообщений для работы с плагинами
@@ -235,6 +261,36 @@ chrome.runtime.onMessage.addListener(
         pluginChatApi.listDraftsForPlugin(pluginId).then(drafts => {
           sendResponse(drafts);
         });
+        return true;
+      }
+
+      // === ЛОГИРОВАНИЕ ===
+      if (msg.type === 'LOG_EVENT' && msg.pluginId && typeof msg.message === 'string') {
+        addPluginLog({
+          pluginId: msg.pluginId,
+          pageKey: msg.pageKey,
+          level: msg.level || 'info',
+          stepId: msg.stepId,
+          message: msg.message,
+          data: msg.logData,
+        });
+        // Оповещаем devtools-panel о новом логе
+        chrome.runtime.sendMessage({
+          type: 'PLUGIN_LOG_UPDATED',
+          pluginId: msg.pluginId,
+          pageKey: msg.pageKey,
+        });
+        sendResponse({ success: true });
+        return true;
+      }
+      // Получение логов по плагину
+      if (msg.type === 'LIST_PLUGIN_LOGS' && msg.pluginId) {
+        sendResponse(pluginLogs[msg.pluginId] || []);
+        return true;
+      }
+      // Получение всех логов (админ)
+      if (msg.type === 'LIST_ALL_PLUGIN_LOGS') {
+        sendResponse(pluginLogs);
         return true;
       }
 
