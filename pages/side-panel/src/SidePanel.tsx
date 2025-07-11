@@ -347,6 +347,7 @@ const SidePanel = () => {
           currentView={panelView}
           isRunning={runningPlugin === selectedPlugin.id}
           isPaused={pausedPlugin === selectedPlugin.id}
+          currentTabUrl={currentTabUrl}
           onViewChange={setPanelView}
           onStart={handleStartPlugin}
           onPause={handlePausePlugin}

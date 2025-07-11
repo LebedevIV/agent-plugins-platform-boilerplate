@@ -14,15 +14,19 @@ interface ChatMessage {
   timestamp: number;
 }
 
-// Получение нормализованного pageKey (без query/hash)
-const getPageKey = (): string => {
+// Получение нормализованного pageKey из URL активной вкладки
+const getPageKey = (currentTabUrl: string | null): string => {
+  if (!currentTabUrl) {
+    return 'unknown-page';
+  }
+
   try {
-    const url = new URL(window.location.href);
+    const url = new URL(currentTabUrl);
     url.search = '';
     url.hash = '';
     return url.toString();
   } catch {
-    return window.location.origin;
+    return currentTabUrl;
   }
 };
 
@@ -31,6 +35,7 @@ interface PluginControlPanelProps {
   currentView: PanelView;
   isRunning: boolean;
   isPaused: boolean;
+  currentTabUrl: string | null; // Добавляем URL активной вкладки
   onViewChange: (view: PanelView) => void;
   onStart: () => void;
   onPause: () => void;
@@ -46,6 +51,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   currentView,
   isRunning,
   isPaused,
+  currentTabUrl,
   onViewChange,
   onStart,
   onPause,
@@ -56,7 +62,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   // Используем хук для ленивой синхронизации
   const { message, setMessage, isDraftSaved, isDraftLoading, draftError, clearDraft } = useLazyChatSync({
     pluginId: plugin.id,
-    pageKey: getPageKey(),
+    pageKey: getPageKey(currentTabUrl),
     debounceMs: 1000, // 1 секунда задержки
     minLength: 10, // Минимум 10 символов для синхронизации
     maxLength: 1000, // Максимум 1000 символов
@@ -92,7 +98,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
 
   // Получаем ключ чата для текущего плагина и страницы
   const pluginId = plugin.id;
-  const pageKey = getPageKey();
+  const pageKey = getPageKey(currentTabUrl);
 
   // Загрузка истории чата при монтировании или смене плагина/страницы
   useEffect(() => {

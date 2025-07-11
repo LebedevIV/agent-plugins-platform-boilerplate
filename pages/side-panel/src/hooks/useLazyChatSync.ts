@@ -159,6 +159,21 @@ export const useLazyChatSync = ({
     loadDraft();
   }, [loadDraft]);
 
+  // Сброс состояния при изменении pageKey (смена страницы)
+  useEffect(() => {
+    setMessageState('');
+    setIsDraftSaved(false);
+    setIsDraftLoading(false);
+    setDraftError(null);
+    lastSavedText.current = '';
+
+    // Очищаем таймер при смене страницы
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+  }, [pageKey]);
+
   return {
     message,
     setMessage,
