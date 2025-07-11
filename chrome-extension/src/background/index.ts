@@ -249,18 +249,34 @@ chrome.runtime.onMessage.addListener(
 
       if (msg.type === 'LIST_PLUGIN_CHATS' && msg.pluginId) {
         const { pluginId } = msg;
-        pluginChatApi.listChatsForPlugin(pluginId).then(chats => {
-          sendResponse(chats);
-        });
+        console.log('[background] Listing chats for plugin:', pluginId);
+        pluginChatApi
+          .listChatsForPlugin(pluginId)
+          .then(chats => {
+            console.log('[background] Chats found:', chats);
+            sendResponse(chats);
+          })
+          .catch(error => {
+            console.error('[background] Error listing chats:', error);
+            sendResponse([]);
+          });
         return true;
       }
 
       // Получение всех черновиков для плагина
       if (msg.type === 'LIST_PLUGIN_CHAT_DRAFTS' && msg.pluginId) {
         const { pluginId } = msg;
-        pluginChatApi.listDraftsForPlugin(pluginId).then(drafts => {
-          sendResponse(drafts);
-        });
+        console.log('[background] Listing drafts for plugin:', pluginId);
+        pluginChatApi
+          .listDraftsForPlugin(pluginId)
+          .then(drafts => {
+            console.log('[background] Drafts found:', drafts);
+            sendResponse(drafts);
+          })
+          .catch(error => {
+            console.error('[background] Error listing drafts:', error);
+            sendResponse([]);
+          });
         return true;
       }
 
