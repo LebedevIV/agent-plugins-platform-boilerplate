@@ -1,6 +1,7 @@
 import '@src/Panel.css';
 import { DebugTab } from './DebugTab';
 import { PluginChatsTab } from './PluginChatsTab';
+import { PluginLogsTab } from './PluginLogsTab';
 import { t } from '@extension/i18n';
 import { PROJECT_URL_OBJECT, useStorage, withErrorBoundary, withSuspense } from '@extension/shared';
 import { exampleThemeStorage } from '@extension/storage';
@@ -11,7 +12,7 @@ import type { ComponentPropsWithoutRef } from 'react';
 const Panel = () => {
   const { isLight } = useStorage(exampleThemeStorage);
   const logo = isLight ? 'devtools-panel/logo_horizontal.svg' : 'devtools-panel/logo_horizontal_dark.svg';
-  const [tab, setTab] = useState<'debug' | 'main' | 'chats'>('debug');
+  const [tab, setTab] = useState<'debug' | 'main' | 'chats' | 'logs'>('debug');
 
   const goGithubSite = () => chrome.tabs.create(PROJECT_URL_OBJECT);
 
@@ -22,6 +23,7 @@ const Panel = () => {
           <button onClick={() => setTab('debug')}>Debug</button>
           <button onClick={() => setTab('main')}>Главная</button>
           <button onClick={() => setTab('chats')}>Чаты плагинов</button>
+          <button onClick={() => setTab('logs')}>Логи</button>
         </div>
         {tab === 'debug' && <DebugTab />}
         {tab === 'main' && (
@@ -36,6 +38,7 @@ const Panel = () => {
           </>
         )}
         {tab === 'chats' && <PluginChatsTab />}
+        {tab === 'logs' && <PluginLogsTab />}
       </header>
     </div>
   );
