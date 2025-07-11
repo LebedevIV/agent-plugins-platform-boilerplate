@@ -1,0 +1,68 @@
+# 🏗️ Architecture Patterns & Constraints
+
+## Project Structure
+- **platform-core/**: Main logic and services (keep boilerplate clean)
+- **chrome-extension/src/background/**: Core background services
+- **pages/*/src/**: UI components for different extension pages
+- **memory-bank/**: Project documentation and context
+- **public/plugins/**: Plugin implementations
+
+## Plugin Architecture
+- **Manifest Structure**: manifest.json + mcp_server.py + icon.svg
+- **MCP Protocol**: Standard MCP server implementation in Python
+- **Permission Model**: Zero Trust - plugins not trusted by default
+- **Isolation**: Each plugin in separate worker for security
+- **Communication**: chrome.runtime.sendMessage for all cross-component communication
+
+## Chat System Architecture
+- **Per-page, per-plugin isolation**: Chats separated by page URL and plugin
+- **LRU Cache**: In-memory cache for performance (50 chats)
+- **IndexedDB**: Persistent storage for all chats
+- **Real-time sync**: Cross-tab communication for chat updates
+- **Cleanup**: Automatic removal of chats older than 90 days
+
+## Security Architecture
+- **Secret Manager**: Encrypted storage of API keys in chrome.storage.local
+- **Network Guard**: Whitelist domains for API calls
+- **Audit System**: Log all plugin activities and network requests
+- **Parameter Validation**: JSON Schema validation for all inputs
+- **Rate Limiting**: Prevent abuse and suspicious activity
+
+## UI/UX Standards
+- **React Components**: TypeScript with proper accessibility
+- **Tailwind CSS**: Consistent styling across all components
+- **Theme Support**: Light/dark mode compatibility
+- **Loading States**: Progress indicators for async operations
+- **Error States**: Clear error messages and recovery options
+
+## Performance Guidelines
+- **Pyodide Loading**: Lazy load runtime, cache results
+- **Memory Management**: Clean up resources, monitor usage
+- **Bundle Size**: Optimize for extension size limits
+- **Caching**: Use LRU cache for frequently accessed data
+- **Async Operations**: Non-blocking UI, proper loading states
+
+## Development Workflow
+- **Feature Branches**: Always create from develop branch
+- **Testing**: Test before commit, use --no-verify if ESLint issues
+- **Documentation**: Update memory-bank for all architectural decisions
+- **Commits**: Use semantic commit messages
+- **Code Quality**: TypeScript for new files, ESLint compliance
+
+## Error Handling
+- **Graceful Degradation**: System continues working with reduced functionality
+- **User Feedback**: Clear error messages and recovery options
+- **Logging**: Structured logging for debugging and monitoring
+- **Fallbacks**: Alternative implementations for critical features
+- **Recovery**: Automatic retry mechanisms where appropriate
+
+## Monitoring and Observability
+- **Structured Logging**: Consistent log format across components
+- **Performance Metrics**: Track execution time and memory usage
+- **Error Tracking**: Monitor and alert on critical errors
+- **User Analytics**: Track feature usage and performance
+- **Health Checks**: Monitor system health and dependencies
+description:
+globs:
+alwaysApply: false
+---

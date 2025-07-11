@@ -1,8 +1,8 @@
 import { withPageConfig } from './index.js';
 import { IS_DEV } from '@extension/env';
 import { makeEntryPointPlugin } from '@extension/hmr';
-import { build as buildTW } from 'tailwindcss/lib/cli/build';
 import { build } from 'vite';
+import { execSync } from 'node:child_process';
 import { readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -64,16 +64,20 @@ const builds = async ({ srcDir, contentName, rootDir, matchesDir, withTw }: ICon
   configsBuilder({ matchesDir, srcDir, rootDir, contentName }).map(async ({ name, config }) => {
     if (withTw) {
       const folder = resolve(matchesDir, name);
-      const args = {
-        ['--input']: resolve(folder, 'index.css'),
-        ['--output']: resolve(rootDir, 'dist', name, 'index.css'),
-        ['--config']: resolve(rootDir, 'tailwind.config.ts'),
-        ['--watch']: IS_DEV,
-      };
-
-      await buildTW(args);
+      const inputCss = resolve(folder, 'index.css');
+      const outputCss = resolve(rootDir, 'dist', name, 'index.css');
+      const twConfig = resolve(rootDir, 'tailwind.config.ts');
+      // Use the tailwindcss CLI via child_process for building CSS
+      try {
+        execSync(
+          `npx tailwindcss --input ${inputCss} --output ${outputCss} --config ${twConfig} ${IS_DEV ? '--watch' : ''}`.trim(),
+          { stdio: 'inherit' },
+        );
+      } catch (err) {
+        console.error('Tailwind build failed:', err);
+        throw err;
+      }
     }
-
     //@ts-expect-error This is hidden property from vite's resolveConfig()
     config.configFile = false;
     return build(config);

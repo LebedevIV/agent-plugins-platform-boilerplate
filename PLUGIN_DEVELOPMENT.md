@@ -295,3 +295,169 @@ if __name__ == "__main__":
 ### Как обновить UI из плагина?
 
 Используйте метод `updatePluginUI_bridge` для отправки данных в интерфейс. 
+
+## Рекомендации по тестированию системы чатов плагинов
+
+### Юнит-тесты (например, Jest, Vitest)
+- Тесты на добавление, получение, удаление чата (plugin-chat-cache.ts)
+- Проверка LRU-очистки (при превышении лимита кэша)
+- Проверка автоматической очистки устаревших чатов (старше 90 дней)
+- Тесты на экспорт/импорт чатов
+- Проверка корректности работы с пустыми чатами (не создаются/удаляются)
+- Мока chrome.runtime.sendMessage/onMessage для проверки messaging API
+- Проверка, что после SAVE_PLUGIN_CHAT_MESSAGE/DELETE_PLUGIN_CHAT отправляется событие PLUGIN_CHAT_UPDATED
+- Проверка, что UI корректно реагирует на PLUGIN_CHAT_UPDATED (автоматическая синхронизация)
+
+### Пример unit-теста (Jest)
+```ts
+import { pluginChatCache } from 'chrome-extension/src/background/plugin-chat-cache';
+
+test('добавление и получение чата', async () => {
+  await pluginChatCache.init();
+  await pluginChatCache.saveMessage('test-plugin', 'https://test/page', {
+    role: 'user', content: 'hello', timestamp: Date.now()
+  });
+  const chat = await pluginChatCache.getOrLoadChat('test-plugin::https://test/page');
+  expect(chat).toBeDefined();
+  expect(chat?.messages[0].content).toBe('hello');
+});
+```
+
+### Интеграционные тесты (e2e, Playwright/WebdriverIO)
+- Открытие side-panel, отправка сообщения, проверка появления в истории
+- Очистка чата, проверка, что история пуста
+- Одновременная работа в двух вкладках: отправка сообщения в одной — мгновенное появление в другой
+- Быстрая отправка нескольких сообщений подряд
+- Перезапуск расширения/браузера — история чата сохраняется
+- Проверка автоматического удаления чата после истечения TTL (можно подменить дату в тесте)
+- Экспорт чата — сравнение содержимого JSON с историей в UI
+
+### Пример e2e-теста (Playwright)
+```ts
+import { test, expect } from '@playwright/test';
+
+test('чат синхронизируется между вкладками', async ({ page, context }) => {
+  await page.goto('chrome-extension://.../side-panel.html');
+  await page.fill('.chat-input textarea', 'Привет!');
+  await page.click('.chat-input button');
+  const page2 = await context.newPage();
+  await page2.goto('chrome-extension://.../side-panel.html');
+  await expect(page2.locator('.chat-message .message-text')).toHaveText('Привет!');
+});
+```
+
+### UX-тесты
+- Проверка отображения индикаторов загрузки, ошибок, статуса синхронизации
+- Проверка доступности кнопок “Очистить чат”, “Экспорт чата” (должны быть неактивны при пустом чате)
+
+### Советы по отладке и DevTools
+- Для отладки используйте chrome://extensions → “Фоновая страница” → Console для логов background.js
+- Включите подробное логирование в plugin-chat-cache.ts (например, при очистке, сохранении, удалении чата)
+- Для ручной проверки TTL — вручную измените updatedAt в IndexedDB через DevTools → Application → IndexedDB
+- Для расширения DevTools-панели можно добавить вкладку “Чаты плагинов” с просмотром, удалением, экспортом чатов и логом событий PLUGIN_CHAT_UPDATED
+
+### Автоматизация
+- Для e2e-тестов используйте мок-данные и автоматическую очистку IndexedDB перед каждым тестом
+- Для unit-тестов — мокайте openDB/idb, чтобы не зависеть от реального браузера
+- Для тестирования broadcast-событий — используйте несколько окон/вкладок в автоматизированных тестах 
+
+---
+
+## Шаблоны тестов и примеры моков для системы чатов
+
+### Шаблон unit-теста с моками IndexedDB (Jest)
+```ts
+import { pluginChatCache } from 'chrome-extension/src/background/plugin-chat-cache';
+
+// Мокаем openDB/idb
+jest.mock('idb', () => ({
+  openDB: jest.fn(() => ({
+    getAll: jest.fn(() => []),
+    get: jest.fn(),
+    put: jest.fn(),
+    delete: jest.fn(),
+  })),
+}));
+
+describe('pluginChatCache', () => {
+  beforeEach(async () => {
+    await pluginChatCache.init();
+  });
+  it('создаёт и возвращает чат', async () => {
+    await pluginChatCache.saveMessage('test-plugin', 'https://test/page', {
+      role: 'user', content: 'hello', timestamp: Date.now()
+    });
+    const chat = await pluginChatCache.getOrLoadChat('test-plugin::https://test/page');
+    expect(chat).toBeDefined();
+  });
+});
+```
+
+### Мок chrome.runtime.sendMessage для unit-тестов UI
+```ts
+beforeAll(() => {
+  global.chrome = {
+    runtime: {
+      sendMessage: jest.fn(() => Promise.resolve({ messages: [] })),
+      onMessage: { addListener: jest.fn(), removeListener: jest.fn() },
+    },
+  } as any;
+});
+```
+
+### Шаблон e2e-теста (Playwright)
+```ts
+import { test, expect } from '@playwright/test';
+
+test('чат синхронизируется между вкладками', async ({ page, context }) => {
+  await page.goto('chrome-extension://.../side-panel.html');
+  await page.fill('.chat-input textarea', 'Привет!');
+  await page.click('.chat-input button');
+  const page2 = await context.newPage();
+  await page2.goto('chrome-extension://.../side-panel.html');
+  await expect(page2.locator('.chat-message .message-text')).toHaveText('Привет!');
+});
+```
+
+---
+
+## Архитектура расширения DevTools-панели для чатов плагинов
+
+**1. Новая вкладка “Чаты плагинов” (Plugin Chats):**
+- Таблица: ключ чата, плагин, страница, дата последнего сообщения, количество сообщений.
+- Кнопка “Просмотр” — открывает модальное окно с историей сообщений (JSON, UI).
+- Кнопка “Удалить” — удаляет чат из IndexedDB и кэша.
+- Кнопка “Экспортировать все чаты” — скачивает JSON-файл со всеми чатами.
+
+**2. Вкладка “События” (Events):**
+- Лог событий PLUGIN_CHAT_UPDATED (pluginId, pageKey, timestamp).
+- Визуализация broadcast-событий между вкладками.
+
+**3. Техническая реализация:**
+- Использовать chrome.runtime.sendMessage({ type: 'LIST_PLUGIN_CHATS' }) для получения всех чатов.
+- Для удаления — chrome.runtime.sendMessage({ type: 'DELETE_PLUGIN_CHAT', pluginId, pageKey }).
+- Для экспорта — chrome.runtime.sendMessage({ type: 'LIST_PLUGIN_CHATS' }) + saveAs(JSON).
+- Для логирования событий — подписка на chrome.runtime.onMessage в DevTools-панели.
+- UI: React, таблица (например, react-table), модальные окна для просмотра/экспорта.
+
+**4. Пример структуры компонента:**
+```tsx
+function PluginChatsTab() {
+  const [chats, setChats] = useState<PluginChat[]>([]);
+  useEffect(() => {
+    chrome.runtime.sendMessage({ type: 'LIST_PLUGIN_CHATS', pluginId: null })
+      .then(setChats);
+    const handleUpdate = (msg) => {
+      if (msg.type === 'PLUGIN_CHAT_UPDATED') {
+        chrome.runtime.sendMessage({ type: 'LIST_PLUGIN_CHATS', pluginId: null })
+          .then(setChats);
+      }
+    };
+    chrome.runtime.onMessage.addListener(handleUpdate);
+    return () => chrome.runtime.onMessage.removeListener(handleUpdate);
+  }, []);
+  // ...render table, buttons, modals...
+}
+```
+
+--- 

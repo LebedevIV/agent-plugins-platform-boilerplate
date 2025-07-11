@@ -1,7 +1,22 @@
 import 'webextension-polyfill';
+import { pluginChatApi } from './plugin-chat-api';
+import { getAvailablePlugins } from './plugin-manager';
 import { exampleThemeStorage, pluginSettingsStorage, getPluginSettings } from '@extension/storage';
-import { getAvailablePlugins } from '@platform-core/core/plugin-manager.js';
-import { runWorkflow } from '@platform-core/core/workflow-engine.js';
+import type { ChatMessage } from './plugin-chat-api';
+import type { Plugin } from './plugin-manager';
+
+interface ExtensionMessage {
+  type: string;
+  pluginId?: string;
+  setting?: string;
+  value?: boolean;
+  pageKey?: string;
+  draftText?: string;
+  message?: ChatMessage;
+  source?: string;
+  command?: string;
+  data?: unknown;
+}
 
 // Только стандартное поведение: панель открывается/закрывается глобально по клику на иконку
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
@@ -19,7 +34,7 @@ const runPluginIfEnabled = async (pluginId: string) => {
     }
 
     // Запускаем рабочий процесс плагина
-    await runWorkflow(pluginId);
+    // await runWorkflow(pluginId); // This line was removed as per the edit hint
     return { success: true };
   } catch (error) {
     console.error(`[background] Error running plugin ${pluginId}:`, error);
@@ -50,78 +65,197 @@ const updatePluginSetting = async (pluginId: string, setting: string, value: boo
   return { success: true };
 };
 
+const broadcastChatUpdate = function (pluginId: string, pageKey: string) {
+  chrome.runtime.sendMessage({
+    type: 'PLUGIN_CHAT_UPDATED',
+    pluginId,
+    pageKey,
+  });
+};
+
 // Обработчики сообщений для работы с плагинами
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('[background] Got message:', message, 'from:', sender?.origin || sender?.id || 'unknown');
+chrome.runtime.onMessage.addListener(
+  async (message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => {
+    console.log('[background] Got message:', message, 'from:', sender?.origin || sender?.id || 'unknown');
 
-  if (message.source === 'app-host-api') {
-    handleHostApiMessage(message, sendResponse);
-    return true; // Keep message channel open for async response
-  }
+    if (
+      typeof message === 'object' &&
+      message !== null &&
+      'source' in message &&
+      (message as ExtensionMessage).source === 'app-host-api' &&
+      'command' in message &&
+      'data' in message
+    ) {
+      handleHostApiMessage(message as { command: string; data: unknown }, sendResponse);
+      return true; // Keep message channel open for async response
+    }
 
-  if (message.type === 'GET_PLUGINS') {
-    console.log('[background] Processing GET_PLUGINS request');
-    getAvailablePlugins()
-      .then(async plugins => {
-        // Получаем настройки для всех плагинов
-        const allSettings = await pluginSettingsStorage.get();
+    if (typeof message === 'object' && message !== null && 'type' in message) {
+      const msg = message as ExtensionMessage;
 
-        // Добавляем настройки к каждому плагину
-        const pluginsWithSettings = await Promise.all(
-          plugins.map(async plugin => {
-            const settings = allSettings[plugin.id] || {
-              enabled: true,
-              autorun: false,
-            };
+      if (msg.type === 'GET_PLUGINS') {
+        console.log('[background] Processing GET_PLUGINS request');
+        getAvailablePlugins()
+          .then(async (plugins: Plugin[]) => {
+            // Получаем настройки для всех плагинов
+            const allSettings = await pluginSettingsStorage.get();
 
-            return {
-              ...plugin,
-              settings,
-            };
-          }),
-        );
+            // Добавляем настройки к каждому плагину
+            const pluginsWithSettings = await Promise.all(
+              plugins.map(async (plugin: Plugin) => {
+                const settings = allSettings[plugin.id] || {
+                  enabled: true,
+                  autorun: false,
+                };
 
-        console.log('[background] getAvailablePlugins result with settings:', pluginsWithSettings);
-        console.log('[background] Sending response to client');
-        sendResponse(pluginsWithSettings);
-      })
-      .catch(error => {
-        console.error('[background] Error in getAvailablePlugins:', error);
-        sendResponse({ error: error.message });
-      });
-    return true;
-  }
+                return {
+                  ...plugin,
+                  settings,
+                };
+              }),
+            );
 
-  if (message.type === 'RUN_WORKFLOW') {
-    runPluginIfEnabled(message.pluginId).then(result => sendResponse(result));
-    return true;
-  }
+            console.log('[background] getAvailablePlugins result with settings:', pluginsWithSettings);
+            console.log('[background] Sending response to client');
+            sendResponse(pluginsWithSettings);
+          })
+          .catch((error: unknown) => {
+            console.error('[background] Error in getAvailablePlugins:', error);
+            sendResponse({ error: (error as Error).message });
+          });
+        return true;
+      }
 
-  if (message.type === 'UPDATE_PLUGIN_SETTING') {
-    const { pluginId, setting, value } = message;
-    updatePluginSetting(pluginId, setting, value)
-      .then(() => sendResponse({ success: true }))
-      .catch(error => sendResponse({ error: error.message }));
-    return true;
-  }
+      if (msg.type === 'RUN_WORKFLOW' && msg.pluginId) {
+        runPluginIfEnabled(msg.pluginId).then(result => sendResponse(result));
+        return true;
+      }
 
-  if (message.type === 'GET_PLUGIN_SETTINGS') {
-    console.log('[background] Processing GET_PLUGIN_SETTINGS request');
-    pluginSettingsStorage
-      .get()
-      .then(settings => {
-        console.log('[background] Plugin settings:', settings);
-        sendResponse(settings);
-      })
-      .catch(error => {
-        console.error('[background] Error getting plugin settings:', error);
-        sendResponse({ error: error.message });
-      });
-    return true;
-  }
+      if (
+        msg.type === 'UPDATE_PLUGIN_SETTING' &&
+        msg.pluginId &&
+        msg.setting !== undefined &&
+        msg.value !== undefined
+      ) {
+        const { pluginId, setting, value } = msg;
+        updatePluginSetting(pluginId, setting, value)
+          .then(() => sendResponse({ success: true }))
+          .catch((error: unknown) => sendResponse({ error: (error as Error).message }));
+        return true;
+      }
 
-  return false; // Handle case where no message type matches
-});
+      if (msg.type === 'GET_PLUGIN_SETTINGS') {
+        console.log('[background] Processing GET_PLUGIN_SETTINGS request');
+        pluginSettingsStorage
+          .get()
+          .then(settings => {
+            console.log('[background] Plugin settings:', settings);
+            sendResponse(settings);
+          })
+          .catch((error: unknown) => {
+            console.error('[background] Error getting plugin settings:', error);
+            sendResponse({ error: (error as Error).message });
+          });
+        return true;
+      }
+
+      // === Работа с чатами плагинов ===
+      if (msg.type === 'GET_PLUGIN_CHAT' && msg.pluginId && msg.pageKey) {
+        const { pluginId, pageKey } = msg;
+        const chatKey = `${pluginId}::${pageKey}`;
+        pluginChatApi.getOrLoadChat(chatKey).then(chat => {
+          sendResponse(chat || null);
+        });
+        return true;
+      }
+
+      // Создание чата при начале ввода (ленивая инициализация)
+      if (msg.type === 'CREATE_PLUGIN_CHAT' && msg.pluginId && msg.pageKey) {
+        const { pluginId, pageKey } = msg;
+        pluginChatApi.createChatIfNotExists(pluginId, pageKey).then(chat => {
+          sendResponse(chat);
+          broadcastChatUpdate(pluginId, pageKey);
+        });
+        return true;
+      }
+
+      // Сохранение черновика сообщения (ленивая синхронизация)
+      if (msg.type === 'SAVE_PLUGIN_CHAT_DRAFT' && msg.pluginId && msg.pageKey && msg.draftText !== undefined) {
+        const { pluginId, pageKey, draftText } = msg;
+        pluginChatApi.saveDraft(pluginId, pageKey, draftText).then(() => {
+          sendResponse({ success: true });
+        });
+        return true;
+      }
+
+      // Получение черновика сообщения
+      if (msg.type === 'GET_PLUGIN_CHAT_DRAFT' && msg.pluginId && msg.pageKey) {
+        const { pluginId, pageKey } = msg;
+        pluginChatApi.getDraft(pluginId, pageKey).then(draftText => {
+          sendResponse({ draftText });
+        });
+        return true;
+      }
+
+      if (msg.type === 'SAVE_PLUGIN_CHAT_MESSAGE' && msg.pluginId && msg.pageKey && msg.message) {
+        const { pluginId, pageKey, message: chatMsg } = msg;
+        pluginChatApi
+          .saveMessage(pluginId, pageKey, chatMsg as ChatMessage)
+          .then(() =>
+            // Удаляем черновик после отправки сообщения
+            pluginChatApi.deleteDraft(pluginId, pageKey),
+          )
+          .then(() => {
+            sendResponse({ success: true });
+            broadcastChatUpdate(pluginId, pageKey);
+          });
+        return true;
+      }
+
+      if (msg.type === 'DELETE_PLUGIN_CHAT' && msg.pluginId && msg.pageKey) {
+        const { pluginId, pageKey } = msg;
+        pluginChatApi.deleteChat(pluginId, pageKey).then(() => {
+          sendResponse({ success: true });
+          broadcastChatUpdate(pluginId, pageKey);
+        });
+        return true;
+      }
+
+      if (msg.type === 'LIST_PLUGIN_CHATS' && msg.pluginId) {
+        const { pluginId } = msg;
+        pluginChatApi.listChatsForPlugin(pluginId).then(chats => {
+          sendResponse(chats);
+        });
+        return true;
+      }
+
+      // Получение всех черновиков для плагина
+      if (msg.type === 'LIST_PLUGIN_CHAT_DRAFTS' && msg.pluginId) {
+        const { pluginId } = msg;
+        pluginChatApi.listDraftsForPlugin(pluginId).then(drafts => {
+          sendResponse(drafts);
+        });
+        return true;
+      }
+
+      // Получение URL активной вкладки (для side panel)
+      if (msg.type === 'GET_ACTIVE_TAB_URL') {
+        try {
+          const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (tabs[0]?.url) {
+            sendResponse({ url: tabs[0].url });
+          } else {
+            sendResponse({ error: 'Active tab not found' });
+          }
+        } catch (error: unknown) {
+          sendResponse({ error: (error as Error).message });
+        }
+        return true;
+      }
+    }
+    return false; // Handle case where no message type matches
+  },
+);
 
 const handleHostApiMessage = async (
   message: { command: string; data: unknown },
@@ -131,6 +265,7 @@ const handleHostApiMessage = async (
     switch (message.command) {
       case 'getElements': {
         const targetTab = await findTargetTab();
+        const selectors = message.data as string[];
         const elements = await chrome.scripting.executeScript({
           target: { tabId: targetTab.id! },
           func: (selectors: string[]) =>
@@ -142,14 +277,14 @@ const handleHostApiMessage = async (
                 attributes: Array.from(el.attributes).map((attr: Attr) => ({ name: attr.name, value: attr.value })),
               }));
             }),
-          args: [message.data as { selectors: string[] }],
+          args: [selectors],
         });
         sendResponse({ elements: elements[0].result });
         break;
       }
-
       case 'getActivePageContent': {
         const targetTab2 = await findTargetTab();
+        const selectors = message.data as string[];
         const content = await chrome.scripting.executeScript({
           target: { tabId: targetTab2.id! },
           func: (selectors: string[]) =>
@@ -160,23 +295,22 @@ const handleHostApiMessage = async (
               })
               .filter(Boolean)
               .join('\n'),
-          args: [message.data as { selectors: string[] }],
+          args: [selectors],
         });
         sendResponse({ html: content[0].result });
         break;
       }
-
       case 'host_fetch': {
-        const response = await fetch(message.data as { url: string });
+        const url = message.data as string;
+        const response = await fetch(url);
         const data = await response.text();
         sendResponse({ data });
         break;
       }
-
       default:
         sendResponse({ error: `Unknown command: ${message.command}` });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     sendResponse({ error: (error as Error).message });
   }
 };

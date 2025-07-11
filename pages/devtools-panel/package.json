@@ -1,6 +1,6 @@
 {
   "name": "@extension/devtools-panel",
-  "version": "0.5.57",
+  "version": "0.5.84",
   "description": "chrome extension - devtools panel",
   "type": "module",
   "private": true,
@@ -23,7 +23,8 @@
     "@extension/shared": "workspace:*",
     "@extension/storage": "workspace:*",
     "@extension/i18n": "workspace:*",
-    "@extension/ui": "workspace:*"
+    "@extension/ui": "workspace:*",
+    "file-saver": "^2.0.5"
   },
   "devDependencies": {
     "@extension/tailwindcss-config": "workspace:*",

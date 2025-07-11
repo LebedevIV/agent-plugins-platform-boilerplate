@@ -5,7 +5,8 @@
   "compilerOptions": {
     "noImplicitAny": false,
     "noEmit": false,
-    "target": "ESNext"
+    "target": "ESNext",
+    "typeRoots": ["./types", "./node_modules/@types"]
   },
-  "include": ["eslint.config.ts"]
+  "include": ["eslint.config.ts", "types"]
 }

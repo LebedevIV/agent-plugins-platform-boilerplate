@@ -4,23 +4,35 @@ import { PROJECT_URL_OBJECT, useStorage, withErrorBoundary, withSuspense } from 
 import { exampleThemeStorage } from '@extension/storage';
 import { cn, ErrorDisplay, LoadingSpinner } from '@extension/ui';
 import type { ComponentPropsWithoutRef } from 'react';
+import { PluginChatsTab } from './PluginChatsTab';
+import { useState } from 'react';
 
 const Panel = () => {
   const { isLight } = useStorage(exampleThemeStorage);
   const logo = isLight ? 'devtools-panel/logo_horizontal.svg' : 'devtools-panel/logo_horizontal_dark.svg';
+  const [tab, setTab] = useState<'main' | 'chats'>('main');
 
   const goGithubSite = () => chrome.tabs.create(PROJECT_URL_OBJECT);
 
   return (
     <div className={cn('App', isLight ? 'bg-slate-50' : 'bg-gray-800')}>
       <header className={cn('App-header', isLight ? 'text-gray-900' : 'text-gray-100')}>
-        <button onClick={goGithubSite}>
-          <img src={chrome.runtime.getURL(logo)} className="App-logo" alt="logo" />
-        </button>
-        <p>
-          Edit <code>pages/devtools-panel/src/Panel.tsx</code>
-        </p>
-        <ToggleButton onClick={exampleThemeStorage.toggle}>{t('toggleTheme')}</ToggleButton>
+        <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+          <button onClick={() => setTab('main')}>Главная</button>
+          <button onClick={() => setTab('chats')}>Чаты плагинов</button>
+        </div>
+        {tab === 'main' && (
+          <>
+            <button onClick={goGithubSite}>
+              <img src={chrome.runtime.getURL(logo)} className="App-logo" alt="logo" />
+            </button>
+            <p>
+              Edit <code>pages/devtools-panel/src/Panel.tsx</code>
+            </p>
+            <ToggleButton onClick={exampleThemeStorage.toggle}>{t('toggleTheme')}</ToggleButton>
+          </>
+        )}
+        {tab === 'chats' && <PluginChatsTab />}
       </header>
     </div>
   );

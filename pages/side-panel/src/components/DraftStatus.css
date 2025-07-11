@@ -1,0 +1,131 @@
+.draft-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  margin-top: 4px;
+}
+
+.draft-status svg {
+  flex-shrink: 0;
+}
+
+.draft-status-text {
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+/* Состояние загрузки */
+.draft-status.loading {
+  color: var(--text-muted, #9ca3af);
+  background: var(--bg-muted, #374151);
+}
+
+.draft-status.loading svg {
+  color: var(--accent-color, #3b82f6);
+}
+
+/* Состояние ошибки */
+.draft-status.error {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.draft-status.error svg {
+  color: #ef4444;
+}
+
+/* Состояние сохранено */
+.draft-status.saved {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.draft-status.saved svg {
+  color: #10b981;
+}
+
+/* Состояние ожидания */
+.draft-status.pending {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.draft-status.pending svg {
+  color: #f59e0b;
+}
+
+/* Состояние готово */
+.draft-status.ready {
+  color: var(--accent-color, #3b82f6);
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.draft-status.ready svg {
+  color: var(--accent-color, #3b82f6);
+}
+
+/* Анимация появления */
+.draft-status {
+  animation: draftStatusFadeIn 0.3s ease-out;
+}
+
+@keyframes draftStatusFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Анимация для иконки сохранения */
+.draft-status.saved svg {
+  animation: draftStatusSaved 0.6s ease-out;
+}
+
+@keyframes draftStatusSaved {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Адаптивность для темной темы */
+@media (prefers-color-scheme: dark) {
+  .draft-status {
+    background: var(--bg-muted, #1f2937);
+  }
+  
+  .draft-status.error {
+    background: rgba(239, 68, 68, 0.15);
+  }
+  
+  .draft-status.saved {
+    background: rgba(16, 185, 129, 0.15);
+  }
+  
+  .draft-status.pending {
+    background: rgba(245, 158, 11, 0.15);
+  }
+  
+  .draft-status.ready {
+    background: rgba(59, 130, 246, 0.15);
+  }
+} 

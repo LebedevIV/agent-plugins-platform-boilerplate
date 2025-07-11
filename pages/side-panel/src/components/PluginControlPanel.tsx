@@ -1,20 +1,52 @@
+import { DraftStatus } from './DraftStatus';
 import { PluginDetails } from './PluginDetails';
+import { useLazyChatSync } from '../hooks/useLazyChatSync';
+import { saveAs } from 'file-saver';
 import { useState, useRef, useEffect } from 'react';
-import type { Plugin } from './PluginCard';
-import type React from 'react';
 import './PluginControlPanel.css';
+import type React from 'react';
+
+// Новый тип для сообщений чата
+interface ChatMessage {
+  id: string;
+  text: string;
+  isUser: boolean;
+  timestamp: number;
+}
+
+// Получение нормализованного pageKey из URL активной вкладки
+const getPageKey = (currentTabUrl: string | null): string => {
+  console.log('[PluginControlPanel] getPageKey вызван с currentTabUrl:', currentTabUrl);
+
+  if (!currentTabUrl) {
+    console.log('[PluginControlPanel] currentTabUrl пустой, возвращаем unknown-page');
+    return 'unknown-page';
+  }
+
+  try {
+    const url = new URL(currentTabUrl);
+    url.search = '';
+    url.hash = '';
+    const pageKey = url.toString();
+    console.log('[PluginControlPanel] Создан pageKey:', pageKey);
+    return pageKey;
+  } catch (error) {
+    console.error('[PluginControlPanel] Ошибка создания pageKey:', error);
+    return currentTabUrl;
+  }
+};
 
 interface PluginControlPanelProps {
   plugin: Plugin;
   currentView: PanelView;
   isRunning: boolean;
   isPaused: boolean;
+  currentTabUrl: string | null; // Добавляем URL активной вкладки
   onViewChange: (view: PanelView) => void;
   onStart: () => void;
   onPause: () => void;
   onStop: () => void;
   onClose: () => void;
-  onSendMessage?: (message: string) => void;
   onUpdateSetting?: (pluginId: string, setting: string, value: boolean) => Promise<void>;
 }
 
@@ -25,16 +57,27 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   currentView,
   isRunning,
   isPaused,
+  currentTabUrl,
   onViewChange,
   onStart,
   onPause,
   onStop,
   onClose,
-  onSendMessage,
   onUpdateSetting,
 }) => {
-  const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState<Array<{ id: string; text: string; isUser: boolean; timestamp: Date }>>([]);
+  // Используем хук для ленивой синхронизации
+  const { message, setMessage, isDraftSaved, isDraftLoading, draftError, clearDraft } = useLazyChatSync({
+    pluginId: plugin.id,
+    pageKey: getPageKey(currentTabUrl),
+    debounceMs: 1000, // 1 секунда задержки
+    minLength: 10, // Минимум 10 символов для синхронизации
+    maxLength: 1000, // Максимум 1000 символов
+  });
+
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [inputHeight, setInputHeight] = useState(60); // Начальная высота поля ввода
   const [isResizing, setIsResizing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -56,49 +99,143 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     onStop();
   };
 
-  const pluginName = plugin.name || plugin.manifest?.name || plugin.id;
+  const pluginName =
+    plugin.name || (typeof plugin.manifest?.name === 'string' ? plugin.manifest.name : '') || plugin.id;
 
-  // Автоскролл к последнему сообщению
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  // Получаем ключ чата для текущего плагина и страницы
+  const pluginId = plugin.id;
+  const pageKey = getPageKey(currentTabUrl);
 
-  // Фокус на поле ввода при открытии чата
+  // Загрузка истории чата при монтировании или смене плагина/страницы
   useEffect(() => {
-    if (currentView === 'chat') {
-      setTimeout(() => textareaRef.current?.focus(), 100);
+    const loadChat = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const chat = await chrome.runtime.sendMessage({
+          type: 'GET_PLUGIN_CHAT',
+          pluginId,
+          pageKey,
+        });
+        if (chat && Array.isArray(chat.messages)) {
+          setMessages(
+            chat.messages.map(
+              (msg: {
+                id?: string;
+                content?: string;
+                text?: string;
+                role?: string;
+                isUser?: boolean;
+                timestamp?: number;
+              }) => ({
+                id: msg.id || String(msg.timestamp || Date.now()),
+                text: msg.content || msg.text,
+                isUser: msg.role ? msg.role === 'user' : !!msg.isUser,
+                timestamp: msg.timestamp || Date.now(),
+              }),
+            ),
+          );
+        } else {
+          setMessages([]);
+        }
+      } catch {
+        setError('Ошибка загрузки истории чата');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadChat();
+  }, [pluginId, pageKey]);
+
+  // Событийная синхронизация чата между вкладками
+  useEffect(() => {
+    const handleChatUpdate = (event: { type: string; pluginId: string; pageKey: string; messages?: ChatMessage[] }) => {
+      if (event?.type === 'PLUGIN_CHAT_UPDATED' && event.pluginId === pluginId && event.pageKey === pageKey) {
+        // Перезагружаем историю чата
+        chrome.runtime
+          .sendMessage({
+            type: 'GET_PLUGIN_CHAT',
+            pluginId,
+            pageKey,
+          })
+          .then(chat => {
+            if (chat && Array.isArray(chat.messages)) {
+              setMessages(
+                chat.messages.map(
+                  (msg: {
+                    id?: string;
+                    content?: string;
+                    text?: string;
+                    role?: string;
+                    isUser?: boolean;
+                    timestamp?: number;
+                  }) => ({
+                    id: msg.id || String(msg.timestamp || Date.now()),
+                    text: msg.content || msg.text,
+                    isUser: msg.role ? msg.role === 'user' : !!msg.isUser,
+                    timestamp: msg.timestamp || Date.now(),
+                  }),
+                ),
+              );
+            } else {
+              setMessages([]);
+            }
+          });
+      }
+    };
+    chrome.runtime.onMessage.addListener(handleChatUpdate);
+    return () => {
+      chrome.runtime.onMessage.removeListener(handleChatUpdate);
+    };
+  }, [pluginId, pageKey]);
+
+  const handleSendMessage = async (): Promise<void> => {
+    if (!message.trim()) return;
+    const newMessage: ChatMessage = {
+      id: Date.now().toString(),
+      text: message.trim(),
+      isUser: true,
+      timestamp: Date.now(),
+    };
+    setMessages(prev => [...prev, newMessage]);
+    setMessage(''); // Очищаем сообщение через хук
+    setSyncStatus('saving');
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'SAVE_PLUGIN_CHAT_MESSAGE',
+        pluginId,
+        pageKey,
+        message: {
+          role: 'user',
+          content: newMessage.text,
+          timestamp: newMessage.timestamp,
+        },
+      });
+      setSyncStatus('saved');
+      setTimeout(() => setSyncStatus('idle'), 1000);
+    } catch {
+      setSyncStatus('error');
+      setError('Ошибка сохранения сообщения');
     }
-  }, [currentView]);
-
-  // Автоматическое изменение высоты textarea
-  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setMessage(e.target.value);
-
-    // Автоматическое изменение высоты
-    const textarea = e.target;
-    textarea.style.height = 'auto';
-    const newHeight = Math.min(Math.max(textarea.scrollHeight, 60), 200); // Минимум 60px, максимум 200px
-    textarea.style.height = `${newHeight}px`;
-    setInputHeight(newHeight);
   };
 
   // Обработка изменения размера разделителя
-  const handleResizeStart = (e: React.MouseEvent) => {
-    e.preventDefault();
+  const handleResizeStart = (event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
     setIsResizing(true);
     document.body.style.cursor = 'ns-resize';
     document.body.style.userSelect = 'none';
   };
 
   useEffect(() => {
-    const handleResizeMove = (e: MouseEvent) => {
+    const handleResizeMove = (event: MouseEvent): void => {
       if (!isResizing) return;
 
       const container = document.querySelector('.chat-view') as HTMLElement;
       if (!container) return;
 
       const containerRect = container.getBoundingClientRect();
-      const newHeight = containerRect.bottom - e.clientY;
+      const newHeight = containerRect.bottom - event.clientY;
       const minHeight = 100; // Минимальная высота чата
       const maxHeight = containerRect.height - 80; // Максимальная высота чата
 
@@ -107,7 +244,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       }
     };
 
-    const handleResizeEnd = () => {
+    const handleResizeEnd = (): void => {
       setIsResizing(false);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
@@ -124,34 +261,60 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     };
   }, [isResizing]);
 
-  const handleSendMessage = () => {
-    if (!message.trim()) return;
+  // Автоскролл к последнему сообщению
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
-    const newMessage = {
-      id: Date.now().toString(),
-      text: message.trim(),
-      isUser: true,
-      timestamp: new Date(),
-    };
-
-    setMessages(prev => [...prev, newMessage]);
-    setMessage('');
-
-    // Сброс высоты textarea
-    if (textareaRef.current) {
-      textareaRef.current.style.height = '60px';
-      setInputHeight(60);
+  // Фокус на поле ввода при открытии чата
+  useEffect(() => {
+    if (currentView === 'chat') {
+      setTimeout(() => textareaRef.current?.focus(), 100);
     }
+  }, [currentView]);
 
-    // Вызываем callback для обработки сообщения
-    onSendMessage?.(newMessage.text);
+  const handleTextareaChange = (event: React.ChangeEvent<HTMLTextAreaElement>): void => {
+    setMessage(event.target.value); // Используем хук вместо setMessage
+
+    // Автоматическое изменение высоты
+    const textarea = event.target;
+    textarea.style.height = 'auto';
+    const newHeight = Math.min(Math.max(textarea.scrollHeight, 60), 200); // Минимум 60px, максимум 200px
+    textarea.style.height = `${newHeight}px`;
+    setInputHeight(newHeight);
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
+  const handleKeyPress = (event: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
       handleSendMessage();
     }
+  };
+
+  // Очистка чата (удаление всей истории)
+  const handleClearChat = async (): Promise<void> => {
+    setSyncStatus('saving');
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'DELETE_PLUGIN_CHAT',
+        pluginId,
+        pageKey,
+      });
+      setMessages([]);
+      await clearDraft(); // Очищаем черновик
+      setSyncStatus('saved');
+      setTimeout(() => setSyncStatus('idle'), 1000);
+    } catch {
+      setSyncStatus('error');
+      setError('Ошибка очистки чата');
+    }
+  };
+
+  // Экспорт чата в JSON
+  const handleExportChat = (): void => {
+    const data = JSON.stringify(messages, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    saveAs(blob, `plugin-chat-${pluginId}.json`);
   };
 
   return (
@@ -162,9 +325,10 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
             className="plugin-icon"
             src={plugin.iconUrl || `plugins/${plugin.id}/${plugin.icon || 'icon.svg'}`}
             alt={`${pluginName} icon`}
-            onError={e => {
-              const firstChar = pluginName.charAt(0) || 'P';
-              e.currentTarget.src = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><rect width='24' height='24' fill='%23e0e0e0'/><text x='12' y='12' text-anchor='middle' dy='.3em' font-family='Arial' font-size='8' fill='%23999'>${firstChar.toUpperCase()}</text></svg>`;
+            onError={event => {
+              const firstChar = typeof pluginName === 'string' && pluginName.length > 0 ? pluginName.charAt(0) : 'P';
+              (event.currentTarget as HTMLImageElement).src =
+                `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><rect width='24' height='24' fill='%23e0e0e0'/><text x='12' y='12' text-anchor='middle' dy='.3em' font-family='Arial' font-size='8' fill='%23999'>${firstChar.toUpperCase()}</text></svg>`;
             }}
           />
           <span className="plugin-name">{pluginName}</span>
@@ -197,31 +361,61 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
           <PluginDetails plugin={plugin} onUpdateSetting={onUpdateSetting} />
         ) : (
           <div className="chat-view">
+            {loading && <div className="chat-loader">Загрузка чата...</div>}
+            {error && <div className="chat-error">{error}</div>}
+            <div className="chat-actions" style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <button onClick={handleClearChat} disabled={messages.length === 0 || loading}>
+                Очистить чат
+              </button>
+              <button onClick={handleExportChat} disabled={messages.length === 0}>
+                Экспорт чата (JSON)
+              </button>
+            </div>
             <div className="chat-messages" style={{ height: `calc(100% - ${inputHeight}px - 8px)` }}>
-              {messages.length === 0 ? (
-                <div className="chat-placeholder">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                  </svg>
-                  <p>Чат с плагином {pluginName}</p>
-                  <p className="chat-hint">Напишите сообщение, чтобы начать общение</p>
-                </div>
+              {messages.length === 0 && !loading ? (
+                <div className="chat-placeholder">Нет сообщений. Начните диалог!</div>
               ) : (
                 <div className="messages-container">
-                  {messages.map(msg => (
-                    <div key={msg.id} className={`chat-message${msg.isUser ? 'user' : 'bot'}`}>
-                      <div className="message-content">
-                        <span className="message-text">{msg.text}</span>
-                        <span className="message-time">
-                          {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                  <div ref={messagesEndRef} />
+                  <>
+                    {messages.map((msg: ChatMessage) =>
+                      msg && typeof msg === 'object' && 'id' in msg ? (
+                        <div key={msg.id} className={`chat-message${msg.isUser ? 'user' : 'bot'}`}>
+                          <div className="message-content">
+                            <span className="message-text">{msg.text}</span>
+                            <span className="message-time">
+                              {typeof msg.timestamp === 'number'
+                                ? String(
+                                    new Date(msg.timestamp).toLocaleTimeString([], {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    }),
+                                  )
+                                : ''}
+                            </span>
+                          </div>
+                        </div>
+                      ) : null,
+                    )}
+                    <div ref={messagesEndRef} />
+                  </>
                 </div>
               )}
             </div>
+            <div className="chat-status">
+              {syncStatus === 'saving' && <span>Сохраняется...</span>}
+              {syncStatus === 'saved' && <span>Сохранено</span>}
+              {syncStatus === 'error' && <span style={{ color: 'red' }}>Ошибка синхронизации</span>}
+            </div>
+
+            {/* Компонент статуса черновика */}
+            <DraftStatus
+              isDraftSaved={isDraftSaved}
+              isDraftLoading={isDraftLoading}
+              draftError={draftError}
+              messageLength={message.length}
+              minLength={10}
+              maxLength={1000}
+            />
 
             {/* Разделитель с возможностью изменения размера */}
             <div
@@ -231,9 +425,9 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
               title="Изменить размер поля ввода"
               role="button"
               tabIndex={0}
-              onKeyDown={e => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
+              onKeyDown={event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
                   // handleResizeStart ожидает MouseEvent, но для a11y просто вызываем setIsResizing(true)
                   setIsResizing(true);
                   document.body.style.cursor = 'ns-resize';
@@ -316,4 +510,13 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       </div>
     </div>
   );
+};
+
+export type Plugin = {
+  id: string;
+  icon?: string;
+  iconUrl?: string;
+  manifest?: Record<string, unknown>;
+  name?: string;
+  [key: string]: unknown;
 };

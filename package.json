@@ -1,6 +1,6 @@
 {
   "name": "agent-plugins-platform",
-  "version": "1.0.41",
+  "version": "1.0.68",
   "description": "Browser extension that enables Python plugin execution using Pyodide and MCP protocol",
   "license": "MIT",
   "private": true,
@@ -38,6 +38,7 @@
     "postinstall": "pnpm copy-env"
   },
   "dependencies": {
+    "file-saver": "^2.0.5",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
@@ -47,6 +48,7 @@
     "@eslint/js": "^9.27.0",
     "@types/chrome": "^0.0.323",
     "@types/eslint-plugin-jsx-a11y": "^6.10.0",
+    "@types/file-saver": "^2.0.7",
     "@types/node": "^22.15.21",
     "@types/react": "^19.1.5",
     "@types/react-dom": "^19.1.5",
