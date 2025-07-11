@@ -1,0 +1,8 @@
+{
+  "name": "Test Chat Plugin",
+  "version": "1.0.0",
+  "description": "Тестовый плагин для отладки системы чатов",
+  "main_server": "mcp_server.py",
+  "host_permissions": ["*://*.example.com/*"],
+  "permissions": ["activeTab", "scripting"]
+}
