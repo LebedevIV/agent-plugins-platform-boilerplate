@@ -31,9 +31,15 @@ agent-plugins-platform/
 
 ## 🛠️ Установка и разработка
 
+### 🚀 Быстрый старт
+**Для новых разработчиков**: 
+- [QUICK_START.md](QUICK_START.md) - быстрый старт (3 шага)
+- [DEVELOPER_SETUP.md](DEVELOPER_SETUP.md) - полное руководство по настройке среды разработки
+
 ### Требования
 - Node.js >= 22.15.1
 - pnpm >= 10.11.0
+- Cursor IDE (рекомендуется для лучшей работы с ИИ-ассистентом)
 
 ### Установка зависимостей
 ```bash
@@ -45,11 +51,8 @@ pnpm install
 # Запуск в режиме разработки
 pnpm dev
 
-# Сборка для Chrome
+# Сборка для продакшена
 pnpm build
-
-# Сборка для Firefox
-pnpm build:firefox
 
 # Создание ZIP архива
 pnpm zip
@@ -67,87 +70,59 @@ pnpm lint
 pnpm type-check
 ```
 
+**Подробные команды и настройки**: См. [DEVELOPER_SETUP.md](DEVELOPER_SETUP.md)
+
 ## 🔌 Разработка плагинов
+
+### Быстрый старт
+```bash
+# Создание нового плагина
+mkdir public/plugins/my-plugin
+# Создайте manifest.json, mcp_server.py, icon.svg
+```
 
 ### Структура плагина
 ```
 public/plugins/plugin-name/
 ├── manifest.json      # Метаданные и разрешения плагина
 ├── mcp_server.py      # Python MCP сервер
-├── workflow.json      # Определение workflow
-└── icon.svg          # Иконка плагина
+├── workflow.json      # Определение workflow (опционально)
+└── icon.svg          # Иконка плагина (опционально)
 ```
 
-### Пример manifest.json
-```json
-{
-  "name": "My Plugin",
-  "version": "1.0.0",
-  "description": "Описание плагина",
-  "main_server": "mcp_server.py",
-  "host_permissions": ["*://*.example.com/*"],
-  "permissions": ["activeTab", "scripting"]
-}
-```
-
-### Пример Python плагина
-```python
-import sys
-import json
-from typing import Any, Dict
-
-async def main():
-    line = sys.stdin.readline()
-    request = json.loads(line)
-    
-    # Обработка запроса
-    result = await process_request(request)
-    
-    # Отправка ответа
-    response = {"result": result}
-    sys.stdout.write(json.dumps(response) + '\n')
-
-async def process_request(request: Dict[str, Any]) -> Dict[str, Any]:
-    # Логика плагина
-    return {"status": "success"}
-```
+**Подробное руководство**: См. [PLUGIN_DEVELOPMENT.md](PLUGIN_DEVELOPMENT.md)
 
 ## 🔧 Конфигурация
 
-### Настройки Options
-- Исходный код: `pages/options/src/Options.tsx`
-- Компоненты: `pages/options/src/components/`
-- Стили: `pages/options/src/Options.css`
+### Основные файлы
+- **Настройки**: `pages/options/src/Options.tsx`
+- **Компоненты**: `pages/options/src/components/`
+- **Стили**: `pages/options/src/Options.css`
 
 ### Alias для импортов
 - `@platform-core` — core, bridge, хуки, UI
 - `@platform-public` — public/plugins, public/pyodide, public/wheels
 
+**Подробная конфигурация**: См. [DEVELOPER_SETUP.md](DEVELOPER_SETUP.md)
+
 ## 🧪 Тестирование
 
-### E2E тесты
 ```bash
-pnpm e2e
+pnpm e2e    # E2E тесты
+pnpm test   # Unit тесты
 ```
 
-### Unit тесты
-```bash
-pnpm test
-```
+**Подробное тестирование**: См. [DEVELOPER_SETUP.md](DEVELOPER_SETUP.md)
 
 ## 📦 Сборка и деплой
 
-### Сборка для Chrome Web Store
 ```bash
-pnpm build
-pnpm zip
+pnpm build        # Сборка для Chrome Web Store
+pnpm build:firefox # Сборка для Firefox Add-ons
+pnpm zip          # Создание ZIP архива
 ```
 
-### Сборка для Firefox Add-ons
-```bash
-pnpm build:firefox
-pnpm zip:firefox
-```
+**Подробная сборка**: См. [DEVELOPER_SETUP.md](DEVELOPER_SETUP.md)
 
 ## 🔒 Безопасность
 
@@ -155,6 +130,8 @@ pnpm zip:firefox
 - Песочница для изолированного выполнения
 - Принцип минимальных привилегий
 - Аудит кода плагинов
+
+**Подробная безопасность**: См. [DEVELOPER_SETUP.md](DEVELOPER_SETUP.md)
 
 ## 📄 Лицензия
 
