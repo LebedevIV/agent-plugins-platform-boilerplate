@@ -1,6 +1,6 @@
 {
   "name": "@extension/sidepanel",
-  "version": "0.5.84",
+  "version": "0.5.97",
   "description": "chrome extension - side panel",
   "type": "module",
   "private": true,

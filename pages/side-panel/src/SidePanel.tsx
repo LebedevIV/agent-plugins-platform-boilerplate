@@ -172,14 +172,30 @@ const SidePanel = () => {
       ? (plugin.manifest?.host_permissions as string[])
       : plugin.host_permissions || [];
     const url = currentTabUrl || window.location.href;
-    console.log('[SidePanel] Проверка плагина', plugin.name, 'host_permissions:', hostPermissions, 'url:', url);
-    return hostPermissions.some((pattern: string) => {
+    let matched = false;
+    const debugInfo = [];
+    for (const pattern of hostPermissions) {
       const regex = patternToRegExp(pattern);
-      if (!regex) return false;
+      if (!regex) {
+        debugInfo.push(`[${plugin.name}] Pattern '${pattern}' не преобразован в RegExp`);
+        continue;
+      }
       const result = regex.test(url);
-      console.log('[SidePanel] Pattern:', pattern, '->', regex, '=>', result);
-      return result;
-    });
+      debugInfo.push(`[${plugin.name}] Pattern: '${pattern}' → ${regex} => ${result}`);
+      if (result) matched = true;
+    }
+    if (!matched) {
+      // Диагностический вывод, если плагин не подходит
+      console.warn(`[SidePanel][DEBUG] Плагин '${plugin.name}' НЕ отображается для URL: ${url}`);
+      console.warn(`[SidePanel][DEBUG] host_permissions:`, hostPermissions);
+      for (const info of debugInfo) {
+        console.warn(info);
+      }
+    } else {
+      // Для успешных тоже можно логировать (опционально)
+      console.log(`[SidePanel][DEBUG] Плагин '${plugin.name}' отображается для URL: ${url}`);
+    }
+    return matched;
   };
 
   const loadPlugins = async () => {
