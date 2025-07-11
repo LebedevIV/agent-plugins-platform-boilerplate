@@ -161,6 +161,7 @@ export const useLazyChatSync = ({
 
   // Сброс состояния при изменении pageKey (смена страницы)
   useEffect(() => {
+    console.log('[useLazyChatSync] pageKey изменился:', pageKey);
     setMessageState('');
     setIsDraftSaved(false);
     setIsDraftLoading(false);

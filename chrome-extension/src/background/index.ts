@@ -209,6 +209,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  // Получение URL активной вкладки (для side panel)
+  if (message.type === 'GET_ACTIVE_TAB_URL') {
+    try {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tabs[0]?.url) {
+        sendResponse({ url: tabs[0].url });
+      } else {
+        sendResponse({ error: 'Active tab not found' });
+      }
+    } catch (error) {
+      sendResponse({ error: (error as Error).message });
+    }
+    return true;
+  }
+
   return false; // Handle case where no message type matches
 });
 

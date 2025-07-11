@@ -16,7 +16,10 @@ interface ChatMessage {
 
 // Получение нормализованного pageKey из URL активной вкладки
 const getPageKey = (currentTabUrl: string | null): string => {
+  console.log('[PluginControlPanel] getPageKey вызван с currentTabUrl:', currentTabUrl);
+
   if (!currentTabUrl) {
+    console.log('[PluginControlPanel] currentTabUrl пустой, возвращаем unknown-page');
     return 'unknown-page';
   }
 
@@ -24,8 +27,11 @@ const getPageKey = (currentTabUrl: string | null): string => {
     const url = new URL(currentTabUrl);
     url.search = '';
     url.hash = '';
-    return url.toString();
-  } catch {
+    const pageKey = url.toString();
+    console.log('[PluginControlPanel] Создан pageKey:', pageKey);
+    return pageKey;
+  } catch (error) {
+    console.error('[PluginControlPanel] Ошибка создания pageKey:', error);
     return currentTabUrl;
   }
 };

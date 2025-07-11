@@ -91,12 +91,57 @@ const SidePanel = () => {
 
   const getCurrentTabUrl = async () => {
     try {
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (tabs[0]?.url) {
-        setCurrentTabUrl(tabs[0].url);
+      console.log('[SidePanel] Получение URL активной вкладки...');
+
+      // Попробуем несколько способов получения активной вкладки
+      let activeTab = null;
+
+      // Способ 1: через chrome.tabs.query
+      try {
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        console.log('[SidePanel] Способ 1 - найденные вкладки:', tabs);
+        if (tabs[0]?.url) {
+          activeTab = tabs[0];
+        }
+      } catch (error) {
+        console.log('[SidePanel] Способ 1 не сработал:', error);
+      }
+
+      // Способ 2: через chrome.tabs.query с более широкими параметрами
+      if (!activeTab) {
+        try {
+          const allTabs = await chrome.tabs.query({ windowId: chrome.windows.WINDOW_ID_CURRENT });
+          console.log('[SidePanel] Способ 2 - все вкладки в окне:', allTabs);
+          activeTab = allTabs.find(tab => tab.active);
+        } catch (error) {
+          console.log('[SidePanel] Способ 2 не сработал:', error);
+        }
+      }
+
+      // Способ 3: через background script
+      if (!activeTab) {
+        try {
+          const response = await chrome.runtime.sendMessage({ type: 'GET_ACTIVE_TAB_URL' });
+          console.log('[SidePanel] Способ 3 - ответ от background:', response);
+          if (response?.url) {
+            setCurrentTabUrl(response.url);
+            return;
+          }
+        } catch (error) {
+          console.log('[SidePanel] Способ 3 не сработал:', error);
+        }
+      }
+
+      if (activeTab?.url) {
+        console.log('[SidePanel] Устанавливаем URL:', activeTab.url);
+        setCurrentTabUrl(activeTab.url);
+      } else {
+        console.log('[SidePanel] URL не найден, activeTab:', activeTab);
+        setCurrentTabUrl(null);
       }
     } catch (error) {
-      console.error('Failed to get current tab URL:', error);
+      console.error('[SidePanel] Ошибка получения URL активной вкладки:', error);
+      setCurrentTabUrl(null);
     }
   };
 
