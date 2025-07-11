@@ -47,7 +47,7 @@ export default defineConfig({
     reportCompressedSize: IS_PROD,
     watch: watchOption,
     rollupOptions: {
-      external: ['chrome', 'unenv/node/process'],
+      external: ['chrome', 'unenv/node/process', 'unenv/polyfill/globalthis'],
     },
   },
 });
