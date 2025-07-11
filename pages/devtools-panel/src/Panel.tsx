@@ -1,16 +1,17 @@
 import '@src/Panel.css';
+import { DebugTab } from './DebugTab';
+import { PluginChatsTab } from './PluginChatsTab';
 import { t } from '@extension/i18n';
 import { PROJECT_URL_OBJECT, useStorage, withErrorBoundary, withSuspense } from '@extension/shared';
 import { exampleThemeStorage } from '@extension/storage';
 import { cn, ErrorDisplay, LoadingSpinner } from '@extension/ui';
-import type { ComponentPropsWithoutRef } from 'react';
-import { PluginChatsTab } from './PluginChatsTab';
 import { useState } from 'react';
+import type { ComponentPropsWithoutRef } from 'react';
 
 const Panel = () => {
   const { isLight } = useStorage(exampleThemeStorage);
   const logo = isLight ? 'devtools-panel/logo_horizontal.svg' : 'devtools-panel/logo_horizontal_dark.svg';
-  const [tab, setTab] = useState<'main' | 'chats'>('main');
+  const [tab, setTab] = useState<'debug' | 'main' | 'chats'>('debug');
 
   const goGithubSite = () => chrome.tabs.create(PROJECT_URL_OBJECT);
 
@@ -18,9 +19,11 @@ const Panel = () => {
     <div className={cn('App', isLight ? 'bg-slate-50' : 'bg-gray-800')}>
       <header className={cn('App-header', isLight ? 'text-gray-900' : 'text-gray-100')}>
         <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+          <button onClick={() => setTab('debug')}>Debug</button>
           <button onClick={() => setTab('main')}>Главная</button>
           <button onClick={() => setTab('chats')}>Чаты плагинов</button>
         </div>
+        {tab === 'debug' && <DebugTab />}
         {tab === 'main' && (
           <>
             <button onClick={goGithubSite}>
