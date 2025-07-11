@@ -1,13 +1,16 @@
 {
   "name": "@extension/vite-config",
-  "version": "0.5.84",
+  "version": "0.5.92",
   "description": "chrome extension - vite base configuration",
   "type": "module",
   "private": true,
   "sideEffects": true,
   "types": "index.mts",
-  "main": "dist/index.mjs",
-  "module": "dist/index.mjs",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
   "scripts": {
     "clean:node_modules": "pnpx rimraf node_modules",
     "clean:bundle": "pnpx rimraf dist",
