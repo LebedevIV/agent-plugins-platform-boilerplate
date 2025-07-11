@@ -1,4 +1,6 @@
+import { DraftStatus } from './DraftStatus';
 import { PluginDetails } from './PluginDetails';
+import { useLazyChatSync } from '../hooks/useLazyChatSync';
 import { saveAs } from 'file-saver';
 import { useState, useRef, useEffect } from 'react';
 import './PluginControlPanel.css';
@@ -51,7 +53,15 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   onClose,
   onUpdateSetting,
 }) => {
-  const [message, setMessage] = useState('');
+  // Используем хук для ленивой синхронизации
+  const { message, setMessage, isDraftSaved, isDraftLoading, draftError, clearDraft } = useLazyChatSync({
+    pluginId: plugin.id,
+    pageKey: getPageKey(),
+    debounceMs: 1000, // 1 секунда задержки
+    minLength: 10, // Минимум 10 символов для синхронизации
+    maxLength: 1000, // Максимум 1000 символов
+  });
+
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -176,7 +186,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       timestamp: Date.now(),
     };
     setMessages(prev => [...prev, newMessage]);
-    setMessage('');
+    setMessage(''); // Очищаем сообщение через хук
     setSyncStatus('saving');
     try {
       await chrome.runtime.sendMessage({
@@ -252,7 +262,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   }, [currentView]);
 
   const handleTextareaChange = (event: React.ChangeEvent<HTMLTextAreaElement>): void => {
-    setMessage(event.target.value);
+    setMessage(event.target.value); // Используем хук вместо setMessage
 
     // Автоматическое изменение высоты
     const textarea = event.target;
@@ -279,6 +289,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
         pageKey,
       });
       setMessages([]);
+      await clearDraft(); // Очищаем черновик
       setSyncStatus('saved');
       setTimeout(() => setSyncStatus('idle'), 1000);
     } catch {
@@ -383,6 +394,16 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
               {syncStatus === 'saved' && <span>Сохранено</span>}
               {syncStatus === 'error' && <span style={{ color: 'red' }}>Ошибка синхронизации</span>}
             </div>
+
+            {/* Компонент статуса черновика */}
+            <DraftStatus
+              isDraftSaved={isDraftSaved}
+              isDraftLoading={isDraftLoading}
+              draftError={draftError}
+              messageLength={message.length}
+              minLength={10}
+              maxLength={1000}
+            />
 
             {/* Разделитель с возможностью изменения размера */}
             <div

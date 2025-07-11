@@ -1,8 +1,9 @@
 import 'webextension-polyfill';
+import { pluginChatApi } from './plugin-chat-api';
 import { exampleThemeStorage, pluginSettingsStorage, getPluginSettings } from '@extension/storage';
 import { getAvailablePlugins } from '@platform-core/core/plugin-manager.js';
 import { runWorkflow } from '@platform-core/core/workflow-engine.js';
-import { pluginChatApi, ChatMessage } from './plugin-chat-api';
+import type { ChatMessage } from './plugin-chat-api';
 
 // Только стандартное поведение: панель открывается/закрывается глобально по клику на иконку
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
@@ -51,7 +52,7 @@ const updatePluginSetting = async (pluginId: string, setting: string, value: boo
   return { success: true };
 };
 
-const broadcastChatUpdate = function(pluginId: string, pageKey: string) {
+const broadcastChatUpdate = function (pluginId: string, pageKey: string) {
   chrome.runtime.sendMessage({
     type: 'PLUGIN_CHAT_UPDATED',
     pluginId,
@@ -139,12 +140,46 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message.type === 'SAVE_PLUGIN_CHAT_MESSAGE') {
-    const { pluginId, pageKey, message: msg } = message;
-    pluginChatApi.saveMessage(pluginId, pageKey, msg as ChatMessage).then(() => {
-      sendResponse({ success: true });
+  // Создание чата при начале ввода (ленивая инициализация)
+  if (message.type === 'CREATE_PLUGIN_CHAT') {
+    const { pluginId, pageKey } = message;
+    pluginChatApi.createChatIfNotExists(pluginId, pageKey).then(chat => {
+      sendResponse(chat);
       broadcastChatUpdate(pluginId, pageKey);
     });
+    return true;
+  }
+
+  // Сохранение черновика сообщения (ленивая синхронизация)
+  if (message.type === 'SAVE_PLUGIN_CHAT_DRAFT') {
+    const { pluginId, pageKey, draftText } = message;
+    pluginChatApi.saveDraft(pluginId, pageKey, draftText).then(() => {
+      sendResponse({ success: true });
+    });
+    return true;
+  }
+
+  // Получение черновика сообщения
+  if (message.type === 'GET_PLUGIN_CHAT_DRAFT') {
+    const { pluginId, pageKey } = message;
+    pluginChatApi.getDraft(pluginId, pageKey).then(draftText => {
+      sendResponse({ draftText });
+    });
+    return true;
+  }
+
+  if (message.type === 'SAVE_PLUGIN_CHAT_MESSAGE') {
+    const { pluginId, pageKey, message: msg } = message;
+    pluginChatApi
+      .saveMessage(pluginId, pageKey, msg as ChatMessage)
+      .then(() =>
+        // Удаляем черновик после отправки сообщения
+        pluginChatApi.deleteDraft(pluginId, pageKey),
+      )
+      .then(() => {
+        sendResponse({ success: true });
+        broadcastChatUpdate(pluginId, pageKey);
+      });
     return true;
   }
 
@@ -161,6 +196,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const { pluginId } = message;
     pluginChatApi.listChatsForPlugin(pluginId).then(chats => {
       sendResponse(chats);
+    });
+    return true;
+  }
+
+  // Получение всех черновиков для плагина
+  if (message.type === 'LIST_PLUGIN_CHAT_DRAFTS') {
+    const { pluginId } = message;
+    pluginChatApi.listDraftsForPlugin(pluginId).then(drafts => {
+      sendResponse(drafts);
     });
     return true;
   }
