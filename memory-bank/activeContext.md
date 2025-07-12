@@ -78,6 +78,13 @@
 - **Community building**: Поддержка сообщества разработчиков
 - **Documentation quality**: Качественная документация для экосистемы
 
+### 11. Принцип "Accurate Time Tracking" (Точное отслеживание времени)
+- **System date commands**: Использовать `date` команды для получения актуальной даты
+- **Date validation**: Проверять и валидировать даты в документации
+- **Consistent formatting**: Использовать формат YYYY-MM-DD для всех дат
+- **User confirmation**: Уточнять даты у пользователя при сомнениях
+- **Documentation updates**: Обновлять даты в документации при необходимости
+
 ## Current Work Focus
 
 ### Memory Bank Initialization
@@ -125,6 +132,7 @@
 - ✅ Created `progress.md` - Project status and completion tracking
 - ✅ Created `comprehensive-architecture.md` - Complete system architecture
 - ✅ Created `errors.md` - Resolved issues and solutions
+- ✅ Created `date-time-patterns.md` - Date/time handling patterns for AI assistants
 
 ### Codebase Analysis
 - ✅ Explored project structure and key files
