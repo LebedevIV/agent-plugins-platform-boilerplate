@@ -500,3 +500,7 @@
 - `npm run build` - сборка для продакшена
 - `npm run lint` - проверка кода
 - `npm run test` - запуск тестов 
+
+# Важно для AI и разработчиков
+- Для всех вопросов по использованию вкладки Agent Platform Tools (DevTools расширения) и отладке используйте инструкцию: [docs/devtools-panel-usage.md](../docs/devtools-panel-usage.md)
+- Не дублируйте текст инструкции в memory-bank, всегда сканируйте и используйте актуальную версию из docs/. 

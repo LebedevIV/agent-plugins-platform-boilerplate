@@ -35,7 +35,7 @@ const manifest = {
   options_page: 'options/index.html',
   options_ui: {
     page: 'options/index.html',
-    open_in_tab: true
+    open_in_tab: true,
   },
   background: {
     service_worker: 'background.js',
@@ -72,19 +72,10 @@ const manifest = {
       css: ['content.css'],
     },
   ],
-  devtools_page: 'devtools/index.html',
+  devtools_page: 'devtools/index.html', // Agent Platform Tools
   web_accessible_resources: [
     {
-      resources: [
-        '*.js', 
-        '*.css', 
-        '*.svg', 
-        'icon-128.png', 
-        'icon-34.png',
-        'plugins/*',
-        'pyodide/*',
-        'wheels/*'
-      ],
+      resources: ['*.js', '*.css', '*.svg', 'icon-128.png', 'icon-34.png', 'plugins/*', 'pyodide/*', 'wheels/*'],
       matches: ['*://*/*'],
     },
   ],
@@ -92,8 +83,8 @@ const manifest = {
     default_path: 'side-panel/index.html',
   },
   content_security_policy: {
-    extension_pages: "script-src 'self'; object-src 'self'"
-  }
+    extension_pages: "script-src 'self'; object-src 'self'",
+  },
 } satisfies ManifestType;
 
 export default manifest;

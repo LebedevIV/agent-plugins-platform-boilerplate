@@ -1,7 +1,7 @@
 {
-  "name": "@extension/devtools-panel",
-  "version": "0.5.100",
-  "description": "chrome extension - devtools panel",
+  "name": "Agent Platform Tools",
+  "version": "0.5.110",
+  "description": "Agent Plugins Platform: инструменты и логи для отладки плагинов.",
   "type": "module",
   "private": true,
   "sideEffects": true,
