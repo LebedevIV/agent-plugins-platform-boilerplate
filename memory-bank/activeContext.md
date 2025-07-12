@@ -109,7 +109,7 @@
 
 ## Recent Changes
 
-### DevTools Panel Issue Resolution (✅ Completed - 2024-12-19)
+### DevTools Panel Issue Resolution (✅ Completed - 2025-07-12)
 - **Проблема**: Custom DevTools panel "Agent Platform Tools" не появлялся в браузере
 - **Причина**: Неправильная конфигурация `devtools_page` в манифесте
 - **Решение**: Изменен путь с `devtools-panel/index.html` на `devtools/index.html`

@@ -31,7 +31,7 @@ Custom DevTools panel "Agent Platform Tools" не появляется в бра
 - `docs/devtools-panel-usage.md` (обновлен)
 
 ### Статус
-✅ **РЕШЕНО** - 2024-12-19
+✅ **РЕШЕНО** - 2025-07-12
 
 ### Коммит
 `9a13f3f` - fix: resolve DevTools panel issue - correct devtools_page path in manifest
