@@ -109,6 +109,13 @@
 
 ## Recent Changes
 
+### DevTools Panel Issue Resolution (✅ Completed - 2024-12-19)
+- **Проблема**: Custom DevTools panel "Agent Platform Tools" не появлялся в браузере
+- **Причина**: Неправильная конфигурация `devtools_page` в манифесте
+- **Решение**: Изменен путь с `devtools-panel/index.html` на `devtools/index.html`
+- **Результат**: Панель теперь корректно отображается в DevTools
+- **Документация**: Созданы troubleshooting guide и usage guide
+
 ### Memory Bank Creation
 - ✅ Created `projectbrief.md` - Core project requirements and goals
 - ✅ Created `productContext.md` - Product vision and user experience
@@ -117,6 +124,7 @@
 - ✅ Created `activeContext.md` - Current work tracking
 - ✅ Created `progress.md` - Project status and completion tracking
 - ✅ Created `comprehensive-architecture.md` - Complete system architecture
+- ✅ Created `errors.md` - Resolved issues and solutions
 
 ### Codebase Analysis
 - ✅ Explored project structure and key files
