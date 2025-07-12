@@ -238,5 +238,26 @@ console.log('- ozonTestSystem.getAllData() - получить все данны�
 console.log('- ozonTestSystem.runOzonTests() - запустить все тесты');
 console.log('- ozonTestSystem.getCurrentUrl() - получить текущий URL');
 
-// Автоматически запускаем тесты
-runOzonTests();
+// Экспорт для ES модулей
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    createOzonChat,
+    createTestPluginChat,
+    sendTestLogs,
+    getAllData,
+    runOzonTests,
+    getCurrentUrl,
+  };
+}
+
+// Экспорт для ES6 модулей
+if (typeof exports !== 'undefined') {
+  exports.ozonTestSystem = {
+    createOzonChat,
+    createTestPluginChat,
+    sendTestLogs,
+    getAllData,
+    runOzonTests,
+    getCurrentUrl,
+  };
+}
