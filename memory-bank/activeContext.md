@@ -84,6 +84,7 @@ ozonTestSystem.getAllData();
 3. **Follow CSP guidelines** - Respect Content Security Policy restrictions
 4. **Test on real pages** - Use actual Ozon pages for full functionality testing
 5. **Monitor logs** - Check Debug tab and console for execution feedback
+6. **Use proper build process** - Always use `pnpm run build` to increment version
 
 #### For Plugin Testing
 1. **Load TestLoader first** - Always initialize the test system
@@ -91,6 +92,43 @@ ozonTestSystem.getAllData();
 3. **Verify results** - Check all relevant tabs for expected data
 4. **Export logs for debugging** - Use Debug tab export functionality
 5. **Test complete workflows** - Run full test suites, not just individual functions
+
+### Version Management and Build Process
+
+#### CRITICAL: Proper Build Commands
+**ALWAYS use these commands for extension testing:**
+
+```bash
+# ✅ CORRECT - Increments patch version automatically
+rm -rf dist && pnpm run build
+
+# ❌ INCORRECT - Does NOT increment version
+cd chrome-extension && npm run build
+```
+
+#### Why This Matters
+- **`pnpm run build`** in root executes: `bash bash-scripts/update_version.sh && pnpm set-global-env && pnpm base-build`
+- **`update_version.sh`** automatically increments patch version in all `package.json` files
+- **`npm run build`** in chrome-extension only runs: `vite build` (no version update)
+
+#### Version Update Process
+```bash
+# Automatic patch increment
+pnpm run build
+
+# Manual version control
+pnpm update-version patch    # Increment patch
+pnpm update-version minor    # Increment minor
+pnpm update-version major    # Increment major
+pnpm update-version 1.2.3    # Set specific version
+```
+
+#### When to Use Proper Build
+- ✅ **Any extension code changes** requiring testing
+- ✅ **Plugin modifications** needing reload
+- ✅ **DevTools panel updates** requiring verification
+- ✅ **Background script changes** needing restart
+- ✅ **Manifest modifications** requiring reinstall
 
 ### Next Steps
 - [ ] Test the new script tag loading functionality on actual Ozon pages
@@ -105,6 +143,7 @@ ozonTestSystem.getAllData();
 3. **DevTools context matters** - Different contexts have different capabilities and restrictions
 4. **UI integration helps** - Providing user-friendly controls improves testing experience
 5. **Comprehensive documentation** - Detailed guides prevent confusion and improve adoption
+6. **Version management is critical** - Always use proper build commands to maintain version consistency
 
 ### Technical Debt
 - None identified at this time
@@ -120,4 +159,5 @@ ozonTestSystem.getAllData();
 - ✅ All functionality accessible through both UI and console
 - ✅ Comprehensive error handling and feedback
 - ✅ Full documentation and guides available
-- ✅ Duplicate script loading prevention implemented 
+- ✅ Duplicate script loading prevention implemented
+- ✅ Proper version management process established 
