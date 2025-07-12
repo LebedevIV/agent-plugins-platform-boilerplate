@@ -7,11 +7,24 @@ console.log('🎯 Тестирование чатов на странице Ozon
 // Получаем текущий URL из активной вкладки
 async function getCurrentUrl() {
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    return tab.url;
+    // Проверяем, доступен ли chrome.tabs API
+    if (chrome.tabs && chrome.tabs.query) {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab && tab.url) {
+        return tab.url;
+      }
+    }
+
+    // Fallback: используем window.location.href
+    const currentUrl = window.location.href;
+    console.log('📍 Используем fallback URL:', currentUrl);
+    return currentUrl;
   } catch (error) {
     console.error('❌ Ошибка получения URL:', error);
-    return window.location.href; // fallback
+    // Fallback: используем window.location.href
+    const fallbackUrl = window.location.href;
+    console.log('📍 Используем fallback URL после ошибки:', fallbackUrl);
+    return fallbackUrl;
   }
 }
 
