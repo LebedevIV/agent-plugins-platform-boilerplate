@@ -7,13 +7,13 @@
 ## Проблема CSP и решение
 
 ### Проблема
-При попытке использовать `eval()` для выполнения динамически загруженных скриптов возникала ошибка:
+При попытке использовать `eval()` или `new Function()` для выполнения динамически загруженных скриптов возникала ошибка:
 ```
 EvalError: Refused to evaluate a string as JavaScript because 'unsafe-eval' is not an allowed source of script in the following Content Security Policy directive: "script-src 'self'".
 ```
 
 ### Решение
-Создан `TestLoader` класс, который использует `new Function()` вместо `eval()` для безопасного выполнения скриптов в контексте CSP.
+Создан `TestLoader` класс, который использует загрузку скриптов через `<script>` теги вместо динамического выполнения кода. Это полностью соответствует политике CSP.
 
 ## Структура тестовых файлов
 
@@ -106,8 +106,8 @@ window.ozonTestSystem
 **Решение**: Нажмите "Загрузить тесты Ozon" в Debug вкладке
 
 ### 3. "Ошибка CSP"
-**Причина**: Попытка использовать eval()
-**Решение**: Используйте TestLoader вместо прямого eval()
+**Причина**: Попытка использовать eval() или new Function()
+**Решение**: Используйте TestLoader с загрузкой через script теги
 
 ### 4. "Нет доступа к chrome.runtime"
 **Причина**: Неправильный контекст DevTools
@@ -118,25 +118,28 @@ window.ozonTestSystem
 ### TestLoader класс
 ```javascript
 class TestLoader {
-  async loadScript(scriptPath) // Загружает скрипт безопасно
-  async loadOzonTests()        // Загружает тесты Ozon
-  async runOzonTests()         // Запускает все тесты
-  getLoadedScripts()           // Список загруженных скриптов
-  clearLoadedScripts()         // Очистка загруженных скриптов
+  async loadScriptSafely(scriptPath) // Загружает скрипт через script тег
+  async loadOzonTests()              // Загружает тесты Ozon
+  async runOzonTests()               // Запускает все тесты
+  getLoadedScripts()                 // Список загруженных скриптов
+  clearLoadedScripts()               // Очистка загруженных скриптов
 }
 ```
 
 ### Безопасная загрузка
 ```javascript
-// Вместо eval()
-const scriptFunction = new Function('chrome', 'window', 'document', scriptContent);
-scriptFunction(chrome, window, document);
+// Вместо eval() или new Function()
+const script = document.createElement('script');
+script.src = chrome.runtime.getURL(scriptPath);
+script.type = 'text/javascript';
+document.head.appendChild(script);
 ```
 
 ### Интеграция с DevTools
 - TypeScript декларации для глобальных объектов
 - React компоненты для управления тестами
 - Автоматическое логирование операций
+- Проверка дублирования загрузки скриптов
 
 ## Рекомендации
 
@@ -150,4 +153,5 @@ scriptFunction(chrome, window, document);
 
 - **2024-12-19**: Добавлен TestLoader для безопасной загрузки скриптов
 - **2024-12-19**: Интегрированы тестовые функции в DevTools панель
-- **2024-12-19**: Добавлены TypeScript декларации для глобальных объектов 
+- **2024-12-19**: Добавлены TypeScript декларации для глобальных объектов
+- **2024-12-19**: Заменен new Function() на загрузку через script теги для полного соответствия CSP 
