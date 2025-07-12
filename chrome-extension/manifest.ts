@@ -75,7 +75,17 @@ const manifest = {
   devtools_page: 'devtools/index.html', // Agent Platform Tools
   web_accessible_resources: [
     {
-      resources: ['*.js', '*.css', '*.svg', 'icon-128.png', 'icon-34.png', 'plugins/*', 'pyodide/*', 'wheels/*'],
+      resources: [
+        '*.js',
+        '*.css',
+        '*.svg',
+        'icon-128.png',
+        'icon-34.png',
+        'plugins/*',
+        'pyodide/*',
+        'wheels/*',
+        'test-scripts/*',
+      ],
       matches: ['*://*/*'],
     },
   ],
