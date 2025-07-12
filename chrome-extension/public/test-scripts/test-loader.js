@@ -8,38 +8,42 @@ class TestLoader {
     this.testFunctions = {};
   }
 
-  // Загрузка скрипта как модуль
-  async loadScript(scriptPath) {
-    try {
-      console.log(`📥 Загрузка скрипта: ${scriptPath}`);
+  // Безопасная загрузка скрипта через script тег
+  async loadScriptSafely(scriptPath) {
+    return new Promise((resolve, reject) => {
+      try {
+        // Проверяем, не загружен ли уже скрипт
+        const existingScript = document.querySelector(`script[src*="${scriptPath}"]`);
+        if (existingScript) {
+          console.log(`Скрипт уже загружен: ${scriptPath}`);
+          resolve();
+          return;
+        }
 
-      const response = await fetch(scriptPath);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const script = document.createElement('script');
+        script.src = chrome.runtime.getURL(scriptPath);
+        script.type = 'text/javascript';
+
+        script.onload = () => {
+          console.log(`✅ Скрипт загружен успешно: ${scriptPath}`);
+          this.loadedScripts.set(scriptPath, {
+            timestamp: Date.now(),
+            loaded: true,
+          });
+          resolve();
+        };
+
+        script.onerror = error => {
+          console.error(`❌ Ошибка загрузки скрипта ${scriptPath}:`, error);
+          reject(new Error(`Failed to load script: ${scriptPath}`));
+        };
+
+        document.head.appendChild(script);
+      } catch (error) {
+        console.error('Ошибка создания script тега:', error);
+        reject(error);
       }
-
-      const scriptContent = await response.text();
-      console.log(`✅ Скрипт загружен: ${scriptPath}`);
-
-      // Создаем функцию из содержимого скрипта
-      const scriptFunction = new Function('chrome', 'window', 'document', scriptContent);
-
-      // Выполняем скрипт в безопасном контексте
-      const result = scriptFunction(chrome, window, document);
-
-      // Сохраняем загруженный скрипт
-      this.loadedScripts.set(scriptPath, {
-        content: scriptContent,
-        function: scriptFunction,
-        timestamp: Date.now(),
-      });
-
-      console.log(`✅ Скрипт выполнен: ${scriptPath}`);
-      return result;
-    } catch (error) {
-      console.error(`❌ Ошибка загрузки скрипта ${scriptPath}:`, error);
-      throw error;
-    }
+    });
   }
 
   // Загрузка Ozon тестов
@@ -47,7 +51,7 @@ class TestLoader {
     try {
       console.log('🎯 Загрузка тестов Ozon...');
 
-      await this.loadScript('/test-scripts/ozon-test.js');
+      await this.loadScriptSafely('test-scripts/ozon-test.js');
 
       // Проверяем, что функции доступны
       if (window.ozonTestSystem) {

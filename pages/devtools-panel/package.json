@@ -1,6 +1,6 @@
 {
   "name": "Agent Platform Tools",
-  "version": "0.5.111",
+  "version": "0.5.113",
   "description": "Agent Plugins Platform: инструменты и логи для отладки плагинов.",
   "type": "module",
   "private": true,

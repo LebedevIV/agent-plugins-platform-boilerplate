@@ -56,26 +56,53 @@ export const DebugTab: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  // Безопасная загрузка скрипта через script тег
+  const loadScriptSafely = (scriptPath: string): Promise<void> =>
+    new Promise((resolve, reject) => {
+      try {
+        // Проверяем, не загружен ли уже скрипт
+        const existingScript = document.querySelector(`script[src="${scriptPath}"]`);
+        if (existingScript) {
+          console.log(`Скрипт уже загружен: ${scriptPath}`);
+          resolve();
+          return;
+        }
+
+        const script = document.createElement('script');
+        script.src = chrome.runtime.getURL(scriptPath);
+        script.type = 'text/javascript';
+
+        script.onload = () => {
+          console.log(`✅ Скрипт загружен успешно: ${scriptPath}`);
+          resolve();
+        };
+
+        script.onerror = error => {
+          console.error(`❌ Ошибка загрузки скрипта ${scriptPath}:`, error);
+          reject(new Error(`Failed to load script: ${scriptPath}`));
+        };
+
+        document.head.appendChild(script);
+      } catch (error) {
+        console.error('Ошибка создания script тега:', error);
+        reject(error);
+      }
+    });
+
   // Загрузка тестового загрузчика
   const loadTestLoader = async () => {
     try {
       setTestStatus({ loading: true });
 
-      const response = await fetch(chrome.runtime.getURL('test-scripts/test-loader.js'));
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      await loadScriptSafely('test-scripts/test-loader.js');
+
+      // Проверяем, что TestLoader доступен
+      if (window.testLoader) {
+        setTestStatus({ loading: false, success: true });
+        setLogs(prev => [`[${new Date().toLocaleTimeString()}] TestLoader загружен успешно`, ...prev.slice(0, 99)]);
+      } else {
+        throw new Error('TestLoader не найден после загрузки скрипта');
       }
-
-      const scriptContent = await response.text();
-
-      // Создаем функцию из содержимого скрипта
-      const scriptFunction = new Function('chrome', 'window', 'document', scriptContent);
-
-      // Выполняем скрипт
-      scriptFunction(chrome, window, document);
-
-      setTestStatus({ loading: false, success: true });
-      setLogs(prev => [`[${new Date().toLocaleTimeString()}] TestLoader загружен успешно`, ...prev.slice(0, 99)]);
     } catch (error) {
       console.error('Ошибка загрузки TestLoader:', error);
       setTestStatus({ loading: false, error: error instanceof Error ? error.message : 'Unknown error' });
