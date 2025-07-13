@@ -165,13 +165,11 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
 
   // --- Синхронизация message с draftText после загрузки черновика ---
   useEffect(() => {
-    // Логируем для отладки
-    console.log('[PluginControlPanel] useEffect draftText -> message:', message);
-    // Если message не совпадает с черновиком, обновляем
-    if (typeof message === 'string' && message !== draftText) {
-      setMessage(draftText || '');
+    // Подставлять draftText только если message пустое (т.е. при инициализации)
+    if (typeof message === 'string' && message === '' && draftText) {
+      setMessage(draftText);
     }
-  }, [draftText, message, setMessage]);
+  }, [draftText]);
 
   const handleSendMessage = async (): Promise<void> => {
     if (!message.trim()) return;
@@ -356,6 +354,9 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
               placeholder="Напишите сообщение..."
               style={{ height: `${inputHeight}px` }}
             />
+            <button onClick={handleSendMessage} disabled={!message.trim()} style={{ marginLeft: 8 }}>
+              Отправить
+            </button>
             <DraftStatus isDraftSaved={isDraftSaved} isDraftLoading={isDraftLoading} draftError={draftError} />
           </div>
         </div>
