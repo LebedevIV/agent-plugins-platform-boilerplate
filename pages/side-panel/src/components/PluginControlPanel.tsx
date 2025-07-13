@@ -59,11 +59,13 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (!isRunning) setStopped(false);
+    if (!isRunning) {
+      // Удалить все вызовы setStopped(...)
+    }
   }, [isRunning]);
 
   const handleStart = () => {
-    setStopped(false);
+    // Удалить все вызовы setStopped(...)
     onStart();
   };
 
@@ -181,7 +183,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     };
     setMessages(prev => [...prev, newMessage]);
     setMessage(''); // Очищаем сообщение через хук
-    setSyncStatus('saving');
+    // Удалить все вызовы setSyncStatus(...)
     try {
       await chrome.runtime.sendMessage({
         type: 'SAVE_PLUGIN_CHAT_MESSAGE',
@@ -193,12 +195,11 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
           timestamp: newMessage.timestamp,
         },
       });
-      setSyncStatus('saved');
-      setTimeout(() => setSyncStatus('idle'), 1000);
+      // Удалить все вызовы setSyncStatus(...)
       await loadChat(); // Перезагружаем историю чата после отправки
       await clearDraft(); // Сбрасываем черновик после отправки
     } catch {
-      setSyncStatus('error');
+      // Удалить все вызовы setSyncStatus(...)
       setError('Ошибка сохранения сообщения');
     }
   };
@@ -270,7 +271,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
 
   // Очистка чата (удаление всей истории)
   const handleClearChat = async (): Promise<void> => {
-    setSyncStatus('saving');
+    // Удалить все вызовы setSyncStatus(...)
     try {
       await chrome.runtime.sendMessage({
         type: 'DELETE_PLUGIN_CHAT',
@@ -279,10 +280,9 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       });
       setMessages([]);
       await clearDraft(); // Очищаем черновик
-      setSyncStatus('saved');
-      setTimeout(() => setSyncStatus('idle'), 1000);
+      // Удалить все вызовы setSyncStatus(...)
     } catch {
-      setSyncStatus('error');
+      // Удалить все вызовы setSyncStatus(...)
       setError('Ошибка очистки чата');
     }
   };
