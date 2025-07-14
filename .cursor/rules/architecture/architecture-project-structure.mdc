@@ -1,0 +1,20 @@
+# Project Structure Architecture
+- platform-core/: Main logic and services (keep boilerplate clean)
+- chrome-extension/src/background/: Core background services
+- pages/*/src/: UI components for different extension pages
+- memory-bank/: Project documentation and context
+- public/plugins/: Plugin implementations
+
+description: Directory and component structure for the project
+globs:
+  - platform-core/*
+  - chrome-extension/src/background/*
+  - pages/*/src/*
+  - memory-bank/*
+  - public/plugins/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

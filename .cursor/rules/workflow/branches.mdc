@@ -1,0 +1,13 @@
+# Rule
+- For new features, use branches with the prefix `feature/` and a meaningful name.
+- For bugfixes, use the prefix `fix/` and a clear description of the problem.
+- Never mix bugfixes and features in the same branch.
+- After merging a bugfix, update feature branches via rebase/merge from develop.
+
+# Examples
+- ✅ `feature/pyodide-integration`
+- ✅ `fix/tailwindcss-build-script`
+description:
+globs:
+alwaysApply: false
+---

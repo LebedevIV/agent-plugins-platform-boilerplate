@@ -1,0 +1,11 @@
+# Rule
+- All React components must be accessible to users with disabilities.
+- Use appropriate aria-attributes, ensure correct focus management, and sufficient color contrast.
+- Support keyboard navigation.
+
+# Examples
+- ✅ `<button aria-label="Send" tabIndex={0}>`
+description:
+globs:
+alwaysApply: false
+---

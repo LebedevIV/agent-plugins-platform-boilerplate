@@ -1,0 +1,26 @@
+name: Rules Structure Check
+
+on:
+  push:
+    paths:
+      - '.cursor/rules/**'
+  pull_request:
+    paths:
+      - '.cursor/rules/**'
+
+jobs:
+  check-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Generate index and README structure
+        run: node .cursor/rules/generate-rules-index.js
+      - name: Check for uncommitted changes
+        run: |
+          git diff --exit-code || (echo 'index.mdc or README.md is outdated. Please run generate-rules-index.js and commit the result.' && exit 1)
+      - name: Check rules structure
+        run: node .cursor/rules/check-rules-structure.js 

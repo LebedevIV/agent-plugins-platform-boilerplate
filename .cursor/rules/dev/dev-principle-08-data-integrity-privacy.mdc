@@ -1,0 +1,17 @@
+# Development Principle 8: Data Integrity & Privacy
+- Data validation: Validate all input data
+- Encryption at rest: Encrypt data at rest
+- Encryption in transit: Encrypt data in transit
+- Data minimization: Collect only necessary data
+- User consent: Explicit user consent for data processing
+- Right to be forgotten: Ability to delete user data
+
+description: Data integrity and privacy in all development
+globs:
+  - *
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

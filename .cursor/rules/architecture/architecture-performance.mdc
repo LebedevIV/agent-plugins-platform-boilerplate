@@ -1,0 +1,22 @@
+# Performance Guidelines (Architecture)
+- Pyodide Loading: Lazy load runtime, cache results
+- Memory Management: Clean up resources, monitor usage
+- Bundle Size: Optimize for extension size limits
+- Caching: Use LRU cache for frequently accessed data
+- Async Operations: Non-blocking UI, proper loading states
+
+related:
+  - plugin-performance.mdc
+  - architecture-observability.mdc
+
+description: Performance guidelines for system architecture
+globs:
+  - platform-core/*
+  - chrome-extension/src/background/*
+  - public/plugins/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

@@ -1,0 +1,20 @@
+# UI Testing Standards
+- Test component logic and behavior (unit tests)
+- Test component interactions (integration tests)
+- Test visual appearance and layout (visual tests)
+- Test accessibility compliance (a11y tests)
+- Test component performance
+
+related:
+  - plugin-testing.mdc
+  - ui-error-handling.mdc
+
+description: Testing standards for all UI components
+globs:
+  - pages/*/src/components/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---
