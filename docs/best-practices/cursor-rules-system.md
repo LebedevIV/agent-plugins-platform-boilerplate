@@ -1,5 +1,7 @@
 # Cursor Rules System — Modular, AI-First, Automated
 
+> This is a proven, modular rule/documentation system. Copy/adapt for any project.
+
 This document describes the principles, structure, automation, and best practices for organizing `.cursor/rules/` in a modern, AI-friendly, and scalable way. Use this as a template to implement the same system in any project.
 
 ---
