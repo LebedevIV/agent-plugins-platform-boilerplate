@@ -202,7 +202,7 @@ chrome.runtime.onMessage.addListener(
         const chatKey = `${pluginId}::${getPageKey(pageKey)}`;
         pluginChatApi.getOrLoadChat(chatKey).then(chat => {
           console.log('[background] sendResponse(GET_PLUGIN_CHAT):', chat);
-          sendResponse(chat || null);
+          sendResponse(chat || { messages: [] });
         });
         return true;
       }
@@ -352,7 +352,8 @@ chrome.runtime.onMessage.addListener(
         return true;
       }
     }
-    return false; // Handle case where no message type matches
+    // ГАРАНТИРОВАННО возвращаем true, чтобы канал не закрывался преждевременно
+    return true;
   },
 );
 

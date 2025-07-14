@@ -4,8 +4,6 @@ interface UseLazyChatSyncOptions {
   pluginId: string;
   pageKey: string;
   debounceMs?: number; // Задержка перед синхронизацией (по умолчанию 1000ms)
-  minLength?: number; // Минимальная длина для синхронизации (по умолчанию 10 символов)
-  maxLength?: number; // Максимальная длина для синхронизации (по умолчанию 1000 символов)
 }
 
 interface UseLazyChatSyncReturn {
@@ -22,8 +20,6 @@ export const useLazyChatSync = ({
   pluginId,
   pageKey,
   debounceMs = 1000,
-  minLength = 10,
-  maxLength = 1000,
 }: UseLazyChatSyncOptions): UseLazyChatSyncReturn => {
   const [message, setMessageState] = useState('');
   const [isDraftSaved, setIsDraftSaved] = useState(false);
@@ -32,19 +28,6 @@ export const useLazyChatSync = ({
 
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedText = useRef<string>('');
-
-  // Функция для создания чата при начале ввода
-  const createChatIfNeeded = useCallback(async () => {
-    try {
-      await chrome.runtime.sendMessage({
-        type: 'CREATE_PLUGIN_CHAT',
-        pluginId,
-        pageKey,
-      });
-    } catch (error) {
-      console.error('Error creating chat:', error);
-    }
-  }, [pluginId, pageKey]);
 
   // Функция для сохранения черновика
   const saveDraft = useCallback(
@@ -86,6 +69,10 @@ export const useLazyChatSync = ({
         setMessageState(response.draftText);
         lastSavedText.current = response.draftText;
         setIsDraftSaved(true);
+      } else {
+        setMessageState(''); // Явно очищаем если драфта нет
+        lastSavedText.current = '';
+        setIsDraftSaved(false);
       }
     } catch (error) {
       console.error('Error loading draft:', error);
@@ -117,31 +104,19 @@ export const useLazyChatSync = ({
   const setMessage = useCallback(
     (text: string) => {
       setMessageState(text);
-
-      // Очищаем предыдущий таймер
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
       }
-
-      // Проверяем условия для синхронизации
-      const shouldSync = text.length >= minLength && text.length <= maxLength;
-
-      if (shouldSync) {
-        // Создаем чат при первом вводе
-        if (text.length === minLength) {
-          createChatIfNeeded();
-        }
-
-        // Устанавливаем debounce для сохранения черновика
+      if (text.length === 0) {
+        clearDraft();
+      } else {
+        // Сохраняем драфт при любом непустом изменении
         debounceRef.current = setTimeout(() => {
           saveDraft(text);
         }, debounceMs);
-      } else if (text.length === 0) {
-        // Если текст пустой, очищаем черновик
-        clearDraft();
       }
     },
-    [minLength, maxLength, debounceMs, createChatIfNeeded, saveDraft, clearDraft],
+    [debounceMs, saveDraft, clearDraft],
   );
 
   // Очистка таймера при размонтировании
@@ -162,7 +137,7 @@ export const useLazyChatSync = ({
   // Сброс состояния при изменении pageKey (смена страницы)
   useEffect(() => {
     console.log('[useLazyChatSync] pageKey изменился:', pageKey);
-    setMessageState('');
+    // setMessageState(''); // УБРАТЬ сброс message
     setIsDraftSaved(false);
     setIsDraftLoading(false);
     setDraftError(null);

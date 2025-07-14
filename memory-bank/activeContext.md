@@ -1,163 +1,174 @@
-# Active Context - Agent Plugins Platform
+# Активный контекст разработки
 
-## Current Status (2024-12-19)
+## Текущий статус проекта
+**Последнее обновление:** Текущая сессия
 
-### Recent Achievements
-- ✅ **CSP Issue Fully Resolved**: Completely solved Content Security Policy violation using script tag loading
-- ✅ **DevTools Integration**: Added comprehensive test controls to DebugTab in DevTools panel
-- ✅ **Safe Script Execution**: Implemented secure script loading using `<script>` tags instead of dynamic evaluation
-- ✅ **TypeScript Support**: Added proper type declarations for global test objects
-- ✅ **Documentation**: Created comprehensive DevTools testing guide
+### Завершенные задачи
+1. ✅ **Модернизация PluginCard** - Полностью обновлен дизайн карточек плагинов
+2. ✅ **Модернизация PluginControlPanel** - Полностью обновлен интерфейс панели управления
+3. ✅ **Улучшение PluginDetails** - Модернизирован компонент отображения деталей плагина
+4. ✅ **Улучшение DraftStatus** - Обновлен индикатор статуса с современным дизайном
 
-### Technical Solution Implemented
+### Текущий фокус
+**Приоритет:** Комплексное тестирование обновленного интерфейса
 
-#### Problem Solved
-- **CSP Error**: `EvalError: Refused to evaluate a string as JavaScript because 'unsafe-eval' is not an allowed source of script`
-- **Root Cause**: Content Security Policy `script-src 'self'` blocks both `eval()` and `new Function()`
-- **Impact**: Could not load and execute test scripts in DevTools panel
+### Следующие шаги
+1. Тестирование всех обновленных компонентов
+2. Выявление и исправление ошибок отображения
+3. Сбор обратной связи от пользователей
+4. Дальнейшая оптимизация на основе тестирования
 
-#### Solution Architecture
-```
-TestLoader Class
-├── loadScriptSafely(scriptPath) - Safe script loading with script tags
-├── loadOzonTests() - Load Ozon test functions
-├── runOzonTests() - Execute complete test suite
-├── getLoadedScripts() - List loaded scripts
-└── clearLoadedScripts() - Cleanup loaded scripts
-```
+## Ключевые принципы работы
 
-#### Files Created/Modified
-- `chrome-extension/public/test-scripts/test-loader.js` - Safe script loader using script tags
-- `chrome-extension/public/test-scripts/ozon-test.js` - Updated with module exports
-- `pages/devtools-panel/src/DebugTab.tsx` - Added test controls UI with script tag loading
-- `pages/devtools-panel/src/index.tsx` - Added TypeScript declarations
-- `memory-bank/devtools-testing-guide.md` - Comprehensive testing guide
+### Инициативность ассистента
+- Всегда предлагать улучшения и оптимизации
+- Конструктивно критиковать существующие решения
+- Предлагать альтернативные подходы
+- Проактивно выявлять потенциальные проблемы
 
-### Current Testing Workflow
+### Качество кода
+- Следовать принципам из memory-bank/development-principles.md
+- Применять "Do No Harm" принцип
+- Использовать AI-First документацию
+- Приоритизировать безопасность и производительность
 
-#### 1. DevTools Panel Access
-- Open any webpage (e.g., https://www.ozon.ru)
-- Press F12 to open DevTools
-- Navigate to "Agent Platform Tools" tab (not Console!)
+### Архитектурные решения
+- Модульная структура компонентов
+- Переиспользуемые UI элементы
+- Консистентный дизайн-система
+- Поддержка светлой и темной темы
 
-#### 2. Test Execution Methods
-**Option A: UI Controls (Recommended)**
-- Go to "Debug" tab in DevTools panel
-- Click "Загрузить TestLoader" → "Загрузить тесты Ozon" → "Запустить все тесты Ozon"
+## Технический контекст
 
-**Option B: Console Commands**
-```javascript
-// After loading tests
-ozonTestSystem.runOzonTests();
-ozonTestSystem.createOzonChat();
-ozonTestSystem.sendTestLogs();
-ozonTestSystem.getAllData();
-```
+### Текущая архитектура
+- React + TypeScript для UI компонентов
+- Модульная система пакетов (@extension/*)
+- Vite для сборки
+- Tailwind CSS для стилизации
+- Chrome Extension API для интеграции
 
-#### 3. Verification Points
-- **Chats Tab**: Check for new plugin chats
-- **Logs Tab**: Verify test log entries
-- **Debug Tab**: Monitor execution status and errors
-- **Console**: View detailed execution logs
+### Стандарты разработки
+- TypeScript для всех новых файлов
+- ESLint для проверки кода
+- Компонентный подход с proper accessibility
+- Структурированное логирование
+- Комплексная документация с примерами
 
-### Security Implementation
+### Безопасность
+- Zero Trust архитектура для плагинов
+- Валидация всех входных данных
+- Шифрование чувствительной информации
+- Аудит всех действий плагинов
 
-#### CSP Compliance
-- ✅ Uses `<script>` tags instead of `eval()` or `new Function()`
-- ✅ Maintains `script-src 'self'` policy
-- ✅ Scripts loaded from extension's own resources via `chrome.runtime.getURL()`
-- ✅ Proper error handling and validation
-- ✅ Duplicate script loading prevention
+## Пользовательский опыт
 
-#### Test Script Safety
-- ✅ Scripts loaded from extension's own resources
-- ✅ Execution in controlled context
-- ✅ No external code execution
-- ✅ Proper cleanup and resource management
-- ✅ Native browser script loading mechanism
+### Приоритеты UX
+1. Интуитивность интерфейса
+2. Быстродействие и отзывчивость
+3. Доступность (a11y)
+4. Консистентность дизайна
+5. Поддержка различных тем
 
-### Development Guidelines
+### Метрики качества
+- Время загрузки компонентов
+- Плавность анимаций (60fps)
+- Доступность для скринридеров
+- Совместимость с различными браузерами
 
-#### For AI Assistants
-1. **Always check DevTools context** - Ensure working in "Agent Platform Tools" not browser console
-2. **Use script tag loading** - Never use `eval()` or `new Function()` directly
-3. **Follow CSP guidelines** - Respect Content Security Policy restrictions
-4. **Test on real pages** - Use actual Ozon pages for full functionality testing
-5. **Monitor logs** - Check Debug tab and console for execution feedback
-6. **Use proper build process** - Always use `pnpm run build` to increment version
+## Планы развития
 
-#### For Plugin Testing
-1. **Load TestLoader first** - Always initialize the test system
-2. **Use UI controls when possible** - Safer than manual console commands
-3. **Verify results** - Check all relevant tabs for expected data
-4. **Export logs for debugging** - Use Debug tab export functionality
-5. **Test complete workflows** - Run full test suites, not just individual functions
+### Краткосрочные цели (1-2 недели)
+- Комплексное тестирование обновленного интерфейса
+- Исправление выявленных ошибок отображения
+- Сбор и анализ обратной связи пользователей
+- Документирование результатов тестирования
 
-### Version Management and Build Process
+### Среднесрочные цели (1 месяц)
+- Оптимизация производительности на основе тестирования
+- Добавление микроинтеракций и анимаций
+- Улучшение адаптивности интерфейса
+- Расширение экосистемы плагинов
 
-#### CRITICAL: Proper Build Commands
-**ALWAYS use these commands for extension testing:**
+### Долгосрочные цели (3 месяца)
+- Создание полноценной платформы для плагинов
+- Развитие сообщества разработчиков
+- Интеграция с популярными сервисами
+- Интернационализация интерфейса
 
+## Важные файлы и ресурсы
+
+### Ключевые компоненты
+- `pages/side-panel/src/components/PluginCard.tsx` - Карточки плагинов ✅
+- `pages/side-panel/src/components/PluginControlPanel.tsx` - Панель управления ✅
+- `pages/side-panel/src/components/PluginDetails.tsx` - Детали плагина ✅
+- `pages/side-panel/src/components/DraftStatus.tsx` - Индикатор статуса ✅
+
+### Документация
+- `memory-bank/development-principles.md` - Принципы разработки
+- `memory-bank/side-panel-improvements.md` - План улучшений UI
+- `memory-bank/future-plans.md` - Долгосрочные планы
+
+### Конфигурация
+- `packages/ui/` - UI компоненты и стили
+- `packages/vite-config/` - Конфигурация сборки
+- `packages/shared/` - Общие утилиты
+
+## Команды и процессы
+
+### Сборка проекта
 ```bash
-# ✅ CORRECT - Increments patch version automatically
-rm -rf dist && pnpm run build
-
-# ❌ INCORRECT - Does NOT increment version
-cd chrome-extension && npm run build
-```
-
-#### Why This Matters
-- **`pnpm run build`** in root executes: `bash bash-scripts/update_version.sh && pnpm set-global-env && pnpm base-build`
-- **`update_version.sh`** automatically increments patch version in all `package.json` files
-- **`npm run build`** in chrome-extension only runs: `vite build` (no version update)
-
-#### Version Update Process
-```bash
-# Automatic patch increment
+# Сборка всех страниц
 pnpm run build
 
-# Manual version control
-pnpm update-version patch    # Increment patch
-pnpm update-version minor    # Increment minor
-pnpm update-version major    # Increment major
-pnpm update-version 1.2.3    # Set specific version
+# Сборка конкретной страницы
+cd pages/side-panel && npm run build
+
+# Разработка
+pnpm run dev
 ```
 
-#### When to Use Proper Build
-- ✅ **Any extension code changes** requiring testing
-- ✅ **Plugin modifications** needing reload
-- ✅ **DevTools panel updates** requiring verification
-- ✅ **Background script changes** needing restart
-- ✅ **Manifest modifications** requiring reinstall
+### Тестирование
+- Использовать DevTools панель "Agent Platform Tools"
+- Тестировать в боковой панели расширения
+- Проверять в различных темах (светлая/темная)
+- Тестировать все обновленные компоненты
 
-### Next Steps
-- [ ] Test the new script tag loading functionality on actual Ozon pages
-- [ ] Verify chat creation and log generation work correctly
-- [ ] Test error handling and recovery scenarios
-- [ ] Consider adding more test scenarios for other plugins
-- [ ] Document any additional edge cases or improvements needed
+### Git workflow
+- Создавать feature ветки для новых функций
+- Создавать fix ветки для исправлений
+- Использовать осмысленные названия веток
+- Вливать через pull requests
 
-### Key Learnings
-1. **CSP is strict** - Both `eval()` and `new Function()` are blocked by strict CSP
-2. **Script tags are safe** - Native browser script loading is CSP-compliant
-3. **DevTools context matters** - Different contexts have different capabilities and restrictions
-4. **UI integration helps** - Providing user-friendly controls improves testing experience
-5. **Comprehensive documentation** - Detailed guides prevent confusion and improve adoption
-6. **Version management is critical** - Always use proper build commands to maintain version consistency
+## Контакты и поддержка
 
-### Technical Debt
-- None identified at this time
-- All ESLint errors resolved
-- TypeScript types properly defined
-- Code follows project standards
-- CSP compliance fully achieved
+### Для пользователей
+- Документация в memory-bank/
+- Тестирование через DevTools панель
+- Обратная связь через GitHub Issues
 
-### Success Metrics
-- ✅ CSP violations completely eliminated
-- ✅ Test scripts load and execute successfully using script tags
-- ✅ DevTools panel provides intuitive testing interface
-- ✅ All functionality accessible through both UI and console
-- ✅ Comprehensive error handling and feedback
-- ✅ Full documentation and guides available
-- ✅ Duplicate script loading prevention implemented
-- ✅ Proper version management process established 
+### Для разработчиков
+- Следовать принципам из development-principles.md
+- Использовать модульную архитектуру
+- Приоритизировать безопасность и производительность
+- Документировать все изменения
+
+## Статус готовности к тестированию
+
+### ✅ Готовые компоненты
+- PluginCard - полностью модернизирован
+- PluginControlPanel - полностью обновлен
+- PluginDetails - современный дизайн
+- DraftStatus - улучшенный индикатор
+
+### 🔄 Готово к тестированию
+- Все компоненты собраны и готовы к использованию
+- Современный дизайн-система внедрена
+- Поддержка светлой и темной темы
+- Анимации и интерактивность добавлены
+
+### 📋 План тестирования
+1. Проверить отображение в боковой панели
+2. Протестировать в DevTools панели
+3. Проверить работу в обеих темах
+4. Протестировать все интерактивные элементы
+5. Выявить и исправить ошибки отображения 

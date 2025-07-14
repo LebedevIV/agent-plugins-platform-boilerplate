@@ -86,6 +86,13 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
         pluginId,
         pageKey,
       });
+      console.log(
+        '[PluginControlPanel] loadChat RAW:',
+        chat,
+        typeof chat,
+        chat && chat.messages,
+        Array.isArray(chat?.messages),
+      );
       if (chat && Array.isArray(chat.messages)) {
         setMessages(
           chat.messages.map(
@@ -104,15 +111,23 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
             }),
           ),
         );
+        console.log('[PluginControlPanel] setMessages:', chat.messages);
       } else {
         setMessages([]);
+        console.log('[PluginControlPanel] setMessages: []');
       }
-    } catch {
+    } catch (e) {
       setError('Ошибка загрузки истории чата');
+      console.error('[PluginControlPanel] loadChat error:', e);
     } finally {
       setLoading(false);
     }
   }, [pluginId, pageKey]);
+
+  // Добавить useEffect для вызова loadChat при монтировании и смене pluginId/pageKey
+  useEffect(() => {
+    loadChat();
+  }, [loadChat]);
 
   // Событийная синхронизация чата между вкладками
   useEffect(() => {
@@ -179,7 +194,6 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       isUser: true,
       timestamp: Date.now(),
     };
-    setMessages(prev => [...prev, newMessage]);
     setMessage(''); // Очищаем сообщение через хук
     // Удалить все вызовы setSyncStatus(...)
     try {

@@ -7,7 +7,7 @@ import { exampleThemeStorage } from '@extension/storage'; // Пример хра
 import { cn, ErrorDisplay, LoadingSpinner } from '@extension/ui'; // Утилита для классов, компонент ошибки и спиннер
 import { PluginCard } from '@extension/ui/lib/components/PluginCard'; // Общий компонент карточки плагина (React)
 // === React хуки ===
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 // === Типы для локальных компонентов ===
 import type { PanelView } from './components/PluginControlPanel'; // Тип для переключения вкладок панели управления
 import './SidePanel.css';
@@ -40,6 +40,8 @@ const SidePanel = () => {
   const [currentTabUrl, setCurrentTabUrl] = useState<string | null>(null);
   const { isLight } = useStorage(exampleThemeStorage);
 
+  const portRef = useRef<chrome.runtime.Port | null>(null);
+
   // Функции для работы с уведомлениями
   const removeToast = useCallback((id: string) => {
     setToasts(prev => prev.filter(toast => toast.id !== id));
@@ -70,9 +72,32 @@ const SidePanel = () => {
   );
 
   useEffect(() => {
-    loadPlugins();
+    console.log('[SidePanel] useEffect вызван - загружаем плагины и URL');
     getCurrentTabUrl();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    // Открываем порт при монтировании компонента
+    const port = chrome.runtime.connect();
+    portRef.current = port;
+
+    port.onMessage.addListener(msg => {
+      if (msg.type === 'PLUGINS_RESULT') {
+        setPlugins(msg.plugins);
+      }
+      if (msg.type === 'PLUGINS_ERROR') {
+        addToastWithDeps('Ошибка загрузки плагинов: ' + msg.error, 'error');
+      }
+      // ... другие типы сообщений
+    });
+
+    // Запрашиваем плагины
+    port.postMessage({ type: 'GET_PLUGINS' });
+
+    return () => {
+      port.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     // Функция для обновления URL
@@ -174,6 +199,10 @@ const SidePanel = () => {
     const url = currentTabUrl || window.location.href;
     let matched = false;
     const debugInfo = [];
+
+    console.log(`[SidePanel] Проверка плагина '${plugin.name}' для URL: ${url}`);
+    console.log(`[SidePanel] host_permissions:`, hostPermissions);
+
     for (const pattern of hostPermissions) {
       const regex = patternToRegExp(pattern);
       if (!regex) {
@@ -185,12 +214,8 @@ const SidePanel = () => {
       if (result) matched = true;
     }
     if (!matched) {
-      // Диагностический вывод, если плагин не подходит
-      console.warn(`[SidePanel][DEBUG] Плагин '${plugin.name}' НЕ отображается для URL: ${url}`);
-      console.warn(`[SidePanel][DEBUG] host_permissions:`, hostPermissions);
-      for (const info of debugInfo) {
-        console.warn(info);
-      }
+      // Краткий лог только для отладки, без подробностей
+      console.info(`[SidePanel] Плагин '${plugin.name}' не отображается для URL: ${url}`);
     } else {
       // Для успешных тоже можно логировать (опционально)
       console.log(`[SidePanel][DEBUG] Плагин '${plugin.name}' отображается для URL: ${url}`);
@@ -198,27 +223,7 @@ const SidePanel = () => {
     return matched;
   };
 
-  const loadPlugins = async () => {
-    try {
-      const response = await chrome.runtime.sendMessage({ type: 'GET_PLUGINS' });
-      if (response) {
-        // Загружаем настройки плагинов из хранилища
-        const settingsResponse = await chrome.runtime.sendMessage({ type: 'GET_PLUGIN_SETTINGS' });
-        const pluginSettings = settingsResponse || {};
-
-        // Объединяем плагины с их настройками
-        const pluginsWithSettings = response.map((plugin: Plugin) => ({
-          ...plugin,
-          settings: pluginSettings[plugin.id] || { enabled: true, autorun: false },
-        }));
-
-        setPlugins(pluginsWithSettings);
-      }
-    } catch (error) {
-      console.error('Failed to load plugins:', error);
-      addToastWithDeps('Ошибка загрузки плагинов', 'error');
-    }
-  };
+  // Удаляю функцию loadPlugins и все связанные с ней вызовы chrome.runtime.sendMessage для загрузки плагинов
 
   const handlePluginClick = async (plugin: Plugin) => {
     // Открываем панель управления вместо прямого запуска
@@ -379,23 +384,34 @@ const SidePanel = () => {
         <section className="plugins-section">
           <h3>Доступные плагины</h3>
           <div className="plugins-grid">
-            {plugins.filter(isPluginAllowedOnHost).map(plugin => (
-              <PluginCard
-                key={plugin.id}
-                id={plugin.id}
-                name={plugin.name}
-                version={plugin.version}
-                description={plugin.description}
-                icon={plugin.icon}
-                iconUrl={plugin.iconUrl}
-                enabled={plugin.settings?.enabled ?? true}
-                selected={selectedPlugin?.id === plugin.id}
-                onClick={() => handlePluginClick(plugin)}
-                onToggle={async (enabled: boolean): Promise<void> => {
-                  await handleUpdatePluginSetting(plugin.id, 'enabled', enabled);
-                }}
-              />
-            ))}
+            {(() => {
+              console.log('[SidePanel] === РЕНДЕР ===');
+              console.log('[SidePanel] Состояние plugins:', plugins);
+              console.log('[SidePanel] Состояние currentTabUrl:', currentTabUrl);
+
+              const filteredPlugins = plugins.filter(isPluginAllowedOnHost);
+              console.log('[SidePanel] Всего плагинов:', plugins.length);
+              console.log('[SidePanel] Отфильтрованных плагинов:', filteredPlugins.length);
+              console.log('[SidePanel] Отфильтрованные плагины:', filteredPlugins);
+
+              return filteredPlugins.map(plugin => (
+                <PluginCard
+                  key={plugin.id}
+                  id={plugin.id}
+                  name={plugin.name}
+                  version={plugin.version}
+                  description={plugin.description}
+                  icon={plugin.icon}
+                  iconUrl={plugin.iconUrl}
+                  enabled={plugin.settings?.enabled ?? true}
+                  selected={selectedPlugin?.id === plugin.id}
+                  onClick={() => handlePluginClick(plugin)}
+                  onToggle={async (enabled: boolean): Promise<void> => {
+                    await handleUpdatePluginSetting(plugin.id, 'enabled', enabled);
+                  }}
+                />
+              ));
+            })()}
           </div>
         </section>
         {/* Удалена секция с LogManager */}
