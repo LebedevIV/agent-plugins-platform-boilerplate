@@ -1,13 +1,28 @@
 #!/bin/bash
 set -e
 
+# === Safe Remove Function ===
+PROTECTED_DIRS=("docs" ".cursor" "memory-bank" "docs/for-ai-best-practices" "platform-core" "chrome-extension/public/plugins")
+
+safe_rm() {
+  for protected in "${PROTECTED_DIRS[@]}"; do
+    if [[ "$1" == "$protected"* ]]; then
+      echo "❌ ERROR: Attempt to delete protected directory: $1"
+      return 1
+    fi
+  done
+  rm -rf "$1"
+  echo "✅ Directory $1 deleted"
+}
+
 while true; do
   echo "\n=== Developer Helper Menu ==="
   echo "1) Lint/format all rules and docs (prettier)"
   echo "2) Generate ToC and cross-references"
   echo "3) Sync roadmap/plans"
   echo "4) Create/search/edit rules (CLI)"
-  echo "5) Exit"
+  echo "5) Safe remove directory (demo)"
+  echo "6) Exit"
   read -p "Choose an option: " opt
   case $opt in
     1)
@@ -39,6 +54,10 @@ while true; do
       esac
       ;;
     5)
+      read -p "Enter directory to remove: " dir
+      safe_rm "$dir"
+      ;;
+    6)
       exit 0
       ;;
     *)

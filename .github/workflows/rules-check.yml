@@ -22,5 +22,10 @@ jobs:
       - name: Check for uncommitted changes
         run: |
           git diff --exit-code || (echo 'index.mdc or README.md is outdated. Please run generate-rules-index.js and commit the result.' && exit 1)
+      - name: Check for protected directory deletion
+        run: |
+          if git diff --name-status | grep -E 'D[[:space:]]+(docs|\.cursor|memory-bank|docs/for-ai-best-practices|platform-core|chrome-extension/public/plugins)'; then
+            echo '::warning::Attempted deletion of a protected directory! Review required.'
+          fi
       - name: Check rules structure
         run: node .cursor/rules/check-rules-structure.js 
