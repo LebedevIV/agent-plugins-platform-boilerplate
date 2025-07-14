@@ -8,9 +8,10 @@ This document describes the principles, structure, automation, and best practice
 
 The `.cursor/rules/` system is designed for:
 - Maximum clarity and maintainability for both humans and AI assistants
-- Easy navigation, search, and automation
+- Fast navigation, search, and automation
 - Seamless scaling as the number of rules grows
 - Full compatibility with AI-first workflows and best practices
+- Automated cross-referencing and documentation
 
 ---
 
@@ -19,10 +20,11 @@ The `.cursor/rules/` system is designed for:
 - **English-First**: All rules, docs, and comments are in English for maximum AI and team compatibility. (User commands may remain in the original language for clarity.)
 - **One Rule — One File**: Each `.mdc` file contains exactly one rule or standard. This enables modularity, easy linking, and granular automation.
 - **Topic-Based Folders**: Rules are grouped by topic (e.g., `dev-principles/`, `architecture/`, `plugin/`, `ui/`, `workflow/`, `doc/`).
+- **Category Expansion**: For large projects, use more granular folders: `security/`, `workflow/`, `code-style/`, `automation/`, `memorybank/`, `dev-experience/`.
 - **Explicit Metadata**: Each rule file includes `description:`, `globs:`, `alwaysApply:`, and (optionally) `related:` and `examples:`.
-- **Cross-Referencing**: Related rules are linked via a `related:` section for easy navigation and AI context.
-- **Automation-First**: Index and documentation are always up-to-date via CLI scripts and CI.
-- **AI-First Documentation**: All rules are written with clarity for both humans and AI, with explicit logic and rationale.
+- **Cross-Reference Policy**: Every rule or doc should include links to all relevant files (related rules, onboarding, progress, user commands, architecture, graveyard, etc.) in a `Cross-References` section.
+- **Automation-First**: Index, summary, and cross-references are auto-generated and checked by scripts for all `.md`/`.mdc` files.
+- **AI-First Documentation**: All rules are written with clarity for both humans and AI, with explicit logic, rationale, and cross-links.
 
 ---
 
@@ -52,6 +54,22 @@ The `.cursor/rules/` system is designed for:
       ai-first.mdc
       user-commands.mdc
       ...
+    security/
+      security-principles.mdc
+      ...
+    code-style/
+      typescript-best-practices.mdc
+      ...
+    automation/
+      automation.mdc
+      ...
+    memorybank/
+      memorybank-quality.mdc
+      knowledge-map.mdc
+      ...
+    dev-experience/
+      user-commands.mdc
+      ...
 ```
 
 ---
@@ -60,35 +78,50 @@ The `.cursor/rules/` system is designed for:
 
 Each rule file must contain:
 - `# Heading` — short, clear title
+- **Category** (optional but recommended for large projects)
 - Main rule body (bulleted or short paragraphs)
+- **Rationale** — why this rule is important (AI/Dev/Team context)
+- **Example** — code/config/example if relevant
 - `related:` — (optional) list of related rule files
+- **Cross-References** — (optional but recommended) links to onboarding, progress, user commands, architecture, graveyard, etc.
 - `description:` — short summary for index/search
 - `globs:` — file globs for rule application
 - `alwaysApply:` — usually `false`
 - `---` — end of metadata
-- (Optional) `# Examples` section
 
 **Example:**
 ```
 # Plugin Error Handling
+
+**Category:** plugin
+
 - Graceful Degradation: Continue working with reduced functionality
 - User Feedback: Provide clear error messages to users
 - Logging: Log errors for debugging without exposing sensitive data
 - Fallbacks: Implement fallback mechanisms for critical features
 - Recovery: Automatic retry mechanisms where appropriate
 
+## Rationale
+Clear error handling ensures plugins do not break the user experience and are easy to debug for both developers and AI.
+
+## Example
+If a plugin fails, show a user-friendly error and log the details for debugging.
+
 related:
   - plugin-security.mdc
   - architecture-error-handling.mdc
+
+## Cross-References
+- [Onboarding](../../docs/onboarding.md) — for new developer guidance
+- [Progress](../../memory-bank/progress.md) — for current project status
+- [User Commands](../../docs/USER_COMMANDS.md) — for automation commands
+- [Architecture](../../memory-bank/codebase-architecture.md) — for system overview
 
 description: Error handling requirements for all plugins
 globs:
   - public/plugins/*
 alwaysApply: false
 ---
-
-# Examples
-- If a plugin fails, show a user-friendly error and log the details for debugging.
 ```
 
 ---
@@ -99,6 +132,13 @@ alwaysApply: false
   - `create-rule.cjs` — Interactive CLI to create a new rule file from a template. Updates index/README automatically.
   - `generate-rules-index.cjs` — Scans all `.mdc` files (recursively) and regenerates `index.mdc` and the structure section in `README.md`.
   - `check-rules-structure.cjs` — Validates all `.mdc` files for required sections, uniqueness, and valid related links. Used in CI.
+- **Advanced CLI/Helper Scripts** (optional):
+  - `list` — Show structure of all rules by folder
+  - `search <keyword>` — Search rules by keyword
+  - `add <category> <filename.mdc>` — Create a new rule from template
+  - `edit <relpath>` — Edit a rule by relative path
+  - `generate-toc` — Recursively updates ToC, summary, and required cross-references for all `.md`/`.mdc` files
+  - `security-audit` — Checks Docker, .env, dependencies, outputs `audit-report.md`
 - **Usage:**
   - `node .cursor/rules/create-rule.cjs`
   - `node .cursor/rules/generate-rules-index.cjs`
@@ -113,6 +153,8 @@ alwaysApply: false
   - Regenerates index/README and checks for uncommitted changes
   - Validates all rules for structure and related links
   - Fails the build if any issues are found
+- **Advanced CI (optional):**
+  - Runs ToC/cross-reference automation, security/performance audit, and roadmap sync
 
 **Example:**
 ```yaml
@@ -147,10 +189,11 @@ jobs:
 ## 7. How to Add/Update Rules
 
 - Use `create-rule.cjs` to add new rules (enforces template and updates navigation)
-- Always provide a clear heading, description, globs, and (if possible) related links
+- Always provide a clear heading, rationale, example, and cross-references
 - Use English for all content except user commands (which may remain in the original language)
 - Run `generate-rules-index.cjs` after any manual changes
 - Run `check-rules-structure.cjs` to validate before commit/PR
+- For advanced projects, use the CLI/ToC/cross-reference automation and developer helper scripts
 
 ---
 
@@ -162,10 +205,28 @@ jobs:
 4. Run the CLI scripts to generate index/README and validate structure
 5. (Optional) Update globs and descriptions for the new codebase
 6. Document any project-specific conventions in `README.md`
+7. (Optional) Add advanced automation for ToC, cross-references, and roadmap sync
 
 ---
 
-## 9. FAQ & Troubleshooting
+## 9. Advanced Practices: Roadmap & Synchronization
+
+- **User-Facing Roadmap:**
+  - All current and planned automation, DevOps, and AI improvements are published in `docs/PLANS.md` for easy access by users and contributors.
+  - This file is always in sync with the technical/AI roadmap in `memory-bank/progress.md`.
+- **AI/Dev Roadmap:**
+  - `memory-bank/progress.md` contains the full, detailed, and always up-to-date list of planned improvements, technical context, and project status for AI/LLM and the core team.
+- **Synchronization Mechanism:**
+  - The section `## Planned Automation & Improvements` is automatically synchronized between `memory-bank/progress.md` and `docs/PLANS.md` using a script (e.g., `tools/sync_plans.py`).
+  - This script can be run manually or automatically in CI.
+  - Any update to plans in one file is reflected in the other, ensuring both user and AI/Dev audiences always see the latest roadmap.
+- **Best Practice:**
+  - Always update plans in `memory-bank/progress.md` (the source of truth), then run the sync script or let CI handle it.
+  - Reference `docs/PLANS.md` in onboarding, README, and user docs for maximum transparency.
+
+---
+
+## 10. FAQ & Troubleshooting
 
 - **Q: Why English?**
   - For maximum AI compatibility and international team support
@@ -174,30 +235,45 @@ jobs:
 - **Q: What if I need a new topic?**
   - Just create a new folder and add rules there
 - **Q: How to avoid duplicates?**
-  - Use `check-rules-structure.cjs` and always search before adding
+  - Use the CLI search and always check before adding
 - **Q: How to update navigation?**
-  - Run `generate-rules-index.cjs` after any changes
+  - Run the ToC/summary automation after any changes
 
 ---
 
-## 10. Appendix: Templates & Examples
+## 11. Appendix: Templates & Examples
 
 **Rule Template:**
 ```
 # [Rule Title]
-- [Main points]
+
+**Category:** [security|workflow|code-style|automation|memorybank|dev-experience]
+
+## Rule
+Describe the rule clearly and concisely.
+
+## Rationale
+Why is this rule important? (AI/Dev/Team context)
+
+## Example
+Provide a code/config/example if relevant.
 
 related:
   - [other-rule.mdc]
+
+## Cross-References
+- [Related Rule 1](../security/another-rule.mdc) — similar security policy
+- [Graveyard](../../memory-bank/graveyard.md) — see failed solutions
+- [Onboarding](../../docs/onboarding.md) — for new developer guidance
+- [Progress](../../memory-bank/progress.md) — for current project status
+- [User Commands](../../docs/USER_COMMANDS.md) — for automation commands
+- [Architecture](../../memory-bank/codebase-architecture.md) — for system overview
 
 description: [Short summary]
 globs:
   - [glob patterns]
 alwaysApply: false
 ---
-
-# Examples
-- [Example usage]
 ```
 
 **CLI Usage:**
