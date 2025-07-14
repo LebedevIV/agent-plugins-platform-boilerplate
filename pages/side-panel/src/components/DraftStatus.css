@@ -1,105 +1,156 @@
+/* Draft Status - Modern Design */
 .draft-status {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-  margin-top: 4px;
+  gap: 8px;
+  font-size: 12px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  margin: 8px 0;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.draft-status::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, currentColor, currentColor);
+  opacity: 0.05;
+  border-radius: 12px;
+  transition: opacity 0.3s ease;
+}
+
+.draft-status:hover::before {
+  opacity: 0.1;
 }
 
 .draft-status svg {
   flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  transition: all 0.3s ease;
 }
 
 .draft-status-text {
-  font-weight: 500;
-  line-height: 1.2;
+  font-weight: 600;
+  line-height: 1.3;
+  flex: 1;
 }
 
 /* Состояние загрузки */
 .draft-status.loading {
-  color: var(--text-muted, #9ca3af);
-  background: var(--bg-muted, #374151);
+  color: var(--text-muted, #cbd5e1);
+  background: var(--loading-bg, #334155);
+  border: 1px solid var(--loading-border, #475569);
+  box-shadow: 0 4px 12px rgba(71, 85, 105, 0.2);
 }
 
 .draft-status.loading svg {
   color: var(--accent-color, #3b82f6);
+  animation: draftStatusSpin 1.5s linear infinite;
+}
+
+@keyframes draftStatusSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 /* Состояние ошибки */
 .draft-status.error {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: var(--error-text, #fecaca);
+  background: linear-gradient(135deg, var(--error-bg, #7f1d1d), var(--error-hover, #991b1b));
+  border: 1px solid var(--error-border, #ef4444);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
 }
 
 .draft-status.error svg {
-  color: #ef4444;
+  color: var(--error-icon, #fecaca);
+  animation: draftStatusShake 0.6s ease-in-out;
+}
+
+@keyframes draftStatusShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  75% { transform: translateX(2px); }
 }
 
 /* Состояние сохранено */
 .draft-status.saved {
-  color: #10b981;
-  background: rgba(16, 185, 129, 0.1);
-  border: 1px solid rgba(16, 185, 129, 0.2);
+  color: var(--success-text, #d1fae5);
+  background: linear-gradient(135deg, var(--success-bg, #065f46), var(--success-hover, #047857));
+  border: 1px solid var(--success-border, #10b981);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
 }
 
 .draft-status.saved svg {
-  color: #10b981;
-}
-
-/* Состояние ожидания */
-.draft-status.pending {
-  color: #f59e0b;
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.2);
-}
-
-.draft-status.pending svg {
-  color: #f59e0b;
-}
-
-/* Состояние готово */
-.draft-status.ready {
-  color: var(--accent-color, #3b82f6);
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.2);
-}
-
-.draft-status.ready svg {
-  color: var(--accent-color, #3b82f6);
-}
-
-/* Анимация появления */
-.draft-status {
-  animation: draftStatusFadeIn 0.3s ease-out;
-}
-
-@keyframes draftStatusFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Анимация для иконки сохранения */
-.draft-status.saved svg {
-  animation: draftStatusSaved 0.6s ease-out;
+  color: var(--success-icon, #d1fae5);
+  animation: draftStatusSaved 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55);
 }
 
 @keyframes draftStatusSaved {
   0% {
-    transform: scale(0.8);
+    transform: scale(0.5) rotate(-180deg);
     opacity: 0;
   }
   50% {
-    transform: scale(1.2);
+    transform: scale(1.3) rotate(0deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+/* Состояние ожидания */
+.draft-status.pending {
+  color: var(--warning-text, #fef3c7);
+  background: linear-gradient(135deg, var(--warning-bg, #92400e), var(--warning-hover, #b45309));
+  border: 1px solid var(--warning-border, #f59e0b);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+
+.draft-status.pending svg {
+  color: var(--warning-icon, #fef3c7);
+  animation: draftStatusPulse 2s ease-in-out infinite;
+}
+
+@keyframes draftStatusPulse {
+  0%, 100% { 
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% { 
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+}
+
+/* Состояние готово */
+.draft-status.ready {
+  color: var(--ready-text, #dbeafe);
+  background: linear-gradient(135deg, var(--ready-bg, #1e40af), var(--ready-hover, #1d4ed8));
+  border: 1px solid var(--ready-border, #3b82f6);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.draft-status.ready svg {
+  color: var(--ready-icon, #dbeafe);
+  animation: draftStatusReady 0.6s ease-out;
+}
+
+@keyframes draftStatusReady {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
   }
   100% {
     transform: scale(1);
@@ -107,25 +158,114 @@
   }
 }
 
-/* Адаптивность для темной темы */
-@media (prefers-color-scheme: dark) {
-  .draft-status {
-    background: var(--bg-muted, #1f2937);
+/* Анимация появления */
+.draft-status {
+  animation: draftStatusFadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes draftStatusFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.95);
   }
-  
-  .draft-status.error {
-    background: rgba(239, 68, 68, 0.15);
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
-  
-  .draft-status.saved {
-    background: rgba(16, 185, 129, 0.15);
-  }
-  
-  .draft-status.pending {
-    background: rgba(245, 158, 11, 0.15);
-  }
-  
-  .draft-status.ready {
-    background: rgba(59, 130, 246, 0.15);
-  }
+}
+
+/* Hover эффекты */
+.draft-status:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+}
+
+.draft-status.loading:hover {
+  box-shadow: 0 6px 16px rgba(71, 85, 105, 0.3);
+}
+
+.draft-status.error:hover {
+  box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4);
+}
+
+.draft-status.saved:hover {
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+}
+
+.draft-status.pending:hover {
+  box-shadow: 0 6px 16px rgba(245, 158, 11, 0.4);
+}
+
+.draft-status.ready:hover {
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+}
+
+/* Прогресс-бар для состояния ожидания */
+.draft-status.pending::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--warning-border, #f59e0b), var(--warning-hover, #d97706));
+  border-radius: 0 0 12px 12px;
+  animation: draftStatusProgress 2s ease-in-out infinite;
+}
+
+@keyframes draftStatusProgress {
+  0% { width: 0%; }
+  50% { width: 100%; }
+  100% { width: 0%; }
+}
+
+/* Light theme variables */
+.App.bg-slate-50 .draft-status {
+  --loading-bg: #f1f5f9;
+  --loading-border: #cbd5e1;
+  --error-bg: #fef2f2;
+  --error-hover: #fee2e2;
+  --error-text: #991b1b;
+  --error-border: #ef4444;
+  --error-icon: #dc2626;
+  --success-bg: #ecfdf5;
+  --success-hover: #d1fae5;
+  --success-text: #065f46;
+  --success-border: #10b981;
+  --success-icon: #059669;
+  --warning-bg: #fffbeb;
+  --warning-hover: #fef3c7;
+  --warning-text: #92400e;
+  --warning-border: #f59e0b;
+  --warning-icon: #d97706;
+  --ready-bg: #eff6ff;
+  --ready-hover: #dbeafe;
+  --ready-text: #1e40af;
+  --ready-border: #3b82f6;
+  --ready-icon: #2563eb;
+}
+
+/* Dark theme variables */
+.App.bg-gray-800 .draft-status {
+  --loading-bg: #334155;
+  --loading-border: #475569;
+  --error-bg: #7f1d1d;
+  --error-hover: #991b1b;
+  --error-text: #fecaca;
+  --error-border: #ef4444;
+  --error-icon: #fecaca;
+  --success-bg: #065f46;
+  --success-hover: #047857;
+  --success-text: #d1fae5;
+  --success-border: #10b981;
+  --success-icon: #d1fae5;
+  --warning-bg: #92400e;
+  --warning-hover: #b45309;
+  --warning-text: #fef3c7;
+  --warning-border: #f59e0b;
+  --warning-icon: #fef3c7;
+  --ready-bg: #1e40af;
+  --ready-hover: #1d4ed8;
+  --ready-text: #dbeafe;
+  --ready-border: #3b82f6;
+  --ready-icon: #dbeafe;
 } 

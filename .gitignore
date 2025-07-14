@@ -1,3 +1,27 @@
+# IDE/editor swap/backup files
+*.swp
+*.swo
+*.bak
+*.tmp
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Local overrides
+*.local
+*.coverage
+*.tgz
+
+# Cursor rules system: ignore temp/service files
+.cursor/rules/.cache/
+.cursor/rules/tmp/
+.cursor/rules/*.log
+.cursor/rules/*.bak
+.cursor/rules/*.tmp
+
 # dependencies
 **/node_modules
 

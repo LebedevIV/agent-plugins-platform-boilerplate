@@ -1,0 +1,16 @@
+# Development Principle 9: Continuous Learning
+- Performance monitoring: Continuous performance monitoring
+- User feedback loops: User feedback
+- A/B testing: Test hypotheses on real users
+- Analytics insights: Usage analysis for improvements
+- Knowledge sharing: Document lessons and insights
+
+description: Continuous learning and improvement in all development
+globs:
+  - *
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

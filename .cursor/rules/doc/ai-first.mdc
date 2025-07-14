@@ -1,0 +1,14 @@
+# Rule
+- Documentation and comments must be AI-oriented and clear for AI assistants.
+- Explain non-obvious decisions, provide examples, and clarify logic.
+- Use analytical comments (// AI: ...).
+
+# Examples
+- ✅ `// AI: This function is required for ...`
+- ✅ `/**
+  * AI: Example usage ...
+  */`
+description:
+globs:
+alwaysApply: false
+---

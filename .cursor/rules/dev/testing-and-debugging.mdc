@@ -1,0 +1,42 @@
+# Testing Strategy
+
+## Unit Testing
+- Test components in isolation.
+- Mock external dependencies.
+- Validate error handling.
+- Test security boundaries.
+
+## Integration Testing
+- Test plugin loading and execution.
+- Validate JS-Python communication.
+- Test integration with browser APIs.
+- Check permission compliance.
+
+## End-to-End Testing
+- Test full plugin workflows.
+- Validate user scenarios.
+- Test extension installation and updates.
+- Check cross-browser compatibility.
+
+# Debugging Guidelines
+
+## JavaScript Debugging
+- Use DevTools for extension debugging.
+- Log message flow.
+- Use breakpoints for complex logic.
+- Monitor WebWorker communication.
+
+## Python Debugging
+- Use print/logging.
+- Test plugins in isolation.
+- Use Pyodide console for debugging.
+
+## Common Issues
+- Pyodide startup: use loading indicators.
+- Memory leaks: monitor worker lifecycle.
+- Permission errors: validate manifests.
+- Communication failures: check MCP format.
+description:
+globs:
+alwaysApply: false
+---

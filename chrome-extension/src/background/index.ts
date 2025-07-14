@@ -1,6 +1,7 @@
 import 'webextension-polyfill';
 import { pluginChatApi } from './plugin-chat-api';
 import { getAvailablePlugins } from './plugin-manager';
+import { getPageKey } from '../../../packages/shared/lib/utils/helpers';
 import { exampleThemeStorage, pluginSettingsStorage, getPluginSettings } from '@extension/storage';
 import type { ChatMessage } from './plugin-chat-api';
 import type { Plugin } from './plugin-manager';
@@ -121,34 +122,44 @@ chrome.runtime.onMessage.addListener(
 
       if (msg.type === 'GET_PLUGINS') {
         console.log('[background] Processing GET_PLUGINS request');
-        getAvailablePlugins()
-          .then(async (plugins: Plugin[]) => {
-            // Получаем настройки для всех плагинов
+        (async () => {
+          try {
+            const plugins: Plugin[] = await getAvailablePlugins();
+            console.log('[background] getAvailablePlugins raw result:', plugins);
             const allSettings = await pluginSettingsStorage.get();
-
-            // Добавляем настройки к каждому плагину
+            console.log('[background] allSettings:', allSettings);
             const pluginsWithSettings = await Promise.all(
               plugins.map(async (plugin: Plugin) => {
                 const settings = allSettings[plugin.id] || {
                   enabled: true,
                   autorun: false,
                 };
-
                 return {
                   ...plugin,
                   settings,
                 };
               }),
             );
-
-            console.log('[background] getAvailablePlugins result with settings:', pluginsWithSettings);
-            console.log('[background] Sending response to client');
-            sendResponse(pluginsWithSettings);
-          })
-          .catch((error: unknown) => {
+            try {
+              const json = JSON.stringify(pluginsWithSettings);
+              console.log('[background] pluginsWithSettings JSON:', json);
+            } catch (e) {
+              console.error('[background] pluginsWithSettings JSON.stringify error:', e);
+            }
+            try {
+              sendResponse({ plugins: pluginsWithSettings });
+            } catch (e) {
+              console.error('[background] sendResponse error:', e);
+            }
+          } catch (error) {
             console.error('[background] Error in getAvailablePlugins:', error);
-            sendResponse({ error: (error as Error).message });
-          });
+            try {
+              sendResponse({ error: (error as Error).message });
+            } catch (e) {
+              console.error('[background] sendResponse error (catch):', e);
+            }
+          }
+        })();
         return true;
       }
 
@@ -172,25 +183,26 @@ chrome.runtime.onMessage.addListener(
 
       if (msg.type === 'GET_PLUGIN_SETTINGS') {
         console.log('[background] Processing GET_PLUGIN_SETTINGS request');
-        pluginSettingsStorage
-          .get()
-          .then(settings => {
+        (async () => {
+          try {
+            const settings = await pluginSettingsStorage.get();
             console.log('[background] Plugin settings:', settings);
             sendResponse(settings);
-          })
-          .catch((error: unknown) => {
+          } catch (error: unknown) {
             console.error('[background] Error getting plugin settings:', error);
             sendResponse({ error: (error as Error).message });
-          });
+          }
+        })();
         return true;
       }
 
       // === Работа с чатами плагинов ===
       if (msg.type === 'GET_PLUGIN_CHAT' && msg.pluginId && msg.pageKey) {
         const { pluginId, pageKey } = msg;
-        const chatKey = `${pluginId}::${pageKey}`;
+        const chatKey = `${pluginId}::${getPageKey(pageKey)}`;
         pluginChatApi.getOrLoadChat(chatKey).then(chat => {
-          sendResponse(chat || null);
+          console.log('[background] sendResponse(GET_PLUGIN_CHAT):', chat);
+          sendResponse(chat || { messages: [] });
         });
         return true;
       }
@@ -198,9 +210,12 @@ chrome.runtime.onMessage.addListener(
       // Создание чата при начале ввода (ленивая инициализация)
       if (msg.type === 'CREATE_PLUGIN_CHAT' && msg.pluginId && msg.pageKey) {
         const { pluginId, pageKey } = msg;
-        pluginChatApi.createChatIfNotExists(pluginId, pageKey).then(chat => {
+        const normPageKey = getPageKey(pageKey);
+        console.log('[background] CREATE_PLUGIN_CHAT pageKey:', pageKey, 'norm:', normPageKey);
+        pluginChatApi.createChatIfNotExists(pluginId, normPageKey).then(chat => {
+          console.log('[background] sendResponse(CREATE_PLUGIN_CHAT):', chat);
           sendResponse(chat);
-          broadcastChatUpdate(pluginId, pageKey);
+          broadcastChatUpdate(pluginId, normPageKey);
         });
         return true;
       }
@@ -208,7 +223,10 @@ chrome.runtime.onMessage.addListener(
       // Сохранение черновика сообщения (ленивая синхронизация)
       if (msg.type === 'SAVE_PLUGIN_CHAT_DRAFT' && msg.pluginId && msg.pageKey && msg.draftText !== undefined) {
         const { pluginId, pageKey, draftText } = msg;
-        pluginChatApi.saveDraft(pluginId, pageKey, draftText).then(() => {
+        const normPageKey = getPageKey(pageKey);
+        console.log('[background] SAVE_PLUGIN_CHAT_DRAFT pageKey:', pageKey, 'norm:', normPageKey);
+        pluginChatApi.saveDraft(pluginId, normPageKey, draftText).then(() => {
+          console.log('[background] sendResponse(SAVE_PLUGIN_CHAT_DRAFT):', { success: true });
           sendResponse({ success: true });
         });
         return true;
@@ -217,7 +235,10 @@ chrome.runtime.onMessage.addListener(
       // Получение черновика сообщения
       if (msg.type === 'GET_PLUGIN_CHAT_DRAFT' && msg.pluginId && msg.pageKey) {
         const { pluginId, pageKey } = msg;
-        pluginChatApi.getDraft(pluginId, pageKey).then(draftText => {
+        const normPageKey = getPageKey(pageKey);
+        console.log('[background] GET_PLUGIN_CHAT_DRAFT pageKey:', pageKey, 'norm:', normPageKey);
+        pluginChatApi.getDraft(pluginId, normPageKey).then(draftText => {
+          console.log('[background] sendResponse(GET_PLUGIN_CHAT_DRAFT):', { draftText });
           sendResponse({ draftText });
         });
         return true;
@@ -225,42 +246,64 @@ chrome.runtime.onMessage.addListener(
 
       if (msg.type === 'SAVE_PLUGIN_CHAT_MESSAGE' && msg.pluginId && msg.pageKey && msg.message) {
         const { pluginId, pageKey, message: chatMsg } = msg;
+        const normPageKey = getPageKey(pageKey);
+        console.log('[background] SAVE_PLUGIN_CHAT_MESSAGE pageKey:', pageKey, 'norm:', normPageKey);
         pluginChatApi
-          .saveMessage(pluginId, pageKey, chatMsg as ChatMessage)
+          .saveMessage(pluginId, normPageKey, chatMsg as ChatMessage)
           .then(() =>
             // Удаляем черновик после отправки сообщения
-            pluginChatApi.deleteDraft(pluginId, pageKey),
+            pluginChatApi.deleteDraft(pluginId, normPageKey),
           )
           .then(() => {
+            console.log('[background] sendResponse(SAVE_PLUGIN_CHAT_MESSAGE):', { success: true });
             sendResponse({ success: true });
-            broadcastChatUpdate(pluginId, pageKey);
+            broadcastChatUpdate(pluginId, normPageKey);
           });
         return true;
       }
 
       if (msg.type === 'DELETE_PLUGIN_CHAT' && msg.pluginId && msg.pageKey) {
         const { pluginId, pageKey } = msg;
-        pluginChatApi.deleteChat(pluginId, pageKey).then(() => {
+        const normPageKey = getPageKey(pageKey);
+        console.log('[background] DELETE_PLUGIN_CHAT pageKey:', pageKey, 'norm:', normPageKey);
+        pluginChatApi.deleteChat(pluginId, normPageKey).then(() => {
+          console.log('[background] sendResponse(DELETE_PLUGIN_CHAT):', { success: true });
           sendResponse({ success: true });
-          broadcastChatUpdate(pluginId, pageKey);
+          broadcastChatUpdate(pluginId, normPageKey);
         });
         return true;
       }
 
       if (msg.type === 'LIST_PLUGIN_CHATS' && msg.pluginId) {
         const { pluginId } = msg;
-        pluginChatApi.listChatsForPlugin(pluginId).then(chats => {
-          sendResponse(chats);
-        });
+        console.log('[background] Listing chats for plugin:', pluginId);
+        pluginChatApi
+          .listChatsForPlugin(pluginId)
+          .then(chats => {
+            console.log('[background] Chats found:', chats);
+            sendResponse(chats);
+          })
+          .catch(error => {
+            console.error('[background] Error listing chats:', error);
+            sendResponse([]);
+          });
         return true;
       }
 
       // Получение всех черновиков для плагина
       if (msg.type === 'LIST_PLUGIN_CHAT_DRAFTS' && msg.pluginId) {
         const { pluginId } = msg;
-        pluginChatApi.listDraftsForPlugin(pluginId).then(drafts => {
-          sendResponse(drafts);
-        });
+        console.log('[background] Listing drafts for plugin:', pluginId);
+        pluginChatApi
+          .listDraftsForPlugin(pluginId)
+          .then(drafts => {
+            console.log('[background] Drafts found:', drafts);
+            sendResponse(drafts);
+          })
+          .catch(error => {
+            console.error('[background] Error listing drafts:', error);
+            sendResponse([]);
+          });
         return true;
       }
 
@@ -309,7 +352,8 @@ chrome.runtime.onMessage.addListener(
         return true;
       }
     }
-    return false; // Handle case where no message type matches
+    // ГАРАНТИРОВАННО возвращаем true, чтобы канал не закрывался преждевременно
+    return true;
   },
 );
 
@@ -385,6 +429,30 @@ const findTargetTab = async (): Promise<chrome.tabs.Tab> => {
 
   return targetTab;
 };
+
+// === Port API для устойчивого обмена с сайдпанелью ===
+chrome.runtime.onConnect.addListener(port => {
+  console.log('[background] Port connected:', port.name);
+
+  port.onMessage.addListener(async msg => {
+    if (msg.type === 'GET_PLUGINS') {
+      try {
+        const plugins = await getAvailablePlugins();
+        const allSettings = await pluginSettingsStorage.get();
+        const pluginsWithSettings = await Promise.all(
+          plugins.map(async plugin => ({
+            ...plugin,
+            settings: allSettings[plugin.id] || { enabled: true, autorun: false },
+          })),
+        );
+        port.postMessage({ type: 'PLUGINS_RESULT', plugins: pluginsWithSettings });
+      } catch (error) {
+        port.postMessage({ type: 'PLUGINS_ERROR', error: (error as Error).message });
+      }
+    }
+    // ... другие типы сообщений по аналогии
+  });
+});
 
 // Обработчик для автозапуска плагинов при загрузке страницы
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {

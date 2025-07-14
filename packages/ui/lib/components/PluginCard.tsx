@@ -54,87 +54,55 @@ export const PluginCard: React.FC<PluginCardProps> = ({
     onToggle?.(!enabled);
   };
 
+  const cardClassName = `plugin-card${selected ? ' selected' : ''}${compact ? ' compact' : ''}`;
+
   return (
     <div
-      className={`plugin-card${selected ? 'selected' : ''}${compact ? 'compact' : ''}`}
+      className={cardClassName}
       onClick={onClick}
       onKeyDown={handleKeyDown}
       tabIndex={onClick ? 0 : -1}
       role={onClick ? 'button' : undefined}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        padding: compact ? 8 : 20,
-        borderRadius: 10,
-        border: selected ? '2px solid #3b82f6' : '1px solid #e5e7eb',
-        background: selected ? '#f0f6ff' : '#fff',
-        cursor: onClick ? 'pointer' : 'default',
-        marginBottom: 16,
-      }}>
+      aria-label={onClick ? `Выбрать плагин ${name}` : undefined}>
       <img
         className="plugin-card-icon"
         src={iconUrl || `plugins/${id}/${icon || 'icon.svg'}`}
         alt={`${name} icon`}
         onError={handleIconError}
-        style={{
-          width: compact ? 32 : 48,
-          height: compact ? 32 : 48,
-          borderRadius: 8,
-          marginRight: 16,
-          objectFit: 'cover',
-          background: '#f3f4f6',
-        }}
       />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div className="plugin-card-content">
-          <div className="plugin-card-main">
-            <span
-              className="plugin-card-name"
-              style={{
-                fontWeight: 600,
-                fontSize: compact ? 15 : 18,
-                color: '#222',
-                flex: 1,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}>
-              {name}
-            </span>
-            <span className="plugin-card-version">v{version}</span>
-          </div>
-          <div className="plugin-card-controls">
-            {showStatus && (
-              <span className={`status-badge ${enabled ? 'status-active' : 'status-inactive'}`}>
-                {status || (enabled ? 'Активен' : 'Неактивен')}
-              </span>
-            )}
-            {showToggle && (
-              <button
-                className={`plugin-toggle-btn ${enabled ? 'enabled' : 'disabled'}`}
-                onClick={handleToggleClick}
-                aria-label={enabled ? 'Отключить плагин' : 'Включить плагин'}>
-                {enabled ? 'Отключить' : 'Включить'}
-              </button>
-            )}
-          </div>
+
+      <div className="plugin-card-content">
+        <div className="plugin-card-main">
+          <span className="plugin-card-name" title={name}>
+            {name}
+          </span>
+          <span className="plugin-card-version" title={`Версия ${version}`}>
+            v{version}
+          </span>
         </div>
+
+        <div className="plugin-card-controls">
+          {showStatus && (
+            <span
+              className={`status-badge ${enabled ? 'status-active' : 'status-inactive'}`}
+              title={status || (enabled ? 'Плагин активен' : 'Плагин неактивен')}>
+              {status || (enabled ? 'Активен' : 'Неактивен')}
+            </span>
+          )}
+
+          {showToggle && (
+            <button
+              className={`plugin-toggle-btn ${enabled ? 'enabled' : 'disabled'}`}
+              onClick={handleToggleClick}
+              aria-label={enabled ? 'Отключить плагин' : 'Включить плагин'}
+              title={enabled ? 'Отключить плагин' : 'Включить плагин'}>
+              {enabled ? 'Отключить' : 'Включить'}
+            </button>
+          )}
+        </div>
+
         {!compact && description && (
-          <div
-            className="plugin-card-desc"
-            style={{
-              fontSize: 15,
-              color: '#555',
-              marginTop: 6,
-              overflow: 'hidden',
-              display: '-webkit-box',
-              WebkitLineClamp: 3,
-              WebkitBoxOrient: 'vertical',
-              lineHeight: 1.4,
-              maxHeight: 62,
-              textOverflow: 'ellipsis',
-              whiteSpace: 'normal',
-            }}>
+          <div className="plugin-card-desc" title={description}>
             {description}
           </div>
         )}

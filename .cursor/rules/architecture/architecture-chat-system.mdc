@@ -1,0 +1,17 @@
+# Chat System Architecture
+- Per-page, per-plugin isolation: Chats separated by page URL and plugin
+- LRU Cache: In-memory cache for performance (50 chats)
+- IndexedDB: Persistent storage for all chats
+- Real-time sync: Cross-tab communication for chat updates
+- Cleanup: Automatic removal of chats older than 90 days
+
+description: Chat system architecture and data flow
+globs:
+  - platform-core/*
+  - chrome-extension/src/background/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

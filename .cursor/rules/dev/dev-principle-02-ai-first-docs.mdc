@@ -1,0 +1,16 @@
+# Development Principle 2: AI-First Documentation
+- Analytical comments: Add comments explaining logic and architectural decisions for AI understanding
+- Context explanations: Explain "why", not just "what" the code does
+- Architectural comments: Document component relationships and data flows
+- Business logic: Explain complex business logic and decisions made
+- TODO comments: Leave TODO with explanation of planned improvements
+
+description: AI-oriented documentation and comments for all code
+globs:
+  - *
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

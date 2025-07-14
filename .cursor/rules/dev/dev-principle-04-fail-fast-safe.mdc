@@ -1,0 +1,16 @@
+# Development Principle 4: Fail Fast, Fail Safe
+- Early error detection: Validate at input, not during execution
+- Graceful degradation: System continues working even with partial failures
+- Circuit breaker: Automatic shutdown of problematic components
+- Rollback capability: Quick rollback to working state
+- Error boundaries: Isolate errors at component level
+
+description: Fail fast and fail safe in all development
+globs:
+  - *
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

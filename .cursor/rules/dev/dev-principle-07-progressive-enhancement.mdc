@@ -1,0 +1,16 @@
+# Development Principle 7: Progressive Enhancement
+- Core functionality: Basic functionality always works
+- Feature detection: Detect browser capabilities
+- Graceful degradation: Degrade functionality, not complete failure
+- Performance budget: Performance budget for new features
+- Accessibility baseline: Minimum accessibility level for all
+
+description: Progressive enhancement in all development
+globs:
+  - *
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

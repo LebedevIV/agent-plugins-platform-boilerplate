@@ -1,0 +1,16 @@
+# Development Principle 10: Ecosystem Thinking
+- Plugin compatibility: Ensure plugin compatibility
+- API stability: Stable public APIs
+- Backward compatibility: Backward version compatibility
+- Community building: Support developer community
+- Documentation quality: Quality documentation for ecosystem
+
+description: Ecosystem thinking in all development
+globs:
+  - *
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

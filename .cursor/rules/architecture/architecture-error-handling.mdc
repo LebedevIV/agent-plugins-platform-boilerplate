@@ -1,0 +1,22 @@
+# Error Handling (Architecture)
+- Graceful Degradation: System continues working with reduced functionality
+- User Feedback: Clear error messages and recovery options
+- Logging: Structured logging for debugging and monitoring
+- Fallbacks: Alternative implementations for critical features
+- Recovery: Automatic retry mechanisms where appropriate
+
+related:
+  - plugin-error-handling.mdc
+  - architecture-security.mdc
+
+description: Error handling requirements for system architecture
+globs:
+  - platform-core/*
+  - chrome-extension/src/background/*
+  - public/plugins/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

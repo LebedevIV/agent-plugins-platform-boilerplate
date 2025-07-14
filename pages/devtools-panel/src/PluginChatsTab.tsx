@@ -46,15 +46,31 @@ export const PluginChatsTab: React.FC = () => {
   }, []);
 
   const loadData = () => {
+    console.log('[PluginChatsTab] Loading data...');
+
     // Загружаем чаты
     chrome.runtime
       .sendMessage({ type: 'LIST_PLUGIN_CHATS', pluginId: null })
-      .then((result: PluginChat[]) => setChats(result || []));
+      .then((result: PluginChat[]) => {
+        console.log('[PluginChatsTab] Chats loaded:', result);
+        setChats(result || []);
+      })
+      .catch(error => {
+        console.error('[PluginChatsTab] Error loading chats:', error);
+        setChats([]);
+      });
 
     // Загружаем черновики
     chrome.runtime
       .sendMessage({ type: 'LIST_PLUGIN_CHAT_DRAFTS', pluginId: null })
-      .then((result: ChatDraft[]) => setDrafts(result || []));
+      .then((result: ChatDraft[]) => {
+        console.log('[PluginChatsTab] Drafts loaded:', result);
+        setDrafts(result || []);
+      })
+      .catch(error => {
+        console.error('[PluginChatsTab] Error loading drafts:', error);
+        setDrafts([]);
+      });
   };
 
   const handleDeleteChat = (chat: PluginChat) => {

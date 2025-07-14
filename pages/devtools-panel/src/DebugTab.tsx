@@ -4,6 +4,9 @@ export const DebugTab: React.FC = () => {
   const [logs, setLogs] = useState<string[]>([]);
   const [chatStats, setChatStats] = useState<{ count: number; lastKeys: string[] }>({ count: 0, lastKeys: [] });
   const [extInfo, setExtInfo] = useState<{ version: string; env: string }>({ version: '', env: '' });
+  const [testStatus, setTestStatus] = useState<{ loading: boolean; error?: string; success?: boolean }>({
+    loading: false,
+  });
   const logsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -53,6 +56,123 @@ export const DebugTab: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  // Безопасная загрузка скрипта через script тег
+  const loadScriptSafely = (scriptPath: string): Promise<void> =>
+    new Promise((resolve, reject) => {
+      try {
+        // Проверяем, не загружен ли уже скрипт
+        const existingScript = document.querySelector(`script[src="${scriptPath}"]`);
+        if (existingScript) {
+          console.log(`Скрипт уже загружен: ${scriptPath}`);
+          resolve();
+          return;
+        }
+
+        const script = document.createElement('script');
+        script.src = chrome.runtime.getURL(scriptPath);
+        script.type = 'text/javascript';
+
+        script.onload = () => {
+          console.log(`✅ Скрипт загружен успешно: ${scriptPath}`);
+          resolve();
+        };
+
+        script.onerror = error => {
+          console.error(`❌ Ошибка загрузки скрипта ${scriptPath}:`, error);
+          reject(new Error(`Failed to load script: ${scriptPath}`));
+        };
+
+        document.head.appendChild(script);
+      } catch (error) {
+        console.error('Ошибка создания script тега:', error);
+        reject(error);
+      }
+    });
+
+  // Загрузка тестового загрузчика
+  const loadTestLoader = async () => {
+    try {
+      setTestStatus({ loading: true });
+
+      await loadScriptSafely('test-scripts/test-loader.js');
+
+      // Проверяем, что TestLoader доступен
+      if (window.testLoader) {
+        setTestStatus({ loading: false, success: true });
+        setLogs(prev => [`[${new Date().toLocaleTimeString()}] TestLoader загружен успешно`, ...prev.slice(0, 99)]);
+      } else {
+        throw new Error('TestLoader не найден после загрузки скрипта');
+      }
+    } catch (error) {
+      console.error('Ошибка загрузки TestLoader:', error);
+      setTestStatus({ loading: false, error: error instanceof Error ? error.message : 'Unknown error' });
+      setLogs(prev => [
+        `[${new Date().toLocaleTimeString()}] Ошибка загрузки TestLoader: ${error}`,
+        ...prev.slice(0, 99),
+      ]);
+    }
+  };
+
+  // Запуск тестов Ozon
+  const runOzonTests = async () => {
+    try {
+      setTestStatus({ loading: true });
+
+      // Проверяем, что TestLoader загружен
+      if (!window.testLoader) {
+        await loadTestLoader();
+      }
+
+      if (window.testLoader && typeof window.testLoader.runOzonTests === 'function') {
+        const result = await window.testLoader.runOzonTests();
+        setTestStatus({ loading: false, success: result });
+        setLogs(prev => [
+          `[${new Date().toLocaleTimeString()}] Тесты Ozon ${result ? 'завершены успешно' : 'завершены с ошибками'}`,
+          ...prev.slice(0, 99),
+        ]);
+      } else {
+        throw new Error('TestLoader не найден или функция runOzonTests недоступна');
+      }
+    } catch (error) {
+      console.error('Ошибка выполнения тестов Ozon:', error);
+      setTestStatus({ loading: false, error: error instanceof Error ? error.message : 'Unknown error' });
+      setLogs(prev => [
+        `[${new Date().toLocaleTimeString()}] Ошибка выполнения тестов Ozon: ${error}`,
+        ...prev.slice(0, 99),
+      ]);
+    }
+  };
+
+  // Загрузка только тестов Ozon
+  const loadOzonTests = async () => {
+    try {
+      setTestStatus({ loading: true });
+
+      // Проверяем, что TestLoader загружен
+      if (!window.testLoader) {
+        await loadTestLoader();
+      }
+
+      if (window.testLoader && typeof window.testLoader.loadOzonTests === 'function') {
+        const testSystem = await window.testLoader.loadOzonTests();
+        setTestStatus({ loading: false, success: true });
+        setLogs(prev => [
+          `[${new Date().toLocaleTimeString()}] Тесты Ozon загружены: ${Object.keys(testSystem).join(', ')}`,
+          ...prev.slice(0, 99),
+        ]);
+      } else {
+        throw new Error('TestLoader не найден или функция loadOzonTests недоступна');
+      }
+    } catch (error) {
+      console.error('Ошибка загрузки тестов Ozon:', error);
+      setTestStatus({ loading: false, error: error instanceof Error ? error.message : 'Unknown error' });
+      setLogs(prev => [
+        `[${new Date().toLocaleTimeString()}] Ошибка загрузки тестов Ozon: ${error}`,
+        ...prev.slice(0, 99),
+      ]);
+    }
+  };
+
   useEffect(() => {
     if (logsRef.current) logsRef.current.scrollTop = 0;
   }, [logs]);
@@ -68,6 +188,30 @@ export const DebugTab: React.FC = () => {
         <strong>Чатов всего:</strong> {chatStats.count} <br />
         <strong>Последние ключи:</strong> {chatStats.lastKeys.join(', ')}
       </div>
+
+      {/* Test Controls */}
+      <div style={{ marginBottom: 12, padding: 12, border: '1px solid #ccc', borderRadius: 4 }}>
+        <h3>🧪 Тестирование</h3>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          <button onClick={loadTestLoader} disabled={testStatus.loading} style={{ padding: '4px 8px', fontSize: 12 }}>
+            {testStatus.loading ? 'Загрузка...' : 'Загрузить TestLoader'}
+          </button>
+          <button onClick={loadOzonTests} disabled={testStatus.loading} style={{ padding: '4px 8px', fontSize: 12 }}>
+            {testStatus.loading ? 'Загрузка...' : 'Загрузить тесты Ozon'}
+          </button>
+          <button onClick={runOzonTests} disabled={testStatus.loading} style={{ padding: '4px 8px', fontSize: 12 }}>
+            {testStatus.loading ? 'Выполнение...' : 'Запустить все тесты Ozon'}
+          </button>
+        </div>
+        {testStatus.error && (
+          <div style={{ color: 'red', fontSize: 12, marginTop: 4 }}>❌ Ошибка: {testStatus.error}</div>
+        )}
+        {testStatus.success && <div style={{ color: 'green', fontSize: 12, marginTop: 4 }}>✅ Успешно выполнено</div>}
+        <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>
+          💡 После загрузки тестов используйте консоль для вызова функций: ozonTestSystem.runOzonTests()
+        </div>
+      </div>
+
       <button onClick={handleExportLogs} style={{ marginBottom: 12 }}>
         Экспорт логов
       </button>
