@@ -14,6 +14,17 @@ These principles ensure high quality, security, and maintainability for any mode
 9. **Ecosystem Thinking** — Ensure plugin/API compatibility and stability
 10. **AI-First Documentation** — Write analytical comments for AI and human understanding
 
+## Workflow & Branch Protection
+- Direct commits or merges to `main` and `develop` are strictly forbidden. All changes must go through pull requests into `develop` only.
+- Merging to `main` is allowed only from `develop` after release approval.
+- All PRs must include documentation links and changelog updates.
+
+### Example: Merge Protection
+- ✅ feature/sidepanel-e2e → PR → develop → PR → main (release)
+- ❌ direct commit to main (forbidden)
+- ❌ direct commit to develop (forbidden)
+- ✅ fix/plugin-card-bug → PR → develop
+
 ## How to Apply
 - Analyze each task through the lens of these principles
 - Select the most relevant principles for the situation

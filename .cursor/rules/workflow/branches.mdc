@@ -3,6 +3,8 @@
 - For bugfixes, use the prefix `fix/` and a clear description of the problem.
 - Never mix bugfixes and features in the same branch.
 - After merging a bugfix, update feature branches via rebase/merge from develop.
+- Direct commits or merges to `main` and `develop` are strictly forbidden. All changes must go through pull requests into `develop` only.
+- Merging to `main` is allowed only from `develop` after release approval.
 
 # Examples
 - ✅ `feature/pyodide-integration`

@@ -17,6 +17,13 @@ This folder collects modular, transferable best practices, organizational method
 - AI-First Documentation Principles
 - Security & Quality Principles
 - Transferability & Project Bootstrap
+- **Workflow & Branch Protection** (see: [development-principles.md](./development-principles.md))
+
+### Example: Merge Protection
+- ✅ feature/sidepanel-e2e → PR → develop → PR → main (release)
+- ❌ direct commit to main (forbidden)
+- ❌ direct commit to develop (forbidden)
+- ✅ fix/plugin-card-bug → PR → develop
 
 ## Cross-References
 - [Project README](../../README.md)
