@@ -39,12 +39,34 @@ jobs:
         run: node .cursor/rules/check-rules-structure.cjs
 ```
 
+---
+
+## Safe Delete & Notification in CI/CD
+
+- All automation and CI scripts must protect critical directories from accidental deletion.
+- Use safe_rm (bash) or safeDelete (Node.js) in all scripts that may remove files/directories.
+- Maintain a list of protected directories (e.g., docs/for-ai-best-practices, memory-bank, platform-core, chrome-extension/public/plugins).
+- Any attempt to delete a protected directory should:
+  - Be blocked
+  - Log a warning (locally or in CI)
+  - Optionally, send a notification (e.g., GitHub Actions annotation, Slack, email)
+
+### Example (GitHub Actions warning)
+```yaml
+- name: Check for protected directory deletion
+  run: |
+    if git diff --name-status | grep -E 'D[[:space:]]+(docs/for-ai-best-practices|memory-bank|platform-core|chrome-extension/public/plugins)'; then
+      echo '::warning::Attempted deletion of a protected directory! Review required.'
+    fi
+```
+
 ## Rationale
-- Ensures documentation and rules are always up-to-date and valid
-- Prevents human error and outdated navigation
-- Enables rapid onboarding and AI context
+- Prevents accidental or malicious loss of critical project data
+- Ensures all destructive actions are intentional and reviewed
+- Increases trust in automation and onboarding safety
 
 ## Cross-References
 - [Cursor Rules System](./cursor-rules-system.md)
+- [Safe Delete Best Practice](./README.md)
 - [Roadmap Synchronization](./roadmap-sync.md)
 - [Project README](../../README.md) 

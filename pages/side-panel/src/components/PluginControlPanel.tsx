@@ -81,10 +81,21 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     setLoading(true);
     setError(null);
     try {
+      console.log('[PluginControlPanel] loadChat запрос:', { pluginId, pageKey });
       const chat = await chrome.runtime.sendMessage({
         type: 'GET_PLUGIN_CHAT',
         pluginId,
         pageKey,
+      });
+      console.log('[PluginControlPanel] chat из background:', {
+        pluginId,
+        pageKey,
+        chat,
+        typeofChat: typeof chat,
+        chatKeys: chat ? Object.keys(chat) : undefined,
+        messages: chat?.messages,
+        isArray: Array.isArray(chat?.messages),
+        messagesLength: chat?.messages?.length,
       });
       console.log(
         '[PluginControlPanel] loadChat RAW:',
@@ -92,26 +103,19 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
         typeof chat,
         chat && chat.messages,
         Array.isArray(chat?.messages),
+        Object.keys(chat || {}),
+        chat?.messages && chat?.messages.length,
+        chat?.messages && chat?.messages[0],
       );
-      if (chat && Array.isArray(chat.messages)) {
-        setMessages(
-          chat.messages.map(
-            (msg: {
-              id?: string;
-              content?: string;
-              text?: string;
-              role?: string;
-              isUser?: boolean;
-              timestamp?: number;
-            }) => ({
-              id: msg.id || String(msg.timestamp || Date.now()),
-              text: msg.content || msg.text,
-              isUser: msg.role ? msg.role === 'user' : !!msg.isUser,
-              timestamp: msg.timestamp || Date.now(),
-            }),
-          ),
-        );
-        console.log('[PluginControlPanel] setMessages:', chat.messages);
+      const messages = chat?.messages || chat?.chat?.messages;
+      if (Array.isArray(messages)) {
+        console.log('[PluginControlPanel] messages для setMessages:', messages);
+        setMessages(messages);
+      } else if (chat && chat.error) {
+        console.error('[PluginControlPanel] Ошибка получения чата:', chat.error, chat.details);
+        alert('Ошибка получения чата: ' + chat.error + (chat.details ? '\n' + chat.details : ''));
+        setMessages([]);
+        return;
       } else {
         setMessages([]);
         console.log('[PluginControlPanel] setMessages: []');
@@ -178,15 +182,33 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     }
   }, [currentView, loadDraft]);
 
+  // Логирование каждого рендера и ключевых параметров
+  useEffect(() => {
+    console.log('[PluginControlPanel] === РЕНДЕР ===', {
+      pluginId,
+      pageKey,
+      draftText,
+      message,
+      currentView,
+      isRunning,
+      isPaused,
+    });
+  });
+
   // --- Синхронизация message с draftText после загрузки черновика ---
   useEffect(() => {
-    // Подставлять draftText только если message пустое (т.е. при инициализации)
-    if (typeof message === 'string' && message === '' && draftText) {
+    // Если draftText пустой, подставляем автотестовый текст
+    if (typeof draftText === 'string' && draftText === '') {
+      setMessage('Тестовое сообщение для диагностики');
+      console.log('[PluginControlPanel] draftText пустой, подставлен автотестовый текст');
+    } else if (typeof draftText === 'string') {
       setMessage(draftText);
+      console.log('[PluginControlPanel] draftText подставлен в поле ввода:', draftText);
     }
-  }, [draftText]);
+  }, [draftText, setMessage]);
 
   const handleSendMessage = async (): Promise<void> => {
+    console.log('[PluginControlPanel] handleSendMessage: попытка отправки', { message });
     if (!message.trim()) return;
     const newMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -195,7 +217,6 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       timestamp: Date.now(),
     };
     setMessage(''); // Очищаем сообщение через хук
-    // Удалить все вызовы setSyncStatus(...)
     try {
       await chrome.runtime.sendMessage({
         type: 'SAVE_PLUGIN_CHAT_MESSAGE',
@@ -207,12 +228,12 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
           timestamp: newMessage.timestamp,
         },
       });
-      // Удалить все вызовы setSyncStatus(...)
+      console.log('[PluginControlPanel] handleSendMessage: сообщение отправлено', newMessage);
       await loadChat(); // Перезагружаем историю чата после отправки
       await clearDraft(); // Сбрасываем черновик после отправки
-    } catch {
-      // Удалить все вызовы setSyncStatus(...)
+    } catch (e) {
       setError('Ошибка сохранения сообщения');
+      console.error('[PluginControlPanel] handleSendMessage: ошибка отправки', e);
     }
   };
 
@@ -256,6 +277,10 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    console.log('[PluginControlPanel] messages после setMessages:', messages);
+  }, [messages]);
+
   // Фокус на поле ввода при открытии чата
   useEffect(() => {
     if (currentView === 'chat') {
@@ -265,7 +290,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
 
   const handleTextareaChange = (event: React.ChangeEvent<HTMLTextAreaElement>): void => {
     setMessage(event.target.value); // Используем хук вместо setMessage
-
+    console.log('[PluginControlPanel] handleTextareaChange: новое значение', event.target.value);
     // Автоматическое изменение высоты
     const textarea = event.target;
     textarea.style.height = 'auto';
@@ -351,12 +376,17 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
           <div className="chat-messages">
             {loading && <p>Загрузка сообщений...</p>}
             {error && <p style={{ color: 'red' }}>{error}</p>}
-            {messages.map(msg => (
-              <div key={msg.id} className={`message ${msg.isUser ? 'user-message' : 'bot-message'}`}>
-                <p>{msg.text}</p>
-                <span>{new Date(msg.timestamp).toLocaleTimeString()}</span>
-              </div>
-            ))}
+            {/* Диагностический вывод сообщений */}
+            {messages.map((msg, idx) => {
+              console.log('[PluginControlPanel] render message:', idx, msg);
+              return (
+                <div
+                  key={msg.id || idx}
+                  style={{ border: '1px solid #ccc', margin: 4, padding: 4, background: '#f9f9f9' }}>
+                  {JSON.stringify(msg)}
+                </div>
+              );
+            })}
             {messagesEndRef.current && <div ref={messagesEndRef} />}
           </div>
           <div className="chat-input-container">

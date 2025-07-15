@@ -1,0 +1,2 @@
+#!/bin/sh
+bash bash-scripts/prevent-main-develop-push.sh

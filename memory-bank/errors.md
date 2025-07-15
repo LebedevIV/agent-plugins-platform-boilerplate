@@ -143,3 +143,36 @@ const getCurrentUrl = async () => {
 ## Другие ошибки
 
 *Здесь будут добавляться другие решенные проблемы* 
+
+---
+
+### [Manjaro] Remote debugging (9222) не работает в Chrome Flatpak и решается установкой Chromium из репозитория
+
+**Проблема:**
+- При запуске Chrome через Flatpak с флагом `--remote-debugging-port=9222` порт не слушается, DevTools протокол недоступен (`curl http://localhost:9222/json/version` не отвечает).
+- Аналогично, если Chromium не установлен как системный пакет, а только присутствует в /usr/lib/chromium (нет бинарника в /usr/bin/), remote debugging не работает.
+
+**Причина:**
+- Flatpak изолирует сетевые порты, sandbox не позволяет пробросить 9222 наружу.
+- В Manjaro/Arch бинарник Chromium может отсутствовать или быть неисполняемым, если пакет установлен не полностью.
+
+**Решение:**
+1. Установить Chromium из официального репозитория:
+   ```bash
+   sudo pacman -Syu chromium
+   ```
+2. Запустить с remote debugging и отдельным профилем:
+   ```bash
+   chromium --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-debug
+   ```
+3. Проверить, что порт слушается:
+   ```bash
+   ss -ltnp | grep 9222
+   curl http://localhost:9222/json/version
+   ```
+4. После этого DevTools протокол доступен, можно использовать Composer Web, Puppeteer, VSCode DevTools и др.
+
+**Примечание:**
+- Для Flatpak Chrome remote debugging практически всегда не работает из-за sandbox. Используйте только системный Chromium/Chrome для автоматизации и интеграции.
+
+--- 
