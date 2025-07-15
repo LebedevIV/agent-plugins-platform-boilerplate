@@ -58,6 +58,20 @@ pnpm build
 pnpm zip
 ```
 
+**Полный список команд для сборки, очистки, запуска и разработки:**
+- [Developer Commands (developer-commands.md)](docs/developer-commands.md)
+
+#### Dev-команды для отдельных пакетов/страниц
+
+```bash
+# Быстрый запуск разработки только для одной страницы/пакета:
+pnpm --filter pages/options dev
+pnpm --filter pages/side-panel dev
+pnpm --filter packages/ui dev
+```
+- Используйте эти команды для ускорения разработки, если меняются только отдельные части проекта.
+- Можно запускать несколько dev-серверов параллельно для разных страниц.
+
 ### Тестирование
 ```bash
 # E2E тесты
@@ -161,3 +175,9 @@ MIT License - см. файл [LICENSE](LICENSE)
 **Важно:**
 - Все тестовые скрипты и логи рекомендуется запускать и смотреть именно в этой вкладке или через боковую панель расширения.
 - Название вкладки уникальное, чтобы не путать с системной вкладкой DevTools.
+
+---
+## AI Knowledge Fallback
+
+If the AI agent cannot answer a question from its own memory-bank, it must first consult the .rules directory, and if no answer is found there, then consult the memory-bank directory. See [.rules/ai-fallback.rules.md](.rules/ai-fallback.rules.md) for details.
+---

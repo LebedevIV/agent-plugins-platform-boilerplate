@@ -1,0 +1,6 @@
+[submodule "external/sidepanel-template"]
+	path = external/sidepanel-template
+	url = https://github.com/QizhengMo/chrome-extension-sidepanel-template.git
+[submodule "external/chrome-extension-boilerplate-react-vite"]
+	path = external/chrome-extension-boilerplate-react-vite
+	url = https://github.com/Jonghakseo/chrome-extension-boilerplate-react-vite
