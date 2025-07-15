@@ -1,3 +1,8 @@
+
+---
+**Main GitHub Repository:** https://github.com/LebedevIV/agent-plugins-platform-boilerplate
+---
+
 # Активный контекст разработки
 
 ## Текущий статус проекта
