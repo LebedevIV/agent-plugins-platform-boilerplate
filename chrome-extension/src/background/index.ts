@@ -200,10 +200,35 @@ chrome.runtime.onMessage.addListener(
       if (msg.type === 'GET_PLUGIN_CHAT' && msg.pluginId && msg.pageKey) {
         const { pluginId, pageKey } = msg;
         const chatKey = `${pluginId}::${getPageKey(pageKey)}`;
-        pluginChatApi.getOrLoadChat(chatKey).then(chat => {
-          console.log('[background] sendResponse(GET_PLUGIN_CHAT):', chat);
-          sendResponse(chat || { messages: [] });
-        });
+        pluginChatApi
+          .getOrLoadChat(chatKey)
+          .then(chat => {
+            let safeChat = chat;
+            if (chat && Array.isArray(chat.messages) && chat.messages.length > 50) {
+              safeChat = { ...chat, messages: chat.messages.slice(-50) };
+            }
+            try {
+              const serializable = JSON.parse(JSON.stringify(safeChat));
+              console.log(
+                '[background] sendResponse(GET_PLUGIN_CHAT):',
+                serializable,
+                'chatKey:',
+                chatKey,
+                'pageKey:',
+                pageKey,
+              );
+              sendResponse(serializable || { messages: [] });
+            } catch (err) {
+              console.error('[background] Ошибка сериализации чата:', err, safeChat);
+              sendResponse({ error: 'serialization failed', details: String(err) });
+            }
+            console.log('[background] return true после sendResponse(GET_PLUGIN_CHAT)');
+          })
+          .catch(err => {
+            console.error('[background] Ошибка в getOrLoadChat:', err);
+            sendResponse({ error: String(err) });
+            console.log('[background] return true после sendResponse(GET_PLUGIN_CHAT) [catch]');
+          });
         return true;
       }
 
