@@ -82,6 +82,11 @@ This directory contains all rules and standards for automation and AI assistants
       workflow.mdc
 ```
 
+---
+## AI Fallback Rule
+
+If an AI agent cannot answer a question from its own memory-bank, it must first check the .rules directory, then the memory-bank directory. See [doc/ai-fallback.rules.md](./doc/ai-fallback.rules.md).
+---
 
 ## How to Use
 - The AI assistant should always refer to specific .mdc files when making decisions
