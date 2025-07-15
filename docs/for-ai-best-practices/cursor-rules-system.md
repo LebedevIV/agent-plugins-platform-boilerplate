@@ -301,5 +301,5 @@ If an answer is not found in the AI memory-bank, the agent must:
 1. First, check the .rules directory for relevant rules.
 2. If not found, check the memory-bank directory (especially architecture and context files).
 
-See [.rules/ai-fallback.rules.md](../../.rules/ai-fallback.rules.md) for the canonical rule.
+See [.cursor/rules/doc/ai-fallback.rules.md](../../.cursor/rules/doc/ai-fallback.rules.md) for the canonical rule.
 --- 

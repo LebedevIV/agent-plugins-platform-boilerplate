@@ -179,5 +179,5 @@ MIT License - см. файл [LICENSE](LICENSE)
 ---
 ## AI Knowledge Fallback
 
-If the AI agent cannot answer a question from its own memory-bank, it must first consult the .rules directory, and if no answer is found there, then consult the memory-bank directory. See [.rules/ai-fallback.rules.md](.rules/ai-fallback.rules.md) for details.
+If the AI agent cannot answer a question from its own memory-bank, it must first consult the .cursor/rules directory, and if no answer is found there, then consult the memory-bank directory. See [.cursor/rules/doc/ai-fallback.rules.md](.cursor/rules/doc/ai-fallback.rules.md) for details.
 ---
