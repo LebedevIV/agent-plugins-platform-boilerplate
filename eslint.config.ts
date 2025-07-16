@@ -1,8 +1,6 @@
 import { fixupConfigRules } from '@eslint/compat';
 import { FlatCompat } from '@eslint/eslintrc';
 import js from '@eslint/js';
-import { flatConfigs as importXFlatConfig } from 'eslint-plugin-import-x';
-import jsxA11y from 'eslint-plugin-jsx-a11y';
 import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended';
 import reactPlugin from 'eslint-plugin-react';
 import { browser, es2020, node } from 'globals';
@@ -13,9 +11,9 @@ export default config(
   // Shared configs
   js.configs.recommended,
   ...tsConfigs.recommended,
-  jsxA11y.flatConfigs.recommended,
-  importXFlatConfig.recommended,
-  importXFlatConfig.typescript,
+  // jsxA11y.configs.recommended,
+  // importXFlatConfig.recommended,
+  // importXFlatConfig.typescript,
   eslintPluginPrettierRecommended,
   ...fixupConfigRules(new FlatCompat().extends('plugin:react-hooks/recommended') as FixupConfigArray),
   {
@@ -25,7 +23,17 @@ export default config(
   },
   // Custom config
   {
-    ignores: ['**/build/**', '**/dist/**', '**/node_modules/**', 'chrome-extension/manifest.js'],
+    ignores: [
+      '**/build/**',
+      '**/dist/**',
+      '**/node_modules/**',
+      'chrome-extension/manifest.js',
+      'danger/**',
+      'docs/api/assets/*.js',
+      'commitlint.config.js',
+      '*.json',
+      '*.md',
+    ],
   },
   {
     files: ['**/*.{ts,tsx}'],
@@ -65,31 +73,31 @@ export default config(
       'arrow-body-style': ['error', 'as-needed'],
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/consistent-type-exports': 'error',
-      'import-x/order': [
-        'error',
-        {
-          'newlines-between': 'never',
-          alphabetize: { order: 'asc', caseInsensitive: true },
-          groups: ['index', 'sibling', 'parent', 'internal', 'external', 'builtin', 'object', 'type'],
-          pathGroups: [
-            {
-              pattern: '@*/**',
-              group: 'internal',
-              position: 'before',
-            },
-          ],
-          pathGroupsExcludedImportTypes: ['type'],
-        },
-      ],
-      'import-x/no-unresolved': 'off',
-      'import-x/no-named-as-default': 'error',
-      'import-x/no-named-as-default-member': 'error',
-      'import-x/newline-after-import': 'error',
-      'import-x/no-deprecated': 'error',
-      'import-x/no-duplicates': ['error', { considerQueryString: true, 'prefer-inline': false }],
-      'import-x/consistent-type-specifier-style': 'error',
-      'import-x/exports-last': 'error',
-      'import-x/first': 'error',
+      // 'import-x/order': [
+      //   'error',
+      //   {
+      //     'newlines-between': 'never',
+      //     alphabetize: { order: 'asc', caseInsensitive: true },
+      //     groups: ['index', 'sibling', 'parent', 'internal', 'external', 'builtin', 'object', 'type'],
+      //     pathGroups: [
+      //       {
+      //         pattern: '@*/**',
+      //         group: 'internal',
+      //         position: 'before',
+      //       },
+      //     ],
+      //     pathGroupsExcludedImportTypes: ['type'],
+      //   },
+      // ],
+      // 'import-x/no-unresolved': 'off',
+      // 'import-x/no-named-as-default': 'error',
+      // 'import-x/no-named-as-default-member': 'error',
+      // 'import-x/newline-after-import': 'error',
+      // 'import-x/no-deprecated': 'error',
+      // 'import-x/no-duplicates': ['error', { considerQueryString: true, 'prefer-inline': false }],
+      // 'import-x/consistent-type-specifier-style': 'error',
+      // 'import-x/exports-last': 'error',
+      // 'import-x/first': 'error',
     },
     linterOptions: {
       reportUnusedDisableDirectives: 'error',

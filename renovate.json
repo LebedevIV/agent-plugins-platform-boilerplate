@@ -1,0 +1,16 @@
+{
+  "extends": ["config:base"],
+  "packageRules": [
+    {
+      "matchPackagePatterns": ["^@?pnpm/", "^@?types/"],
+      "groupName": "pnpm/types dependencies"
+    }
+  ],
+  "labels": ["dependencies", "renovate"],
+  "prHourlyLimit": 2,
+  "prConcurrentLimit": 5,
+  "automerge": false,
+  "rangeStrategy": "bump",
+  "enabledManagers": ["npm", "pnpm"],
+  "onboarding": true
+}

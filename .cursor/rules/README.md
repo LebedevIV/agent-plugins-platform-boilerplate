@@ -1,4 +1,4 @@
-# .cursor/rules/ — Modular Rules for Cursor AI
+# .cursor/rules: Project Rules & AI Onboarding
 
 This directory contains all rules and standards for automation and AI assistants in the Agent Plugins Platform.
 
@@ -82,6 +82,12 @@ This directory contains all rules and standards for automation and AI assistants
       workflow.mdc
 ```
 
+<<<<<<< HEAD
+## Кросс-ссылки на организационные best practices
+
+- [Инструкция по переносу best practices и автоматизаций](../../docs/for-ai-best-practices/transfer-best-practices.md)
+- [Организационные знания и правила (memory-bank)](../../memory-bank/README.md)
+=======
 ---
 ## AI Fallback Rule
 
@@ -93,6 +99,7 @@ If an AI agent cannot answer a question from its own memory-bank, it must first 
 
 https://github.com/LebedevIV/agent-plugins-platform-boilerplate
 ---
+>>>>>>> origin/develop
 
 ## How to Use
 - The AI assistant should always refer to specific .mdc files when making decisions
