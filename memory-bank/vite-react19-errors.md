@@ -2,9 +2,7 @@
 
 > Этот файл предназначен для AI-ассистента. Используй эти правила для автоматического предотвращения и устранения типовых ошибок сборки, связанных с современным стеком Vite/React/SWC/polyfills.
 
----
-
-> **См. также:** [Кладбище ошибок (Resolved Issues)](./errors.md) — все общие выводы и решения по ошибкам должны дублироваться в этом файле.
+> Внимание! Все основные ошибки и решения теперь собираются в memory-bank/ERRORS_AND_SOLUTIONS.md. Этот файл содержит только уникальные детали и ссылки на кладбище ошибок.
 
 ---
 
@@ -38,6 +36,33 @@
 - Не допускай смешения нескольких версий react/react-dom
 - Для новых проектов всегда используй `"jsx": "react-jsx"` и не требуй явного импорта React в компонентах
 - Если появляется ошибка jsx-runtime — первым делом проверь версии и структуру node_modules
+
+---
+
+## [side-panel] jsx-runtime export error при SVG-анимации
+- **Ошибка:** "jsx is not exported by react/jsx-runtime.js", imported by DraftStatus.tsx
+- **Причина:** SVG-анимация с <animate> внутри JSX ломает Rollup+SWC+React 19+Vite (баг в связке)
+- **Решение:**
+  - Заменить SVG-анимацию на CSS-анимированный элемент (например, border spinner)
+  - Альтернатива: использовать gif/webp или импортировать SVG через SVGR
+- **Пример CSS-анимации:**
+  ```css
+  .draft-status-loader {
+    width: 12px;
+    height: 12px;
+    border: 2px solid currentColor;
+    border-top: 2px solid transparent;
+    border-radius: 50%;
+    animation: draft-spin 1s linear infinite;
+    display: inline-block;
+    vertical-align: middle;
+  }
+  @keyframes draft-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  ```
+- **Статус:** workaround внедрён, side-panel теперь собирается без ошибок.
 
 ---
 

@@ -28,6 +28,10 @@ describe('Webextension Side Panel', () => {
     });
     await expect(browser).toHaveTitle('Side Panel');
 
+    // 2.1. Кликаем по карточке плагина Ozon analyser
+    const ozonCard = await $('[data-testid="plugin-card-ozon-analyzer"]').getElement();
+    await ozonCard.click();
+
     // 3. Переключаемся на вкладку "Чат" (замените селектор на ваш)
     const chatTab = await $('[data-testid="chat-tab"]').getElement();
     await chatTab.click();
