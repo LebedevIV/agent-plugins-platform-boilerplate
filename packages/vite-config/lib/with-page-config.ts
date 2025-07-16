@@ -14,26 +14,35 @@ export const watchOption = IS_DEV
     }
   : undefined;
 
-export const withPageConfig = (config: UserConfig) =>
-  defineConfig(
-    deepmerge(
-      {
-        define: {
-          'process.env': env,
-        },
-        base: '',
-        plugins: [react(), IS_DEV && watchRebuildPlugin({ refresh: true }), nodePolyfills()],
-        build: {
-          sourcemap: IS_DEV,
-          minify: IS_PROD,
-          reportCompressedSize: IS_PROD,
-          emptyOutDir: IS_PROD,
-          watch: watchOption,
-          rollupOptions: {
-            external: ['chrome', 'unenv/node/process', 'unenv/polyfill/globalthis'],
-          },
-        },
+export const withPageConfig = (config: UserConfig) => {
+  const base: UserConfig = {
+    define: {
+      'process.env': env,
+    },
+    base: '',
+    plugins: [react(), IS_DEV && watchRebuildPlugin({ refresh: true }), nodePolyfills()],
+    build: {
+      sourcemap: IS_DEV,
+      minify: IS_PROD,
+      reportCompressedSize: IS_PROD,
+      emptyOutDir: IS_PROD,
+      watch: watchOption,
+      rollupOptions: {
+        external: ['chrome', 'unenv/node/process', 'unenv/polyfill/globalthis'],
       },
-      config,
-    ),
-  );
+    },
+  };
+
+  // Ручное объединение plugins, остальные поля через deepmerge
+  const merged = deepmerge(base, config, {
+    arrayMerge: (destinationArray, sourceArray, options) => {
+      // Для plugins объединяем вручную, для остальных массивов — по умолчанию
+      if (options && options.key === 'plugins') {
+        return [...(destinationArray || []), ...(sourceArray || [])];
+      }
+      return sourceArray;
+    },
+  });
+
+  return defineConfig(merged);
+};
