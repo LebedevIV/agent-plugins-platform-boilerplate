@@ -1,6 +1,6 @@
 {
   "name": "agent-plugins-platform",
-  "version": "1.0.166",
+  "version": "1.0.201",
   "description": "Browser extension that enables Python plugin execution using Pyodide and MCP protocol",
   "license": "MIT",
   "private": true,
