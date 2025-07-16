@@ -70,3 +70,58 @@ jobs:
 - [Safe Delete Best Practice](./README.md)
 - [Roadmap Synchronization](./roadmap-sync.md)
 - [Project README](../../README.md) 
+
+## Automated PR Checks with Danger.js
+
+- The project uses danger.js to automatically check every Pull Request in CI:
+  - Ensures detailed PR description
+  - Checks for changelog updates when source code changes
+  - Requires cross-references to rules, best practices, or documentation
+  - Reminds to update documentation when src/core changes
+- All warnings and suggestions appear directly in the PR discussion on GitHub.
+- This removes routine control from the AI and team, increasing transparency and review quality.
+
+**Cross-References:**
+- [Progress: Automated PR Checks](../../memory-bank/progress.md#автоматизация-проверка-pull-request-через-dangerjs)
+- [.github/workflows/danger.yml]
+- [danger/dangerfile.js] 
+
+## Automated Releases with semantic-release
+
+- The project uses semantic-release for fully automated releases:
+  - Analyzes conventional commits to determine release type (major/minor/patch)
+  - Updates CHANGELOG.md and all package.json files
+  - Creates git tags and publishes releases to GitHub/npm (if tokens are set)
+  - Runs automatically on merge to main via GitHub Actions
+- This removes all manual versioning and changelog management, reduces errors, and speeds up publishing.
+
+**Cross-References:**
+- [Progress: Automated Releases](../../memory-bank/progress.md#автоматизация-релизы-и-версионирование-через-semantic-release)
+- [.releaserc.json]
+- [.github/workflows/release.yml] 
+
+## Automated Dependency Updates with Renovate
+
+- The project uses Renovate to automatically update npm/pnpm dependencies:
+  - Creates PRs with grouped updates (e.g., types/pnpm)
+  - All updates go through CI, danger.js, and the standard workflow
+  - PRs are labeled dependencies, renovate
+  - PR frequency and concurrency are limited for review convenience
+  - Automerge is disabled (can be enabled if desired)
+- This removes routine work from the AI and team, reduces the risk of vulnerabilities and outdated packages.
+
+**Cross-References:**
+- [Progress: Automated Dependency Updates](../../memory-bank/progress.md#автоматизация-обновление-зависимостей-через-renovate)
+- [renovate.json] 
+
+## Automated Security Audit of Dependencies
+
+- The project uses pnpm audit to automatically check dependencies for vulnerabilities:
+  - On every push and PR to main/develop, audit runs in GitHub Actions
+  - All vulnerabilities (moderate and above) are reported directly in CI
+  - This enables quick response to critical issues and reduces the risk of vulnerabilities in production
+- The mechanism is fully automated and requires no manual control from AI or the team.
+
+**Cross-References:**
+- [Progress: Security Audit Automation](../../memory-bank/progress.md#автоматизация-аудит-безопасности-зависимостей)
+- [.github/workflows/audit.yml] 

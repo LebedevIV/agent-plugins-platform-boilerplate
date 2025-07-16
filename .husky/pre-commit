@@ -1,1 +1,10 @@
+#!/bin/sh
+branch=$(git rev-parse --abbrev-ref HEAD)
+if [ "$branch" = "main" ] || [ "$branch" = "develop" ]; then
+  echo "\e[31mDirect commit to $branch is forbidden! Use PRs and merge only from allowed branches.\e[0m"
+  exit 1
+fi
+
+bash bash-scripts/prevent-branch-mixing.sh || exit 1
+
 pnpm dlx lint-staged --allow-empty

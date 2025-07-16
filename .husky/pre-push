@@ -1,2 +1,3 @@
 #!/bin/sh
 bash bash-scripts/prevent-main-develop-push.sh
+bash bash-scripts/prevent-branch-mixing.sh --push || exit 1

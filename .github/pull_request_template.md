@@ -1,25 +1,33 @@
-<!-- Note: Please ensure your PR is targeting the `dev` branch -->
+# Pull Request: [Краткое описание изменений]
 
-<!-- Describe what this PR is for in the title. -->
+## Описание
+<!-- Опишите, что изменено, зачем и для кого. Укажите, какие правила, best practices или задачи покрывает этот PR. -->
 
-> `*` denotes required fields
+- [ ] Тип изменений: feature / fix / docs / chore / refactor
+- [ ] Ссылка на задачу/issue: <!-- #номер_задачи или короткое описание -->
+- [ ] Краткое описание изменений:
+  - 
+  - 
 
-## Priority*
+## Чек-лист
+- [ ] Все изменения оформлены через отдельную ветку (feature/fix/doc/...)
+- [ ] Нет прямых коммитов в main/develop
+- [ ] Все тесты (CI) проходят успешно
+- [ ] Документация и changelog обновлены
+- [ ] Кросс-ссылки на правила и best practices добавлены
+- [ ] **Перед началом новой задачи завершена текущая ветка (commit, push, PR, merge), новая ветка создана только после merge**
 
-- [ ] High: This PR needs to be merged first, before other tasks.
-- [x] Medium: This PR should be merged quickly to prevent conflicts due to common changes. (default)
-- [ ] Low: This PR does not affect other tasks, so it can be merged later.
+## Ссылки и документация
+- [ ] [README](../README.md)
+- [ ] [Best Practices](../docs/for-ai-best-practices/README.md)
+- [ ] [Workflow & Branch Protection](../docs/for-ai-best-practices/development-principles.md)
+- [ ] [Cursor Rules Index](../.cursor/rules/index.mdc)
 
-## Purpose of the PR*
-<!-- Describe the purpose of the PR. -->
+## Требования к ревью
+- [ ] Проверить соответствие workflow и защите веток
+- [ ] Проверить кросс-ссылки и описание
+- [ ] Оставить комментарии или одобрить PR
 
-## Changes*
+---
 
-
-## How to check the feature
-<!-- Describe how to check the feature in detail -->
-<!-- If there are any visual changes, please attach a screenshot for easy identification. -->
-
-
-## Reference
-<!-- Any helpful information for understanding the PR. -->
+_Этот шаблон подставляется автоматически для всех новых Pull Request. Следуйте структуре для ускорения ревью и автоматизации!_

@@ -1,4 +1,4 @@
-# Agent-Plugins-Platform
+# Agent Plugins Platform
 
 Браузерное расширение, которое позволяет выполнять Python плагины в браузере с использованием Pyodide и MCP протокола.
 
@@ -161,3 +161,9 @@ MIT License - см. файл [LICENSE](LICENSE)
 **Важно:**
 - Все тестовые скрипты и логи рекомендуется запускать и смотреть именно в этой вкладке или через боковую панель расширения.
 - Название вкладки уникальное, чтобы не путать с системной вкладкой DevTools.
+
+## Организационные best practices и автоматизация
+
+- [Инструкция по переносу best practices и автоматизаций (для пользователя)](docs/transfer-best-practices-user.md)
+- [AI best practices (только для AI-ассистентов, EN)](docs/for-ai-best-practices/README.md)
+- [Организационные знания и правила (memory-bank, EN, только для AI)](memory-bank/README.md)

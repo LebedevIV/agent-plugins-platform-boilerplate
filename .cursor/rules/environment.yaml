@@ -1,0 +1,23 @@
+os: Manjaro Linux (Plasma)
+os_version: 6.12.37-1-MANJARO
+browser:
+  main: Chrome
+  main_version: 138.0.7204.100
+  install: Flatpak
+  test: Chromium
+  test_version: 138.0.7204.100
+  test_install: official repo (external), required for test automation
+editor: Cursor
+chrome_launch: Flatpak, custom args possible
+debug_tools:
+  - Cursor
+  - Debugger for Chrome
+  - Composer Web
+preferred_doc_lang: en
+devtools_note: F12 only for main page, inspect sidepanel via context menu
+extension_tab_name: Agent Platform Tools
+ai_file_access: true  # AI assistant has full access to all project files
+cli_tools:
+  - git
+  - gh (GitHub CLI)
+  # Add more CLI tools as needed 
