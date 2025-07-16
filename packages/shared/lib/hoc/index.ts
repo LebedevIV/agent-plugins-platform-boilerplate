@@ -1,2 +1,2 @@
-export { withSuspense } from './with-suspense.js';
+// export * from './with-suspense';
 export { withErrorBoundary } from './with-error-boundary.js';
