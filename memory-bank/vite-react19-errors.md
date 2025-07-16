@@ -4,6 +4,10 @@
 
 ---
 
+> **См. также:** [Кладбище ошибок (Resolved Issues)](./errors.md) — все общие выводы и решения по ошибкам должны дублироваться в этом файле.
+
+---
+
 ## 1. jsx-runtime export error ("jsx is not exported by react/jsx-runtime.js")
 - **Причины:**
   - Несовместимость версий React 19.x, Vite 6+, @vitejs/plugin-react-swc

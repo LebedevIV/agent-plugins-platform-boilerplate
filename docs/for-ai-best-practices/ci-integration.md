@@ -69,6 +69,7 @@ jobs:
 - [Cursor Rules System](./cursor-rules-system.md)
 - [Safe Delete Best Practice](./README.md)
 - [Roadmap Synchronization](./roadmap-sync.md)
+<<<<<<< HEAD
 - [Project README](../../README.md) 
 
 ## Automated PR Checks with Danger.js
@@ -125,3 +126,6 @@ jobs:
 **Cross-References:**
 - [Progress: Security Audit Automation](../../memory-bank/progress.md#автоматизация-аудит-безопасности-зависимостей)
 - [.github/workflows/audit.yml] 
+=======
+- [Project README](../../README.md) 
+>>>>>>> origin/develop

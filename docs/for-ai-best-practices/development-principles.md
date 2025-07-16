@@ -14,6 +14,7 @@ These principles ensure high quality, security, and maintainability for any mode
 9. **Ecosystem Thinking** — Ensure plugin/API compatibility and stability
 10. **AI-First Documentation** — Write analytical comments for AI and human understanding
 
+<<<<<<< HEAD
 ## Workflow & Branch Protection
 - Direct commits or merges to `main` and `develop` are strictly forbidden. All changes must go through pull requests into `develop` only.
 - Merging to `main` is allowed only from `develop` after release approval.
@@ -74,6 +75,8 @@ flowchart TD
 - [Progress: Branch Purpose Tracking](../../memory-bank/progress.md#правило-отслеживание-смысла-ветки-и-завершение-задач)
 - [.cursor/rules/workflow/branches.mdc]
 
+=======
+>>>>>>> origin/develop
 ## How to Apply
 - Analyze each task through the lens of these principles
 - Select the most relevant principles for the situation

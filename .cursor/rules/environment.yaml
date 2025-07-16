@@ -1,5 +1,15 @@
 os: Manjaro Linux (Plasma)
 os_version: 6.12.37-1-MANJARO
+os_arch: x64
+cursor:
+  version: 1.2.4
+  vscode_version: 1.99.3
+  commit: a8e95743c5268be73767c46944a71f4465d05c90
+  build_date: 2025-07-10T16:59:43.242Z
+  electron: 34.5.1
+  chromium: 132.0.6834.210
+  node: 20.19.0
+  v8: 13.2.152.41-electron.0
 browser:
   main: Chrome
   main_version: 138.0.7204.100

@@ -58,6 +58,20 @@ pnpm build
 pnpm zip
 ```
 
+**Полный список команд для сборки, очистки, запуска и разработки:**
+- [Developer Commands (developer-commands.md)](docs/developer-commands.md)
+
+#### Dev-команды для отдельных пакетов/страниц
+
+```bash
+# Быстрый запуск разработки только для одной страницы/пакета:
+pnpm --filter pages/options dev
+pnpm --filter pages/side-panel dev
+pnpm --filter packages/ui dev
+```
+- Используйте эти команды для ускорения разработки, если меняются только отдельные части проекта.
+- Можно запускать несколько dev-серверов параллельно для разных страниц.
+
 ### Тестирование
 ```bash
 # E2E тесты
@@ -162,8 +176,16 @@ MIT License - см. файл [LICENSE](LICENSE)
 - Все тестовые скрипты и логи рекомендуется запускать и смотреть именно в этой вкладке или через боковую панель расширения.
 - Название вкладки уникальное, чтобы не путать с системной вкладкой DevTools.
 
+<<<<<<< HEAD
 ## Организационные best practices и автоматизация
 
 - [Инструкция по переносу best practices и автоматизаций (для пользователя)](docs/transfer-best-practices-user.md)
 - [AI best practices (только для AI-ассистентов, EN)](docs/for-ai-best-practices/README.md)
 - [Организационные знания и правила (memory-bank, EN, только для AI)](memory-bank/README.md)
+=======
+---
+## AI Knowledge Fallback
+
+If the AI agent cannot answer a question from its own memory-bank, it must first consult the .cursor/rules directory, and if no answer is found there, then consult the memory-bank directory. See [.cursor/rules/doc/ai-fallback.rules.md](.cursor/rules/doc/ai-fallback.rules.md) for details.
+---
+>>>>>>> origin/develop

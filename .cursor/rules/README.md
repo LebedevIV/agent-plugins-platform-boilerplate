@@ -82,10 +82,24 @@ This directory contains all rules and standards for automation and AI assistants
       workflow.mdc
 ```
 
+<<<<<<< HEAD
 ## Кросс-ссылки на организационные best practices
 
 - [Инструкция по переносу best practices и автоматизаций](../../docs/for-ai-best-practices/transfer-best-practices.md)
 - [Организационные знания и правила (memory-bank)](../../memory-bank/README.md)
+=======
+---
+## AI Fallback Rule
+
+If an AI agent cannot answer a question from its own memory-bank, it must first check the .rules directory, then the memory-bank directory. See [doc/ai-fallback.rules.md](./doc/ai-fallback.rules.md).
+---
+
+---
+## Main GitHub Repository
+
+https://github.com/LebedevIV/agent-plugins-platform-boilerplate
+---
+>>>>>>> origin/develop
 
 ## How to Use
 - The AI assistant should always refer to specific .mdc files when making decisions
