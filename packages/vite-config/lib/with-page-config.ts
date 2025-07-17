@@ -33,15 +33,9 @@ export const withPageConfig = (config: UserConfig) => {
     },
   };
 
-  // Ручное объединение plugins, остальные поля через deepmerge
+  // Всегда объединять массивы через spread
   const merged = deepmerge(base, config, {
-    arrayMerge: (destinationArray, sourceArray, options) => {
-      // Для plugins объединяем вручную, для остальных массивов — по умолчанию
-      if (options && options.key === 'plugins') {
-        return [...(destinationArray || []), ...(sourceArray || [])];
-      }
-      return sourceArray;
-    },
+    arrayMerge: (destinationArray, sourceArray) => [...(destinationArray || []), ...(sourceArray || [])],
   });
 
   return defineConfig(merged);

@@ -1,6 +1,6 @@
 import '@src/index.css';
 import { createRoot } from 'react-dom/client';
-import { TestReact19Pure } from '@extension/ui';
+import Options from '@src/Options';
 
 const init = () => {
   const appContainer = document.querySelector('#app-container');
@@ -8,7 +8,7 @@ const init = () => {
     throw new Error('Can not find #app-container');
   }
   const root = createRoot(appContainer);
-  root.render(<TestReact19Pure />);
+  root.render(<Options />);
 };
 
 init();

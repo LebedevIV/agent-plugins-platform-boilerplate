@@ -1,8 +1,10 @@
-import { PluginCard } from '../../../../packages/ui/lib/components/PluginCard';
 import { useTranslations } from '../hooks/useTranslations';
 import { useEffect } from 'react';
 import type { Plugin } from '../hooks/usePlugins';
-import type React from 'react';
+import LoadingSpinner from './LoadingSpinner';
+import ErrorDisplay from './ErrorDisplay';
+import PluginCard from './PluginCard';
+// import PluginCard from './PluginCard'; // если потребуется локальная реализация
 
 interface PluginsTabProps {
   plugins: Plugin[];
@@ -11,34 +13,29 @@ interface PluginsTabProps {
   loading: boolean;
   error: string | null;
   locale?: 'en' | 'ru';
-  onUpdatePluginSetting?: (pluginId: string, setting: string, value: boolean) => Promise<void>;
 }
 
-export const PluginsTab: React.FC<PluginsTabProps> = ({
+const PluginsTab = function ({
   plugins,
   selectedPlugin,
   onSelectPlugin,
   loading,
   error,
   locale = 'en',
-  onUpdatePluginSetting,
-}) => {
+}: PluginsTabProps) {
   const { t } = useTranslations(locale);
 
-  // Select first plugin if nothing is selected
   useEffect(() => {
     if (plugins.length > 0 && !selectedPlugin) {
       onSelectPlugin(plugins[0]);
     }
   }, [plugins, selectedPlugin, onSelectPlugin]);
 
-  // Убираем лишние логи для предотвращения бесконечных циклов
-
-  if (loading) return <p>Загрузка...</p>;
-  if (error) return <p>Ошибка: {error}</p>;
-  if (!plugins) return <p>Ошибка: plugins равен null или undefined</p>;
+  if (loading) return <LoadingSpinner />;
+  if (error) return <ErrorDisplay error={{ message: error }} />;
+  if (!plugins) return <ErrorDisplay error={{ message: 'plugins равен null или undefined' }} />;
   if (!Array.isArray(plugins)) {
-    return <p>Ошибка: plugins не является массивом. plugins = {JSON.stringify(plugins)}</p>;
+    return <ErrorDisplay error={{ message: `plugins не является массивом. plugins = ${JSON.stringify(plugins)}` }} />;
   }
   if (plugins.length === 0) {
     return <p>Нет доступных плагинов.</p>;
@@ -51,29 +48,16 @@ export const PluginsTab: React.FC<PluginsTabProps> = ({
 
   const renderPlugins = () => {
     try {
-      return plugins.map(plugin => {
-        const enabled = plugin.settings?.enabled ?? true;
-        return (
-          <PluginCard
-            key={plugin.id}
-            id={plugin.id}
-            name={plugin.name}
-            version={plugin.version}
-            description={plugin.description}
-            icon={plugin.icon}
-            iconUrl={plugin.iconUrl}
-            enabled={enabled}
-            selected={selectedPlugin?.id === plugin.id}
-            onClick={() => handlePluginClick(plugin)}
-            onToggle={
-              onUpdatePluginSetting ? enabled => onUpdatePluginSetting(plugin.id, 'enabled', enabled) : undefined
-            }
-          />
-        );
-      });
+      return plugins.map(plugin => (
+        <PluginCard
+          key={plugin.id}
+          plugin={plugin}
+          selected={selectedPlugin?.id === plugin.id}
+          onClick={() => handlePluginClick(plugin)}
+        />
+      ));
     } catch (e) {
-      console.error('[PluginsTab] Ошибка при рендеринге списка плагинов:', e);
-      return <p>Ошибка при отображении плагинов: {(e as Error).message}</p>;
+      return <ErrorDisplay error={e as Error} />;
     }
   };
 
@@ -84,3 +68,4 @@ export const PluginsTab: React.FC<PluginsTabProps> = ({
     </>
   );
 };
+export { PluginsTab };

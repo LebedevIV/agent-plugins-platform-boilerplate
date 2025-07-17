@@ -1,10 +1,11 @@
 import { resolve } from 'node:path';
-import { withPageConfig } from '@extension/vite-config';
+import react from '@vitejs/plugin-react-swc';
 
 const rootDir = resolve(import.meta.dirname);
 const srcDir = resolve(rootDir, 'src');
 
-export default withPageConfig({
+export default {
+  plugins: [react()],
   resolve: {
     alias: {
       '@src': srcDir,
@@ -14,4 +15,4 @@ export default withPageConfig({
   build: {
     outDir: resolve(rootDir, '..', '..', 'dist', 'new-tab'),
   },
-});
+};

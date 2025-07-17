@@ -1,6 +1,6 @@
 {
   "name": "@extension/shared",
-  "version": "0.5.217",
+  "version": "0.5.227",
   "description": "chrome extension - shared code",
   "type": "module",
   "private": true,
@@ -23,9 +23,7 @@
     "postinstall": "pnpm ready",
     "build": "tsc -b"
   },
-  "dependencies": {
-    "react-error-boundary": "^6.0.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@extension/storage": "workspace:*",
     "@extension/tsconfig": "workspace:*",

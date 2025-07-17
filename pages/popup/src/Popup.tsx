@@ -1,8 +1,10 @@
 import '@src/Popup.css';
 import { t } from '@extension/i18n';
-import { PROJECT_URL_OBJECT, useStorage, withErrorBoundary, withSuspense } from '@extension/shared';
+import { PROJECT_URL_OBJECT, useStorage } from '@extension/shared';
 import { exampleThemeStorage } from '@extension/storage';
-import { cn, ErrorDisplay, LoadingSpinner, ToggleButton } from '@extension/ui';
+import cn from '@extension/ui/lib/utils/cn';
+import ToggleButton from './components/ToggleButton';
+import LocalErrorBoundary from './components/LocalErrorBoundary';
 
 const notificationOptions = {
   type: 'basic',
@@ -60,4 +62,11 @@ const Popup = () => {
   );
 };
 
-export default withErrorBoundary(withSuspense(Popup, <LoadingSpinner />), ErrorDisplay);
+const PopupWrapper = function () {
+  return (
+    <LocalErrorBoundary>
+      <Popup />
+    </LocalErrorBoundary>
+  );
+};
+export default PopupWrapper;
