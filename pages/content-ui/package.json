@@ -1,6 +1,6 @@
 {
   "name": "@extension/content-ui",
-  "version": "0.5.227",
+  "version": "0.5.360",
   "description": "chrome extension - content ui",
   "type": "module",
   "private": true,
@@ -30,6 +30,10 @@
     "@extension/hmr": "workspace:*",
     "@extension/tailwindcss-config": "workspace:*",
     "@extension/tsconfig": "workspace:*",
-    "@extension/vite-config": "workspace:*"
+    "@extension/vite-config": "workspace:*",
+    "tailwindcss": "^4.1.11",
+    "autoprefixer": "^10.4.21",
+    "@tailwindcss/postcss": "^4.1.11",
+    "tsx": "^4.20.3"
   }
 }

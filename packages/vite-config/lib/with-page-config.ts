@@ -1,6 +1,6 @@
 import env, { IS_DEV, IS_PROD } from '@extension/env';
 import { watchRebuildPlugin } from '@extension/hmr';
-import react from '@vitejs/plugin-react-swc';
+import react from '@vitejs/plugin-react';
 import deepmerge from 'deepmerge';
 import { defineConfig } from 'vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
@@ -21,6 +21,9 @@ export const withPageConfig = (config: UserConfig) => {
     },
     base: '',
     plugins: [react(), IS_DEV && watchRebuildPlugin({ refresh: true }), nodePolyfills()],
+    resolve: {
+      dedupe: ['react', 'react-dom'],
+    },
     build: {
       sourcemap: IS_DEV,
       minify: IS_PROD,
@@ -34,9 +37,7 @@ export const withPageConfig = (config: UserConfig) => {
   };
 
   // Всегда объединять массивы через spread
-  const merged = deepmerge(base, config, {
-    arrayMerge: (destinationArray, sourceArray) => [...(destinationArray || []), ...(sourceArray || [])],
-  });
+  const merged = deepmerge(base, config);
 
   return defineConfig(merged);
 };

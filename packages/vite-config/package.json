@@ -1,6 +1,6 @@
 {
   "name": "@extension/vite-config",
-  "version": "0.5.235",
+  "version": "0.5.368",
   "description": "chrome extension - vite base configuration",
   "type": "module",
   "private": true,
@@ -17,11 +17,10 @@
   },
   "dependencies": {
     "@extension/env": "workspace:*",
-    "@vitejs/plugin-react-swc": "^3.10.2"
+    "@vitejs/plugin-react": "^4.6.0"
   },
   "devDependencies": {
     "@extension/hmr": "workspace:*",
-    "@extension/tsconfig": "workspace:*",
-    "@vitejs/plugin-react-swc": "^3.10.2"
+    "@extension/tsconfig": "workspace:*"
   }
 }

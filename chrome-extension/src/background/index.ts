@@ -342,7 +342,7 @@ chrome.runtime.onMessage.addListener(
           message: msg.message,
           data: msg.logData,
         });
-        // Оповещаем devtools-panel о новом логе
+        // Оповещаем о новом логе
         chrome.runtime.sendMessage({
           type: 'PLUGIN_LOG_UPDATED',
           pluginId: msg.pluginId,

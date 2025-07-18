@@ -1,5 +1,5 @@
 import '@src/Options.css';
-import SettingsTab from './components/SettingsTab';
+import { SettingsTab } from './components/SettingsTab';
 import LocalErrorBoundary from './components/LocalErrorBoundary';
 
 // AI-First: Основная страница настроек, обёрнута в ErrorBoundary для защиты UX

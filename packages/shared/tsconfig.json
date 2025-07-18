@@ -6,7 +6,9 @@
     "jsx": "react-jsx",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "target": "ESNext"
+    "target": "ESNext",
+    "declaration": true,
+    "declarationDir": "dist"
   },
   "include": ["index.mts", "lib"]
 }

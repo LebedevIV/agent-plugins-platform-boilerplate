@@ -1,6 +1,6 @@
 {
   "name": "@extension/new-tab",
-  "version": "0.5.227",
+  "version": "0.5.360",
   "description": "chrome extension - new tab",
   "type": "module",
   "private": true,
@@ -29,12 +29,9 @@
     "@extension/tailwindcss-config": "workspace:*",
     "@extension/tsconfig": "workspace:*",
     "@extension/vite-config": "workspace:*",
-    "sass": "^1.89.0"
-  },
-  "postcss": {
-    "plugins": {
-      "tailwindcss": {},
-      "autoprefixer": {}
-    }
+    "sass": "^1.89.0",
+    "tailwindcss": "^4.1.11",
+    "autoprefixer": "^10.4.21",
+    "@tailwindcss/postcss": "^4.1.11"
   }
 }
