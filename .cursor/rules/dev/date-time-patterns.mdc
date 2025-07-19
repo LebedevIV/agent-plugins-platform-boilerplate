@@ -161,5 +161,10 @@ echo "Found old dates above. Consider updating them."
 # .git/hooks/pre-commit
 current_date=$(date +"%Y-%m-%d")
 echo "Current date: $current_date"
+
+## New Entry ([2025-07-19T01:32:19.979Z])
+
+Паттерн работы с датами: Использовать date +%Y-%m-%d для получения текущей даты в документации
+
 echo "Please ensure all dates in documentation are current."
 ``` 
