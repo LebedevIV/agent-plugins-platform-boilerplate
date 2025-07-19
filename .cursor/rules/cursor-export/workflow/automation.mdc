@@ -1,9 +1,8 @@
 ---
 description: Automation and synchronization rules
 globs: ["**/*.ts", "**/*.js", "**/*.json", "**/*.md", "**/*.mdc"]
-alwaysApply: trueaiPriority: medium
-aiCategory: process-management
----
+alwaysApply: false
+aiCategory: process-management---
 
 # Automation Rules
 

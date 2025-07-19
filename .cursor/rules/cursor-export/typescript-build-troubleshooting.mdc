@@ -1,9 +1,8 @@
 ---
 description: Руководство по устранению ошибок TypeScript сборки - типы, barrel exports, зависимости, TailwindCSS
 globs: ["**/*"]
-alwaysApply: trueaiPriority: normal
-aiCategory: general
----
+alwaysApply: false
+aiCategory: general---
 
 # TypeScript Build Troubleshooting Rules
 

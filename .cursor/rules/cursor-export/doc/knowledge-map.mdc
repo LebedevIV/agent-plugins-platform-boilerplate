@@ -1,9 +1,8 @@
 ---
 description: Project knowledge structure
 globs: ["**/*.md", "**/*.mdc", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
-alwaysApply: trueaiPriority: medium
-aiCategory: documentation
----
+alwaysApply: false
+aiCategory: documentation---
 
 # Knowledge Map
 

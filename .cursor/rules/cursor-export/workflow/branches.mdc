@@ -1,9 +1,8 @@
 ---
 description: Git branch management rules
 globs: ["**/*.ts", "**/*.js", "**/*.json", "**/*.md", "**/*.mdc"]
-alwaysApply: trueaiPriority: medium
-aiCategory: process-management
----
+alwaysApply: false
+aiCategory: process-management---
 
 # Rule
 - For new features, use branches with the prefix `feature/` and a meaningful name.

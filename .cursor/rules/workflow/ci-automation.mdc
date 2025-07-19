@@ -1,0 +1,85 @@
+---
+description: Automation and synchronization rules
+globs: ["**/*.ts", "**/*.js", "**/*.json", "**/*.md", "**/*.mdc"]
+alwaysApply: trueaiPriority: medium
+aiCategory: process-management
+---
+
+# CI/CD Automation & Safe Delete Practices
+
+## GitHub Actions Workflow для .cursor Rules
+
+Добавить `.github/workflows/rules-check.yml`:
+```yaml
+name: Rules Structure Check
+on:
+  push:
+    paths:
+      - '.cursor/rules/**'
+  pull_request:
+    paths:
+      - '.cursor/rules/**'
+jobs:
+  check-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Generate index and README structure
+        run: node .cursor/rules/cursor-manager.cjs full
+      - name: Check for uncommitted changes
+        run: |
+          git diff --exit-code || (echo 'Rules structure is outdated. Please run cursor-manager.cjs full and commit the result.' && exit 1)
+```
+
+## Safe Delete Protection
+
+### Защищенные директории:
+- `docs/for-ai-best-practices`
+- `memory-bank`
+- `platform-core`
+- `chrome-extension/public/plugins`
+- `.cursor/rules`
+
+### GitHub Actions проверка:
+```yaml
+- name: Check for protected directory deletion
+  run: |
+    if git diff --name-status | grep -E 'D[[:space:]]+(docs/for-ai-best-practices|memory-bank|platform-core|chrome-extension/public/plugins|\.cursor/rules)'; then
+      echo '::warning::Attempted deletion of a protected directory! Review required.'
+    fi
+```
+
+## Automated PR Checks с Danger.js
+
+- Проверка детального описания PR
+- Проверка обновления changelog при изменении кода
+- Требование cross-references к правилам
+- Напоминание обновить документацию при изменении src/core
+
+## Automated Releases с semantic-release
+
+- Анализ conventional commits
+- Автоматическое обновление CHANGELOG.md
+- Создание git tags и релизов
+- Запуск автоматически при мерже в main
+
+## Automated Dependency Updates с Renovate
+
+- Создание PR с группированными обновлениями
+- Все обновления проходят CI и danger.js
+- PR помечаются labels: dependencies, renovate
+- Automerge отключен (можно включить при желании)
+
+## Automated Security Audit
+
+- `pnpm audit` на каждом push/PR
+- Отчет о vulnerabilities (moderate и выше) в CI
+- Быстрый ответ на критические проблемы
+description:
+globs:
+alwaysApply: false
+---

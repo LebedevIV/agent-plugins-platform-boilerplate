@@ -1,9 +1,8 @@
 ---
 description: Quality standards for memory-bank
 globs: ["**/*.md", "**/*.mdc", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
-alwaysApply: trueaiPriority: medium
-aiCategory: documentation
----
+alwaysApply: false
+aiCategory: documentation---
 
 # Memory-Bank Quality Checklist
 

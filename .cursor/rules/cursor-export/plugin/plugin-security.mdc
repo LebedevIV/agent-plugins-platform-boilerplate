@@ -1,9 +1,8 @@
 ---
 description: Plugin standard for security
 globs: ["public/plugins/**/*", "**/*.py", "**/*.json", "**/*.ts", "**/*.js"]
-alwaysApply: falseaiPriority: normal
-aiCategory: plugin-development
----
+alwaysApply: true
+aiCategory: plugin-development---
 
 # Plugin Security Requirements
 - Zero Trust: Plugins are not trusted by default

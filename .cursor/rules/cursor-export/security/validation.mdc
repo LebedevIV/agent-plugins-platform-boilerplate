@@ -1,9 +1,8 @@
 ---
 description: Input validation and data sanitization rules
 globs: ["**/*.ts", "**/*.js", "**/*.py", "**/*.json", "platform-core/**/*"]
-alwaysApply: trueaiPriority: normal
-aiCategory: security
----
+alwaysApply: false
+aiCategory: security---
 
 # Rule
 - Always validate all input data and API parameters.

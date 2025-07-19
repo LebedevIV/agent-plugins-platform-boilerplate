@@ -1,9 +1,8 @@
 ---
 description: Лучшие практики для работы с монорепозиторием - структура, зависимости, TypeScript, barrel exports
 globs: ["**/*"]
-alwaysApply: trueaiPriority: normal
-aiCategory: general
----
+alwaysApply: false
+aiCategory: general---
 
 # Monorepo Best Practices for AI
 

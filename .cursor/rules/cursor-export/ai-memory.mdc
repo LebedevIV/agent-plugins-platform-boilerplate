@@ -1,3 +1,10 @@
+---
+description: User commands and AI instructions
+globs: ["**/*"]
+alwaysApply: trueaiPriority: critical
+aiCategory: general
+---
+
 <!-- AI: This is an AI-specific rule or instruction -->
 <!-- AI: Priority: critical -->
 <!-- AI: Category: general -->

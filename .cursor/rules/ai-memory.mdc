@@ -1,3 +1,10 @@
+---
+description: User commands and AI instructions
+globs: ["**/*"]
+alwaysApply: trueaiPriority: critical
+aiCategory: general
+---
+
 <!-- AI: This is an AI-specific rule or instruction -->
 <!-- AI: Priority: critical -->
 <!-- AI: Category: general -->
@@ -49,6 +56,8 @@ aiCategory: general
 - `экспорт cursor` / `cursor export` - Экспортировать все правила .cursor для переноса в другой проект
 - `экспорт cursor [проект]` - Экспорт с указанием целевого проекта
 - `импорт cursor` - Импортировать правила из cursor-export в текущий проект
+- `внедри best practices` - Внедрить все автоматизации и стандарты из .cursor в проект
+- `аудит проекта` - Провести аудит на соответствие best practices
 
 ### Релизы и деплой:
 - `Создай релиз` / `Создать релиз` - Подготовить проект к релизу (увеличить версию, создать ZIP)
