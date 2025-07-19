@@ -16,6 +16,7 @@ function versionReplacePlugin() {
 }
 
 export default {
+  base: './', // <--- ВАЖНО для Chrome Extension!
   resolve: {
     alias: {
       '@src': srcDir,
