@@ -1,4 +1,4 @@
-# Session Log - react-typescript
+# Session Log - React-TypeScript
 
 ## Overview
 
@@ -9,4 +9,4 @@ This file contains development session logs.
 <!-- Entries will be added here automatically -->
 
 ---
-*Generated on 2025-07-19 for react-typescript project*
+*Generated on 2025-07-19 for React-TypeScript project*

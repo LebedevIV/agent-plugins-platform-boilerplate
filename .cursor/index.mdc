@@ -20,7 +20,7 @@
 - [architecture-patterns.mdc](rules/architecture-patterns.mdc) — архитектурные Patterns
 - [development-principles.mdc](rules/development-principles.mdc) — Principles разработки
 
-Все правила всегда применяются для максимальной автоматизации и прозрачности.
+Все правила всегда применяются для максимальной automation и прозрачности.
 description:
 globs:
 alwaysApply: false

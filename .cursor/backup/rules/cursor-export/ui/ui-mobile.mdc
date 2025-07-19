@@ -1,20 +1,20 @@
 ---
 description: UI standard for mobile
-globs: ["pages/**/*", "**/*.tsx", "**/*.css", "**/*.scss", "packages/ui/**/*"]
+globs: ["pages/**/*", "**/*.tsx", "**/*.css", "**/*..css", "packages/ui/**/*"]
 alwaysApply: falseaiPriority: normal
 aiCategory: user-interface
 ---
 
 # UI Mobile Responsiveness
-- Adequate size for touch interaction (touch targets)
+- Adequate size for touch interaction (touch targ.ts)
 - Proper viewport meta tags
-- Use flexbox and grid for responsive layouts
+- Use flexbox and grid for responsive layo.ts
 - Support common touch gestures
 - Optimize for mobile performance
 
-description: Mobile responsiveness standards for all UI components
+description: Mobile responsiveness standards for all UI compone.ts
 globs:
-  - pages/*/src/components/*
+  - pages/*/src/compone.ts/*
 alwaysApply: false
 ---
 description:

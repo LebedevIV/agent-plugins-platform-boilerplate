@@ -10,10 +10,10 @@ aiCategory: development-practices
 **Rule:**
 - Only merge into main from develop.
 - All feature, fix, and doc branches must be merged into develop first, never directly into main.
-- This rule is mandatory for all changes and pull requests. 
+- This rule is mandatory for all changes and pull reque.ts. 
 
 ---
 ## Enforcement
 - Local pre-push hook (.husky/pre-push) blocks direct push to main and develop.
-- GitHub branch protection prevents direct push and enforces PRs from develop only.
+- GitHub branch protection preve.ts direct push and enforces PRs from develop only.
 --- 

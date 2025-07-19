@@ -33,7 +33,7 @@ node cursor-manager..js export my-new-project
 
 **Создается папка `cursor-export/` с:**
 - Все правила по Categoryм
-- Скрипты автоматизации
+- Скрипты automation
 - Инструкции по импорту
 - Автоматический скрипт импорта
 
@@ -242,7 +242,7 @@ rm -rf cursor-export
 echo "✅ Transfer completed!"
 ```
 
-### **Git hooks для автоматизации:**
+### **Git hooks для automation:**
 ```bash
 # .git/hooks/post-merge
 #!/bin/bash

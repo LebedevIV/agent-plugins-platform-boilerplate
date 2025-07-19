@@ -8,7 +8,7 @@ aiCategory: development-practices
 # Security Best Practices
 
 ## Plugin Validation
-- Validate plugin manifests.
+- Validate plugin manife.ts.
 - Check all permissions.
 - Scan for malicious code.
 - Verify plugin signatures.
@@ -19,21 +19,21 @@ aiCategory: development-practices
 - Monitor plugin behavior.
 - Apply rate limiting.
 
-## Data Protection
+## data Protection
 - Sanitize all user data.
 - Encrypt sensitive information.
 - Ensure secure communication.
 - Audit all data access.
 
-# Deployment Considerations
+# Deployment ConsIDErations
 
-## Extension Distribution
-- Follow Chrome Web Store guidelines.
+## Extension distribution
+- Follow Chrome Web Store guIDElines.
 - Use a secure update mechanism.
-- Provide a transparent privacy policy.
+- ProvIDE a transparent privacy policy.
 - Maintain user support channels.
 
-## Plugin Distribution
+## Plugin distribution
 - Use a marketplace for plugins.
 - Validate and manage plugin versions.
 - Perform security scanning.
@@ -41,7 +41,7 @@ aiCategory: development-practices
 ## Monitoring and Analytics
 - Track plugin usage.
 - Monitor performance.
-- Collect error reports.
+- Collect error repo.ts.
 - Analyze user feedback.
 description:
 globs:

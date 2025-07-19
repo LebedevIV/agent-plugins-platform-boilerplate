@@ -35,7 +35,10 @@
     "copy-env": "bash bash-scripts/copy_env.sh",
     "set-global-env": "bash bash-scripts/set_global_env.sh",
     "module-manager": "pnpm -F module-manager start",
-    "postinstall": "pnpm copy-env"
+    "postinstall": "pnpm copy-env",
+    "protect-cursor": "node .cursor/rules/protect-cursor.cjs protect",
+    "check-cursor": "node .cursor/rules/cursor-protector.cjs check",
+    "install-cursor-hooks": "node .cursor/rules/cursor-git-hook.cjs install"
   },
   "dependencies": {
     "react": "^19.0.0",

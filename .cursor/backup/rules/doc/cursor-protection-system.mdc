@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Cursor Protection System automatically ensures that all files in the `.cursor` directory are written in English for maximum AI/LLM compatibility. This system provides comprehensive protection through automatic translation, Git hooks, and monitoring.
+The Cursor Protection System automatically ensures that all files in the `.cursor` directory are written in English for maximum AI/LLM compatibility. This system provIDEs comprehensive protection through automatic translation, Git hooks, and monitoring.
 
 ## Key Features
 
@@ -14,73 +14,73 @@ The Cursor Protection System automatically ensures that all files in the `.curso
 
 ### 🔧 **Git Integration**
 - **Pre-commit hooks** - automatically translate staged .cursor files
-- **Post-commit hooks** - verify protection status after commits
+- **Post-commit hooks** - verify protection status after comm.ts
 - **Pre-push hooks** - block push if Russian content is detected
 - **Automatic staging** of translated files
 
 ### 📊 **Monitoring and Status**
-- **Status checking** - identify files that need translation
-- **Protection reports** - comprehensive status overview
-- **Backup management** - easy restoration from backups
-- **Integration status** - verify all components are working
+- **Status checking** - IDEntify files that need translation
+- **Protection repo.ts** - comprehensive status overview
+- **backup management** - easy restoration from backups
+- **Integration status** - verify all compone.ts are working
 
-## System Components
+## System Compone.ts
 
-### **1. Cursor Protector (`cursor-protector.cjs`)**
+### **1. Cursor Protector (`cursor-protector..js`)**
 Main translation engine with comprehensive terminology coverage:
 - **Translation mappings** - 500+ technical terms
 - **File scanning** - recursive directory processing
-- **Backup creation** - automatic backup before translation
+- **backup creation** - automatic backup before translation
 - **Status reporting** - detailed analysis of files
 
-### **2. Git Hooks (`cursor-git-hook.cjs`)**
+### **2. Git Hooks (`cursor-git-hook..js`)**
 Automatic protection during Git operations:
 - **Pre-commit** - translate staged .cursor files
 - **Post-commit** - verify overall protection status
 - **Pre-push** - block push if Russian content found
 - **Hook management** - install/uninstall hooks
 
-### **3. Protection Manager (`protect-cursor.cjs`)**
+### **3. Protection Manager (`protect-cursor..js`)**
 Complete system management:
 - **Full protection** - translate, install hooks, commit
-- **System installation** - setup all components
+- **System installation** - setup all compone.ts
 - **Status checking** - comprehensive protection report
-- **Backup restoration** - restore from backups
+- **backup restoration** - restore from backups
 
 ## Usage
 
 ### **Complete Protection (Recommended)**
 ```bash
 # Protect all .cursor files, install hooks, and commit
-node .cursor/rules/protect-cursor.cjs protect
+node .cursor/rules/protect-cursor..js protect
 ```
 
 ### **System Installation**
 ```bash
-# Install protection system (hooks, scripts, .cursorignore)
-node .cursor/rules/protect-cursor.cjs install
+# Install protection system (hooks, scri.ts, .cursorignore)
+node .cursor/rules/protect-cursor..js install
 ```
 
 ### **Status Checking**
 ```bash
 # Check protection status
-node .cursor/rules/protect-cursor.cjs check
+node .cursor/rules/protect-cursor..js check
 
 # Check .cursor files specifically
-node .cursor/rules/cursor-protector.cjs check
+node .cursor/rules/cursor-protector..js check
 ```
 
 ### **Manual Protection**
 ```bash
 # Protect all .cursor files
-node .cursor/rules/cursor-protector.cjs protect
+node .cursor/rules/cursor-protector..js protect
 
 # Install Git hooks
-node .cursor/rules/cursor-git-hook.cjs install
+node .cursor/rules/cursor-git-hook..js install
 ```
 
-### **Package.json Scripts**
-After installation, use npm scripts:
+### **Package.json Scri.ts**
+After installation, use npm scri.ts:
 ```bash
 npm run protect-cursor    # Complete protection
 npm run check-cursor      # Check status
@@ -90,62 +90,62 @@ npm run install-cursor-hooks # Install hooks
 ## Translation Coverage
 
 ### **Technical Terminology**
-- **Development terms** - разработка → development
-- **Architecture terms** - архитектура → architecture
-- **Security terms** - безопасность → security
-- **Performance terms** - производительность → performance
-- **Quality terms** - качество → quality
+- **Development terms** - Development → development
+- **Architecture terms** - Architecture → architecture
+- **Security terms** - Security → security
+- **Performance terms** - Performance → performance
+- **Quality terms** - Quality → quality
 
 ### **File Structure**
 - **Headers and titles** - заголовки и названия
 - **Section names** - названия разделов
-- **Status indicators** - индикаторы статуса
+- **Status indicators** - индикаторы Statusа
 - **Action descriptions** - описания действий
 
 ### **Common Phrases**
-- **Important notes** - важные примечания
-- **Best practices** - лучшие практики
-- **Requirements** - требования
-- **Recommendations** - рекомендации
+- **Important notes** - важные Notes
+- **Best practices** - Best Practices
+- **Requireme.ts** - Requireme.ts
+- **Recommendations** - Recommendations
 
 ## Git Hook Behavior
 
 ### **Pre-commit Hook**
 1. **Scans staged files** for .cursor files
-2. **Detects Russian content** in staged files
+2. **Dete.ts Russian content** in staged files
 3. **Automatically translates** files with Russian content
 4. **Creates backups** before translation
 5. **Stages translated files** for commit
 
 ### **Post-commit Hook**
 1. **Checks overall .cursor status**
-2. **Reports any remaining Russian content**
-3. **Suggests actions** if needed
+2. **Repo.ts any remaining Russian content**
+3. **Sugge.ts actions** if needed
 4. **Confirms protection status**
 
 ### **Pre-push Hook**
 1. **Scans all .cursor files**
 2. **Blocks push** if Russian content found
-3. **Provides clear error message**
-4. **Suggests protection command**
+3. **ProvIDEs clear error message**
+4. **Sugge.ts protection Command**
 
 ## File Structure
 
 ```
 .cursor/
 ├── rules/
-│   ├── cursor-protector.cjs           # Main translation engine
-│   ├── cursor-git-hook.cjs            # Git hooks
-│   ├── protect-cursor.cjs             # Protection manager
+│   ├── cursor-protector..js           # Main translation engine
+│   ├── cursor-git-hook..js            # Git hooks
+│   ├── protect-cursor..js             # Protection manager
 │   └── doc/
 │       └── cursor-protection-system.mdc # This documentation
-├── backup/                            # Backup directory
+├── backup/                            # backup directory
 │   ├── pre-commit/                    # Pre-commit backups
 │   └── [timestamped-backups]/         # Manual backups
 └── [other .cursor files]              # Protected files
 ```
 
-## Configuration
+## configuration
 
 ### **.cursorignore**
 Exclude files from automatic translation:
@@ -153,34 +153,34 @@ Exclude files from automatic translation:
 # Cursor Protection System
 # Files that should not be automatically translated
 
-# Backup files
+# backup files
 .cursor/backup/
 
-# Temporary files
+# temporary files
 *.tmp
 *.temp
 
 # Log files
 *.log
 
-# Cache files
+# cache files
 .cache/
 node_modules/
 ```
 
-### **Package.json Scripts**
+### **Package.json Scri.ts**
 Automatically added during installation:
-```json
+``.json
 {
-  "scripts": {
-    "protect-cursor": "node .cursor/rules/protect-cursor.cjs protect",
-    "check-cursor": "node .cursor/rules/cursor-protector.cjs check",
-    "install-cursor-hooks": "node .cursor/rules/cursor-git-hook.cjs install"
+  "scri.ts": {
+    "protect-cursor": "node .cursor/rules/protect-cursor..js protect",
+    "check-cursor": "node .cursor/rules/cursor-protector..js check",
+    "install-cursor-hooks": "node .cursor/rules/cursor-git-hook..js install"
   }
 }
 ```
 
-## Benefits
+## Benef.ts
 
 ### **For AI/LLM Compatibility**
 - **Universal accessibility** - any AI assistant can read .cursor files
@@ -197,8 +197,8 @@ Automatically added during installation:
 ### **For Development Workflow**
 - **Automatic process** - no manual translation needed
 - **Safe operation** - backups created automatically
-- **Git integration** - seamless workflow integration
-- **Error prevention** - blocks problematic commits/pushes
+- **Git integration** - sea.less workflow integration
+- **Error prevention** - blocks problematic comm.ts/pushes
 
 ## Best Practices
 
@@ -208,14 +208,14 @@ Automatically added during installation:
 3. **Check backups** if translation issues occur
 4. **Use English for new files** - maintain consistency
 
-### **For AI Assistants**
+### **For AI Assista.ts**
 1. **Always write .cursor files in English**
 2. **Trust the protection system** - it handles translation
 3. **Check protection status** if unsure
 4. **Use standard terminology** from translation mappings
 
 ### **For Developers**
-1. **Install protection system** in new projects
+1. **Install protection system** in new proje.ts
 2. **Extend translation mappings** as needed
 3. **Test protection** before deployment
 4. **Maintain backup system** for safety
@@ -223,7 +223,7 @@ Automatically added during installation:
 ## Error Handling
 
 ### **Translation Errors**
-- **Backup preservation** - original files always saved
+- **backup preservation** - original files always saved
 - **Partial translation** - system continues with available mappings
 - **Error reporting** - clear messages about issues
 - **Manual fallback** - option to restore from backup
@@ -235,7 +235,7 @@ Automatically added during installation:
 - **Safe operation** - no data loss in case of hook problems
 
 ### **System Errors**
-- **Graceful degradation** - system continues with available features
+- **Graceful Degradation** - system continues with available features
 - **Error logging** - detailed error information
 - **Recovery options** - multiple ways to restore functionality
 - **User guidance** - clear instructions for resolution
@@ -247,12 +247,12 @@ Automatically added during installation:
 #### **Files not being translated**
 1. Check if files are in `.cursorignore`
 2. Verify file extensions (.md, .mdc)
-3. Run manual protection: `node .cursor/rules/cursor-protector.cjs protect`
+3. Run manual protection: `node .cursor/rules/cursor-protector..js protect`
 
 #### **Git hooks not working**
-1. Check hook installation: `node .cursor/rules/cursor-git-hook.cjs install`
+1. Check hook installation: `node .cursor/rules/cursor-git-hook..js install`
 2. Verify hook permissions (should be executable)
-3. Check for conflicts with other hooks
+3. Check for confli.ts with other hooks
 
 #### **Translation quality issues**
 1. Check backup files for original content
@@ -262,10 +262,10 @@ Automatically added during installation:
 ### **Debug Commands**
 ```bash
 # Check protection status
-node .cursor/rules/protect-cursor.cjs check
+node .cursor/rules/protect-cursor..js check
 
 # Test translation on specific file
-node .cursor/rules/cursor-protector.cjs protect
+node .cursor/rules/cursor-protector..js protect
 
 # Verify Git hooks
 ls -la .git/hooks/
@@ -274,7 +274,7 @@ ls -la .git/hooks/
 ls -la .cursor/backup/
 ```
 
-## Future Enhancements
+## Future Enhanceme.ts
 
 ### **Planned Features**
 - **API integration** with translation services
@@ -284,7 +284,7 @@ ls -la .cursor/backup/
 - **Real-time translation** during editing
 - **Translation quality scoring**
 
-### **Integration Ideas**
+### **Integration IDEas**
 - **IDE plugins** for real-time protection
 - **CI/CD integration** for automated protection
 - **Webhook system** for remote protection
@@ -292,9 +292,9 @@ ls -la .cursor/backup/
 
 ## Conclusion
 
-The Cursor Protection System ensures that all `.cursor` files are automatically maintained in English for maximum AI/LLM compatibility. This creates a truly international and AI-compatible configuration system that supports global collaboration and development.
+The Cursor Protection System ensures that all `.cursor` files are automatically maintained in English for maximum AI/LLM compatibility. This creates a truly international and AI-compatible configuration system that suppo.ts global collaboration and development.
 
-**Key Benefits:**
+**Key Benef.ts:**
 - ✅ **Universal AI compatibility**
 - ✅ **Automatic protection process**
 - ✅ **Safe backup system**
@@ -302,7 +302,7 @@ The Cursor Protection System ensures that all `.cursor` files are automatically 
 - ✅ **Comprehensive coverage**
 - ✅ **Error handling and recovery**
 
-**Usage:** Simply run `node .cursor/rules/protect-cursor.cjs protect` to activate complete protection, and the system will automatically maintain all `.cursor` files in English for maximum AI/LLM compatibility.
+**Usage:** Simply run `node .cursor/rules/protect-cursor..js protect` to activate complete protection, and the system will automatically maintain all `.cursor` files in English for maximum AI/LLM compatibility.
 description:
 globs:
 alwaysApply: false

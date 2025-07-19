@@ -1,8 +1,8 @@
-# Memory Bank - react-typescript Project
+# Memory Bank - React-TypeScript Project
 
 ## Project Information
 
-**Type:** react-typescript
+**Type:** React-TypeScript
 **Created:** 2025-07-19
 **Last Updated:** 2025-07-19
 
@@ -11,7 +11,7 @@
 ### 📋 [Core](./core/) - Core context files
 - activeContext.md - Current project context
 - progress.md - Development progress
-- projectbrief.md - Краткое описание проекта
+- projectbrief.md - Краткое Description проекта
 - session-log.md - Лог сессий разработки
 
 ### ❌ [Errors](./errors/) - Errors and solutions
@@ -22,21 +22,21 @@
 
 ### 🏗️ [Architecture](./architecture/) - Architectural decisions
 - decisions.md - Принятые решения
-- patterns.md - Системные паттерны
-- state-management.md - Управление состоянием
+- patterns.md - Системные Patterns
+- State-management.md - Управление Stateм
 - component-structure.md - Структура компонентов
 - routing.md - Маршрутизация
 
 ### 🔧 [Development](./development/) - Development process
-- testing-results.md - Результаты тестирования
-- debugging-guide.md - Руководство по отладке
-- devtools-guide.md - Работа с DevTools
+- testing-resu.ts.md - Результаты тестирования
+- debugging-guIDE.md - Руководство по отладке
+- devtools-guIDE.md - Работа с DevTools
 - version-management.md - Управление версиями
 
 ### 🎨 [UI](./ui/) - UI/UX context
 - component-library.md - Библиотека компонентов
-- styling-patterns.md - Паттерны стилизации
-- responsive-design.md - Адаптивный дизайн
+- styling-patterns.md - Patterns стилизации
+- responsive-design.md - Адаптивный Design
 
 ### 📅 [Planning](./planning/) - Planning
 - feature-roadmap.md - Roadmap фич
@@ -44,7 +44,7 @@
 
 ### 🌍 [Context](./context/) - Contextual information
 - tech-stack.md - Технический стек
-- dependencies.md - Зависимости проекта
+- dependencies.md - Dependencies проекта
 - environment.md - Окружение разработки
 
 ## Quick Navigation
@@ -56,10 +56,10 @@
 
 ## AI Commands
 
-- `создай запись в memory-bank` - Создать новую запись
-- `обнови контекст` - Обновить активный контекст
+- `создай запись в memory-bank` - Create новую запись
+- `обнови контекст` - Update Active контекст
 - `восстанови контекст` - Восстановить полный контекст
 - `аудит memory-bank` - Провести аудит
 
 ---
-*Auto-generated for react-typescript project on 2025-07-19*
+*Auto-generated for React-TypeScript project on 2025-07-19*

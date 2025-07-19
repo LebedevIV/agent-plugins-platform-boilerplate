@@ -1,18 +1,18 @@
 ---
-description: Development best practices and guidelines
+description: Development best practices and guIDElines
 globs: ["**/*"]
 alwaysApply: true
 aiPriority: high
 aiCategory: development-practices
 ---
 
-# Development Guidelines
+# Development GuIDElines
 
 ## Overview
 
-This file contains dev practice guidelines and best practices.
+This file contains dev practice guIDElines and best practices.
 
-## Guidelines
+## GuIDElines
 
 <!-- Content will be added here automatically -->
 

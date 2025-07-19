@@ -8,7 +8,7 @@ aiCategory: process-management
 # Workflow Branching Rules
 
 - В ветке main запрещено вести работу. main используется только для релизов и production.
-- В ветке develop запрещено вести работу напрямую. Все изменения — только через feature-Branches с именованием feature/{смысловое_название}, которые создаются автоматически по смыслу задачи.
+- В ветке develop запрещено вести работу напрямую. Все изменения — только через feature-Branches с именованием feature/{Seeсловое_название}, которые создаются автоматически по Seeслу задачи.
 - Merge feature-веток только через pull request в develop.
 - Прямой merge или commit в main и develop запрещён.
 - В main разрешён merge только из develop после релизного ревью.

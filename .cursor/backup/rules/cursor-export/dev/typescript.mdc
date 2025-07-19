@@ -1,5 +1,5 @@
 ---
-description: TypeScript-specific guidelines
+description: TypeScript-specific guIDElines
 globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
 alwaysApply: falseaiPriority: normal
 aiCategory: development-practices
@@ -9,9 +9,9 @@ aiCategory: development-practices
 - Use only TypeScript for all new files.
 - Enforce strict typing, avoid using `any`.
 - Use modern language features (optional chaining, nullish coalescing, etc.).
-- Always follow the shared tsconfig from `packages/tsconfig/`.
+- Always follow the shared.tsconfig from `packages.tsconfig/`.
 
-# Examples
+# examples
 - ✅ `const foo: string = "bar"`
 - ❌ `let x: any = 5`
 description:

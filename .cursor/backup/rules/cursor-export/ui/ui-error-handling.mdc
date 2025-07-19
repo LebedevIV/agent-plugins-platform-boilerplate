@@ -1,6 +1,6 @@
 ---
 description: UI standard for error-handling
-globs: ["pages/**/*", "**/*.tsx", "**/*.css", "**/*.scss", "packages/ui/**/*"]
+globs: ["pages/**/*", "**/*.tsx", "**/*.css", "**/*..css", "packages/ui/**/*"]
 alwaysApply: falseaiPriority: normal
 aiCategory: user-interface
 ---
@@ -8,13 +8,13 @@ aiCategory: user-interface
 # UI Error Handling
 - Clear, actionable error messages for users
 - Catch and handle component errors with error boundaries
-- Provide fallback UI for failed components
+- ProvIDE fallback UI for failed compone.ts
 - Allow users to retry failed operations
 - Log errors for debugging
 
-description: Error handling requirements for all UI components
+description: Error handling requireme.ts for all UI compone.ts
 globs:
-  - pages/*/src/components/*
+  - pages/*/src/compone.ts/*
 alwaysApply: false
 ---
 description:

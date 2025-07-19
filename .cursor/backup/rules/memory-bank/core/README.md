@@ -1,4 +1,4 @@
-# Core Files - react-typescript
+# Core Files - React-TypeScript
 
 ## Files in this category:
 
@@ -15,9 +15,9 @@
 
 ## AI Commands:
 
-- `добавь в core` - Добавить запись в эту категорию
-- `обнови core` - Обновить файлы в категории
+- `добавь в core` - Add запись в эту категорию
+- `обнови core` - Update файлы в категории
 - `покажи core` - Показать содержимое категории
 
 ---
-*Auto-generated for react-typescript project*
+*Auto-generated for React-TypeScript project*

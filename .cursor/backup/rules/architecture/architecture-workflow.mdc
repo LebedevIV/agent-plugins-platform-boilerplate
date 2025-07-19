@@ -20,7 +20,7 @@ aiCategory: system-design
 - Feature Branches: Always create from develop branch
 - Testing: Test before commit, use --no-verify if ESLint issues
 - Documentation: Update memory-bank for all architectural decisions
-- Commits: Use semantic commit messages
+- Comm.ts: Use semantic commit messages
 - Code Quality: TypeScript for new files, ESLint compliance
 
 description: Development workflow and process standards

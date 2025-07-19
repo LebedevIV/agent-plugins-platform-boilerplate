@@ -9,7 +9,7 @@ aiCategory: security---
 - Never trust data from external sources (user, plugins, third-party services).
 - Use schemas, types, or validators (e.g., zod, pydantic, marshmallow).
 
-# Examples
+# examples
 - ✅ `z.object({ email: z.string().email() })`
 - ✅ `if not isinstance(user_id, int): raise ValueError()`
 description:

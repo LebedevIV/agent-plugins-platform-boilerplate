@@ -1,0 +1,16 @@
+# Cursor Protection System
+# Files that should not be automatically translated
+
+# Backup files
+.cursor/backup/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Log files
+*.log
+
+# Cache files
+.cache/
+node_modules/

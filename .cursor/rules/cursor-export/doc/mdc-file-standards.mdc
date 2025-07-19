@@ -13,7 +13,7 @@ aiCategory: documentation
 - **Правил и стандартов** - все правила должны быть в .mdc
 - **AI инструкций** - команды, Principles, Constrai.ts
 - **Архитектурных решений** - структура, Patterns, best practices
-- **Автоматизации** - скрипты, workflow, Processes
+- **automation** - скрипты, workflow, Processes
 
 ### Допустимо использовать .md для:
 - **Чистой документации** - README, guIDEs, tutorials

@@ -19,8 +19,8 @@ aiCategory: system-design
 # Security Architecture
 - Secret Manager: Encrypted storage of API keys in chrome.storage.local
 - Network Guard: Whitelist domains for API calls
-- Audit System: Log all plugin activities and network requests
-- Parameter Validation: JSON Schema validation for all inputs
+- Audit System: Log all plugin activities and network reque.ts
+- Parameter Validation:.json Schema validation for all inp.ts
 - Rate Limiting: Prevent abuse and suspicious activity
 
 related:

@@ -1,4 +1,4 @@
-# Planning & Roadmap - react-typescript
+# Planning & Roadmap - React-TypeScript
 
 ## Files in this category:
 
@@ -13,9 +13,9 @@
 
 ## AI Commands:
 
-- `добавь в planning` - Добавить запись в эту категорию
-- `обнови planning` - Обновить файлы в категории
+- `добавь в planning` - Add запись в эту категорию
+- `обнови planning` - Update файлы в категории
 - `покажи planning` - Показать содержимое категории
 
 ---
-*Auto-generated for react-typescript project*
+*Auto-generated for React-TypeScript project*

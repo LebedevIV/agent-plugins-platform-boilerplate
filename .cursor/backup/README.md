@@ -6,6 +6,6 @@
 
 ## Environment Parameters
 
-См. [rules/environment.yaml](rules/environment.yaml) — параметры операционной и тестовой среды, доступные AI-ассистенту для автоматизации и диагностики.
+См. [rules/environment.yaml](rules/environment.yaml) — Parameters операционной и тестовой среды, доступные AI-ассистенту для автоматизации и диагностики.
 
 --- 

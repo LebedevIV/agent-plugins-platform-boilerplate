@@ -1,4 +1,4 @@
-# UI/UX Context - react-typescript
+# UI/UX Context - React-TypeScript
 
 ## Files in this category:
 
@@ -10,13 +10,13 @@
 
 ## Description:
 
-UI/UX решения и улучшения, пользовательский опыт.
+UI/UX решения и улучшения, User Experience.
 
 ## AI Commands:
 
-- `добавь в ui` - Добавить запись в эту категорию
-- `обнови ui` - Обновить файлы в категории
+- `добавь в ui` - Add запись в эту категорию
+- `обнови ui` - Update файлы в категории
 - `покажи ui` - Показать содержимое категории
 
 ---
-*Auto-generated for react-typescript project*
+*Auto-generated for React-TypeScript project*

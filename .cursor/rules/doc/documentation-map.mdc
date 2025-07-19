@@ -69,7 +69,7 @@ Type практики → Файл назначения
 
 ### **Автоматизация:**
 ```
-Type автоматизации → Файл назначения
+Type automation → Файл назначения
 ├── CI/CD → .cursor/rules/workflow/ci-automation.mdc
 ├── build → .cursor/rules/dev/TypeScript-build-troubleshooting.mdc
 ├── Testing → .cursor/rules/dev/testing-troubleshooting.mdc

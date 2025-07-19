@@ -148,7 +148,7 @@ export { default as ComponentName } from './component-file.js';
 export { ComponentName } from './component-file.js';
 ```
 
-## Команды для диагностики
+## Команды для diagnostics
 
 ```bash
 # Verification зависимостей

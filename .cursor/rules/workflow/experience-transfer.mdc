@@ -19,9 +19,9 @@ aiCategory: process-management
 - Генерирует или обновляет документацию
 - Проводит аудит проекта и сообщает о несоответствиях или необходимых доработках
 
-### Команда для автоматизации:
+### Команда для automation:
 ```
-Внедри все best practices и автоматизации из .cursor/rules в этот проект, установи необходимые Dependencies, настрой CI/CD, husky, danger.js, semantic-release, commitlint, renovate и т.д. Проведи аудит и сообщи, если что-то требует ручной доработки.
+Внедри все best practices и automation из .cursor/rules в этот проект, установи необходимые Dependencies, настрой CI/CD, husky, danger.js, semantic-release, commitlint, renovate и т.д. Проведи аудит и сообщи, если что-то требует ручной доработки.
 ```
 
 ## Быстрый старт для нового проекта
@@ -58,7 +58,7 @@ node cursor-manager..js audit
 ## Команды для AI:
 - `экспорт cursor` - Export правила для переноса
 - `импорт cursor` - Import правила в текущий проект
-- `внедри best practices` - Внедрить все автоматизации и Standards
+- `внедри best practices` - Внедрить все automation и Standards
 - `аудит проекта` - Провести аудит на соответствие best practices
 
 ## Результат:

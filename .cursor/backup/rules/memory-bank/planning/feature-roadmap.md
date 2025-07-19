@@ -1,4 +1,4 @@
-# Feature Roadmap - react-typescript
+# Feature Roadmap - React-TypeScript
 
 ## Overview
 
@@ -9,4 +9,4 @@ This file contains feature planning and roadmap.
 <!-- Entries will be added here automatically -->
 
 ---
-*Generated on 2025-07-19 for react-typescript project*
+*Generated on 2025-07-19 for React-TypeScript project*

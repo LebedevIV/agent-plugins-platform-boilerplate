@@ -1,4 +1,4 @@
-# Tech Stack - react-typescript
+# Tech Stack - React-TypeScript
 
 ## Overview
 
@@ -9,4 +9,4 @@ This file contains technology stack and tools.
 <!-- Entries will be added here automatically -->
 
 ---
-*Generated on 2025-07-19 for react-typescript project*
+*Generated on 2025-07-19 for React-TypeScript project*

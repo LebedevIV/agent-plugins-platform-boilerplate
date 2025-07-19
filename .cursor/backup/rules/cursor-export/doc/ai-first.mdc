@@ -10,7 +10,7 @@ aiCategory: documentation
 <!-- AI: Category: documentation -->
 
 ---
-description: AI-First Documentation Standards - analytical comments and AI-oriented documentation
+description: AI-First Documentation Standards - analytical comme.ts and AI-oriented documentation
 globs: ["**/*.md", "**/*.mdc", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
 alwaysApply: trueaiPriority: medium
 aiCategory: documentation
@@ -18,18 +18,18 @@ aiCategory: documentation
 
 # AI-First Documentation Standards
 
-## Основные принципы
-- **Analytical comments**: Add comments explaining logic and architectural decisions for AI understanding
+## Основные Principles
+- **Analytical comme.ts**: Add comme.ts explaining logic and architectural decisions for AI understanding
 - **Context explanations**: Explain "why", not just "what" the code does
-- **Architectural comments**: Document component relationships and data flows
+- **Architectural comme.ts**: Document component relationships and data flows
 - **Business logic**: Explain complex business logic and decisions made
-- **TODO comments**: Leave TODO with explanation of planned improvements
+- **TODO comme.ts**: Leave TODO with explanation of planned improveme.ts
 
-## Примеры правильного использования
+## examples правильного использования
 
-### ✅ Аналитические комментарии:
-```typescript
-// AI: This function is required for plugin isolation - prevents direct DOM access
+### ✅ Аналитические Comme.ts:
+```TypeScript
+// AI: This function is required for plugin isolation - preve.ts direct DOM access
 function createSandboxedEnvironment() {
   // Implementation...
 }
@@ -44,24 +44,24 @@ export function PluginBridge() {
 ```
 
 ### ✅ Объяснение контекста:
-```typescript
+```TypeScript
 // AI: Using setTimeout here because Chrome extension APIs are async
-// and we need to ensure DOM is ready before accessing elements
+// and we need to ensure DOM is ready before accessing eleme.ts
 setTimeout(() => {
   initializePlugin();
 }, 100);
 ```
 
 ### ✅ TODO с объяснением:
-```typescript
+```TypeScript
 // TODO: AI - Replace with Web Workers for better performance
 // Current implementation blocks main thread during heavy computations
-function processLargeDataset(data) {
+function proceSSLargedataset(data) {
   // Implementation...
 }
 ```
 
-## Рекомендации
+## Recommendations
 1. **Всегда объясняйте "почему"** - не только что делает код
 2. **Используйте префикс "AI:"** для комментариев, предназначенных для AI
 3. **Документируйте архитектурные решения** и их обоснование

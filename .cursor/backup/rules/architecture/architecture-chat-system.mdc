@@ -17,11 +17,11 @@ aiCategory: system-design
 ---
 
 # Chat System Architecture
-- Per-page, per-plugin isolation: Chats separated by page URL and plugin
-- LRU Cache: In-memory cache for performance (50 chats)
-- IndexedDB: Persistent storage for all chats
+- Per-page, per-plugin isolation: Ch.ts separated by page URL and plugin
+- LRU cache: In-memory cache for performance (50 ch.ts)
+- IndexedDB: Persistent storage for all ch.ts
 - Real-time sync: Cross-tab communication for chat updates
-- Cleanup: Automatic removal of chats older than 90 days
+- Cleanup: Automatic removal of ch.ts older than 90 days
 
 description: Chat system architecture and data flow
 globs:

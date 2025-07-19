@@ -1,5 +1,5 @@
 ---
-description: File organization patterns and relationships - universal project structure guidelines
+description: File organization patterns and relationships - universal project structure guIDElines
 globs: ["**/*"]
 alwaysApply: true
 aiPriority: high
@@ -8,133 +8,133 @@ aiCategory: system-design
 
 # Карта взаимосвязей файлов
 
-## Структура файлов и их назначение
+## File Structure и их Purpose
 
 ### 1. Background Layer (Слой фоновых сервисов)
 
 #### `chrome-extension/src/background/plugin-chat-cache.ts`
-**Назначение:** Центральный сервис управления чатами
-**Зависимости:**
-- `plugin-chat-api.ts` - для работы с IndexedDB
+**Purpose:** Центральный сервис управления чатами
+**Dependencies:**
+- `plugin-chat-API.ts` - для работы с IndexedDB
 - Chrome Extensions API (chrome.runtime, chrome.tabs)
 
 **Экспортирует:**
-- `PluginChatCache` class
-- `ChatData`, `ChatMessage` interfaces
+- `PluginChatcache` class
+- `Chatdata`, `ChatMessage` interfaces
 
 **Используется:**
 - `background/index.ts` - создание экземпляра и регистрация обработчиков
 
-**Ключевые методы:**
-```typescript
-class PluginChatCache {
-  getChat(pluginId: string, pageKey: string): Promise<ChatData | null>
+**Ключевые Methodы:**
+```TypeScript
+class PluginChatcache {
+  getChat(pluginId: string, pageKey: string): Promise<Chatdata | null>
   saveMessage(pluginId: string, pageKey: string, message: ChatMessage): Promise<void>
   deleteChat(pluginId: string, pageKey: string): Promise<void>
-  getAllChats(): Promise<ChatData[]>
-  cleanupOldChats(): Promise<void>
+  getAllCh.ts(): Promise<Chatdata[]>
+  cleanupOldCh.ts(): Promise<void>
 }
 ```
 
-#### `chrome-extension/src/background/plugin-chat-api.ts`
-**Назначение:** Абстракция над IndexedDB
-**Зависимости:**
+#### `chrome-extension/src/background/plugin-chat-API.ts`
+**Purpose:** Abstraction над IndexedDB
+**Dependencies:**
 - IndexedDB API
 - Chrome Extensions API
 
 **Экспортирует:**
-- `ChatStorageAPI` class
-- Database utility functions
+- `Ch.tstorageAPI` class
+- database utility functions
 
 **Используется:**
-- `plugin-chat-cache.ts` - для всех операций с хранилищем
+- `plugin-chat-cache.ts` - для всех операций с Storageм
 
-**Ключевые методы:**
-```typescript
-class ChatStorageAPI {
-  async getChat(pluginId: string, pageKey: string): Promise<ChatData | null>
-  async saveChat(chatData: ChatData): Promise<void>
+**Ключевые Methodы:**
+```TypeScript
+class Ch.tstorageAPI {
+  async getChat(pluginId: string, pageKey: string): Promise<Chatdata | null>
+  async saveChat(chatdata: Chatdata): Promise<void>
   async deleteChat(pluginId: string, pageKey: string): Promise<void>
-  async getAllChats(): Promise<ChatData[]>
-  async cleanupOldChats(): Promise<void>
+  async getAllCh.ts(): Promise<Chatdata[]>
+  async cleanupOldCh.ts(): Promise<void>
 }
 ```
 
 #### `chrome-extension/src/background/index.ts`
-**Назначение:** Точка входа background script
-**Зависимости:**
-- `plugin-chat-cache.ts` - создание экземпляра кэша
+**Purpose:** Точка входа background script
+**Dependencies:**
+- `plugin-chat-cache.ts` - создание экземпляра cacheа
 - Chrome Extensions API
 
 **Используется:**
 - Chrome Extensions runtime (автоматически)
 
 **Основные функции:**
-- Инициализация `PluginChatCache`
+- Инициализация `PluginChatcache`
 - Регистрация обработчиков сообщений
 - Управление жизненным циклом
 
 **Обработчики сообщений:**
-```typescript
+```TypeScript
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   switch (request.type) {
     case 'GET_PLUGIN_CHAT':
     case 'SAVE_PLUGIN_CHAT_MESSAGE':
     case 'DELETE_PLUGIN_CHAT':
-    case 'GET_ALL_PLUGIN_CHATS':
+    case 'GET_ALL_PLUGIN_CH.ts':
   }
 });
 ```
 
-### 2. UI Layer (Слой пользовательского интерфейса)
+### 2. UI Layer (Слой пользовательского Interfaceа)
 
-#### `pages/side-panel/src/components/PluginControlPanel.tsx`
-**Назначение:** Основной компонент управления плагином
-**Зависимости:**
+#### `pages/sIDE-panel/src/compone.ts/PluginControlPanel.tsx`
+**Purpose:** Основной компонент управления плагином
+**Dependencies:**
 - React hooks (useState, useEffect, useRef)
 - Chrome Extensions API (chrome.runtime)
 - `PluginDetails.tsx` - для отображения деталей плагина
 
 **Используется:**
-- `pages/side-panel/src/components/SidePanel.tsx` - основной контейнер
+- `pages/sIDE-panel/src/compone.ts/SIDEPanel.tsx` - основной контейнер
 
 **Ключевые состояния:**
-```typescript
+```TypeScript
 const [messages, setMessages] = useState<ChatMessage[]>([]);
 const [loading, setLoading] = useState(false);
-const [syncStatus, setSyncStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+const [syncStatus, s.tsyncStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 ```
 
 **Основные функции:**
 - Загрузка чата при монтировании
 - Сохранение сообщений
-- Синхронизация с другими вкладками
+- Synchronization с другими вкладками
 - Экспорт и очистка чатов
 
-#### `pages/side-panel/src/components/PluginDetails.tsx`
-**Назначение:** Отображение деталей плагина
-**Зависимости:**
+#### `pages/sIDE-panel/src/compone.ts/PluginDetails.tsx`
+**Purpose:** Отображение деталей плагина
+**Dependencies:**
 - React
 - Plugin interface
 
 **Используется:**
 - `PluginControlPanel.tsx` - как дочерний компонент
 
-#### `pages/side-panel/src/components/SidePanel.tsx`
-**Назначение:** Основной контейнер side panel
-**Зависимости:**
+#### `pages/sIDE-panel/src/compone.ts/SIDEPanel.tsx`
+**Purpose:** Основной контейнер sIDE panel
+**Dependencies:**
 - `PluginControlPanel.tsx`
 - `PluginCard.tsx`
 - React
 
 **Используется:**
-- Chrome Extensions side panel API
+- Chrome Extensions sIDE panel API
 
 ### 3. DevTools Layer (Слой инструментов разработчика)
 
-#### `pages/devtools-panel/src/components/PluginChatsTab.tsx`
-**Назначение:** Административный интерфейс для управления чатами
-**Зависимости:**
+#### `pages/devtools-panel/src/compone.ts/PluginCh.tsTab.tsx`
+**Purpose:** Административный Interface для управления чатами
+**Dependencies:**
 - React hooks
 - Chrome Extensions API
 - `file-saver` library
@@ -145,13 +145,13 @@ const [syncStatus, setSyncStatus] = useState<'idle' | 'saving' | 'saved' | 'erro
 **Основные функции:**
 - Отображение всех чатов
 - Удаление чатов
-- Экспорт в JSON
+- Экспорт в.json
 - Фильтрация и поиск
 
 #### `pages/devtools-panel/src/index.tsx`
-**Назначение:** Точка входа DevTools panel
-**Зависимости:**
-- `PluginChatsTab.tsx`
+**Purpose:** Точка входа DevTools panel
+**Dependencies:**
+- `PluginCh.tsTab.tsx`
 - React
 
 **Используется:**
@@ -160,12 +160,12 @@ const [syncStatus, setSyncStatus] = useState<'idle' | 'saving' | 'saved' | 'erro
 ### 4. Shared Layer (Общий слой)
 
 #### `chrome-extension/src/background/types.ts` (предлагаемый)
-**Назначение:** Общие типы для всей системы
-**Зависимости:**
+**Purpose:** Общие Typeы для всей системы
+**Dependencies:**
 - TypeScript
 
 **Экспортирует:**
-```typescript
+```TypeScript
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -173,7 +173,7 @@ export interface ChatMessage {
   timestamp: number;
 }
 
-export interface ChatData {
+export interface Chatdata {
   pluginId: string;
   pageKey: string;
   messages: ChatMessage[];
@@ -185,7 +185,7 @@ export type ChatRequest =
   | { type: 'GET_PLUGIN_CHAT'; pluginId: string; pageKey: string }
   | { type: 'SAVE_PLUGIN_CHAT_MESSAGE'; pluginId: string; pageKey: string; message: ChatMessage }
   | { type: 'DELETE_PLUGIN_CHAT'; pluginId: string; pageKey: string }
-  | { type: 'GET_ALL_PLUGIN_CHATS' };
+  | { type: 'GET_ALL_PLUGIN_CH.ts' };
 
 export type ChatEvent = 
   | { type: 'PLUGIN_CHAT_UPDATED'; pluginId: string; pageKey: string; messages?: ChatMessage[] };
@@ -194,17 +194,17 @@ export type ChatEvent =
 **Используется:**
 - Все компоненты системы чатов
 
-## Потоки данных между файлами
+## Threads данных между файлами
 
 ### 1. Загрузка чата
 ```
 PluginControlPanel.tsx
     ↓ (chrome.runtime.sendMessage)
 background/index.ts
-    ↓ (chatCache.getChat)
+    ↓ (chatcache.getChat)
 plugin-chat-cache.ts
     ↓ (storageAPI.getChat)
-plugin-chat-api.ts
+plugin-chat-API.ts
     ↓ (IndexedDB)
 Browser Storage
 ```
@@ -214,45 +214,45 @@ Browser Storage
 PluginControlPanel.tsx
     ↓ (chrome.runtime.sendMessage)
 background/index.ts
-    ↓ (chatCache.saveMessage)
+    ↓ (chatcache.saveMessage)
 plugin-chat-cache.ts
     ↓ (storageAPI.saveChat + event broadcast)
-plugin-chat-api.ts + chrome.tabs.query
+plugin-chat-API.ts + chrome.tabs.query
     ↓ (IndexedDB + other tabs)
-Browser Storage + Other UI Components
+Browser Storage + Other UI Compone.ts
 ```
 
 ### 3. Административные операции
 ```
-PluginChatsTab.tsx
+PluginCh.tsTab.tsx
     ↓ (chrome.runtime.sendMessage)
 background/index.ts
-    ↓ (chatCache.getAllChats/deleteChat)
+    ↓ (chatcache.getAllCh.ts/deleteChat)
 plugin-chat-cache.ts
     ↓ (storageAPI)
-plugin-chat-api.ts
+plugin-chat-API.ts
     ↓ (IndexedDB)
 Browser Storage
 ```
 
-## Зависимости и импорты
+## Dependencies и импорты
 
 ### Background Layer
-```typescript
+```TypeScript
 // background/index.ts
-import { PluginChatCache } from './plugin-chat-cache';
+import { PluginChatcache } from './plugin-chat-cache';
 import type { ChatRequest, ChatEvent } from './types';
 
 // plugin-chat-cache.ts
-import { ChatStorageAPI } from './plugin-chat-api';
-import type { ChatData, ChatMessage } from './types';
+import { Ch.tstorageAPI } from './plugin-chat-API';
+import type { Chatdata, ChatMessage } from './types';
 
-// plugin-chat-api.ts
+// plugin-chat-API.ts
 // Нет внешних зависимостей, только IndexedDB API
 ```
 
 ### UI Layer
-```typescript
+```TypeScript
 // PluginControlPanel.tsx
 import { PluginDetails } from './PluginDetails';
 import type { ChatMessage } from '../../../background/types';
@@ -260,70 +260,70 @@ import type { ChatMessage } from '../../../background/types';
 // PluginDetails.tsx
 import type { Plugin } from './PluginCard';
 
-// SidePanel.tsx
+// SIDEPanel.tsx
 import { PluginControlPanel } from './PluginControlPanel';
 import { PluginCard } from './PluginCard';
 ```
 
 ### DevTools Layer
-```typescript
-// PluginChatsTab.tsx
+```TypeScript
+// PluginCh.tsTab.tsx
 import { saveAs } from 'file-saver';
-import type { ChatData } from '../../../background/types';
+import type { Chatdata } from '../../../background/types';
 
 // devtools-panel/index.tsx
-import { PluginChatsTab } from './components/PluginChatsTab';
+import { PluginCh.tsTab } from './compone.ts/PluginCh.tsTab';
 ```
 
-## Конфигурационные файлы
+## configuration Files
 
 ### `chrome-extension/manifest.json`
-**Назначение:** Конфигурация расширения
+**Purpose:** configuration Extensions
 **Содержит:**
 - Background script registration
-- Side panel configuration
+- SIDE panel configuration
 - DevTools panel configuration
 - Permissions
 
 ### `package.json` (в каждой папке pages)
-**Назначение:** Зависимости и скрипты сборки
+**Purpose:** Dependencies и скрипты сборки
 **Содержит:**
 - React dependencies
-- Build tools
+- build tools
 - TypeScript configuration
 
 ## Стили и ресурсы
 
-### CSS файлы
+###.css файлы
 - `PluginControlPanel.css` - стили для основного компонента
-- `SidePanel.css` - стили для side panel
+- `SIDEPanel.css` - стили для sIDE panel
 - `PluginCard.css` - стили для карточек плагинов
 
 ### Иконки и изображения
-- `icon.svg` - иконки плагинов
-- Логотипы и брендинг
+- .icon.svg` - иконки плагинов
+- ЛогоTypeы и брендинг
 
 ## Тестовые файлы
 
-### Unit тесты
-- `__tests__/plugin-chat-cache.test.ts`
-- `__tests__/plugin-chat-api.test.ts`
-- `__tests__/PluginControlPanel.test.tsx`
+### Unit Te.ts
+- `__te.ts__/plugin-chat-cache.test.ts`
+- `__te.ts__/plugin-chat-API.test.ts`
+- `__te.ts__/PluginControlPanel.test.tsx`
 
-### Integration тесты
-- `__tests__/chat-system.integration.test.ts`
+### Integration Te.ts
+- `__te.ts__/chat-system.integration.test.ts`
 
-### E2E тесты
-- `tests/e2e/chat-functionality.test.ts`
+### E2E Te.ts
+- `te.ts/e2e/chat-functionality.test.ts`
 
-## Документация
+## Documentation
 
-### Техническая документация
-- `README.md` - общее описание
-- `API.md` - документация API
-- `ARCHITECTURE.md` - архитектурное описание
+### Техническая Documentation
+- `README.md` - общее Description
+- `API.md` - Documentation API
+- `ARCHITECTURE.md` - архитектурное Description
 
-### Пользовательская документация
+### Пользовательская Documentation
 - `USER_GUIDE.md` - руководство пользователя
 - `DEVELOPER_GUIDE.md` - руководство разработчика
 
@@ -332,8 +332,8 @@ import { PluginChatsTab } from './components/PluginChatsTab';
 Система чатов плагинов имеет четкую модульную архитектуру с разделением ответственности:
 
 1. **Background Layer** - управление данными и бизнес-логика
-2. **UI Layer** - пользовательский интерфейс
+2. **UI Layer** - пользовательский Interface
 3. **DevTools Layer** - административные функции
-4. **Shared Layer** - общие типы и утилиты
+4. **Shared Layer** - общие Typeы и утилиты
 
-Все компоненты связаны через messaging API, что обеспечивает loose coupling и легкую тестируемость. Каждый файл имеет четко определенную ответственность и минимальные зависимости. 
+Все компоненты связаны через messaging API, что обеспечивает loose coupling и легкую тестируемость. Каждый файл имеет четко определенную ответственность и минимальные Dependencies. 

@@ -1,9 +1,9 @@
-# Active Context - react-typescript
+# Active Context - React-TypeScript
 
 ## Current Status
 
 **Last Updated:** 2025-07-19
-**Project Type:** react-typescript
+**Project Type:** React-TypeScript
 **Phase:** Development
 
 ## Active Tasks
@@ -33,4 +33,4 @@ Describe current development focus and priorities.
 - Blocker 2: Description
 
 ---
-*Auto-generated for react-typescript project*
+*Auto-generated for React-TypeScript project*
