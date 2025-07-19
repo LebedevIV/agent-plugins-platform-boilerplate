@@ -6,7 +6,7 @@ import type { ComponentPropsWithoutRef } from 'react';
 type ToggleButtonProps = ComponentPropsWithoutRef<'button'>;
 
 export const ToggleButton = ({ className, children, ...props }: ToggleButtonProps) => {
-  const { isLight } = useStorage(exampleThemeStorage);
+  const { isLight } = useStorage();
 
   return (
     <button

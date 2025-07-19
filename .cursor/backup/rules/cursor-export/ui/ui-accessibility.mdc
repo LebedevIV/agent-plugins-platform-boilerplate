@@ -1,0 +1,27 @@
+---
+description: UI standard for accessibility
+globs: ["pages/**/*", "**/*.tsx", "**/*.css", "**/*..css", "packages/ui/**/*"]
+alwaysApply: falseaiPriority: normal
+aiCategory: user-interface
+---
+
+# Accessibility (A11y) Standards
+- ProvIDE proper ARIA labels for interactive eleme.ts
+- Ensure all functionality is keyboard accessible
+- Proper focus handling and visible focus indicators
+- Use semantic.html and descriptive text for screen readers
+- Meet WCAG color contrast requireme.ts
+
+related:
+  - ui-forms.mdc
+  - ui-error-handling.mdc
+
+description: Accessibility requireme.ts for all UI compone.ts
+globs:
+  - pages/*/src/compone.ts/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

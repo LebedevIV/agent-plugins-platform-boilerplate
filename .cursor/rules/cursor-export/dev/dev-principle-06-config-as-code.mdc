@@ -1,0 +1,34 @@
+---
+description: Development principle code - dev principle 06 config as code
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: trueaiPriority: high
+aiCategory: development-practices
+---
+
+<!-- AI: This is a development principle that should be applied to all code -->
+<!-- AI: Priority: high -->
+<!-- AI: Category: development-practices -->
+
+---
+description: Development principle code - dev principle 06 config as code
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: trueaiPriority: high
+aiCategory: development-practices
+---
+
+# Development Principle 6: configuration as Code
+- Version-controlled configs: All configurations in version control
+- Environment-specific: Different configurations for different environme.ts
+- Validation: Automatic configuration validation
+- Documentation: Document all configuration parameters
+- Default safety: Safe default values
+
+description: configuration as code for all environme.ts
+globs:
+  - *
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

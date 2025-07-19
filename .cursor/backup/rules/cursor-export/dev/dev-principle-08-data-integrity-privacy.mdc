@@ -1,0 +1,35 @@
+---
+description: Development principle privacy - dev principle 08 data integrity privacy
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: trueaiPriority: high
+aiCategory: development-practices
+---
+
+<!-- AI: This is a development principle that should be applied to all code -->
+<!-- AI: Priority: high -->
+<!-- AI: Category: development-practices -->
+
+---
+description: Development principle privacy - dev principle 08 data integrity privacy
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: trueaiPriority: high
+aiCategory: development-practices
+---
+
+# Development Principle 8: data Integrity & Privacy
+- data validation: Validate all input data
+- Encryption at rest: Encrypt data at rest
+- Encryption in transit: Encrypt data in transit
+- data minimization: Collect only necessary data
+- User consent: Explicit user consent for data processing
+- Right to be forgotten: Ability to delete user data
+
+description: data integrity and privacy in all development
+globs:
+  - *
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

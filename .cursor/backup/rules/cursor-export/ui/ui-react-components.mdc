@@ -1,0 +1,23 @@
+---
+description: UI standard for React-compone.ts
+globs: ["pages/**/*", "**/*.tsx", "**/*.css", "**/*..css", "packages/ui/**/*"]
+alwaysApply: falseaiPriority: normal
+aiCategory: user-interface
+---
+
+# React Component Standards
+- Use TypeScript for all new compone.ts
+- Prefer functional compone.ts with hooks
+- Define clear interfaces for component props
+- ProvIDE sensible default values
+- Wrap compone.ts in error boundaries
+
+description: Standards for React component structure in UI
+globs:
+  - pages/*/src/compone.ts/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

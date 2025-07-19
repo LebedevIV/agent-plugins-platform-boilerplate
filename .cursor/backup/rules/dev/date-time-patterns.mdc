@@ -1,0 +1,170 @@
+---
+description: Date and time patterns for AI assista.ts - universal guIDElines for handling dates
+globs: ["**/*"]
+alwaysApply: true
+aiPriority: high
+aiCategory: development-practices
+---
+
+# Patterns работы с Dateми и временем
+
+## Проблема
+AI-ассистенты не могут самостоятельно получать актуальную дату и Time, что приводит к использованию устаревших дат в документации.
+
+## Решение: Usage системных команд
+
+### Получение текущей даты
+```bash
+# Текущая Date в формате YYYY-MM-DD
+date +"%Y-%m-%d"
+
+# Текущая Date и Time
+date +"%Y-%m-%d %H:%M:%S"
+
+# Текущая Date на русском языке
+date +"%d %B %Y"
+```
+
+### Получение времени
+```bash
+# Только Time
+date +"%H:%M:%S"
+
+# Time с часовым поясом
+date +"%H:%M:%S %Z"
+```
+
+## Patterns для AI-ассистентов
+
+### 1. При создании документации
+```bash
+# Всегда получать актуальную дату перед созданием документации
+current_date=$(date +"%Y-%m-%d")
+echo "Current date: $current_date"
+```
+
+### 2. При обновлении существующей документации
+```bash
+# Проверять, не устарели ли даты в документации
+# Если Date старая - обновлять с актуальной
+```
+
+### 3. При создании коммитов
+```bash
+# Использовать актуальную дату в сообщениях коммитов
+git commit -m "feat: new feature - $(date +"%Y-%m-%d")"
+```
+
+## Форматы дат для разных целей
+
+### Documentation (YYYY-MM-DD)
+- `2025-07-12` - стандартный формат для документации
+- Используется в memory-bank, README, технической документации
+
+### Comm.ts (YYYY-MM-DD)
+- `2025-07-12` - для сообщений коммитов
+- Краткий и понятный формат
+
+### Пользовательский Interface
+- `12 июля 2025` - для пользовательского Interfaceа
+- Локализованный формат
+
+### Logging
+- `2025-07-12 14:30:25` - полный формат с временем
+- Для системных логов и отладки
+
+## Проверочный список
+
+### ✅ Перед созданием документации
+- [ ] Получить актуальную дату командой `date +"%Y-%m-%d"`
+- [ ] Использовать полученную дату в документации
+- [ ] Check формат даты (YYYY-MM-DD)
+
+### ✅ При обновлении документации
+- [ ] Check даты в существующих файлах
+- [ ] Update устаревшие даты
+- [ ] Убедиться в консистентности форматов
+
+### ✅ При работе с пользователем
+- [ ] Уточнить дату, если есть сомнения
+- [ ] Использовать понятные пользователю форматы
+- [ ] Объяснить, почему используется системная Date
+
+## examples использования
+
+### Создание нового этапа в progress.md
+```bash
+current_date=$(date +"%Y-%m-%d")
+echo "### ✅ Этап X: Description (Завершен - $current_date)"
+```
+
+### Обновление Statusа в errors.md
+```bash
+current_date=$(date +"%Y-%m-%d")
+echo "### Status"
+echo "✅ **РЕШЕНО** - $current_date"
+```
+
+### Создание коммита с датой
+```bash
+current_date=$(date +"%Y-%m-%d")
+git commit -m "feat: new feature - $current_date"
+```
+
+## Частые ошибки
+
+### ❌ Неправильно
+- Usage устаревших дат из контекста
+- Разные форматы дат в одном документе
+- Отсутствие проверки актуальности дат
+
+### ✅ Правильно
+- Usage `date` команды для получения актуальной даты
+- Консистентный формат YYYY-MM-DD
+- Регулярная Verification и обновление дат
+
+## Integration с Cursor IDE
+
+### Project Rules
+Add в project rules:
+```
+- Always use system date Commands for current date/time
+- Format dates as YYYY-MM-DD in documentation
+- Validate dates before using in documentation
+```
+
+### Saved Memories
+Create memory:
+```
+Date/Time Pattern: Use 'date +"%Y-%m-%d"' Command to get current date
+Format: Always use YYYY-MM-DD format in documentation
+Validation: Check dates before using in documentation
+```
+
+## Автоматизация
+
+### Скрипт для проверки дат
+```bash
+#!/bin/bash
+# check-dates.sh
+current_date=$(date +"%Y-%m-%d")
+echo "Current date: $current_date"
+
+# Verification дат в документации
+grep -r "2024-" docs/ memory-bank/ 2>/dev/null | head -5
+echo "Found old dates above. ConsIDEr updating them."
+```
+
+### Git hook для проверки дат
+```bash
+#!/bin/bash
+# .git/hooks/pre-commit
+current_date=$(date +"%Y-%m-%d")
+echo "Current date: $current_date"
+
+## New Entry ([2025-07-19T01:32:19.979Z])
+
+Паттерн работы с Dateми: Использовать date +%Y-%m-%d для получения текущей даты в документации
+
+echo "Please ensure all dates in documentation are current."
+``` 

@@ -1,0 +1,12 @@
+---
+description: Critical environment constrai.ts - Node.js версия, popup vs sIDEpanel
+globs: ["**/*"]
+alwaysApply: trueaiPriority: critical
+aiCategory: general
+---
+
+# Critical environment constrai.ts
+
+- **popup не используется**, основной Interface — **sIDEpanel**. Все ошибки popup можно игнорировать, если они не влияют на работу sIDEpanel.
+
+- **Использовать только Node.js версии 22.17.1 и выше**. Понижать версию запрещено, все баги и инфраструктурные проблемы решать только в этом контексте. 

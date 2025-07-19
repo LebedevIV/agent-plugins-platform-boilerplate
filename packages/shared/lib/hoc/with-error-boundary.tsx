@@ -1,15 +1,22 @@
-import { ErrorBoundary } from 'react-error-boundary';
+import * as React from 'react';
 import type { ComponentType } from 'react';
-import type { FallbackProps } from 'react-error-boundary';
 
 export const withErrorBoundary = <T extends Record<string, unknown>>(
   Component: ComponentType<T>,
-  FallbackComponent: ComponentType<FallbackProps>,
+  FallbackComponent: ComponentType<{ error?: Error; resetError?: () => void }>,
 ) =>
   function WithErrorBoundary(props: T) {
-    return (
-      <ErrorBoundary FallbackComponent={FallbackComponent}>
-        <Component {...props} />
-      </ErrorBoundary>
-    );
+    const [error, setError] = React.useState<Error | null>(null);
+    const resetError = React.useCallback(() => setError(null), []);
+
+    if (error) {
+      return <FallbackComponent error={error} resetError={resetError} />;
+    }
+
+    try {
+      return <Component {...props} />;
+    } catch (err) {
+      setError(err as Error);
+      return null;
+    }
   };

@@ -1,0 +1,35 @@
+---
+description: Development principle practices - dev principle 03 best practices
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: trueaiPriority: high
+aiCategory: development-practices
+---
+
+<!-- AI: This is a development principle that should be applied to all code -->
+<!-- AI: Priority: high -->
+<!-- AI: Category: development-practices -->
+
+---
+description: Development principle practices - dev principle 03 best practices
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: trueaiPriority: high
+aiCategory: development-practices
+---
+
+# Development Principle 3: Best Practices First
+- Architectural patterns: Use proven architectural patterns and principles
+- Coding standards: Follow accepted standards and conventions
+- Security: Apply security principles (Zero Trust, Defense in Depth, Least Privilege)
+- Performance: Optimize critical paths and avoid anti-patterns
+- Scalability: Design consIDEring future growth and changes
+- Testability: Write code that is easy to test and maintain
+
+description: Prioritize best practices in all development
+globs:
+  - *
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

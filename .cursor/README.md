@@ -1,11 +1,11 @@
 ## AI Access Policy
 
-См. [AI-access-policy.md](./AI-access-policy.md) — политика полного доступа AI-ассистента ко всем файлам проекта и проактивных действий.
+See [memory-bank/AI-access-policy.md](../memory-bank/AI-access-policy.md) — policy полного доступа AI-ассистента ко всем файлам проекта и проактивных действий.
 
 ---
 
 ## Environment Parameters
 
-См. [rules/environment.yaml](rules/environment.yaml) — параметры операционной и тестовой среды, доступные AI-ассистенту для автоматизации и диагностики.
+See [rules/environment.yaml](rules/environment.yaml) — Parameters operational и test environment, available AI-ассистенту для automation и diagnostics.
 
 --- 

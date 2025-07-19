@@ -1,0 +1,27 @@
+---
+description: Fallback procedures for AI
+globs: ["**/*.md", "**/*.mdc", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+alwaysApply: trueaiPriority: medium
+aiCategory: documentation
+---
+
+<!-- AI: This is an AI-specific rule or instruction -->
+<!-- AI: Priority: medium -->
+<!-- AI: Category: documentation -->
+
+---
+description: Правило fallback для AI - Priority источников информации при отсутствии ответа в memory-bank
+globs: ["**/*.md", "**/*.mdc", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+alwaysApply: trueaiPriority: medium
+aiCategory: documentation
+---
+
+# AI Fallback Rule
+
+**Правило:**
+Если возникает вопрос, на который нет ответа в AI memory-bank, необходимо:
+1. Сначала обращаться к сведениям в папке .rules проекта.
+2. Если нужной информации нет в .rules, обращаться к сведениям в папке memory-bank проекта (особенно к архитектурным и контекстным файлам).
+
+**Priority:**
+Это правило Priorityно для всех будущих консультаций и автоматизаций. 

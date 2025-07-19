@@ -1,6 +1,6 @@
 {
   "name": "@extension/hmr",
-  "version": "0.5.169",
+  "version": "0.5.360",
   "description": "chrome extension - hot module reload/refresh",
   "type": "module",
   "private": true,
@@ -29,7 +29,7 @@
     "@types/ws": "^8.18.1",
     "esbuild": "^0.25.4",
     "esm": "^3.2.25",
-    "rollup": "^4.41.0",
+    "rollup": "^4.45.1",
     "ts-node": "^10.9.2",
     "ws": "^8.18.2"
   }

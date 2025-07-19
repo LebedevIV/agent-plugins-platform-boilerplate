@@ -1,6 +1,6 @@
 {
   "name": "@extension/shared",
-  "version": "0.5.169",
+  "version": "0.5.360",
   "description": "chrome extension - shared code",
   "type": "module",
   "private": true,
@@ -20,11 +20,10 @@
     "lint:fix": "pnpm lint --fix",
     "format": "prettier . --write --ignore-path ../../.prettierignore",
     "type-check": "tsc --noEmit",
-    "postinstall": "pnpm ready"
+    "postinstall": "pnpm ready",
+    "build": "tsc -b"
   },
-  "dependencies": {
-    "react-error-boundary": "^6.0.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@extension/storage": "workspace:*",
     "@extension/tsconfig": "workspace:*",

@@ -1,0 +1,34 @@
+---
+description: Development principle observability - dev principle 05 observability
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: trueaiPriority: high
+aiCategory: development-practices
+---
+
+<!-- AI: This is a development principle that should be applied to all code -->
+<!-- AI: Priority: high -->
+<!-- AI: Category: development-practices -->
+
+---
+description: Development principle observability - dev principle 05 observability
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: trueaiPriority: high
+aiCategory: development-practices
+---
+
+# Development Principle 5: Observability First
+- Structured logging: Structured logging for analysis
+- Metrics everywhere: Performance and State metrics
+- distributed tracing: Track reque.ts through all compone.ts
+- Health checks: Monitor State of all services
+- Debug information: Sufficient information for problem diagnosis
+
+description: Observability and monitoring in all development
+globs:
+  - *
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

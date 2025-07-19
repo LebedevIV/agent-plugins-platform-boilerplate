@@ -1,33 +1,31 @@
 import '@src/Options.css';
-import '../../../packages/ui/lib/components/PluginCard.css';
-import { useStorage, withErrorBoundary, withSuspense } from '@extension/shared';
-import { exampleThemeStorage } from '@extension/storage';
-import { cn, ErrorDisplay, LoadingSpinner } from '@extension/ui';
-import { useEffect } from 'react';
-import { APPOptions } from './components/APPOptions';
+import { SettingsTab } from './components/SettingsTab';
+import LocalErrorBoundary from './components/LocalErrorBoundary';
 
-const Options = () => {
-  const { isLight } = useStorage(exampleThemeStorage);
-
-  useEffect(() => {
-    // Log for debugging
-    console.log('Options component initialized');
-    
-    // Check if we're in a Chrome extension context
-    const isExtension = !!(window.chrome && chrome.runtime && chrome.runtime.id);
-    console.log('Is extension context:', isExtension);
-    
-    if (isExtension) {
-      // Log the extension ID
-      console.log('Extension ID:', chrome.runtime.id);
-    }
-  }, []);
-
+// AI-First: Основная страница настроек, обёрнута в ErrorBoundary для защиты UX
+const Options = function () {
+  // TODO: Подключить реальные пропсы и стейт для SettingsTab
   return (
-    <div className={cn('App', isLight ? 'bg-slate-50' : 'bg-gray-800')} id="app-container">
-      <APPOptions isLight={isLight} />
+    <div className="App" id="app-container" style={{ padding: 32 }}>
+      <h1>Options (React 19 ESM test)</h1>
+      <LocalErrorBoundary>
+        <SettingsTab
+          aiKeys={[]}
+          customKeys={[]}
+          onSave={() => {}}
+          onTest={() => {}}
+          onAddCustomKey={() => {}}
+          onRemoveCustomKey={() => {}}
+          onUpdateKey={() => {}}
+          onUpdateCustomKeyName={() => {}}
+          getStatusText={() => ''}
+          getStatusClass={() => ''}
+          theme="light"
+          setTheme={() => {}}
+        />
+      </LocalErrorBoundary>
     </div>
   );
 };
 
-export default withErrorBoundary(withSuspense(Options, <LoadingSpinner />), ErrorDisplay);
+export default Options;

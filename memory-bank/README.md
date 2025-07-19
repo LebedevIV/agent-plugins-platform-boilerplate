@@ -10,30 +10,30 @@ For user instructions, see the `docs/` folder.
 
 ---
 
-## Перенос best practices в новый проект
+## Transferring Best Practices to New Projects
 
-Для быстрого внедрения организационных best practices и автоматизаций в другой проект используйте инструкцию:
+For quick implementation of organizational best practices and automations in another project, use the guide:
 - [docs/for-ai-best-practices/transfer-best-practices.md](../docs/for-ai-best-practices/transfer-best-practices.md)
 
-Следуйте шагам из инструкции, чтобы масштабировать лучшие практики и автоматизацию на любой проект.
+Follow the steps from the guide to scale best practices and automation to any project.
 
 ---
 
-## Содержание
-- [Организационные нарративы](./activeContext.md)
-- [Контекст продукта](./productContext.md)
-- [Прогресс и автоматизация](./progress.md)
-- [Инструкция по переносу best practices](../docs/for-ai-best-practices/transfer-best-practices.md) 
+## Contents
+- [Organizational narratives](./activeContext.md)
+- [Product context](./productContext.md)
+- [Progress and automation](./progress.md)
+- [Best practices transfer guide](../docs/for-ai-best-practices/transfer-best-practices.md) 
 
 ## AI Access Policy
 
-См. [AI-access-policy.md](./AI-access-policy.md) — политика полного доступа AI-ассистента ко всем файлам проекта и проактивных действий.
+See [AI-access-policy.md](./AI-access-policy.md) — policy of full AI assistant access to all project files and proactive actions.
 
 --- 
 
-## Кладбище ошибок
+## Error Graveyard
 
-- [Кладбище ошибок (Resolved Issues)](./errors.md) — основной файл для всех общих и кросс-тематических проблем, решений и выводов.
-- Тематические ошибки (например, Vite/React 19) — см. отдельные файлы, но подробные разборы и решения должны дублироваться в errors.md.
+- [Error Graveyard (Resolved Issues)](./errors.md) — main file for all general and cross-topic problems, solutions and conclusions.
+- Topic-specific errors (e.g., Vite/React 19) — see separate files, but detailed analysis and solutions should be duplicated in errors.md.
 
---- 
+--- Test commit for .cursor and memory-bank at $(date)

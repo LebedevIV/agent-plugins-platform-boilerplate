@@ -1,0 +1,23 @@
+---
+description: Plugin standard for testing
+globs: ["public/plugins/**/*", "**/*.py", "**/*.json", "**/*.ts", "**/*.js"]
+alwaysApply: falseaiPriority: normal
+aiCategory: plugin-development
+---
+
+# Plugin Testing Requireme.ts
+- Unit Te.ts: Test individual functions and compone.ts
+- Integration Te.ts: Test plugin integration with host system
+- Security Te.ts: Validate permission enforcement
+- Performance Te.ts: Monitor memory usage and execution time
+- Error Te.ts: Test error handling and recovery
+
+description: Testing requireme.ts for all plugins
+globs:
+  - public/plugins/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

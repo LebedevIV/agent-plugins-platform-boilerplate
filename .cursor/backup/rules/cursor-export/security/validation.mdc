@@ -1,0 +1,18 @@
+---
+description: Input validation and data sanitization rules
+globs: ["**/*.ts", "**/*.js", "**/*.py", "**/*.json", "platform-core/**/*"]
+alwaysApply: false
+aiCategory: security---
+
+# Rule
+- Always validate all input data and API parameters.
+- Never trust data from external sources (user, plugins, third-party services).
+- Use schemas, types, or validators (e.g., zod, pydantic, marshmallow).
+
+# examples
+- ✅ `z.object({ email: z.string().email() })`
+- ✅ `if not isinstance(user_id, int): raise ValueError()`
+description:
+globs:
+alwaysApply: false
+---

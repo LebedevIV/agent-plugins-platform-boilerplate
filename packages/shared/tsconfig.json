@@ -2,7 +2,13 @@
   "extends": "@extension/tsconfig/module",
   "compilerOptions": {
     "baseUrl": ".",
-    "outDir": "dist"
+    "outDir": "dist",
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "target": "ESNext",
+    "declaration": true,
+    "declarationDir": "dist"
   },
   "include": ["index.mts", "lib"]
 }

@@ -1,0 +1,89 @@
+---
+description: AI-optimized index of rules by priority and category
+globs: ["**/*"]
+alwaysApply: true
+aiPriority: critical
+aiCategory: ai-optimization
+---
+
+# AI-Optimized Rules Index
+
+## Critical Priority Rules
+*Must be applied to all code and decisions*
+
+- [Ai Index](ai-index.mdc) — AI-optimized index of rules by priority and category
+- [Ai Memory](ai-memory.mdc) — User Commands and AI instructions
+- [Ai Optimization](ai-optimization.mdc) — AI-specific instructions and optimizations for .cursor rules
+- [Ai Memory](cursor-export/ai-memory.mdc) — User Commands and AI instructions
+- [Environment](cursor-export/environment.mdc) — Critical environment constrai.ts - Node.js version, popup vs sIDEpanel
+
+## High Priority Rules
+*Should be applied to most code and decisions*
+
+- [Architecture Chat System](architecture/architecture-chat-system.mdc) — Architecture rule for chat-system
+- [Architecture Error Handling](architecture/architecture-error-handling.mdc) — Architecture rule for error-handling
+- [Architecture Observability](architecture/architecture-observability.mdc) — Architecture rule for observability
+- [Architecture Performance](architecture/architecture-performance.mdc) — Architecture rule for performance
+- [Architecture Plugin](architecture/architecture-plugin.mdc) — Architecture rule for plugin
+- [Architecture Project Structure](architecture/architecture-project-structure.mdc) — Architecture rule for project-structure
+- [Architecture Security](architecture/architecture-security.mdc) — Architecture rule for security
+- [Architecture Workflow](architecture/architecture-workflow.mdc) — Architecture rule for workflow
+- [Project Architecture](architecture/project-architecture.mdc) — Architecture rule for project-architecture
+- [Dev Principle 01 Do No Harm](cursor-export/dev/dev-principle-01-do-no-harm.mdc) — Development principle harm - dev principle 01 do no harm
+- [Dev Principle 03 Best Practices](cursor-export/dev/dev-principle-03-best-practices.mdc) — Development principle practices - dev principle 03 best practices
+- [Dev Principle 04 Fail Fast Safe](cursor-export/dev/dev-principle-04-fail-fast-safe.mdc) — Development principle safe - dev principle 04 fail fast safe
+- [Dev Principle 05 Observability](cursor-export/dev/dev-principle-05-observability.mdc) — Development principle observability - dev principle 05 observability
+- [Dev Principle 06 config As Code](cursor-export/dev/dev-principle-06-config-as-code.mdc) — Development principle code - dev principle 06 config as code
+- [Dev Principle 07 Progressive Enhancement](cursor-export/dev/dev-principle-07-progressive-enhancement.mdc) — Development principle enhancement - dev principle 07 progressive enhancement
+- [Dev Principle 08 data Integrity Privacy](cursor-export/dev/dev-principle-08-data-integrity-privacy.mdc) — Development principle privacy - dev principle 08 data integrity privacy
+- [Dev Principle 09 Continuous Learning](cursor-export/dev/dev-principle-09-continuous-learning.mdc) — Development principle learning - dev principle 09 continuous learning
+- [Dev Principle 10 Ecosystem Thinking](cursor-export/dev/dev-principle-10-ecosystem-thinking.mdc) — Development principle thinking - dev principle 10 ecosystem thinking
+
+## Medium Priority Rules
+*Apply when relevant to the task*
+
+- [Ai Fallback](cursor-export/doc/ai-fallback.mdc) — Fallback procedures for AI
+- [Ai First](cursor-export/doc/ai-first.mdc) — AI-oriented documentation standards
+- .mdc File Standards](cursor-export/doc.mdc-file-standards.mdc) — Standards for .mdc file creation
+- [Workflow](cursor-export/workflow/workflow.mdc) — Workflow rule for 
+- [Ai Answer Self Check](doc/ai-answer-self-check.mdc) — ai answer self check rule
+- [Ci Automation](workflow/ci-automation.mdc) — Automation and synchronization rules
+- [Experience Transfer](workflow/experience-transfer.mdc) — experience transfer rule
+
+## Normal Priority Rules
+*Apply when appropriate*
+
+- [README](README.mdc) — Main project rules documentation and AI onboarding - structure, CLI scri.ts, usage
+- [Development GuIDElines](cursor-export/dev/development-guIDElines.mdc) — General development guIDElines
+- [Git Workflow](cursor-export/dev/git-workflow.mdc) — Git workflow rule - only develop to main, mandatory PR for all changes
+- [Security And Deployment](cursor-export/dev/security-and-deployment.mdc) — Security rule for -and-deployment
+- [Testing And Debugging](cursor-export/dev/testing-and-debugging.mdc) — Testing and debugging standards
+- [TypeScript](cursor-export/dev/TypeScript.mdc) — TypeScript-specific guIDElines
+- [Knowledge Map](cursor-export/doc/knowledge-map.mdc) — Project knowledge structure
+- [Memorybank Quality](cursor-export/doc/memorybank-quality.mdc) — Quality standards for memory-bank
+- [Restore Context](cursor-export/doc/restore-context.mdc) — Context restoration procedures
+- [Index](cursor-export/index.mdc) — index rule
+- [Monorepo Best Practices](cursor-export/monorepo-best-practices.mdc) — Best practices for monorepo work - structure, dependencies, TypeScript, barrel expo.ts
+- [Plugin Best Practices](cursor-export/plugin/plugin-best-practices.mdc) — Plugin standard for best-practices
+- [Plugin Documentation](cursor-export/plugin/plugin-documentation.mdc) — Plugin standard for documentation
+- [Plugin Error Handling](cursor-export/plugin/plugin-error-handling.mdc) — Plugin standard for error-handling
+- [Plugin Performance](cursor-export/plugin/plugin-performance.mdc) — Plugin standard for performance
+- [Plugin Security](cursor-export/plugin/plugin-security.mdc) — Plugin standard for security
+- [Plugin Structure](cursor-export/plugin/plugin-structure.mdc) — Plugin standard for structure
+- [Plugin Testing](cursor-export/plugin/plugin-testing.mdc) — Plugin standard for testing
+- [Validation](cursor-export/security/validation.mdc) — Input validation and data sanitization rules
+- [TypeScript build Troubleshooting](cursor-export/TypeScript-build-troubleshooting.mdc) — TypeScript build error troubleshooting guIDE - types, barrel expo.ts, dependencies, Tailwin.css
+- [Ui Accessibility](cursor-export/ui/ui-accessibility.mdc) — UI standard for accessibility
+- [Ui Animation](cursor-export/ui/ui-animation.mdc) — UI standard for animation
+- [Ui Error Handling](cursor-export/ui/ui-error-handling.mdc) — UI standard for error-handling
+- [Ui Forms](cursor-export/ui/ui-forms.mdc) — UI standard for forms
+- [Ui Loading States](cursor-export/ui/ui-loading-States.mdc) — UI standard for loading-States
+- [Ui Mobile](cursor-export/ui/ui-mobile.mdc) — UI standard for mobile
+- [Ui Navigation](cursor-export/ui/ui-navigation.mdc) — UI standard for navigation
+- [Ui Performance](cursor-export/ui/ui-performance.mdc) — UI standard for performance
+- [Ui React Compone.ts](cursor-export/ui/ui-React-compone.ts.mdc) — UI standard for React-compone.ts
+- [Ui Styling](cursor-export/ui/ui-styling.mdc) — UI standard for styling
+- [Ui Testing](cursor-export/ui/ui-testing.mdc) — UI standard for testing
+- [Automation](cursor-export/workflow/automation.mdc) — Automation and synchronization rules
+- [Branches](cursor-export/workflow/branches.mdc) — Git branch management rules
+- [Testing Troubleshooting](dev/testing-troubleshooting.mdc) — Testing and debugging standards

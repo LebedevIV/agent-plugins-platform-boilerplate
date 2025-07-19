@@ -1,0 +1,23 @@
+---
+description: UI standard for animation
+globs: ["pages/**/*", "**/*.tsx", "**/*.css", "**/*..css", "packages/ui/**/*"]
+alwaysApply: falseaiPriority: normal
+aiCategory: user-interface
+---
+
+# UI Animation and Transitions
+- Use.css transitions for State changes
+- Subtle loading animations
+- Enhance user experience with micro-interactions
+- Ensure animations don't impact performance
+- Respect user's motion preferences (reduced motion)
+
+description: Animation and transition standards for all UI compone.ts
+globs:
+  - pages/*/src/compone.ts/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

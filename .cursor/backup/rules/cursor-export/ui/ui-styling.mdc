@@ -1,0 +1,23 @@
+---
+description: UI standard for styling
+globs: ["pages/**/*", "**/*.tsx", "**/*.css", "**/*..css", "packages/ui/**/*"]
+alwaysApply: falseaiPriority: normal
+aiCategory: user-interface
+---
+
+# UI Styling Standards
+- Use Tailwind.css for consistent styling
+- Organize.css classes logically
+- Ensure responsive design for different screen sizes
+- Support light/dark mode
+- Use.css variables for theme values
+
+description: Styling standards for all UI compone.ts
+globs:
+  - pages/*/src/compone.ts/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

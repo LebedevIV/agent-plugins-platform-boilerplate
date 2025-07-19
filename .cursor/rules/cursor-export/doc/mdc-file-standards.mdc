@@ -1,0 +1,134 @@
+---
+description: Standards for .mdc file creation
+globs: ["**/*.md", "**/*.mdc", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+alwaysApply: trueaiPriority: medium
+aiCategory: documentation
+---
+
+# Standards создания правил в .cursor/rules
+
+## Priority .mdc файлов над .md
+
+### Required использовать .mdc для:
+- **Правил и стандартов** - все правила должны быть в .mdc
+- **AI инструкций** - команды, Principles, Constrai.ts
+- **Архитектурных решений** - структура, Patterns, best practices
+- **automation** - скрипты, workflow, Processes
+
+### Допустимо использовать .md для:
+- **Чистой документации** - README, guIDEs, tutorials
+- **Временных заметок** - черновики, эксперименты
+- **Внешних ссылок** - ссылки на внешние ресурсы
+
+## Структура .mdc файла
+
+### Обязательные метаdata:
+``.yaml
+---
+description: Краткое Description назначения файла
+globs: ["**/*"]  # Patterns файлов для применения
+alwaysApply: true  # Автоматическое применение
+---
+```
+
+### Дополнительные метаdata:
+``.yaml
+---
+description: Description
+globs: ["pages/**/*", "packages/**/*"]
+alwaysApply: false  # Применяется по запросу
+related:
+  - other-rule.mdc
+  - another-rule.mdc
+---
+```
+
+## Преимущества .mdc файлов
+
+### 1. Автоматическое применение
+- Cursor читает метаdata при создании чата
+- Правила применяются без явного обращения
+- `alwaysApply: true` обеспечивает постоянное Action
+
+### 2. Лучшая Integration с AI
+- AI понимает контекст применения через `globs`
+- Description помогает AI выбрать подходящие правила
+- Структурированные метаdata улучшают понимание
+
+### 3. Приоритизация и организация
+- `alwaysApply` определяет Importantсть правила
+- `related` связывает связанные правила
+- `globs` ограничивает область применения
+
+### 4. AI memory-bank Integration
+- Правила автоматически попадают в AI memory-bank
+- Доступны через Settings / Rules & Memories
+- Сохраняются между сессиями
+
+## Миграция .md → .mdc
+
+### Когда мигрировать:
+- Файл содержит правила или инструкции
+- Файл должен применяться автоматически
+- Файл важен для AI понимания проекта
+
+### Процесс миграции:
+1. Переименовать `.md` → `.mdc`
+2. Add.yaml frontmatter с метаданными
+3. Убедиться в корректности `globs` и `alwaysApply`
+4. Check интеграцию с AI memory-bank
+
+## examples правильного использования
+
+### ✅ Правильно - .mdc с метаданными:
+``.yaml
+---
+description: Правила TypeScript - configuration, barrel expo.ts, troubleshooting
+globs: ["**/*.ts", "**/*.tsx", "**/*.json"]
+alwaysApply: true
+---
+```
+
+### ❌ Неправильно - .md без метаданных:
+```markdown
+# TypeScript Rules
+- Use strict mode
+- Prefer barrel expo.ts
+```
+
+## Exceptions
+
+### Допустимые .md файлы:
+- `README.md` - главная Documentation проекта
+- `CHANGELOG.md` - история изменений
+- `LICENSE.md` - лицензия
+- Временные файлы с префиксом `temp-` или `draft-`
+
+## Verification соответствия
+
+### Автоматическая Verification:
+```bash
+# Найти все .md файлы в .cursor/rules
+find .cursor/rules -name "*.md" -not -name "README.md"
+
+# Check структуру .mdc файлов
+node .cursor/rules/check-rules-structure..js
+```
+
+### Ручная Verification:
+1. Все ли правила в .mdc формате?
+2. Есть ли метаdata во всех .mdc файлах?
+3. Корректны ли `globs` и `alwaysApply`?
+4. Нужно ли мигрировать какие-то .md файлы?
+
+## Recommendations
+
+1. **Всегда начинать с .mdc** для новых правил
+2. **Мигрировать важные .md** файлы в .mdc
+3. **Проверять метаdata** при создании правил
+4. **Использовать `alwaysApply: true`** для критических правил
+5. **Документировать Exceptions** в README.mdc
+description:
+globs:
+alwaysApply: false
+---

@@ -1,0 +1,23 @@
+---
+description: UI standard for loading-States
+globs: ["pages/**/*", "**/*.tsx", "**/*.css", "**/*..css", "packages/ui/**/*"]
+alwaysApply: falseaiPriority: normal
+aiCategory: user-interface
+---
+
+# UI Loading States
+- Show skeleton UI while loading
+- Use spinners or progress bars as indicators
+- ProvIDE informative loading messages
+- Handle loading timeo.ts gracefully
+- Show appropriate error States
+
+description: Loading State requireme.ts for all UI compone.ts
+globs:
+  - pages/*/src/compone.ts/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

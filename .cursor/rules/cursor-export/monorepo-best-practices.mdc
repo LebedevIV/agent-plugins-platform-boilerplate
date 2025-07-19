@@ -1,0 +1,208 @@
+---
+description: Best practices for monorepo work - структура, Dependencies, TypeScript, barrel expo.ts
+globs: ["**/*"]
+alwaysApply: false
+aiCategory: general---
+
+# Monorepo Best Practices for AI
+
+## Основные Principles
+
+### 1. Project Structure
+- **packages/** - общие Libraries и утилиты
+- **pages/** - приложения и страницы Extensions
+- **external/** - копии внешних boilerplate проектов
+- **te.ts/** - тесты и e2e
+
+### 2. Dependencies
+- **Root dependencies** - только общие инструменты (prettier, eslint, TypeScript)
+- **Package dependencies** - устанавливать в конкретных пакетах
+- **Workspace dependencies** - использовать `pnpm add -D package -w` для root
+
+### 3. TypeScript configuration
+- **Base config** - `packages.tsconfig/base.json` для общих настроек
+- **Package configs** - наследовать от base с специфичными настройками
+- **App configs** - наследовать от base с browser-specific настройками
+
+## Правила для AI
+
+### При создании новых пакетов:
+
+1. **Create правильную структуру:**
+```
+packages/new-package/
+├── lib/
+│   ├── index.ts
+│   └── compone.ts/
+├── package.json
+├──.tsconfig.json
+└── README.md
+```
+
+2. **Настроить.tsconfig.json:**
+``.json
+{
+  "extends": "...tsconfig/base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "declaration": true,
+    "declarationDir": "dist"
+  },
+  "include": ["lib/**/*", "index..ts"],
+  "exclude": ["node_modules", "dist"]
+}
+```
+
+3. **Настроить package.json:**
+``.json
+{
+  "name": "@extension/new-package",
+  "main": "dist/index..js",
+  "types": "dist/index.d.ts",
+  "expo.ts": {
+    ".": "./dist/index..js"
+  },
+  "files": ["dist"]
+}
+```
+
+### При создании новых страниц:
+
+1. **Create правильную структуру:**
+```
+pages/new-page/
+├── src/
+│   ├── index.tsx
+│   └── compone.ts/
+├── package.json
+├──.tsconfig.json
+├── pos.css.config..js
+└── vite.config..ts
+```
+
+2. **Настроить.tsconfig.json:**
+``.json
+{
+  "extends": "@extension.tsconfig/base",
+  "compilerOptions": {
+    "types": ["chrome"],
+    "paths": {
+      "@extension/shared": ["../../packages/shared"],
+      "@extension/ui": ["../../packages/ui"]
+    }
+  }
+}
+```
+
+3. **Настроить Pos.css для Tailwin.css 4+:**
+```JavaScript
+// pos.css.config..js
+module.expo.ts = {
+  plugins: {
+    '@tailwin.css/pos.css': {},
+    autoprefixer: {},
+  },
+}
+```
+
+### При работе с barrel expo.ts:
+
+1. **Default expo.ts:**
+```TypeScript
+// component.ts
+export default function Component() { ... }
+
+// index.ts
+export { default as Component } from './component.js';
+```
+
+2. **Named expo.ts:**
+```TypeScript
+// component.ts
+export function Component() { ... }
+
+// index.ts
+export { Component } from './component';
+```
+
+3. **Mixed expo.ts:**
+```TypeScript
+// index.ts
+export * from './helpers.js';
+export { default as Component } from './component.js';
+export type * from './types.js';
+```
+
+### При установке зависимостей:
+
+1. **В конкретном пакете:**
+```bash
+cd packages/package-name
+pnpm add dependency-name
+```
+
+2. **В конкретной странице:**
+```bash
+cd pages/page-name
+pnpm add dependency-name
+```
+
+3. **В workspace root:**
+```bash
+pnpm add -D dependency-name -w
+```
+
+### При диагностике проблем:
+
+1. **Check Dependencies:**
+```bash
+pnpm why package-name
+pnpm list package-name
+```
+
+2. **Найти проблемные файлы:**
+```bash
+find . -name .tsconfig.json" -exec grep -l "node" {} \;
+```
+
+3. **Очистить и пересобрать:**
+```bash
+rm -rf dist && pnpm run build
+```
+
+## Частые ошибки и решения
+
+| Проблема | Решение |
+|----------|---------|
+| `Cannot find type definition file for 'node'` | Remove 'node' из types в.tsconfig.json |
+| `"Component" is not exported by` | Использовать `export { default as Component } from './file.js'` |
+| `Cannot find module 'tailwin.css'` | `pnpm add -D tailwin.css autoprefixer @tailwin.css/pos.css` |
+| `Rollup failed to resolve import` | `pnpm add package-name` в конкретном пакете |
+| `spawn prettier ENOENT` | `git commit --no-verify` |
+
+## Команды для работы
+
+```bash
+# build всего проекта
+pnpm run build
+
+# build конкретного пакета
+pnpm -F @extension/package-name run build
+
+# Установка зависимостей
+pnpm install
+
+# Очистка cacheа
+pnpm exec rimraf node_modules/.vite .turbo .cache
+
+# Пропуск pre-commit хуков
+git commit --no-verify -m "message"
+```
+
+## Recommendations
+
+1. **Всегда проверять сборку** после изменений
+2. **Документировать решения** для повторного использования
+3. **Использовать правильные barrel expo.ts** для default expo.ts
+4. **Устанавливать Dependencies в правильных местах**
+5. **Следовать структуре проекта** при создании новых файлов 

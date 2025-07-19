@@ -34,7 +34,6 @@ export const recoverFeature = async (manifestObject: ManifestType, moduleName?: 
     }
   } else if (moduleName === 'devtools') {
     recoverModule(manifestObject, moduleName as ModuleNameType);
-    recoverModule(manifestObject, 'devtools-panel');
   } else {
     recoverModule(manifestObject, moduleName as ModuleNameType);
   }

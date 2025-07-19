@@ -1,7 +1,9 @@
-import globalConfig from '@extension/tailwindcss-config';
 import type { Config } from 'tailwindcss';
+import globalConfig from './tailwind-global.config';
 
-export default {
+const config: Config = {
   content: ['lib/**/*.tsx'],
   presets: [globalConfig],
-} satisfies Config;
+};
+
+export default config;

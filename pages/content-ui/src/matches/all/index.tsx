@@ -1,5 +1,9 @@
-import inlineCss from '../../../dist/all/index.css?inline';
-import { initAppWithShadow } from '@extension/shared';
+import './index.css';
+import initAppWithShadow from '@extension/shared/lib/utils/init-app-with-shadow';
 import App from '@src/matches/all/App';
 
-initAppWithShadow({ id: 'CEB-extension-all', app: <App />, inlineCss });
+initAppWithShadow({
+  id: 'CEB-extension-all',
+  inlineCss: '',
+  app: <App />
+});

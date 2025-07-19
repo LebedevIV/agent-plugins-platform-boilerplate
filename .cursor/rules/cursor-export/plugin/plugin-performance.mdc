@@ -1,0 +1,27 @@
+---
+description: Plugin standard for performance
+globs: ["public/plugins/**/*", "**/*.py", "**/*.json", "**/*.ts", "**/*.js"]
+alwaysApply: falseaiPriority: normal
+aiCategory: plugin-development
+---
+
+# Plugin Performance GuIDElines
+- PyodIDE Optimization: Optimize for WebAssembly execution
+- Memory Management: Clean up resources and avoid memory leaks
+- Async Operations: Use async/await for all I/O operations
+- Caching: Implement appropriate caching strategies
+- Bundle Size: Keep plugin size reasonable for browser loading
+
+related:
+  - architecture-performance.mdc
+  - plugin-testing.mdc
+
+description: Performance guIDElines for all plugins
+globs:
+  - public/plugins/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---
