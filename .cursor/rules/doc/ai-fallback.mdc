@@ -1,3 +1,9 @@
+---
+description: Правило fallback для AI - приоритет источников информации при отсутствии ответа в memory-bank
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # AI Fallback Rule
 
 **Правило:**

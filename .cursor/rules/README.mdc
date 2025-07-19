@@ -1,3 +1,9 @@
+---
+description: Главная документация по правилам проекта и AI onboarding - структура, CLI скрипты, использование
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # .cursor/rules: Project Rules & AI Onboarding
 
 This directory contains all rules and standards for automation and AI assistants in the Agent Plugins Platform.

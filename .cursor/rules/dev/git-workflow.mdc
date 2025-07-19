@@ -1,3 +1,9 @@
+---
+description: Правило Git workflow - только develop в main, обязательные PR для всех изменений
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Git Workflow Rule
 
 **Rule:**
