@@ -1,3 +1,9 @@
+---
+description: Architecture rule for project-structure
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Project Structure Architecture
 - platform-core/: Main logic and services (keep boilerplate clean)
 - chrome-extension/src/background/: Core background services

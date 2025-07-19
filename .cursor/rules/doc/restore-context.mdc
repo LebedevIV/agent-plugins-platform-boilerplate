@@ -1,3 +1,9 @@
+---
+description: Context restoration procedures
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Восстанови контекст
 
 1. Прочитать все файлы в директории `memory-bank` и `USER_COMMANDS.md`.

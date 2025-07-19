@@ -1,3 +1,9 @@
+---
+description: Development principle thinking - dev principle 10 ecosystem thinking
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Development Principle 10: Ecosystem Thinking
 - Plugin compatibility: Ensure plugin compatibility
 - API stability: Stable public APIs

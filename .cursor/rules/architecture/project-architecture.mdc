@@ -1,3 +1,9 @@
+---
+description: Architecture rule for project-architecture
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Project Overview
 Agent-Plugins-Platform (APP) is a browser extension for running Python plugins via Pyodide and the MCP protocol. Key priorities: security, performance, and developer experience.
 

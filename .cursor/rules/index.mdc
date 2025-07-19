@@ -1,4 +1,17 @@
+---
+description: index rule
+globs: ["**/*"]
+alwaysApply: false
+---
+
 # Index of Modular Rules
+
+## root
+- [AI Memory Bank](ai-memory.mdc) — User commands and AI instructions
+- [Environment Constraints](environment.mdc) — Critical environment limitations
+- [Monorepo Best Practices](monorepo-best-practices.mdc) — Monorepo structure and guidelines
+- [TypeScript Build Troubleshooting](typescript-build-troubleshooting.mdc) — TypeScript build error solutions
+- [README](README.mdc) — Main documentation and structure
 
 ## architecture
 - [Chat System Architecture](architecture/architecture-chat-system.mdc) — Chat system architecture and data flow
@@ -13,7 +26,7 @@
 
 ## dev
 - [Development Principle 1: Do No Harm](dev/dev-principle-01-do-no-harm.mdc) — 'Do No Harm' principle for all development
-- [Development Principle 2: AI-First Documentation](dev/dev-principle-02-ai-first-docs.mdc) — AI-oriented documentation and comments for all code
+- [AI-First Documentation](doc/ai-first.mdc) — AI-oriented documentation and comments for all code
 - [Development Principle 3: Best Practices First](dev/dev-principle-03-best-practices.mdc) — Prioritize best practices in all development
 - [Development Principle 4: Fail Fast, Fail Safe](dev/dev-principle-04-fail-fast-safe.mdc) — Fail fast and fail safe in all development
 - [Development Principle 5: Observability First](dev/dev-principle-05-observability.mdc) — Observability and monitoring in all development
@@ -22,17 +35,19 @@
 - [Development Principle 8: Data Integrity & Privacy](dev/dev-principle-08-data-integrity-privacy.mdc) — Data integrity and privacy in all development
 - [Development Principle 9: Continuous Learning](dev/dev-principle-09-continuous-learning.mdc) — Continuous learning and improvement in all development
 - [Development Principle 10: Ecosystem Thinking](dev/dev-principle-10-ecosystem-thinking.mdc) — Ecosystem thinking in all development
-- [Development Guidelines](dev/development-guidelines.mdc)
-- [Security Best Practices](dev/security-and-deployment.mdc)
-- [Testing Strategy](dev/testing-and-debugging.mdc)
-- [Rule](dev/typescript.mdc)
+- [Development Guidelines](dev/development-guidelines.mdc) — General development guidelines
+- [Security Best Practices](dev/security-and-deployment.mdc) — Security and deployment standards
+- [Testing Strategy](dev/testing-and-debugging.mdc) — Testing and debugging approaches
+- [TypeScript Rules](dev/typescript.mdc) — TypeScript-specific guidelines
+- [Git Workflow](dev/git-workflow.mdc) — Git workflow and branching rules
 
 ## doc
-- [Rule](doc/ai-first.mdc)
-- [Knowledge Map](doc/knowledge-map.mdc)
-- [Memory-Bank Quality Checklist](doc/memorybank-quality.mdc)
-- [Восстанови контекст](doc/restore-context.mdc)
-- [Пользовательские команды (User Commands)](doc/user-commands.mdc)
+- [AI-First Documentation](doc/ai-first.mdc) — AI-oriented documentation standards
+- [Knowledge Map](doc/knowledge-map.mdc) — Project knowledge structure
+- [Memory-Bank Quality Checklist](doc/memorybank-quality.mdc) — Quality standards for memory-bank
+- [Restore Context](doc/restore-context.mdc) — Context restoration procedures
+- [MDC File Standards](doc/mdc-file-standards.mdc) — Standards for .mdc file creation
+- [AI Fallback Rule](doc/ai-fallback.mdc) — Fallback procedures for AI
 
 ## plugin
 - [Plugin Best Practices](plugin/plugin-best-practices.mdc) — Best practices for plugin development
@@ -44,10 +59,9 @@
 - [Plugin Testing Requirements](plugin/plugin-testing.mdc) — Testing requirements for all plugins
 
 ## security
-- [Rule](security/validation.mdc)
+- [Input Validation](security/validation.mdc) — Input validation and data sanitization rules
 
 ## ui
-- [Rule](ui/accessibility.mdc)
 - [Accessibility (A11y) Standards](ui/ui-accessibility.mdc) — Accessibility requirements for all UI components
 - [UI Animation and Transitions](ui/ui-animation.mdc) — Animation and transition standards for all UI components
 - [UI Error Handling](ui/ui-error-handling.mdc) — Error handling requirements for all UI components
@@ -61,11 +75,6 @@
 - [UI Testing Standards](ui/ui-testing.mdc) — Testing standards for all UI components
 
 ## workflow
-- [Automation Rules](workflow/automation.mdc)
-- [Rule](workflow/branches.mdc)
-- [Workflow Branching Rules](workflow/workflow.mdc)
-
-description:
-globs:
-alwaysApply: false
----
+- [Automation Rules](workflow/automation.mdc) — Automation and synchronization rules
+- [Branch Management](workflow/branches.mdc) — Git branch management rules
+- [Workflow Branching Rules](workflow/workflow.mdc) — Development workflow standards

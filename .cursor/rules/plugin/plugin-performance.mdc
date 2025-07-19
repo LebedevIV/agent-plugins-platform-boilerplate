@@ -1,3 +1,9 @@
+---
+description: Plugin standard for performance
+globs: ["plugins/**/*", "**/*.py", "**/*.json"]
+alwaysApply: false
+---
+
 # Plugin Performance Guidelines
 - Pyodide Optimization: Optimize for WebAssembly execution
 - Memory Management: Clean up resources and avoid memory leaks

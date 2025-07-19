@@ -1,3 +1,9 @@
+---
+description: Architecture rule for plugin
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Plugin Architecture
 - Manifest Structure: manifest.json + mcp_server.py + icon.svg
 - MCP Protocol: Standard MCP server implementation in Python

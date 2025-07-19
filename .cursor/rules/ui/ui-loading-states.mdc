@@ -1,3 +1,9 @@
+---
+description: UI standard for loading-states
+globs: ["pages/**/*", "**/*.tsx", "**/*.css"]
+alwaysApply: false
+---
+
 # UI Loading States
 - Show skeleton UI while loading
 - Use spinners or progress bars as indicators

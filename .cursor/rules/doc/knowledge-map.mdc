@@ -1,3 +1,9 @@
+---
+description: Project knowledge structure
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Knowledge Map
 
 - USER_COMMANDS: USER_COMMANDS.md — все пользовательские команды

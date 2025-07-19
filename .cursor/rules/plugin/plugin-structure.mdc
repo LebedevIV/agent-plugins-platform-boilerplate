@@ -1,3 +1,9 @@
+---
+description: Plugin standard for structure
+globs: ["plugins/**/*", "**/*.py", "**/*.json"]
+alwaysApply: false
+---
+
 # Plugin Structure
 
 ## Directory Layout

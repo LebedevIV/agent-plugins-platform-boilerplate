@@ -1,3 +1,9 @@
+---
+description: Testing and debugging standards
+globs: ["tests/**/*", "**/*.test.*", "**/*.spec.*"]
+alwaysApply: false
+---
+
 # Testing Strategy
 
 ## Unit Testing

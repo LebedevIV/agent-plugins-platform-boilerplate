@@ -1,3 +1,9 @@
+---
+description: Architecture rule for workflow
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Development Workflow (Architecture)
 - Feature Branches: Always create from develop branch
 - Testing: Test before commit, use --no-verify if ESLint issues

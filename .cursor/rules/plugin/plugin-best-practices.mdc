@@ -1,3 +1,9 @@
+---
+description: Plugin standard for best-practices
+globs: ["plugins/**/*", "**/*.py", "**/*.json"]
+alwaysApply: false
+---
+
 # Plugin Best Practices
 - Single Responsibility: Each plugin should have a single, clear purpose
 - Modular Design: Break complex functionality into modules

@@ -1,3 +1,9 @@
+---
+description: Git branch management rules
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Rule
 - For new features, use branches with the prefix `feature/` and a meaningful name.
 - For bugfixes, use the prefix `fix/` and a clear description of the problem.
@@ -11,8 +17,3 @@
 - ✅ `feature/pyodide-integration`
 - ✅ `fix/tailwindcss-build-script`
 - ❌ `feature/pyodide-integration` + unrelated refactor in same branch
-
-description:
-globs:
-alwaysApply: false
----

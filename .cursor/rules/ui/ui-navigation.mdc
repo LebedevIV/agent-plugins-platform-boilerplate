@@ -1,3 +1,9 @@
+---
+description: UI standard for navigation
+globs: ["pages/**/*", "**/*.tsx", "**/*.css"]
+alwaysApply: false
+---
+
 # UI Navigation Standards
 - Provide clear navigation context with breadcrumbs
 - Clearly indicate current page/section (active states)

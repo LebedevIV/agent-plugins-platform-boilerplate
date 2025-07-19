@@ -1,3 +1,9 @@
+---
+description: UI standard for mobile
+globs: ["pages/**/*", "**/*.tsx", "**/*.css"]
+alwaysApply: false
+---
+
 # UI Mobile Responsiveness
 - Adequate size for touch interaction (touch targets)
 - Proper viewport meta tags

@@ -1,3 +1,9 @@
+---
+description: Development principle observability - dev principle 05 observability
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Development Principle 5: Observability First
 - Structured logging: Structured logging for analysis
 - Metrics everywhere: Performance and state metrics

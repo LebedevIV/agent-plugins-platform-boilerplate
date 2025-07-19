@@ -1,3 +1,9 @@
+---
+description: UI standard for testing
+globs: ["pages/**/*", "**/*.tsx", "**/*.css"]
+alwaysApply: false
+---
+
 # UI Testing Standards
 - Test component logic and behavior (unit tests)
 - Test component interactions (integration tests)

@@ -1,3 +1,9 @@
+---
+description: Architecture rule for security
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Security Architecture
 - Secret Manager: Encrypted storage of API keys in chrome.storage.local
 - Network Guard: Whitelist domains for API calls

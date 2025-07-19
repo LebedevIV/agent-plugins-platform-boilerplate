@@ -1,3 +1,9 @@
+---
+description: Development principle harm - dev principle 01 do no harm
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Development Principle 1: Do No Harm
 - Security first: Any changes must improve system security, not weaken it
 - Backward compatibility: Changes must not break existing functionality

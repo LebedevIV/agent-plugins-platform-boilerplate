@@ -1,3 +1,9 @@
+---
+description: Plugin standard for error-handling
+globs: ["plugins/**/*", "**/*.py", "**/*.json"]
+alwaysApply: false
+---
+
 # Plugin Error Handling
 - Graceful Degradation: Continue working with reduced functionality
 - User Feedback: Provide clear error messages to users

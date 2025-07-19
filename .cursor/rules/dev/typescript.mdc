@@ -1,3 +1,9 @@
+---
+description: TypeScript-specific guidelines
+globs: ["**/*.ts", "**/*.tsx", "**/*.json"]
+alwaysApply: false
+---
+
 # Rule
 - Use only TypeScript for all new files.
 - Enforce strict typing, avoid using `any`.

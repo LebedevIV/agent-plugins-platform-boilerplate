@@ -1,3 +1,9 @@
+---
+description: Architecture rule for performance
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Performance Guidelines (Architecture)
 - Pyodide Loading: Lazy load runtime, cache results
 - Memory Management: Clean up resources, monitor usage

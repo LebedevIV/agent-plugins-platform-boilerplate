@@ -1,3 +1,9 @@
+---
+description: Development principle privacy - dev principle 08 data integrity privacy
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Development Principle 8: Data Integrity & Privacy
 - Data validation: Validate all input data
 - Encryption at rest: Encrypt data at rest

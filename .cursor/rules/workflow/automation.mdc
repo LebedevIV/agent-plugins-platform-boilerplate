@@ -1,3 +1,9 @@
+---
+description: Automation and synchronization rules
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Automation Rules
 
 - При обновлении ключевых принципов, стандартов или чек-листов в memory-bank (например, DEV_PRACTICES.md, SECURITY.md, KNOWLEDGE_MAP.md), ассистент обязан синхронизировать их с правилами Cursor (.cursor/rules/).

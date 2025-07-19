@@ -1,3 +1,9 @@
+---
+description: Quality standards for memory-bank
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Memory-Bank Quality Checklist
 
 - Актуальность: информация своевременно обновляется

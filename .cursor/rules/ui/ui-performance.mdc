@@ -1,3 +1,9 @@
+---
+description: UI standard for performance
+globs: ["pages/**/*", "**/*.tsx", "**/*.css"]
+alwaysApply: false
+---
+
 # UI Performance Standards
 - Lazy load components and routes
 - Use React.memo and useMemo appropriately

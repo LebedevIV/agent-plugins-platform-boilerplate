@@ -1,3 +1,9 @@
+---
+description: Input validation and data sanitization rules
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Rule
 - Always validate all input data and API parameters.
 - Never trust data from external sources (user, plugins, third-party services).

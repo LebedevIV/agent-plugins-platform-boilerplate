@@ -24,11 +24,19 @@ This directory contains all rules and standards for automation and AI assistants
 - **check-rules-structure.js** — Validates all .mdc files for required sections, uniqueness, and valid related links. Used in CI.
   - Usage: `node .cursor/rules/check-rules-structure.js`
 
-## Example Structure
+## Current Structure
 ```
 .cursor/
   rules/
-    architecture/
+    # Root level - critical rules
+    ai-memory.mdc                    # User commands and AI instructions
+    environment.mdc                  # Critical environment limitations
+    monorepo-best-practices.mdc      # Monorepo structure and guidelines
+    typescript-build-troubleshooting.mdc # TypeScript build error solutions
+    README.mdc                       # Main documentation
+    index.mdc                        # Rules index and navigation
+    
+    architecture/                    # System architecture rules
       architecture-chat-system.mdc
       architecture-error-handling.mdc
       architecture-observability.mdc
@@ -38,9 +46,9 @@ This directory contains all rules and standards for automation and AI assistants
       architecture-security.mdc
       architecture-workflow.mdc
       project-architecture.mdc
-    dev/
+      
+    dev/                             # Development principles and guidelines
       dev-principle-01-do-no-harm.mdc
-      dev-principle-02-ai-first-docs.mdc
       dev-principle-03-best-practices.mdc
       dev-principle-04-fail-fast-safe.mdc
       dev-principle-05-observability.mdc
@@ -53,13 +61,17 @@ This directory contains all rules and standards for automation and AI assistants
       security-and-deployment.mdc
       testing-and-debugging.mdc
       typescript.mdc
-    doc/
-      ai-first.mdc
-      knowledge-map.mdc
-      memorybank-quality.mdc
-      restore-context.mdc
-      user-commands.mdc
-    plugin/
+      git-workflow.mdc
+      
+    doc/                             # Documentation and AI standards
+      ai-first.mdc                   # AI-oriented documentation standards
+      knowledge-map.mdc              # Project knowledge structure
+      memorybank-quality.mdc         # Memory-bank quality standards
+      restore-context.mdc            # Context restoration procedures
+      mdc-file-standards.mdc         # .mdc file creation standards
+      ai-fallback.mdc                # AI fallback procedures
+      
+    plugin/                          # Plugin development standards
       plugin-best-practices.mdc
       plugin-documentation.mdc
       plugin-error-handling.mdc
@@ -67,10 +79,11 @@ This directory contains all rules and standards for automation and AI assistants
       plugin-security.mdc
       plugin-structure.mdc
       plugin-testing.mdc
-    security/
-      validation.mdc
-    ui/
-      accessibility.mdc
+      
+    security/                        # Security standards
+      validation.mdc                 # Input validation rules
+      
+    ui/                              # UI/UX standards
       ui-accessibility.mdc
       ui-animation.mdc
       ui-error-handling.mdc
@@ -82,7 +95,8 @@ This directory contains all rules and standards for automation and AI assistants
       ui-react-components.mdc
       ui-styling.mdc
       ui-testing.mdc
-    workflow/
+      
+    workflow/                        # Development workflow
       automation.mdc
       branches.mdc
       workflow.mdc

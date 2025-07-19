@@ -1,6 +1,6 @@
 ## AI Access Policy
 
-См. [AI-access-policy.md](./AI-access-policy.md) — политика полного доступа AI-ассистента ко всем файлам проекта и проактивных действий.
+См. [memory-bank/AI-access-policy.md](../memory-bank/AI-access-policy.md) — политика полного доступа AI-ассистента ко всем файлам проекта и проактивных действий.
 
 ---
 

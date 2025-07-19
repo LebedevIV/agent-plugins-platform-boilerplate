@@ -1,3 +1,9 @@
+---
+description: Development principle safe - dev principle 04 fail fast safe
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Development Principle 4: Fail Fast, Fail Safe
 - Early error detection: Validate at input, not during execution
 - Graceful degradation: System continues working even with partial failures

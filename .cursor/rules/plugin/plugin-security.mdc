@@ -1,3 +1,9 @@
+---
+description: Plugin standard for security
+globs: ["plugins/**/*", "**/*.py", "**/*.json"]
+alwaysApply: false
+---
+
 # Plugin Security Requirements
 - Zero Trust: Plugins are not trusted by default
 - Permission Declaration: All required permissions must be declared in manifest

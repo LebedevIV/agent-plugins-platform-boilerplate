@@ -1,3 +1,9 @@
+---
+description: Development principle code - dev principle 06 config as code
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Development Principle 6: Configuration as Code
 - Version-controlled configs: All configurations in version control
 - Environment-specific: Different configurations for different environments

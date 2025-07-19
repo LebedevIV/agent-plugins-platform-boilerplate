@@ -1,3 +1,9 @@
+---
+description: Architecture rule for error-handling
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Error Handling (Architecture)
 - Graceful Degradation: System continues working with reduced functionality
 - User Feedback: Clear error messages and recovery options

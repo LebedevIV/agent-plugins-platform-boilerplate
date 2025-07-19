@@ -1,3 +1,9 @@
+---
+description: Plugin standard for documentation
+globs: ["plugins/**/*", "**/*.py", "**/*.json"]
+alwaysApply: false
+---
+
 # Plugin Documentation Standards
 - API Documentation: Document all public APIs and parameters
 - Usage Examples: Provide clear usage examples

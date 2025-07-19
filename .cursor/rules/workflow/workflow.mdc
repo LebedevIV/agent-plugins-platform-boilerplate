@@ -1,3 +1,9 @@
+---
+description: Workflow rule for 
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Workflow Branching Rules
 
 - В ветке main запрещено вести работу. main используется только для релизов и production.

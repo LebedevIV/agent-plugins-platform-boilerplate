@@ -1,3 +1,9 @@
+---
+description: Security rule for -and-deployment
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Security Best Practices
 
 ## Plugin Validation

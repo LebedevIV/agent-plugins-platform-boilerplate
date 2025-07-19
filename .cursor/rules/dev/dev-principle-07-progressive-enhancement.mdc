@@ -1,3 +1,9 @@
+---
+description: Development principle enhancement - dev principle 07 progressive enhancement
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Development Principle 7: Progressive Enhancement
 - Core functionality: Basic functionality always works
 - Feature detection: Detect browser capabilities

@@ -1,3 +1,9 @@
+---
+description: Standards for .mdc file creation
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Стандарты создания правил в .cursor/rules
 
 ## Приоритет .mdc файлов над .md

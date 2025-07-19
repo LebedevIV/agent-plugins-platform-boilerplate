@@ -1,3 +1,9 @@
+---
+description: General development guidelines
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Development Guidelines
 
 ## JavaScript/TypeScript

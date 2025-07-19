@@ -1,3 +1,9 @@
+---
+description: Development principle practices - dev principle 03 best practices
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Development Principle 3: Best Practices First
 - Architectural patterns: Use proven architectural patterns and principles
 - Coding standards: Follow accepted standards and conventions

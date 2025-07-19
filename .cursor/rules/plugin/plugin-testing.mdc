@@ -1,3 +1,9 @@
+---
+description: Plugin standard for testing
+globs: ["plugins/**/*", "**/*.py", "**/*.json"]
+alwaysApply: false
+---
+
 # Plugin Testing Requirements
 - Unit Tests: Test individual functions and components
 - Integration Tests: Test plugin integration with host system

@@ -1,3 +1,9 @@
+---
+description: Architecture rule for chat-system
+globs: ["**/*"]
+alwaysApply: true
+---
+
 # Chat System Architecture
 - Per-page, per-plugin isolation: Chats separated by page URL and plugin
 - LRU Cache: In-memory cache for performance (50 chats)
