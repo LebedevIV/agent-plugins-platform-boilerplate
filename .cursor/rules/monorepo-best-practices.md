@@ -1,0 +1,202 @@
+# Monorepo Best Practices for AI
+
+## Основные принципы
+
+### 1. Структура проекта
+- **packages/** - общие библиотеки и утилиты
+- **pages/** - приложения и страницы расширения
+- **external/** - копии внешних boilerplate проектов
+- **tests/** - тесты и e2e
+
+### 2. Зависимости
+- **Root dependencies** - только общие инструменты (prettier, eslint, typescript)
+- **Package dependencies** - устанавливать в конкретных пакетах
+- **Workspace dependencies** - использовать `pnpm add -D package -w` для root
+
+### 3. TypeScript Configuration
+- **Base config** - `packages/tsconfig/base.json` для общих настроек
+- **Package configs** - наследовать от base с специфичными настройками
+- **App configs** - наследовать от base с browser-specific настройками
+
+## Правила для AI
+
+### При создании новых пакетов:
+
+1. **Создать правильную структуру:**
+```
+packages/new-package/
+├── lib/
+│   ├── index.ts
+│   └── components/
+├── package.json
+├── tsconfig.json
+└── README.md
+```
+
+2. **Настроить tsconfig.json:**
+```json
+{
+  "extends": "../tsconfig/base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "declaration": true,
+    "declarationDir": "dist"
+  },
+  "include": ["lib/**/*", "index.mts"],
+  "exclude": ["node_modules", "dist"]
+}
+```
+
+3. **Настроить package.json:**
+```json
+{
+  "name": "@extension/new-package",
+  "main": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.mjs"
+  },
+  "files": ["dist"]
+}
+```
+
+### При создании новых страниц:
+
+1. **Создать правильную структуру:**
+```
+pages/new-page/
+├── src/
+│   ├── index.tsx
+│   └── components/
+├── package.json
+├── tsconfig.json
+├── postcss.config.cjs
+└── vite.config.mts
+```
+
+2. **Настроить tsconfig.json:**
+```json
+{
+  "extends": "@extension/tsconfig/base",
+  "compilerOptions": {
+    "types": ["chrome"],
+    "paths": {
+      "@extension/shared": ["../../packages/shared"],
+      "@extension/ui": ["../../packages/ui"]
+    }
+  }
+}
+```
+
+3. **Настроить PostCSS для TailwindCSS 4+:**
+```javascript
+// postcss.config.cjs
+module.exports = {
+  plugins: {
+    '@tailwindcss/postcss': {},
+    autoprefixer: {},
+  },
+}
+```
+
+### При работе с barrel exports:
+
+1. **Default exports:**
+```typescript
+// component.ts
+export default function Component() { ... }
+
+// index.ts
+export { default as Component } from './component.js';
+```
+
+2. **Named exports:**
+```typescript
+// component.ts
+export function Component() { ... }
+
+// index.ts
+export { Component } from './component';
+```
+
+3. **Mixed exports:**
+```typescript
+// index.ts
+export * from './helpers.js';
+export { default as Component } from './component.js';
+export type * from './types.js';
+```
+
+### При установке зависимостей:
+
+1. **В конкретном пакете:**
+```bash
+cd packages/package-name
+pnpm add dependency-name
+```
+
+2. **В конкретной странице:**
+```bash
+cd pages/page-name
+pnpm add dependency-name
+```
+
+3. **В workspace root:**
+```bash
+pnpm add -D dependency-name -w
+```
+
+### При диагностике проблем:
+
+1. **Проверить зависимости:**
+```bash
+pnpm why package-name
+pnpm list package-name
+```
+
+2. **Найти проблемные файлы:**
+```bash
+find . -name "tsconfig.json" -exec grep -l "node" {} \;
+```
+
+3. **Очистить и пересобрать:**
+```bash
+rm -rf dist && pnpm run build
+```
+
+## Частые ошибки и решения
+
+| Проблема | Решение |
+|----------|---------|
+| `Cannot find type definition file for 'node'` | Убрать 'node' из types в tsconfig.json |
+| `"Component" is not exported by` | Использовать `export { default as Component } from './file.js'` |
+| `Cannot find module 'tailwindcss'` | `pnpm add -D tailwindcss autoprefixer @tailwindcss/postcss` |
+| `Rollup failed to resolve import` | `pnpm add package-name` в конкретном пакете |
+| `spawn prettier ENOENT` | `git commit --no-verify` |
+
+## Команды для работы
+
+```bash
+# Сборка всего проекта
+pnpm run build
+
+# Сборка конкретного пакета
+pnpm -F @extension/package-name run build
+
+# Установка зависимостей
+pnpm install
+
+# Очистка кэша
+pnpm exec rimraf node_modules/.vite .turbo .cache
+
+# Пропуск pre-commit хуков
+git commit --no-verify -m "message"
+```
+
+## Рекомендации
+
+1. **Всегда проверять сборку** после изменений
+2. **Документировать решения** для повторного использования
+3. **Использовать правильные barrel exports** для default exports
+4. **Устанавливать зависимости в правильных местах**
+5. **Следовать структуре проекта** при создании новых файлов 

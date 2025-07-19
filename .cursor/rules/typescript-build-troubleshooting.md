@@ -1,0 +1,160 @@
+# TypeScript Build Troubleshooting Rules
+
+## Основные принципы устранения ошибок
+
+### 1. TypeScript Configuration Errors
+
+**Ошибка:** `Cannot find type definition file for 'node'`
+- **Причина:** В `tsconfig.json` указаны типы Node.js для браузерного кода
+- **Решение:** Убрать `'node'` из `compilerOptions.types`, оставить только `['chrome']`
+- **Применяется к:** `pages/*/tsconfig.json`, `tests/e2e/tsconfig.json`
+
+**Ошибка:** `Cannot find module '@extension/shared'`
+- **Причина:** Неправильные `paths` в `tsconfig.json`
+- **Решение:** Добавить корректные пути в `compilerOptions.paths`
+- **Пример:**
+```json
+{
+  "compilerOptions": {
+    "paths": {
+      "@extension/shared": ["../../packages/shared"],
+      "@extension/ui": ["../../packages/ui"]
+    }
+  }
+}
+```
+
+### 2. Barrel Export Issues
+
+**Ошибка:** `"initAppWithShadow" is not exported by ".../packages/shared/dist/index.mjs"`
+- **Причина:** Неправильный barrel export для default exports
+- **Решение:** Использовать явный re-export: `export { default as initAppWithShadow } from './init-app-with-shadow.js'`
+- **Паттерн:**
+```typescript
+// В index.ts
+export { default as ComponentName } from './component-file.js';
+
+// В component-file.ts
+export default function ComponentName() { ... }
+```
+
+### 3. TailwindCSS 4+ Setup
+
+**Ошибка:** `Cannot find module 'tailwindcss'`
+- **Решение:** Установить зависимости в конкретном пакете:
+```bash
+pnpm add -D tailwindcss autoprefixer @tailwindcss/postcss
+```
+
+**Ошибка:** `Loading PostCSS Plugin failed: Cannot find module '@tailwindcss/postcss'`
+- **Решение:** Создать `postcss.config.cjs`:
+```javascript
+module.exports = {
+  plugins: {
+    '@tailwindcss/postcss': {},
+    autoprefixer: {},
+  },
+}
+```
+
+**Ошибка:** `Command 'tailwindcss-cli' not found`
+- **Решение:** Удалить прямой вызов CLI из `build.mts`, использовать Vite PostCSS pipeline
+
+### 4. Module Resolution
+
+**Ошибка:** `Rollup failed to resolve import 'file-saver'`
+- **Решение:** Установить недостающую зависимость в конкретном пакете:
+```bash
+pnpm add file-saver
+```
+
+**Ошибка:** `Failed to resolve entry for package '@extension/vite-config'`
+- **Причина:** Неправильные `main`/`exports` в `package.json`
+- **Решение:** Использовать ESM-only экспорт:
+```json
+{
+  "main": "dist/index.mjs",
+  "exports": {
+    ".": "./dist/index.mjs"
+  }
+}
+```
+
+### 5. Build Script Issues
+
+**Ошибка:** `jsx is not exported by react/jsx-runtime.js`
+- **Причина:** Несовместимость версий React/SWC/Vite
+- **Решение:**
+  1. Обновить до последних версий: `react`, `react-dom`, `vite`, `@vitejs/plugin-react-swc`
+  2. Убедиться в `tsconfig.json`: `"jsx": "react-jsx"`
+  3. Не использовать `import type React`
+
+### 6. Pre-commit Hook Issues
+
+**Ошибка:** `spawn prettier ENOENT`
+- **Решение:** Установить prettier и плагины:
+```bash
+pnpm add -D prettier prettier-plugin-tailwindcss -w
+```
+- **Альтернатива:** Использовать `git commit --no-verify` для пропуска хуков
+
+## Порядок устранения ошибок
+
+1. **Анализ ошибки:** Определить тип и контекст
+2. **Проверка зависимостей:** Убедиться в наличии всех пакетов
+3. **Конфигурация:** Исправить `tsconfig.json`, `package.json`
+4. **Barrel exports:** Проверить правильность экспортов
+5. **Сборка:** Выполнить `rm -rf dist && pnpm run build`
+6. **Кэш:** При необходимости очистить кэш: `pnpm exec rimraf node_modules/.vite .turbo .cache`
+
+## Частые паттерны исправлений
+
+### Для pages/*/tsconfig.json:
+```json
+{
+  "compilerOptions": {
+    "types": ["chrome"], // Убрать 'node'
+    "paths": {
+      "@extension/shared": ["../../packages/shared"],
+      "@extension/ui": ["../../packages/ui"]
+    }
+  }
+}
+```
+
+### Для packages/*/tsconfig.json:
+```json
+{
+  "compilerOptions": {
+    "outDir": "dist",
+    "declaration": true,
+    "declarationDir": "dist"
+  }
+}
+```
+
+### Для barrel exports:
+```typescript
+// Правильно для default exports
+export { default as ComponentName } from './component-file.js';
+
+// Правильно для named exports
+export { ComponentName } from './component-file.js';
+```
+
+## Команды для диагностики
+
+```bash
+# Проверка зависимостей
+pnpm why react
+pnpm why tailwindcss
+
+# Поиск файлов
+find . -name "tsconfig.json" -exec grep -l "node" {} \;
+
+# Проверка сборки
+pnpm run build
+
+# Очистка кэша
+pnpm exec rimraf node_modules/.vite .turbo .cache && pnpm install
+``` 
