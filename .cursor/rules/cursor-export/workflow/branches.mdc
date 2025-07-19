@@ -9,11 +9,11 @@ aiCategory: process-management---
 - For bugfixes, use the prefix `fix/` and a clear description of the problem.
 - Never mix bugfixes and features in the same branch.
 - After merging a bugfix, update feature branches via rebase/merge from develop.
-- Direct commits or merges to `main` and `develop` are strictly forbidden. All changes must go through pull requests into `develop` only.
+- Direct comm.ts or merges to `main` and `develop` are strictly forbidden. All changes must go through pull reque.ts into `develop` only.
 - Merging to `main` is allowed only from `develop` after release approval.
-- **Branch Purpose Tracking:** Before starting a new, unrelated task, you must finish the current branch (commit, push, PR, merge) and only then create a new branch for the next task. This prevents mixing tasks and improves review clarity. Exceptions: urgent bugfixes (fix/).
+- **Branch Purpose Tracking:** Before starting a new, unrelated task, you must finish the current branch (commit, push, PR, merge) and only then create a new branch for the next task. This preve.ts mixing tasks and improves review clarity. Exceptions: urgent bugfixes (fix/).
 
-# Examples
-- ✅ `feature/pyodide-integration`
-- ✅ `fix/tailwindcss-build-script`
-- ❌ `feature/pyodide-integration` + unrelated refactor in same branch
+# examples
+- ✅ `feature/pyodIDE-integration`
+- ✅ `fix/tailwin.css-build-script`
+- ❌ `feature/pyodIDE-integration` + unrelated refactor in same branch

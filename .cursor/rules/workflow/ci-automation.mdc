@@ -9,8 +9,8 @@ aiCategory: process-management
 
 ## GitHub Actions Workflow для .cursor Rules
 
-Добавить `.github/workflows/rules-check.yml`:
-```yaml
+Add `.github/workflows/rules-check.yml`:
+``.yaml
 name: Rules Structure Check
 on:
   push:
@@ -29,10 +29,10 @@ jobs:
         with:
           node-version: '18'
       - name: Generate index and README structure
-        run: node .cursor/rules/cursor-manager.cjs full
+        run: node .cursor/rules/cursor-manager..js full
       - name: Check for uncommitted changes
         run: |
-          git diff --exit-code || (echo 'Rules structure is outdated. Please run cursor-manager.cjs full and commit the result.' && exit 1)
+          git diff --exit-code || (echo 'Rules structure is outdated. Please run cursor-manager..js full and commit the result.' && exit 1)
 ```
 
 ## Safe Delete Protection
@@ -44,8 +44,8 @@ jobs:
 - `chrome-extension/public/plugins`
 - `.cursor/rules`
 
-### GitHub Actions проверка:
-```yaml
+### GitHub Actions Verification:
+``.yaml
 - name: Check for protected directory deletion
   run: |
     if git diff --name-status | grep -E 'D[[:space:]]+(docs/for-ai-best-practices|memory-bank|platform-core|chrome-extension/public/plugins|\.cursor/rules)'; then
@@ -55,14 +55,14 @@ jobs:
 
 ## Automated PR Checks с Danger.js
 
-- Проверка детального описания PR
-- Проверка обновления changelog при изменении кода
+- Verification детального описания PR
+- Verification обновления changelog при изменении кода
 - Требование cross-references к правилам
-- Напоминание обновить документацию при изменении src/core
+- Напоминание Update документацию при изменении src/core
 
 ## Automated Releases с semantic-release
 
-- Анализ conventional commits
+- Анализ conventional comm.ts
 - Автоматическое обновление CHANGELOG.md
 - Создание git tags и релизов
 - Запуск автоматически при мерже в main

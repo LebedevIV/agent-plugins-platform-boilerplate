@@ -8,7 +8,7 @@ aiCategory: plugin-development
 # Plugin Best Practices
 - Single Responsibility: Each plugin should have a single, clear purpose
 - Modular Design: Break complex functionality into modules
-- Configuration: Use configuration files for customizable behavior
+- configuration: Use configuration files for customizable behavior
 - Versioning: Follow semantic versioning for plugin updates
 - Backward Compatibility: Maintain compatibility with previous versions
 

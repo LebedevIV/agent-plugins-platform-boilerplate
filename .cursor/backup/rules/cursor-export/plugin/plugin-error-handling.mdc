@@ -1,0 +1,27 @@
+---
+description: Plugin standard for error-handling
+globs: ["public/plugins/**/*", "**/*.py", "**/*.json", "**/*.ts", "**/*.js"]
+alwaysApply: falseaiPriority: normal
+aiCategory: plugin-development
+---
+
+# Plugin Error Handling
+- Graceful Degradation: Continue working with reduced functionality
+- User Feedback: Provide clear error messages to users
+- Logging: Log errors for debugging without exposing sensitive data
+- Fallbacks: Implement fallback mechanisms for critical features
+- Recovery: Automatic retry mechanisms where appropriate
+
+related:
+  - plugin-security.mdc
+  - architecture-error-handling.mdc
+
+description: Error handling requirements for all plugins
+globs:
+  - public/plugins/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

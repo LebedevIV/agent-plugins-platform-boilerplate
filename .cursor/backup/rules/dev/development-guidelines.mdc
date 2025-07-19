@@ -1,0 +1,23 @@
+---
+description: Development best practices and guidelines
+globs: ["**/*"]
+alwaysApply: true
+aiPriority: high
+aiCategory: development-practices
+---
+
+# Development Guidelines
+
+## Overview
+
+This file contains dev practice guidelines and best practices.
+
+## Guidelines
+
+<!-- Content will be added here automatically -->
+
+## Development Practice ([2025-07-19T01:19:31.302Z])
+
+Best practice: Использовать только ESM-экспорт для внутренних пакетов платформы
+
+

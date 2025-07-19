@@ -1,0 +1,23 @@
+---
+description: Plugin standard for documentation
+globs: ["public/plugins/**/*", "**/*.py", "**/*.json", "**/*.ts", "**/*.js"]
+alwaysApply: falseaiPriority: normal
+aiCategory: plugin-development
+---
+
+# Plugin Documentation Standards
+- API Documentation: Document all public APIs and parameters
+- Usage Examples: Provide clear usage examples
+- Error Codes: Document all possible error codes and meanings
+- Performance Notes: Document performance characteristics
+- Security Notes: Document security considerations
+
+description: Documentation standards for all plugins
+globs:
+  - public/plugins/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

@@ -1,0 +1,73 @@
+---
+description: experience transfer rule
+globs: ["**/*.ts", "**/*.js", "**/*.json", "**/*.md", "**/*.mdc"]
+alwaysApply: falseaiPriority: medium
+aiCategory: process-management
+---
+
+# Experience Transfer & Project Bootstrap
+
+## Автоматизация переноса опыта
+
+**Автоматизация** — это когда ассистент не просто даёт советы, а сам выполняет все технические шаги по внедрению best practices и автоматизаций:
+
+### Что автоматизируется:
+- Автоматически копирует и адаптирует конфиги (husky, danger.js, semantic-release, commitlint, renovate, CI/CD и т.д.)
+- Устанавливает необходимые npm-пакеты и настраивает их
+- Добавляет шаблоны PR, чек-листы, хуки, скрипты
+- Вносит изменения в package.json, .github/workflows, .husky/ и другие служебные файлы
+- Генерирует или обновляет документацию
+- Проводит аудит проекта и сообщает о несоответствиях или необходимых доработках
+
+### Команда для автоматизации:
+```
+Внедри все best practices и автоматизации из .cursor/rules в этот проект, установи необходимые зависимости, настрой CI/CD, husky, danger.js, semantic-release, commitlint, renovate и т.д. Проведи аудит и сообщи, если что-то требует ручной доработки.
+```
+
+## Быстрый старт для нового проекта
+
+### 1. Экспорт из исходного проекта:
+```bash
+cd .cursor/rules
+node cursor-manager.cjs export new-project-name
+```
+
+### 2. Копирование в новый проект:
+```bash
+cp -r cursor-export /path/to/new-project/
+```
+
+### 3. Импорт в новый проект:
+```bash
+cd /path/to/new-project
+node cursor-export/import-cursor.cjs
+```
+
+### 4. Кастомизация:
+```bash
+cd .cursor/rules
+node cursor-manager.cjs full
+```
+
+### 5. Аудит результата:
+```bash
+node cursor-manager.cjs status
+node cursor-manager.cjs audit
+```
+
+## Команды для AI:
+- `экспорт cursor` - Экспортировать правила для переноса
+- `импорт cursor` - Импортировать правила в текущий проект
+- `внедри best practices` - Внедрить все автоматизации и стандарты
+- `аудит проекта` - Провести аудит на соответствие best practices
+
+## Результат:
+- Быстрый старт новых проектов
+- Консистентность между проектами
+- Автоматизация рутинных задач
+- Улучшенное AI-ассистирование
+- Стандартизация процессов разработки
+description:
+globs:
+alwaysApply: false
+---

@@ -1,0 +1,19 @@
+---
+description: Git workflow rule - только develop в main, обязательные PR для всех изменений
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: trueaiPriority: normal
+aiCategory: development-practices
+---
+
+# Git Workflow Rule
+
+**Rule:**
+- Only merge into main from develop.
+- All feature, fix, and doc branches must be merged into develop first, never directly into main.
+- This rule is mandatory for all changes and pull requests. 
+
+---
+## Enforcement
+- Local pre-push hook (.husky/pre-push) blocks direct push to main and develop.
+- GitHub branch protection prevents direct push and enforces PRs from develop only.
+--- 

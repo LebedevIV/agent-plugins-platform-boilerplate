@@ -2,8 +2,8 @@
 
 ## Overview
 
-Automated system for synchronizing user commands between multiple sources:
-- `USER_COMMANDS.md` - User-friendly command reference
+Automated system for synchronizing user Commands between multiple sources:
+- `USER_CommandS.md` - User-friendly Command reference
 - `.cursor/rules/cursor-export/ai-memory.mdc` - AI assistant instructions
 - `.cursor/rules/ai-memory.mdc` - Cursor rules
 - `CURSOR_AI_MEMORY_BANK.md` - Export for Cursor AI memory-bank
@@ -11,14 +11,14 @@ Automated system for synchronizing user commands between multiple sources:
 ## How It Works
 
 ### Single Source of Truth
-All commands are defined in `.cursor/rules/command-sync.cjs` in a structured format:
+All Commands are defined in `.cursor/rules/Command-sync..js` in a structured format:
 
-```javascript
-const commandCategories = {
+```JavaScript
+const CommandCategories = {
   'Context and Memory': {
     'save context': {
-      russian: ['Сохрани контекст', 'Сохранить контекст сессии'],
-      description: 'Save achievements, decisions and plans to memory-bank',
+      russian: ['Сохрани контекст', 'Save контекст сессии'],
+      description: 'Save achieveme.ts, decisions and plans to memory-bank',
       userDescription: 'AI-ассистент сохранит все достижения, решения и планы в memory-bank'
     }
   }
@@ -30,24 +30,24 @@ The script generates all files from the single source:
 
 ```bash
 # Sync all files
-node .cursor/rules/command-sync.cjs sync
+node .cursor/rules/Command-sync..js sync
 
 # Export for Cursor AI memory-bank
-node .cursor/rules/command-sync.cjs export
+node .cursor/rules/Command-sync..js export
 
 # Translate context to English
-node .cursor/rules/command-sync.cjs translate-context
+node .cursor/rules/Command-sync..js translate-context
 ```
 
-## File Formats
+## File Form.ts
 
-### USER_COMMANDS.md
+### USER_CommandS.md
 User-friendly format with emojis and detailed descriptions:
 ```markdown
 ## 📝 Сохранение контекста
 
-### Сохранить контекст сессии
-`Сохрани контекст` / `Сохранить контекст сессии`
+### Save контекст сессии
+`Сохрани контекст` / `Save контекст сессии`
 *AI-ассистент сохранит все достижения, решения и планы в memory-bank*
 ```
 
@@ -55,14 +55,14 @@ User-friendly format with emojis and detailed descriptions:
 AI-optimized format for .cursor rules:
 ```markdown
 ### Context and Memory:
-- `save context` / `Сохрани контекст` / `Сохранить контекст сессии` - Save achievements, decisions and plans to memory-bank
+- `save context` / `Сохрани контекст` / `Save контекст сессии` - Save achieveme.ts, decisions and plans to memory-bank
 ```
 
 ### CURSOR_AI_MEMORY_BANK.md
 Format optimized for Cursor AI memory-bank:
 ```markdown
 ### 📝 Context and Memory:
-- `save context` / `Сохрани контекст` / `Сохранить контекст сессии` - Save achievements, decisions and plans to memory-bank
+- `save context` / `Сохрани контекст` / `Save контекст сессии` - Save achieveme.ts, decisions and plans to memory-bank
 ```
 
 ## Context Translation System
@@ -72,23 +72,23 @@ The system automatically translates context to English for AI/LLM compatibility:
 
 ```bash
 # Save context with automatic translation and commit
-node .cursor/rules/save-context.cjs save
+node .cursor/rules/save-context..js save
 
 # Only translate without committing
-node .cursor/rules/save-context.cjs translate-only
+node .cursor/rules/save-context..js translate-only
 ```
 
 ### Features
 - ✅ **Automatic translation** from Russian to English
-- ✅ **Backup creation** before translation
-- ✅ **Git integration** with automatic commits
+- ✅ **backup creation** before translation
+- ✅ **Git integration** with automatic comm.ts
 - ✅ **Comprehensive coverage** of all context terminology
 - ✅ **Error handling** with safe fallbacks
 
 ### Translation Coverage
 - **Headers and titles** - All section headers
 - **Task status** - Completed tasks, current focus, next steps
-- **Principles** - Working principles and guidelines
+- **Principles** - Working principles and guIDElines
 - **Technical context** - Architecture and standards
 - **Command system** - Command categories and descriptions
 - **User experience** - UX priorities and metrics
@@ -98,9 +98,9 @@ node .cursor/rules/save-context.cjs translate-only
 ## Integration with Cursor AI Memory-Bank
 
 ### Manual Integration
-1. Run export command:
+1. Run export Command:
    ```bash
-   node .cursor/rules/command-sync.cjs export
+   node .cursor/rules/Command-sync..js export
    ```
 
 2. Copy content from `CURSOR_AI_MEMORY_BANK.md`
@@ -114,13 +114,13 @@ node .cursor/rules/save-context.cjs translate-only
 ### Automatic Integration (Future)
 Planned features:
 - Direct API integration with Cursor
-- Automatic updates when commands change
+- Automatic updates when Commands change
 - Version control for AI memory-bank
 
 ## Command Categories
 
 ### 📝 Context and Memory
-- `save context` - Save achievements, decisions and plans in English (automatic translation)
+- `save context` - Save achieveme.ts, decisions and plans in English (automatic translation)
 - `update progress` - Update project status files
 - `restore context` - Restore full project understanding
 - `quick restore` - Get brief summary
@@ -134,12 +134,12 @@ Planned features:
 ### 🔧 Development
 - `create plugin [name]` - Create new plugin
 - `check code` - Run linting and type checking
-- `run tests` - Run all project tests
+- `run te.ts` - Run all project te.ts
 - `check dependencies` - Verify dependencies
 
 ### 📊 Project Management
 - `bump version patch/minor/major` - Increase version
-- `clean project` - Clean build artifacts
+- `clean project` - Clean build artifa.ts
 - `analyze performance` - Performance analysis
 - `check security` - Security analysis
 
@@ -147,44 +147,44 @@ Planned features:
 - `create release` - Prepare for release
 - `build production` - Production build
 
-## Benefits
+## Benef.ts
 
 ### For Users
-- ✅ **Consistent commands** across all sources
+- ✅ **Consistent Commands** across all sources
 - ✅ **Easy to use** - just copy and paste
 - ✅ **Bilingual support** - English and Russian
 - ✅ **Always up-to-date** - automatic synchronization
 
-### For AI Assistants
+### For AI Assista.ts
 - ✅ **Structured format** - easy to parse
-- ✅ **Clear descriptions** - understand what each command does
-- ✅ **Multiple sources** - available in all contexts
+- ✅ **Clear descriptions** - understand what each Command does
+- ✅ **Multiple sources** - available in all conte.ts
 - ✅ **Semantic understanding** - works with any language
 
 ### For Development
 - ✅ **Single source of truth** - no duplication
 - ✅ **Automatic updates** - change once, update everywhere
-- ✅ **Version control** - track command changes
+- ✅ **Version control** - track Command changes
 - ✅ **Easy maintenance** - centralized management
 
-## Usage Examples
+## Usage examples
 
 ### Adding New Commands
-1. Edit `.cursor/rules/command-sync.cjs`
-2. Add command to appropriate category
-3. Run sync command:
+1. Edit `.cursor/rules/Command-sync..js`
+2. Add Command to appropriate category
+3. Run sync Command:
    ```bash
-   node .cursor/rules/command-sync.cjs sync
+   node .cursor/rules/Command-sync..js sync
    ```
 
 ### Updating Existing Commands
-1. Edit command in `.cursor/rules/command-sync.cjs`
-2. Run sync command
+1. Edit Command in `.cursor/rules/Command-sync..js`
+2. Run sync Command
 3. All files updated automatically
 
 ### Exporting for Cursor
 ```bash
-node .cursor/rules/command-sync.cjs export
+node .cursor/rules/Command-sync..js export
 ```
 
 ## Technical Details
@@ -192,44 +192,44 @@ node .cursor/rules/command-sync.cjs export
 ### File Structure
 ```
 .cursor/rules/
-├── command-sync.cjs              # Main synchronization script
+├── Command-sync..js              # Main synchronization script
 ├── ai-memory.mdc                 # Cursor rules (auto-generated)
 ├── cursor-export/
 │   └── ai-memory.mdc            # AI assistant instructions (auto-generated)
 └── doc/
-    └── command-synchronization.mdc # This documentation
+    └── Command-synchronization.mdc # This documentation
 
-USER_COMMANDS.md                  # User reference (auto-generated)
+USER_CommandS.md                  # User reference (auto-generated)
 CURSOR_AI_MEMORY_BANK.md         # Cursor export (auto-generated)
 ```
 
 ### Script Functions
-- `generateUserCommandsMD()` - Generate USER_COMMANDS.md
-- `generateAIMemoryMD()` - Generate ai-memory.mdc files
+- `generateUserCommand.md()` - Generate USER_CommandS.md
+- `generateAIMemor.md()` - Generate ai-memory.mdc files
 - `generateCursorMemoryBank()` - Generate Cursor format
 - `syncCommands()` - Sync all files
 - `exportForCursor()` - Export for Cursor AI memory-bank
 
 ### Command Structure
-Each command has:
-- **English command** - Primary command
+Each Command has:
+- **English Command** - Primary Command
 - **Russian alternatives** - User-friendly alternatives
 - **Description** - Technical description for AI
 - **User description** - User-friendly description
 
-## Future Enhancements
+## Future Enhanceme.ts
 
 ### Planned Features
 - [ ] **API Integration** - Direct Cursor API integration
 - [ ] **Auto-sync** - Automatic sync on file changes
-- [ ] **Command validation** - Validate command syntax
-- [ ] **Usage analytics** - Track command usage
-- [ ] **Template system** - Command templates for different project types
+- [ ] **Command validation** - Validate Command syntax
+- [ ] **Usage analytics** - Track Command usage
+- [ ] **template system** - Command templates for different project types
 
-### Integration Ideas
+### Integration IDEas
 - **Git hooks** - Auto-sync on commit
-- **CI/CD integration** - Validate command consistency
-- **Plugin system** - Extensible command categories
+- **CI/CD integration** - Validate Command consistency
+- **Plugin system** - Extensible Command categories
 - **Multi-language support** - More languages beyond English/Russian
 
 ## Troubleshooting
@@ -237,27 +237,27 @@ Each command has:
 ### Common Issues
 1. **Sync fails** - Check file permissions
 2. **Commands not working** - Verify Cursor AI memory-bank integration
-3. **Format issues** - Check command structure in script
+3. **Format issues** - Check Command structure in script
 
 ### Debug Commands
 ```bash
 # Check script help
-node .cursor/rules/command-sync.cjs help
+node .cursor/rules/Command-sync..js help
 
 # Verify file generation
-ls -la USER_COMMANDS.md CURSOR_AI_MEMORY_BANK.md
+ls -la USER_CommandS.md CURSOR_AI_MEMORY_BANK.md
 ```
 
 ## Conclusion
 
-The command synchronization system provides:
+The Command synchronization system provIDEs:
 - ✅ **Consistent experience** across all platforms
 - ✅ **Easy maintenance** with single source of truth
-- ✅ **Automatic updates** for all command sources
+- ✅ **Automatic updates** for all Command sources
 - ✅ **AI-optimized format** for maximum compatibility
 - ✅ **User-friendly interface** for easy adoption
 
-This system ensures that commands work seamlessly across USER_COMMANDS.md, .cursor rules, and Cursor AI memory-bank settings.
+This system ensures that Commands work sea.lessLy across USER_CommandS.md, .cursor rules, and Cursor AI memory-bank settings.
 description:
 globs:
 alwaysApply: false

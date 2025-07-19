@@ -5,36 +5,36 @@ alwaysApply: trueaiPriority: medium
 aiCategory: documentation
 ---
 
-# Стандарты создания правил в .cursor/rules
+# Standards создания правил в .cursor/rules
 
-## Приоритет .mdc файлов над .md
+## Priority .mdc файлов над .md
 
-### Обязательно использовать .mdc для:
+### Required использовать .mdc для:
 - **Правил и стандартов** - все правила должны быть в .mdc
-- **AI инструкций** - команды, принципы, ограничения
-- **Архитектурных решений** - структура, паттерны, best practices
-- **Автоматизации** - скрипты, workflow, процессы
+- **AI инструкций** - команды, Principles, Constrai.ts
+- **Архитектурных решений** - структура, Patterns, best practices
+- **Автоматизации** - скрипты, workflow, Processes
 
 ### Допустимо использовать .md для:
-- **Чистой документации** - README, guides, tutorials
+- **Чистой документации** - README, guIDEs, tutorials
 - **Временных заметок** - черновики, эксперименты
 - **Внешних ссылок** - ссылки на внешние ресурсы
 
 ## Структура .mdc файла
 
-### Обязательные метаданные:
-```yaml
+### Обязательные метаdata:
+``.yaml
 ---
-description: Краткое описание назначения файла
-globs: ["**/*"]  # Паттерны файлов для применения
+description: Краткое Description назначения файла
+globs: ["**/*"]  # Patterns файлов для применения
 alwaysApply: true  # Автоматическое применение
 ---
 ```
 
-### Дополнительные метаданные:
-```yaml
+### Дополнительные метаdata:
+``.yaml
 ---
-description: Описание
+description: Description
 globs: ["pages/**/*", "packages/**/*"]
 alwaysApply: false  # Применяется по запросу
 related:
@@ -46,23 +46,23 @@ related:
 ## Преимущества .mdc файлов
 
 ### 1. Автоматическое применение
-- Cursor читает метаданные при создании чата
+- Cursor читает метаdata при создании чата
 - Правила применяются без явного обращения
-- `alwaysApply: true` обеспечивает постоянное действие
+- `alwaysApply: true` обеспечивает постоянное Action
 
-### 2. Лучшая интеграция с AI
+### 2. Лучшая Integration с AI
 - AI понимает контекст применения через `globs`
-- Описание помогает AI выбрать подходящие правила
-- Структурированные метаданные улучшают понимание
+- Description помогает AI выбрать подходящие правила
+- Структурированные метаdata улучшают понимание
 
 ### 3. Приоритизация и организация
-- `alwaysApply` определяет важность правила
+- `alwaysApply` определяет Importantсть правила
 - `related` связывает связанные правила
 - `globs` ограничивает область применения
 
-### 4. AI memory-bank интеграция
+### 4. AI memory-bank Integration
 - Правила автоматически попадают в AI memory-bank
-- Доступны через Настройки / Rules & Memories
+- Доступны через Settings / Rules & Memories
 - Сохраняются между сессиями
 
 ## Миграция .md → .mdc
@@ -74,16 +74,16 @@ related:
 
 ### Процесс миграции:
 1. Переименовать `.md` → `.mdc`
-2. Добавить YAML frontmatter с метаданными
+2. Add.yaml frontmatter с метаданными
 3. Убедиться в корректности `globs` и `alwaysApply`
-4. Проверить интеграцию с AI memory-bank
+4. Check интеграцию с AI memory-bank
 
-## Примеры правильного использования
+## examples правильного использования
 
 ### ✅ Правильно - .mdc с метаданными:
-```yaml
+``.yaml
 ---
-description: Правила TypeScript - конфигурация, barrel exports, troubleshooting
+description: Правила TypeScript - configuration, barrel expo.ts, troubleshooting
 globs: ["**/*.ts", "**/*.tsx", "**/*.json"]
 alwaysApply: true
 ---
@@ -93,41 +93,41 @@ alwaysApply: true
 ```markdown
 # TypeScript Rules
 - Use strict mode
-- Prefer barrel exports
+- Prefer barrel expo.ts
 ```
 
-## Исключения
+## Exceptions
 
 ### Допустимые .md файлы:
-- `README.md` - главная документация проекта
+- `README.md` - главная Documentation проекта
 - `CHANGELOG.md` - история изменений
 - `LICENSE.md` - лицензия
 - Временные файлы с префиксом `temp-` или `draft-`
 
-## Проверка соответствия
+## Verification соответствия
 
-### Автоматическая проверка:
+### Автоматическая Verification:
 ```bash
 # Найти все .md файлы в .cursor/rules
 find .cursor/rules -name "*.md" -not -name "README.md"
 
-# Проверить структуру .mdc файлов
-node .cursor/rules/check-rules-structure.cjs
+# Check структуру .mdc файлов
+node .cursor/rules/check-rules-structure..js
 ```
 
-### Ручная проверка:
+### Ручная Verification:
 1. Все ли правила в .mdc формате?
-2. Есть ли метаданные во всех .mdc файлах?
+2. Есть ли метаdata во всех .mdc файлах?
 3. Корректны ли `globs` и `alwaysApply`?
 4. Нужно ли мигрировать какие-то .md файлы?
 
-## Рекомендации
+## Recommendations
 
 1. **Всегда начинать с .mdc** для новых правил
 2. **Мигрировать важные .md** файлы в .mdc
-3. **Проверять метаданные** при создании правил
+3. **Проверять метаdata** при создании правил
 4. **Использовать `alwaysApply: true`** для критических правил
-5. **Документировать исключения** в README.mdc
+5. **Документировать Exceptions** в README.mdc
 description:
 globs:
 alwaysApply: false

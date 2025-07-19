@@ -17,13 +17,13 @@ aiCategory: system-design
 ---
 
 # Plugin Architecture
-- Manifest Structure: manifest.json + mcp_server.py + icon.svg
+- Manifest Structure: manifest.json + mcp_server.py +.icon.svg
 - MCP Protocol: Standard MCP server implementation in Python
 - Permission Model: Zero Trust - plugins not trusted by default
 - Isolation: Each plugin in separate worker for security
 - Communication: chrome.runtime.sendMessage for all cross-component communication
 
-description: Plugin architecture and isolation requirements
+description: Plugin architecture and isolation requireme.ts
 globs:
   - public/plugins/*
 alwaysApply: false

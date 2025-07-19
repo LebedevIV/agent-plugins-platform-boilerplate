@@ -1,0 +1,21 @@
+---
+description: Project knowledge structure
+globs: ["**/*.md", "**/*.mdc", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+alwaysApply: false
+aiCategory: documentation---
+
+# Knowledge Map
+
+- USER_COMMANDS: USER_COMMANDS.md — все пользовательские команды
+- graveyard: memory-bank/graveyard.md — ошибки, environment-specific issues
+- architecture: memory-bank/codebase-architecture.md — архитектурные решения, паттерны, зависимости
+- meta: memory-bank/README.md — мета-правила, структура, универсальные инструкции
+- dev-principles: memory-bank/DEV_PRACTICES.md — best practices для разработки
+- security: memory-bank/SECURITY.md — стандарты безопасности
+- knowledge-map: memory-bank/KNOWLEDGE_MAP.md — карта знаний
+- progress: memory-bank/progress.md — статус и история
+- activeContext: memory-bank/activeContext.md — актуальный контекст
+description:
+globs:
+alwaysApply: false
+---

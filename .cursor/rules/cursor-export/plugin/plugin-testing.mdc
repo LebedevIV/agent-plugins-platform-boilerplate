@@ -5,14 +5,14 @@ alwaysApply: falseaiPriority: normal
 aiCategory: plugin-development
 ---
 
-# Plugin Testing Requirements
-- Unit Tests: Test individual functions and components
-- Integration Tests: Test plugin integration with host system
-- Security Tests: Validate permission enforcement
-- Performance Tests: Monitor memory usage and execution time
-- Error Tests: Test error handling and recovery
+# Plugin Testing Requireme.ts
+- Unit Te.ts: Test individual functions and compone.ts
+- Integration Te.ts: Test plugin integration with host system
+- Security Te.ts: Validate permission enforcement
+- Performance Te.ts: Monitor memory usage and execution time
+- Error Te.ts: Test error handling and recovery
 
-description: Testing requirements for all plugins
+description: Testing requireme.ts for all plugins
 globs:
   - public/plugins/*
 alwaysApply: false

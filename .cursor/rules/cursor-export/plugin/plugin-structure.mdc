@@ -13,30 +13,30 @@ public/plugins/plugin-name/
 ├── manifest.json      # Plugin metadata and permissions
 ├── mcp_server.py      # Python MCP protocol implementation
 ├── workflow.json      # Plugin workflow definition (optional)
-└── icon.svg           # Plugin icon
+└──.icon.svg           # Plugin.icon
 ```
 
 ## Manifest.json Example
-```json
+``.json
 {
   "name": "Plugin Name",
   "version": "1.0.0",
   "description": "Plugin description",
   "main_server": "mcp_server.py",
-  "required_secrets": ["openai_api_key", "weather_api_key"],
-  "api_permissions": {
+  "required_secr.ts": ["openai_API_key", "weather_API_key"],
+  "API_permissions": {
     "openai": {
-      "domains": ["api.openai.com"],
-      "endpoints": ["/v1/chat/completions"],
+      "domains": ["API.openai.com"],
+      "endpoi.ts": ["/v1/chat/completions"],
       "methods": ["POST"],
       "rate_limit": "100/hour"
     }
   },
   "network_policy": {
-    "allowed_domains": ["api.openai.com"],
-    "websockets": "denied"
+    "allowed_domains": ["API.openai.com"],
+    "WebSock.ts": "denied"
   },
-  "api_schemas": {
+  "API_schemas": {
     "openai": {
       "chat_completions": {
         "type": "object",
@@ -49,7 +49,7 @@ public/plugins/plugin-name/
   }
 }
 ```
-description: Plugin directory and manifest requirements
+description: Plugin directory and manifest requireme.ts
 globs:
   - public/plugins/*
 alwaysApply: false

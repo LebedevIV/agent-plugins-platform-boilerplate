@@ -1,0 +1,23 @@
+---
+description: UI standard for navigation
+globs: ["pages/**/*", "**/*.tsx", "**/*.css", "**/*.scss", "packages/ui/**/*"]
+alwaysApply: falseaiPriority: normal
+aiCategory: user-interface
+---
+
+# UI Navigation Standards
+- Provide clear navigation context with breadcrumbs
+- Clearly indicate current page/section (active states)
+- Support browser back button
+- Support direct links to specific content (deep linking)
+- Show loading during navigation
+
+description: Navigation standards for all UI components
+globs:
+  - pages/*/src/components/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

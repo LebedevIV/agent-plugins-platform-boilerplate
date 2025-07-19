@@ -27,7 +27,7 @@ related:
   - plugin-error-handling.mdc
   - architecture-security.mdc
 
-description: Error handling requirements for system architecture
+description: Error handling requireme.ts for system architecture
 globs:
   - platform-core/*
   - chrome-extension/src/background/*

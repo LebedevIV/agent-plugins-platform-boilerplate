@@ -19,7 +19,7 @@ aiCategory: system-design
 # Project Structure Architecture
 - platform-core/: Main logic and services (keep boilerplate clean)
 - chrome-extension/src/background/: Core background services
-- pages/*/src/: UI components for different extension pages
+- pages/*/src/: UI compone.ts for different extension pages
 - memory-bank/: Project documentation and context
 - public/plugins/: Plugin implementations
 

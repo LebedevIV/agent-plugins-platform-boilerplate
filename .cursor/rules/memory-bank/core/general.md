@@ -13,16 +13,16 @@ This file contains core-related information and entries.
 
 ## [2025-07-19 01:56:13] - New Entry
 
-**Тип:** test
-**Категория:** core
-**Приоритет:** high
+**Type:** test
+**Category:** core
+**Priority:** high
 
-**Контекст:** No content provided
+**Контекст:** No content provIDEd
 
-**Статус:** 🔄 В процессе
+**Status:** 🔄 In Progress
 
 
-**Теги:** #universal #commands #testing
+**Теги:** #universal #Commands #testing
 
 **AI Команды:**
 - `обнови контекст` - для обновления активного контекста

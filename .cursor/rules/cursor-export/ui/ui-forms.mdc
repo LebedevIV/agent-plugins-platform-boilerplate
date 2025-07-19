@@ -1,20 +1,20 @@
 ---
 description: UI standard for forms
-globs: ["pages/**/*", "**/*.tsx", "**/*.css", "**/*.scss", "packages/ui/**/*"]
+globs: ["pages/**/*", "**/*.tsx", "**/*.css", "**/*..css", "packages/ui/**/*"]
 alwaysApply: falseaiPriority: normal
 aiCategory: user-interface
 ---
 
 # UI Form Standards
-- Client-side and server-side validation
+- Client-sIDE and server-sIDE validation
 - Show validation errors clearly
-- Provide clear success feedback
+- ProvIDE clear success feedback
 - Auto-save forms where appropriate
-- Support common keyboard shortcuts
+- Support common keyboard shortc.ts
 
-description: Form standards for all UI components
+description: Form standards for all UI compone.ts
 globs:
-  - pages/*/src/components/*
+  - pages/*/src/compone.ts/*
 alwaysApply: false
 ---
 description:

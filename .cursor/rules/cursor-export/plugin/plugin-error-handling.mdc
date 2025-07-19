@@ -7,7 +7,7 @@ aiCategory: plugin-development
 
 # Plugin Error Handling
 - Graceful Degradation: Continue working with reduced functionality
-- User Feedback: Provide clear error messages to users
+- User Feedback: ProvIDE clear error messages to users
 - Logging: Log errors for debugging without exposing sensitive data
 - Fallbacks: Implement fallback mechanisms for critical features
 - Recovery: Automatic retry mechanisms where appropriate
@@ -16,7 +16,7 @@ related:
   - plugin-security.mdc
   - architecture-error-handling.mdc
 
-description: Error handling requirements for all plugins
+description: Error handling requireme.ts for all plugins
 globs:
   - public/plugins/*
 alwaysApply: false

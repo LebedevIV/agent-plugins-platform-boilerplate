@@ -1,0 +1,80 @@
+---
+description: index rule
+globs: ["**/*"]
+alwaysApply: true
+aiCategory: general---
+
+# Index of Modular Rules
+
+## root
+- [AI Memory Bank](ai-memory.mdc) — User commands and AI instructions
+- [Environment Constraints](environment.mdc) — Critical environment limitations
+- [Monorepo Best Practices](monorepo-best-practices.mdc) — Monorepo structure and guidelines
+- [TypeScript Build Troubleshooting](typescript-build-troubleshooting.mdc) — TypeScript build error solutions
+- [README](README.mdc) — Main documentation and structure
+
+## architecture
+- [Chat System Architecture](architecture/architecture-chat-system.mdc) — Chat system architecture and data flow
+- [Error Handling (Architecture)](architecture/architecture-error-handling.mdc) — Error handling requirements for system architecture
+- [Monitoring and Observability (Architecture)](architecture/architecture-observability.mdc) — Monitoring and observability requirements for system architecture
+- [Performance Guidelines (Architecture)](architecture/architecture-performance.mdc) — Performance guidelines for system architecture
+- [Plugin Architecture](architecture/architecture-plugin.mdc) — Plugin architecture and isolation requirements
+- [Project Structure Architecture](architecture/architecture-project-structure.mdc) — Directory and component structure for the project
+- [Security Architecture](architecture/architecture-security.mdc) — Security architecture and controls
+- [Development Workflow (Architecture)](architecture/architecture-workflow.mdc) — Development workflow and process standards
+- [Project Overview](architecture/project-architecture.mdc)
+
+## dev
+- [Development Principle 1: Do No Harm](dev/dev-principle-01-do-no-harm.mdc) — 'Do No Harm' principle for all development
+- [AI-First Documentation](doc/ai-first.mdc) — AI-oriented documentation and comments for all code
+- [Development Principle 3: Best Practices First](dev/dev-principle-03-best-practices.mdc) — Prioritize best practices in all development
+- [Development Principle 4: Fail Fast, Fail Safe](dev/dev-principle-04-fail-fast-safe.mdc) — Fail fast and fail safe in all development
+- [Development Principle 5: Observability First](dev/dev-principle-05-observability.mdc) — Observability and monitoring in all development
+- [Development Principle 6: Configuration as Code](dev/dev-principle-06-config-as-code.mdc) — Configuration as code for all environments
+- [Development Principle 7: Progressive Enhancement](dev/dev-principle-07-progressive-enhancement.mdc) — Progressive enhancement in all development
+- [Development Principle 8: Data Integrity & Privacy](dev/dev-principle-08-data-integrity-privacy.mdc) — Data integrity and privacy in all development
+- [Development Principle 9: Continuous Learning](dev/dev-principle-09-continuous-learning.mdc) — Continuous learning and improvement in all development
+- [Development Principle 10: Ecosystem Thinking](dev/dev-principle-10-ecosystem-thinking.mdc) — Ecosystem thinking in all development
+- [Development Guidelines](dev/development-guidelines.mdc) — General development guidelines
+- [Security Best Practices](dev/security-and-deployment.mdc) — Security and deployment standards
+- [Testing Strategy](dev/testing-and-debugging.mdc) — Testing and debugging approaches
+- [TypeScript Rules](dev/typescript.mdc) — TypeScript-specific guidelines
+- [Git Workflow](dev/git-workflow.mdc) — Git workflow and branching rules
+
+## doc
+- [AI-First Documentation](doc/ai-first.mdc) — AI-oriented documentation standards
+- [Knowledge Map](doc/knowledge-map.mdc) — Project knowledge structure
+- [Memory-Bank Quality Checklist](doc/memorybank-quality.mdc) — Quality standards for memory-bank
+- [Restore Context](doc/restore-context.mdc) — Context restoration procedures
+- [MDC File Standards](doc/mdc-file-standards.mdc) — Standards for .mdc file creation
+- [AI Fallback Rule](doc/ai-fallback.mdc) — Fallback procedures for AI
+
+## plugin
+- [Plugin Best Practices](plugin/plugin-best-practices.mdc) — Best practices for plugin development
+- [Plugin Documentation Standards](plugin/plugin-documentation.mdc) — Documentation standards for all plugins
+- [Plugin Error Handling](plugin/plugin-error-handling.mdc) — Error handling requirements for all plugins
+- [Plugin Performance Guidelines](plugin/plugin-performance.mdc) — Performance guidelines for all plugins
+- [Plugin Security Requirements](plugin/plugin-security.mdc) — Security requirements for all plugins
+- [Plugin Structure](plugin/plugin-structure.mdc) — Plugin directory and manifest requirements
+- [Plugin Testing Requirements](plugin/plugin-testing.mdc) — Testing requirements for all plugins
+
+## security
+- [Input Validation](security/validation.mdc) — Input validation and data sanitization rules
+
+## ui
+- [Accessibility (A11y) Standards](ui/ui-accessibility.mdc) — Accessibility requirements for all UI components
+- [UI Animation and Transitions](ui/ui-animation.mdc) — Animation and transition standards for all UI components
+- [UI Error Handling](ui/ui-error-handling.mdc) — Error handling requirements for all UI components
+- [UI Form Standards](ui/ui-forms.mdc) — Form standards for all UI components
+- [UI Loading States](ui/ui-loading-states.mdc) — Loading state requirements for all UI components
+- [UI Mobile Responsiveness](ui/ui-mobile.mdc) — Mobile responsiveness standards for all UI components
+- [UI Navigation Standards](ui/ui-navigation.mdc) — Navigation standards for all UI components
+- [UI Performance Standards](ui/ui-performance.mdc) — Performance standards for all UI components
+- [React Component Standards](ui/ui-react-components.mdc) — Standards for React component structure in UI
+- [UI Styling Standards](ui/ui-styling.mdc) — Styling standards for all UI components
+- [UI Testing Standards](ui/ui-testing.mdc) — Testing standards for all UI components
+
+## workflow
+- [Automation Rules](workflow/automation.mdc) — Automation and synchronization rules
+- [Branch Management](workflow/branches.mdc) — Git branch management rules
+- [Workflow Branching Rules](workflow/workflow.mdc) — Development workflow standards

@@ -1,0 +1,66 @@
+---
+description: Testing and debugging standards
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: falseaiPriority: normal
+aiCategory: development-practices
+---
+
+# Testing & Troubleshooting Best Practices
+
+## Документирование тестирования и отладки
+
+### Ключевые принципы:
+- Писать пошаговые гайды для всех основных flows тестирования и отладки
+- Разделять usage, troubleshooting и advanced diagnostics в отдельные файлы
+- Cross-link гайды для навигации (usage → troubleshooting → advanced)
+- Использовать четкие, воспроизводимые шаги и code snippets
+- Ссылаться на релевантные скрипты, автоматизацию и best practices
+- Обновлять гайды при изменении features или workflows
+
+### Примеры гайдов:
+- DevTools Testing Guide
+- DevTools Panel Troubleshooting
+- DevTools Panel Usage
+
+## Анализ внешних репозиториев как submodules
+
+Для анализа, поиска и отслеживания изменений во внешнем git репозитории:
+
+### Пошагово:
+1. В корне монорепо:
+   ```bash
+   git submodule add <repo-url> external/<folder-name>
+   git submodule update --init --recursive
+   ```
+   
+   Пример:
+   ```bash
+   git submodule add https://github.com/QizhengMo/chrome-extension-sidepanel-template.git external/sidepanel-template
+   git submodule update --init --recursive
+   ```
+
+2. Открыть монорепо в Cursor/VSCode. Submodule будет проиндексирован и доступен для поиска кода, навигации и анализа.
+
+3. Обновить submodule до последней версии:
+   ```bash
+   cd external/sidepanel-template
+   git pull origin main
+   ```
+
+4. Удалить submodule (если больше не нужен):
+   ```bash
+   git submodule deinit -f external/sidepanel-template
+   git rm -f external/sidepanel-template
+   rm -rf .git/modules/external/sidepanel-template
+   ```
+
+### Преимущества:
+- Изолирует внешний код от основной git истории
+- Позволяет легкие обновления и независимое версионирование
+- Обеспечивает полный поиск кода и анализ в Cursor/VSCode
+
+**Используйте этот метод для любого внешнего кодового база, который хотите анализировать или ссылаться в монорепо.**
+description:
+globs:
+alwaysApply: false
+---

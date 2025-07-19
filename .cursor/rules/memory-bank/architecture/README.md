@@ -1,4 +1,4 @@
-# Architecture Decisions - react-typescript
+# Architecture Decisions - React-TypeScript
 
 ## Files in this category:
 
@@ -6,7 +6,7 @@
 - [decisions](./decisions.md)
 - [patterns](./patterns.md)
 - [routing](./routing.md)
-- [state-management](./state-management.md)
+- [State-management](./State-management.md)
 
 ## Description:
 
@@ -14,9 +14,9 @@
 
 ## AI Commands:
 
-- `добавь в architecture` - Добавить запись в эту категорию
-- `обнови architecture` - Обновить файлы в категории
+- `добавь в architecture` - Add запись в эту категорию
+- `обнови architecture` - Update файлы в категории
 - `покажи architecture` - Показать содержимое категории
 
 ---
-*Auto-generated for react-typescript project*
+*Auto-generated for React-TypeScript project*

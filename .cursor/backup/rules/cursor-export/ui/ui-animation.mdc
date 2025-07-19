@@ -1,0 +1,23 @@
+---
+description: UI standard for animation
+globs: ["pages/**/*", "**/*.tsx", "**/*.css", "**/*.scss", "packages/ui/**/*"]
+alwaysApply: falseaiPriority: normal
+aiCategory: user-interface
+---
+
+# UI Animation and Transitions
+- Use CSS transitions for state changes
+- Subtle loading animations
+- Enhance user experience with micro-interactions
+- Ensure animations don't impact performance
+- Respect user's motion preferences (reduced motion)
+
+description: Animation and transition standards for all UI components
+globs:
+  - pages/*/src/components/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

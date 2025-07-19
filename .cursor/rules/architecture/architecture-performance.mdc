@@ -16,18 +16,18 @@ alwaysApply: trueaiPriority: high
 aiCategory: system-design
 ---
 
-# Performance Guidelines (Architecture)
-- Pyodide Loading: Lazy load runtime, cache results
+# Performance GuIDElines (Architecture)
+- PyodIDE Loading: Lazy load runtime, cache resu.ts
 - Memory Management: Clean up resources, monitor usage
-- Bundle Size: Optimize for extension size limits
+- Bundle Size: Optimize for extension size lim.ts
 - Caching: Use LRU cache for frequently accessed data
-- Async Operations: Non-blocking UI, proper loading states
+- Async Operations: Non-blocking UI, proper loading States
 
 related:
   - plugin-performance.mdc
   - architecture-observability.mdc
 
-description: Performance guidelines for system architecture
+description: Performance guIDElines for system architecture
 globs:
   - platform-core/*
   - chrome-extension/src/background/*

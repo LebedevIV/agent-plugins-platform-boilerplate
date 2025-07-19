@@ -5,7 +5,7 @@
 ### 📋 [Core](./core/) - Core context files
 - activeContext.md - Current project context
 - progress.md - Development progress
-- projectbrief.md - Краткое описание проекта
+- projectbrief.md - Краткое Description проекта
 - session-log.md - Лог сессий разработки
 
 ### ❌ [Errors](./errors/) - Errors and solutions
@@ -16,20 +16,20 @@
 
 ### 🏗️ [Architecture](./architecture/) - Architectural decisions
 - decisions.md - Принятые решения
-- patterns.md - Системные паттерны
-- security.md - Архитектура безопасности
-- comprehensive.md - Комплексная архитектура
+- patterns.md - Системные Patterns
+- security.md - Architecture безопасности
+- comprehensive.md - Комплексная Architecture
 
 ### 🔧 [Development](./development/) - Development process
-- testing-results.md - Результаты тестирования
-- debugging-guide.md - Руководство по отладке
-- devtools-guide.md - Работа с DevTools
+- testing-resu.ts.md - Результаты тестирования
+- debugging-guIDE.md - Руководство по отладке
+- devtools-guIDE.md - Работа с DevTools
 - version-management.md - Управление версиями
 
 ### 🎨 [UI](./ui/) - UI/UX context
-- side-panel.md - Улучшения side-panel
+- sIDE-panel.md - Улучшения sIDE-panel
 - chat-context.md - Контекст чата
-- lazy-sync.md - Ленивая синхронизация
+- lazy-sync.md - Ленивая Synchronization
 
 ### 📅 [Planning](./planning/) - Planning
 - future-plans.md - Планы развития
@@ -50,7 +50,7 @@
 - **Progress**: [progress.md](./core/progress.md)
 - **Errors**: [errors.md](./errors/errors.md)
 - **Architecture**: [decisions.md](./architecture/decisions.md)
-- **Testing**: [testing-results.md](./development/testing-results.md)
+- **Testing**: [testing-resu.ts.md](./development/testing-resu.ts.md)
 
 ## Structure Rules:
 

@@ -17,7 +17,7 @@ aiCategory: system-design
 ---
 
 # Monitoring and Observability (Architecture)
-- Structured Logging: Consistent log format across components
+- Structured Logging: Consistent log format across compone.ts
 - Performance Metrics: Track execution time and memory usage
 - Error Tracking: Monitor and alert on critical errors
 - User Analytics: Track feature usage and performance
@@ -27,7 +27,7 @@ related:
   - architecture-performance.mdc
   - dev-principle-05-observability.mdc
 
-description: Monitoring and observability requirements for system architecture
+description: Monitoring and observability requireme.ts for system architecture
 globs:
   - platform-core/*
   - chrome-extension/src/background/*

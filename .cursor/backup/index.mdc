@@ -1,0 +1,27 @@
+# Project Rules Index
+
+В этом проекте используются современные Cursor Project Rules:
+
+- Все правила хранятся в виде отдельных .mdc-файлов в .cursor/rules/
+- Каждый файл отвечает за отдельный аспект: команды пользователя, best practices, безопасность, workflow и т.д.
+
+## Ключевые правила:
+- [user-commands.mdc](rules/user-commands.mdc) — обработка пользовательских команд
+- [development-guidelines.mdc](rules/development-guidelines.mdc) — best practices для разработки
+- [security-and-deployment.mdc](rules/security-and-deployment.mdc) — security-стандарты
+- [knowledge-map.mdc](rules/knowledge-map.mdc) — карта структуры знаний
+- [memorybank-quality.mdc](rules/memorybank-quality.mdc) — чек-лист качества memory-bank
+- [automation.mdc](rules/automation.mdc) — автоматизация синхронизации
+- [workflow.mdc](rules/workflow.mdc) — workflow-правила ветвления
+- [project-architecture.mdc](rules/project-architecture.mdc) — архитектура и паттерны
+- [testing-and-debugging.mdc](rules/testing-and-debugging.mdc) — тестирование и отладка
+- [plugin-development.mdc](rules/plugin-development.mdc) — стандарты для плагинов
+- [ui-standards.mdc](rules/ui-standards.mdc) — UI-стандарты
+- [architecture-patterns.mdc](rules/architecture-patterns.mdc) — архитектурные паттерны
+- [development-principles.mdc](rules/development-principles.mdc) — принципы разработки
+
+Все правила всегда применяются для максимальной автоматизации и прозрачности.
+description:
+globs:
+alwaysApply: false
+---

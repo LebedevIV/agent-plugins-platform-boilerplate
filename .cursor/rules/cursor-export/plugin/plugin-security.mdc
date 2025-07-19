@@ -4,14 +4,14 @@ globs: ["public/plugins/**/*", "**/*.py", "**/*.json", "**/*.ts", "**/*.js"]
 alwaysApply: true
 aiCategory: plugin-development---
 
-# Plugin Security Requirements
+# Plugin Security Requireme.ts
 - Zero Trust: Plugins are not trusted by default
 - Permission Declaration: All required permissions must be declared in manifest
 - API Validation: All API calls must be validated against schemas
-- Rate Limiting: Respect rate limits to prevent abuse
+- Rate Limiting: Respect rate lim.ts to prevent abuse
 - Error Handling: Graceful error handling without exposing sensitive data
 
-description: Security requirements for all plugins
+description: Security requireme.ts for all plugins
 globs:
   - public/plugins/*
 alwaysApply: false

@@ -17,16 +17,16 @@ aiCategory: system-design
 ---
 
 # Project Overview
-Agent-Plugins-Platform (APP) is a browser extension for running Python plugins via Pyodide and the MCP protocol. Key priorities: security, performance, and developer experience.
+Agent-Plugins-Platform (APP) is a browser extension for running Python plugins via PyodIDE and the MCP protocol. Key priorities: security, performance, and developer experience.
 
 ## Architecture Patterns
 
-### Core Components
+### Core Compone.ts
 - **Plugin Manager** (`core/plugin-manager.js`): manages plugin lifecycle
-- **Host API** (`core/host-api.js`): provides Python access to browser APIs
+- **Host API** (`core/host-API.js`): provIDEs Python access to browser APIs
 - **Workflow Engine** (`core/workflow-engine.js`): executes plugin workflows
-- **MCP Bridge** (`bridge/mcp-bridge.js`): JS ↔ Python communication
-- **Pyodide Worker** (`bridge/pyodide-worker.js`): isolated Python execution
+- **MCP Bridge** (`Bridge/mcp-Bridge.js`):.js ↔ Python communication
+- **PyodIDE Worker** (`Bridge/pyodIDE-worker.js`): isolated Python execution
 
 ### Plugin Structure
 ```
@@ -34,13 +34,13 @@ public/plugins/plugin-name/
 ├── manifest.json      # Metadata and permissions
 ├── mcp_server.py      # MCP protocol (Python)
 ├── workflow.json      # Workflow description
-└── icon.svg           # Icon
+└──.icon.svg           #.icon
 ```
 
 ### Communication Flow
-1. UI → Plugin Manager → MCP Bridge → Pyodide Worker → Python Plugin
+1. UI → Plugin Manager → MCP Bridge → PyodIDE Worker → Python Plugin
 2. Python Plugin → Host API → Browser APIs
-3. Results return via the same path
+3. Resu.ts return via the same path
 description:
 globs:
 alwaysApply: false

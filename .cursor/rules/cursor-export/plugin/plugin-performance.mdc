@@ -5,8 +5,8 @@ alwaysApply: falseaiPriority: normal
 aiCategory: plugin-development
 ---
 
-# Plugin Performance Guidelines
-- Pyodide Optimization: Optimize for WebAssembly execution
+# Plugin Performance GuIDElines
+- PyodIDE Optimization: Optimize for WebAssembly execution
 - Memory Management: Clean up resources and avoid memory leaks
 - Async Operations: Use async/await for all I/O operations
 - Caching: Implement appropriate caching strategies
@@ -16,7 +16,7 @@ related:
   - architecture-performance.mdc
   - plugin-testing.mdc
 
-description: Performance guidelines for all plugins
+description: Performance guIDElines for all plugins
 globs:
   - public/plugins/*
 alwaysApply: false

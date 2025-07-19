@@ -1,0 +1,40 @@
+---
+description: Architecture rule for observability
+globs: ["platform-core/**/*", "chrome-extension/src/background/*", "**/*.ts", "**/*.js"]
+alwaysApply: trueaiPriority: high
+aiCategory: system-design
+---
+
+<!-- AI: This is an architectural rule that defines system structure -->
+<!-- AI: Priority: high -->
+<!-- AI: Category: system-design -->
+
+---
+description: Architecture rule for observability
+globs: ["platform-core/**/*", "chrome-extension/src/background/*", "**/*.ts", "**/*.js"]
+alwaysApply: trueaiPriority: high
+aiCategory: system-design
+---
+
+# Monitoring and Observability (Architecture)
+- Structured Logging: Consistent log format across components
+- Performance Metrics: Track execution time and memory usage
+- Error Tracking: Monitor and alert on critical errors
+- User Analytics: Track feature usage and performance
+- Health Checks: Monitor system health and dependencies
+
+related:
+  - architecture-performance.mdc
+  - dev-principle-05-observability.mdc
+
+description: Monitoring and observability requirements for system architecture
+globs:
+  - platform-core/*
+  - chrome-extension/src/background/*
+  - public/plugins/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

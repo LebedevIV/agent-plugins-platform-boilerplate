@@ -1,4 +1,4 @@
-# Context Information - react-typescript
+# Context Information - React-TypeScript
 
 ## Files in this category:
 
@@ -13,9 +13,9 @@
 
 ## AI Commands:
 
-- `добавь в context` - Добавить запись в эту категорию
-- `обнови context` - Обновить файлы в категории
+- `добавь в context` - Add запись в эту категорию
+- `обнови context` - Update файлы в категории
 - `покажи context` - Показать содержимое категории
 
 ---
-*Auto-generated for react-typescript project*
+*Auto-generated for React-TypeScript project*
