@@ -54,10 +54,10 @@
     "turbo": "^2.5.5"
   },
   "lint-staged": {
-    "*.{js,jsx,ts,tsx,json}": [
-      "prettier --write",
-      "eslint --fix"
-    ]
+    "*.js": ["eslint --fix", "prettier --write"],
+    "*.ts": ["eslint --fix", "prettier --write"],
+    "memory-bank/**/*.md": ["prettier --write"],
+    ".cursor/**/*.md": ["prettier --write"]
   },
   "packageManager": "pnpm@10.11.0",
   "engines": {
