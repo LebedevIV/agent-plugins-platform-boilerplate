@@ -1,0 +1,27 @@
+<!-- AI: This is a development principle that should be applied to all code -->
+<!-- AI: Priority: high -->
+<!-- AI: Category: development-practices -->
+
+---
+description: Development principle learning - dev principle 09 continuous learning
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: trueaiPriority: high
+aiCategory: development-practices
+---
+
+# Development Principle 9: Continuous Learning
+- Performance monitoring: Continuous performance monitoring
+- User feedback loops: User feedback
+- A/B testing: Test hypotheses on real users
+- Analytics insights: Usage analysis for improvements
+- Knowledge sharing: Document lessons and insights
+
+description: Continuous learning and improvement in all development
+globs:
+  - *
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

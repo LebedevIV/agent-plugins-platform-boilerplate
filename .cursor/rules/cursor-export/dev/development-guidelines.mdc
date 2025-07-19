@@ -1,0 +1,40 @@
+---
+description: General development guidelines
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: trueaiPriority: normal
+aiCategory: development-practices
+---
+
+# Development Guidelines
+
+## JavaScript/TypeScript
+- Use ES6+ and async/await.
+- Modular architecture, clear separation of concerns.
+- Error handling and structured logging are required.
+- Use TypeScript for type safety.
+- Prefer functional patterns where possible.
+
+## Python (Plugins)
+- Use MCP protocol for communication.
+- Use async/await for I/O operations.
+- Always validate inputs and handle errors.
+- Plugins should be single-purpose.
+- Document all plugin APIs clearly.
+
+# Security First
+- Validate manifests and permissions.
+- Sanitize data between JS and Python.
+- Sandbox all plugins.
+- Apply the principle of least privilege.
+- Audit all plugin code.
+
+# Performance Considerations
+- Lazy-load plugins and Pyodide when possible.
+- Cache repeated operations.
+- Monitor memory usage and clean up resources.
+- Optimize bundle size and loading time.
+- Use WebWorkers for non-blocking tasks.
+description:
+globs:
+alwaysApply: false
+---

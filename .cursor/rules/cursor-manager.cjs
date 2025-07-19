@@ -3,12 +3,14 @@
 const CursorAuditor = require('./audit-cursor.cjs');
 const CursorFixer = require('./fix-cursor.cjs');
 const AIOptimizer = require('./optimize-for-ai.cjs');
+const CursorExporter = require('./export-cursor.cjs');
 
 class CursorManager {
   constructor() {
     this.auditor = new CursorAuditor();
     this.fixer = new CursorFixer();
     this.optimizer = new AIOptimizer();
+    this.exporter = new CursorExporter();
   }
 
   async run(command, options = {}) {
@@ -29,6 +31,9 @@ class CursorManager {
         break;
       case 'status':
         await this.status();
+        break;
+      case 'export':
+        await this.export(options);
         break;
       case 'help':
         this.showHelp();
@@ -156,6 +161,13 @@ class CursorManager {
     console.log('\n' + '='.repeat(50));
   }
 
+  async export(options = {}) {
+    console.log('📦 Running .cursor export...\n');
+    
+    const targetProject = options.targetProject || null;
+    await this.exporter.export(targetProject);
+  }
+
   generateWorkflowReport(initialStats, finalStats) {
     console.log('\n📊 WORKFLOW REPORT');
     console.log('='.repeat(50));
@@ -196,12 +208,14 @@ COMMANDS:
   optimize  - Optimize rules for AI and Cursor
   full      - Run complete workflow (audit + fix + optimize)
   status    - Show current status and recommendations
+  export    - Export .cursor rules for transfer to another project
   help      - Show this help message
 
 OPTIONS:
   --json          - Output audit results as JSON
   --no-audit-first  - Skip audit before fixes/optimization
   --no-audit-after   - Skip audit after fixes/optimization
+  --target=PROJECT - Target project for export
 
 EXAMPLES:
   node cursor-manager.cjs audit
@@ -209,6 +223,8 @@ EXAMPLES:
   node cursor-manager.cjs optimize
   node cursor-manager.cjs full
   node cursor-manager.cjs status
+  node cursor-manager.cjs export
+  node cursor-manager.cjs export my-new-project
   node cursor-manager.cjs audit --json
 
 WORKFLOW:
@@ -245,6 +261,11 @@ async function main() {
       options.auditFirst = false;
     } else if (arg === '--no-audit-after') {
       options.auditAfter = false;
+    } else if (arg.startsWith('--target=')) {
+      options.targetProject = arg.split('=')[1];
+    } else if (!command && arg !== 'help') {
+      // Если это не опция и не команда help, считаем это целевым проектом
+      options.targetProject = arg;
     }
   }
   

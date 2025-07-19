@@ -1,0 +1,40 @@
+<!-- AI: This is an architectural rule that defines system structure -->
+<!-- AI: Priority: high -->
+<!-- AI: Category: system-design -->
+
+---
+description: Architecture rule for project-architecture
+globs: ["platform-core/**/*", "chrome-extension/src/background/*", "**/*.ts", "**/*.js"]
+alwaysApply: trueaiPriority: high
+aiCategory: system-design
+---
+
+# Project Overview
+Agent-Plugins-Platform (APP) is a browser extension for running Python plugins via Pyodide and the MCP protocol. Key priorities: security, performance, and developer experience.
+
+## Architecture Patterns
+
+### Core Components
+- **Plugin Manager** (`core/plugin-manager.js`): manages plugin lifecycle
+- **Host API** (`core/host-api.js`): provides Python access to browser APIs
+- **Workflow Engine** (`core/workflow-engine.js`): executes plugin workflows
+- **MCP Bridge** (`bridge/mcp-bridge.js`): JS ↔ Python communication
+- **Pyodide Worker** (`bridge/pyodide-worker.js`): isolated Python execution
+
+### Plugin Structure
+```
+public/plugins/plugin-name/
+├── manifest.json      # Metadata and permissions
+├── mcp_server.py      # MCP protocol (Python)
+├── workflow.json      # Workflow description
+└── icon.svg           # Icon
+```
+
+### Communication Flow
+1. UI → Plugin Manager → MCP Bridge → Pyodide Worker → Python Plugin
+2. Python Plugin → Host API → Browser APIs
+3. Results return via the same path
+description:
+globs:
+alwaysApply: false
+---

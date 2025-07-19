@@ -1,0 +1,23 @@
+---
+description: UI standard for forms
+globs: ["pages/**/*", "**/*.tsx", "**/*.css", "**/*.scss", "packages/ui/**/*"]
+alwaysApply: falseaiPriority: normal
+aiCategory: user-interface
+---
+
+# UI Form Standards
+- Client-side and server-side validation
+- Show validation errors clearly
+- Provide clear success feedback
+- Auto-save forms where appropriate
+- Support common keyboard shortcuts
+
+description: Form standards for all UI components
+globs:
+  - pages/*/src/components/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

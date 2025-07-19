@@ -1,0 +1,62 @@
+<!-- AI: This is an AI-specific rule or instruction -->
+<!-- AI: Priority: medium -->
+<!-- AI: Category: documentation -->
+
+---
+description: AI-First Documentation Standards - analytical comments and AI-oriented documentation
+globs: ["**/*.md", "**/*.mdc", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+alwaysApply: trueaiPriority: medium
+aiCategory: documentation
+---
+
+# AI-First Documentation Standards
+
+## Основные принципы
+- **Analytical comments**: Add comments explaining logic and architectural decisions for AI understanding
+- **Context explanations**: Explain "why", not just "what" the code does
+- **Architectural comments**: Document component relationships and data flows
+- **Business logic**: Explain complex business logic and decisions made
+- **TODO comments**: Leave TODO with explanation of planned improvements
+
+## Примеры правильного использования
+
+### ✅ Аналитические комментарии:
+```typescript
+// AI: This function is required for plugin isolation - prevents direct DOM access
+function createSandboxedEnvironment() {
+  // Implementation...
+}
+
+/**
+ * AI: Example usage - this component handles plugin communication
+ * through a secure message passing system
+ */
+export function PluginBridge() {
+  // Implementation...
+}
+```
+
+### ✅ Объяснение контекста:
+```typescript
+// AI: Using setTimeout here because Chrome extension APIs are async
+// and we need to ensure DOM is ready before accessing elements
+setTimeout(() => {
+  initializePlugin();
+}, 100);
+```
+
+### ✅ TODO с объяснением:
+```typescript
+// TODO: AI - Replace with Web Workers for better performance
+// Current implementation blocks main thread during heavy computations
+function processLargeDataset(data) {
+  // Implementation...
+}
+```
+
+## Рекомендации
+1. **Всегда объясняйте "почему"** - не только что делает код
+2. **Используйте префикс "AI:"** для комментариев, предназначенных для AI
+3. **Документируйте архитектурные решения** и их обоснование
+4. **Объясняйте сложную бизнес-логику** с примерами
+5. **Оставляйте TODO с контекстом** для будущих улучшений

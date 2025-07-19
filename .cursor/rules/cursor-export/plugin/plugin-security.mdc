@@ -1,0 +1,23 @@
+---
+description: Plugin standard for security
+globs: ["public/plugins/**/*", "**/*.py", "**/*.json", "**/*.ts", "**/*.js"]
+alwaysApply: falseaiPriority: normal
+aiCategory: plugin-development
+---
+
+# Plugin Security Requirements
+- Zero Trust: Plugins are not trusted by default
+- Permission Declaration: All required permissions must be declared in manifest
+- API Validation: All API calls must be validated against schemas
+- Rate Limiting: Respect rate limits to prevent abuse
+- Error Handling: Graceful error handling without exposing sensitive data
+
+description: Security requirements for all plugins
+globs:
+  - public/plugins/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

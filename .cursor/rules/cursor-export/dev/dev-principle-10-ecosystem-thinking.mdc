@@ -1,0 +1,27 @@
+<!-- AI: This is a development principle that should be applied to all code -->
+<!-- AI: Priority: high -->
+<!-- AI: Category: development-practices -->
+
+---
+description: Development principle thinking - dev principle 10 ecosystem thinking
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: trueaiPriority: high
+aiCategory: development-practices
+---
+
+# Development Principle 10: Ecosystem Thinking
+- Plugin compatibility: Ensure plugin compatibility
+- API stability: Stable public APIs
+- Backward compatibility: Backward version compatibility
+- Community building: Support developer community
+- Documentation quality: Quality documentation for ecosystem
+
+description: Ecosystem thinking in all development
+globs:
+  - *
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

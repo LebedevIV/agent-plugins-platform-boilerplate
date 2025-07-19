@@ -1,0 +1,23 @@
+---
+description: Plugin standard for best-practices
+globs: ["public/plugins/**/*", "**/*.py", "**/*.json", "**/*.ts", "**/*.js"]
+alwaysApply: falseaiPriority: normal
+aiCategory: plugin-development
+---
+
+# Plugin Best Practices
+- Single Responsibility: Each plugin should have a single, clear purpose
+- Modular Design: Break complex functionality into modules
+- Configuration: Use configuration files for customizable behavior
+- Versioning: Follow semantic versioning for plugin updates
+- Backward Compatibility: Maintain compatibility with previous versions
+
+description: Best practices for plugin development
+globs:
+  - public/plugins/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

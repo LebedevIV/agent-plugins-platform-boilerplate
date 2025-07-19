@@ -1,0 +1,23 @@
+---
+description: UI standard for styling
+globs: ["pages/**/*", "**/*.tsx", "**/*.css", "**/*.scss", "packages/ui/**/*"]
+alwaysApply: falseaiPriority: normal
+aiCategory: user-interface
+---
+
+# UI Styling Standards
+- Use Tailwind CSS for consistent styling
+- Organize CSS classes logically
+- Ensure responsive design for different screen sizes
+- Support light/dark mode
+- Use CSS variables for theme values
+
+description: Styling standards for all UI components
+globs:
+  - pages/*/src/components/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

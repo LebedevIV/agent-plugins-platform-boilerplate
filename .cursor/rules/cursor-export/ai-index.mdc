@@ -1,0 +1,83 @@
+---
+description: AI-optimized index of rules by priority and category
+globs: ["**/*"]
+alwaysApply: true
+aiPriority: critical
+aiCategory: ai-optimization
+---
+
+# AI-Optimized Rules Index
+
+## Critical Priority Rules
+*Must be applied to all code and decisions*
+
+- [Ai Memory](ai-memory.mdc) — Пользовательские команды для AI-ассистента - полный справочник команд с триггерами и действиями
+- [Ai Optimization](ai-optimization.mdc) — AI-specific instructions and optimizations for .cursor rules
+- [Environment](environment.mdc) — Критические ограничения окружения - Node.js версия, popup vs sidepanel
+
+## High Priority Rules
+*Should be applied to most code and decisions*
+
+- [Architecture Chat System](architecture/architecture-chat-system.mdc) — Architecture rule for chat-system
+- [Architecture Error Handling](architecture/architecture-error-handling.mdc) — Architecture rule for error-handling
+- [Architecture Observability](architecture/architecture-observability.mdc) — Architecture rule for observability
+- [Architecture Performance](architecture/architecture-performance.mdc) — Architecture rule for performance
+- [Architecture Plugin](architecture/architecture-plugin.mdc) — Architecture rule for plugin
+- [Architecture Project Structure](architecture/architecture-project-structure.mdc) — Architecture rule for project-structure
+- [Architecture Security](architecture/architecture-security.mdc) — Architecture rule for security
+- [Architecture Workflow](architecture/architecture-workflow.mdc) — Architecture rule for workflow
+- [Project Architecture](architecture/project-architecture.mdc) — Architecture rule for project-architecture
+- [Dev Principle 01 Do No Harm](dev/dev-principle-01-do-no-harm.mdc) — Development principle harm - dev principle 01 do no harm
+- [Dev Principle 03 Best Practices](dev/dev-principle-03-best-practices.mdc) — Development principle practices - dev principle 03 best practices
+- [Dev Principle 04 Fail Fast Safe](dev/dev-principle-04-fail-fast-safe.mdc) — Development principle safe - dev principle 04 fail fast safe
+- [Dev Principle 05 Observability](dev/dev-principle-05-observability.mdc) — Development principle observability - dev principle 05 observability
+- [Dev Principle 06 Config As Code](dev/dev-principle-06-config-as-code.mdc) — Development principle code - dev principle 06 config as code
+- [Dev Principle 07 Progressive Enhancement](dev/dev-principle-07-progressive-enhancement.mdc) — Development principle enhancement - dev principle 07 progressive enhancement
+- [Dev Principle 08 Data Integrity Privacy](dev/dev-principle-08-data-integrity-privacy.mdc) — Development principle privacy - dev principle 08 data integrity privacy
+- [Dev Principle 09 Continuous Learning](dev/dev-principle-09-continuous-learning.mdc) — Development principle learning - dev principle 09 continuous learning
+- [Dev Principle 10 Ecosystem Thinking](dev/dev-principle-10-ecosystem-thinking.mdc) — Development principle thinking - dev principle 10 ecosystem thinking
+
+## Medium Priority Rules
+*Apply when relevant to the task*
+
+- [Ai Fallback](doc/ai-fallback.mdc) — Правило fallback для AI - приоритет источников информации при отсутствии ответа в memory-bank
+- [Ai First](doc/ai-first.mdc) — AI-First Documentation Standards - analytical comments and AI-oriented documentation
+- [Knowledge Map](doc/knowledge-map.mdc) — Project knowledge structure
+- [Mdc File Standards](doc/mdc-file-standards.mdc) — Standards for .mdc file creation
+- [Memorybank Quality](doc/memorybank-quality.mdc) — Quality standards for memory-bank
+- [Restore Context](doc/restore-context.mdc) — Context restoration procedures
+- [Automation](workflow/automation.mdc) — Automation and synchronization rules
+- [Branches](workflow/branches.mdc) — Git branch management rules
+- [Workflow](workflow/workflow.mdc) — Workflow rule for 
+
+## Normal Priority Rules
+*Apply when appropriate*
+
+- [README](README.mdc) — Главная документация по правилам проекта и AI onboarding - структура, CLI скрипты, использование
+- [Development Guidelines](dev/development-guidelines.mdc) — General development guidelines
+- [Git Workflow](dev/git-workflow.mdc) — Правило Git workflow - только develop в main, обязательные PR для всех изменений
+- [Security And Deployment](dev/security-and-deployment.mdc) — Security rule for -and-deployment
+- [Testing And Debugging](dev/testing-and-debugging.mdc) — Testing and debugging standards
+- [Typescript](dev/typescript.mdc) — TypeScript-specific guidelines
+- [Index](index.mdc) — index rule
+- [Monorepo Best Practices](monorepo-best-practices.mdc) — Лучшие практики для работы с монорепозиторием - структура, зависимости, TypeScript, barrel exports
+- [Plugin Best Practices](plugin/plugin-best-practices.mdc) — Plugin standard for best-practices
+- [Plugin Documentation](plugin/plugin-documentation.mdc) — Plugin standard for documentation
+- [Plugin Error Handling](plugin/plugin-error-handling.mdc) — Plugin standard for error-handling
+- [Plugin Performance](plugin/plugin-performance.mdc) — Plugin standard for performance
+- [Plugin Security](plugin/plugin-security.mdc) — Plugin standard for security
+- [Plugin Structure](plugin/plugin-structure.mdc) — Plugin standard for structure
+- [Plugin Testing](plugin/plugin-testing.mdc) — Plugin standard for testing
+- [Validation](security/validation.mdc) — Input validation and data sanitization rules
+- [Typescript Build Troubleshooting](typescript-build-troubleshooting.mdc) — Руководство по устранению ошибок TypeScript сборки - типы, barrel exports, зависимости, TailwindCSS
+- [Ui Accessibility](ui/ui-accessibility.mdc) — UI standard for accessibility
+- [Ui Animation](ui/ui-animation.mdc) — UI standard for animation
+- [Ui Error Handling](ui/ui-error-handling.mdc) — UI standard for error-handling
+- [Ui Forms](ui/ui-forms.mdc) — UI standard for forms
+- [Ui Loading States](ui/ui-loading-states.mdc) — UI standard for loading-states
+- [Ui Mobile](ui/ui-mobile.mdc) — UI standard for mobile
+- [Ui Navigation](ui/ui-navigation.mdc) — UI standard for navigation
+- [Ui Performance](ui/ui-performance.mdc) — UI standard for performance
+- [Ui React Components](ui/ui-react-components.mdc) — UI standard for react-components
+- [Ui Styling](ui/ui-styling.mdc) — UI standard for styling
+- [Ui Testing](ui/ui-testing.mdc) — UI standard for testing
