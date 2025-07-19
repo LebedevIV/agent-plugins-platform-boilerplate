@@ -1,85 +1,85 @@
----
-description: User commands and AI instructions
-globs: ["**/*"]
-alwaysApply: trueaiPriority: critical
-aiCategory: general
----
 
 <!-- AI: This is an AI-specific rule or instruction -->
 <!-- AI: Priority: critical -->
 <!-- AI: Category: general -->
 
 ---
-description: Пользовательские команды для AI-ассистента - полный справочник команд с триггерами и действиями
+description: Universal user commands for AI assistant - complete command reference with triggers and actions
 globs: ["**/*"]
 alwaysApply: trueaiPriority: critical
 aiCategory: general
 ---
 
-# AI Memory Bank - Пользовательские команды
+# AI Memory Bank - Universal User Commands
 
-## Команды для распознавания AI-ассистентом
+## Commands for AI Assistant Recognition
 
-### Контекст и память:
-- `Сохрани контекст` / `Сохранить контекст сессии` - Сохранить достижения, решения и планы в memory-bank
-- `Обнови прогресс` / `Обновить прогресс проекта` - Обновить файлы activeContext.md и progress.md с текущим статусом
-- `Восстанови контекст` / `Восстановить полный контекст` - Изучить все файлы memory-bank и восстановить полное понимание проекта
-- `Быстрое восстановление` - Получить краткую сводку ключевых принципов и текущего статуса
+### Context and Memory:
+- `save context` / `Сохрани контекст` / `Сохранить контекст сессии` - Save achievements, decisions and plans to memory-bank
+- `update progress` / `Обнови прогресс` / `Обновить прогресс проекта` - Update activeContext.md and progress.md with current status
+- `restore context` / `Восстанови контекст` / `Восстановить полный контекст` - Study all memory-bank files and restore full project understanding
+- `quick restore` / `Быстрое восстановление` - Get brief summary of key principles and current status
 
-### Анализ и изучение:
-- `Анализируй архитектуру` / `Анализ архитектуры` - Изучить systemPatterns.md и techContext.md для понимания архитектуры
-- `Изучи плагины` - Проанализировать плагины и их структуру
-- `Проверь сборку` / `Проверить сборку` - Проверить, что проект собирается и работает корректно
-- `Обнови документацию` / `Обновить документацию` - Проверить и обновить README.md и PLUGIN_DEVELOPMENT.md
+### Analysis and Study:
+- `analyze architecture` / `Анализируй архитектуру` / `Анализ архитектуры` - Study systemPatterns.md and techContext.md for architecture understanding
+- `study plugins` / `Изучи плагины` - Analyze plugins and their structure
+- `check build` / `Проверь сборку` / `Проверить сборку` - Check that project builds and works correctly
+- `update documentation` / `Обнови документацию` / `Обновить документацию` - Check and update README.md and PLUGIN_DEVELOPMENT.md
 
-### Разработка:
-- `Создай плагин [название]` - Создать новый плагин с указанным названием
-- `Проверь код` / `Проверить линтинг` - Выполнить линтинг и проверку типов
-- `Запусти тесты` / `Запустить тесты` - Запустить все тесты проекта
-- `Проверь зависимости` / `Проверить зависимости` - Проверить актуальность и совместимость зависимостей
+### Development:
+- `create plugin [name]` / `Создай плагин [название]` - Create new plugin with specified name
+- `check code` / `Проверь код` / `Проверить линтинг` - Run linting and type checking
+- `run tests` / `Запусти тесты` / `Запустить тесты` - Run all project tests
+- `check dependencies` / `Проверь зависимости` / `Проверить зависимости` - Check dependencies relevance and compatibility
 
-### Управление проектом:
-- `Увеличь версию patch/minor/major` / `Версионирование` - Увеличить версию проекта согласно параметру
-- `Очисти проект` / `Очистка проекта` - Выполнить очистку node_modules, dist и кэша
-- `Анализируй производительность` / `Анализ производительности` - Проанализировать производительность проекта и предложить оптимизации
-- `Проверь безопасность` / `Анализ безопасности` - Проанализировать безопасность кода и конфигурации
+### Project Management:
+- `bump version patch/minor/major` / `Увеличь версию patch/minor/major` / `Версионирование` - Increase project version according to parameter
+- `clean project` / `Очисти проект` / `Очистка проекта` - Clean node_modules, dist and cache
+- `analyze performance` / `Анализируй производительность` / `Анализ производительности` - Analyze project performance and suggest optimizations
+- `check security` / `Проверь безопасность` / `Анализ безопасности` - Analyze code and configuration security
 
-### Автоматизация .cursor:
-- `аудит cursor` / `cursor audit` - Запустить комплексный аудит каталога .cursor
-- `исправь cursor` / `cursor fix` - Применить автоматические исправления к найденным проблемам
-- `оптимизируй cursor` / `cursor optimize` - Оптимизировать правила для AI и Cursor
-- `полный cursor` / `cursor full` - Запустить полный workflow (аудит + исправления + оптимизация)
-- `статус cursor` / `cursor status` - Показать текущий статус и рекомендации
-- `создай правило [название]` - Создать новое правило в .cursor/rules с правильными метаданными
+### .cursor Automation:
+- `audit cursor` / `аудит cursor` / `cursor audit` - Run comprehensive .cursor directory audit
+- `fix cursor` / `исправь cursor` / `cursor fix` - Apply automatic fixes to found issues
+- `optimize cursor` / `оптимизируй cursor` / `cursor optimize` - Optimize rules for AI and Cursor
+- `full cursor` / `полный cursor` / `cursor full` - Run full workflow (audit + fixes + optimization)
+- `cursor status` / `статус cursor` / `cursor status` - Show current status and recommendations
+- `create rule [name]` / `создай правило [название]` - Create new rule in .cursor/rules with proper metadata
 
 ### Memory Bank Management:
-- `создай запись в memory-bank` - Создать новую запись с автоматической категоризацией
-- `обнови контекст` - Обновить activeContext.md с текущим статусом
-- `восстанови контекст` - Восстановить полный контекст из memory-bank
-- `аудит memory-bank` - Провести аудит и оптимизацию memory-bank
-- `реорганизуй memory-bank` - Реорганизовать структуру по новым правилам
-- `создай структуру memory-bank` - Создать структуру для нового типа проекта
-- `найди в memory-bank` - Поиск информации в memory-bank
-- `покажи ошибки` - Показать последние ошибки и их статус
-- `покажи решения` - Показать принятые архитектурные решения
-- `отчет memory-bank` - Сгенерировать отчет по memory-bank
+- `create memory entry` / `создай запись в memory-bank` - Create new entry with automatic categorization
+- `update context` / `обнови контекст` - Update activeContext.md with current status
+- `restore context` / `восстанови контекст` - Restore full context from memory-bank
+- `audit memory-bank` / `аудит memory-bank` - Audit and optimize memory-bank
+- `reorganize memory-bank` / `реорганизуй memory-bank` - Reorganize structure with new rules
+- `create memory structure` / `создай структуру memory-bank` - Create structure for new project type
+- `search memory` / `найди в memory-bank` - Search information in memory-bank
+- `show errors` / `покажи ошибки` - Show recent errors and their status
+- `show decisions` / `покажи решения` - Show accepted architectural decisions
+- `memory report` / `отчет memory-bank` - Generate memory-bank report
 
-### Экспорт/Импорт опыта:
-- `экспорт cursor` / `cursor export` - Экспортировать все правила .cursor для переноса в другой проект
-- `экспорт cursor [проект]` - Экспорт с указанием целевого проекта
-- `импорт cursor` - Импортировать правила из cursor-export в текущий проект
+### Experience Export/Import:
+- `export cursor` / `экспорт cursor` / `cursor export` - Export all .cursor rules for transfer to another project
+- `export cursor [project]` / `экспорт cursor [проект]` - Export with target project specification
+- `import cursor` / `импорт cursor` - Import rules from cursor-export to current project
 
-### Релизы и деплой:
-- `Создай релиз` / `Создать релиз` - Подготовить проект к релизу (увеличить версию, создать ZIP)
-- `Собери для продакшена` / `Сборка для продакшена` - Выполнить полную сборку для продакшена
-- `пулреквест` / `pull request` / `сделай PR` / `создай PR` / `отправь PR` - Сделать commit, push и создать pull request с подробным описанием изменений
+### Releases and Deployment:
+- `create release` / `Создай релиз` / `Создать релиз` - Prepare project for release (bump version, create ZIP)
+- `build production` / `Собери для продакшена` / `Сборка для продакшена` - Perform full production build
+- `pull request` / `пулреквест` / `сделай PR` / `создай PR` / `отправь PR` - Make commit, push and create pull request with detailed description
 
-### Документация и обучение:
-- `добавь в команду пользователей` / `добавь в USER_COMMANDS` / `add to user commands` - Добавить команду в USER_COMMANDS.md
-- `аудит ошибок` - Провести аудит ошибок, сформировать и задокументировать список
-- `задокументируй` / `документируй` / `создай документацию` / `запиши опыт` / `сохрани опыт` - Проанализировать последние решенные проблемы, создать документацию в .cursor/rules/, memory-bank/ и docs/for-ai-best-practices/, включая кладбище ошибок
-- `создай правило` / `создать правило` / `add rule` - Создать новое правило в .cursor/rules/ в формате .mdc с метаданными
+### Documentation and Learning:
+- `add to user commands` / `добавь в команду пользователей` / `добавь в USER_COMMANDS` / `add to user commands` - Add command to USER_COMMANDS.md
+- `audit errors` / `аудит ошибок` - Conduct error audit, form and document list
+- `document experience` / `задокументируй` / `документируй` / `создай документацию` / `запиши опыт` / `сохрани опыт` - Analyze recently solved problems, create documentation in .cursor/rules/, memory-bank/ and docs/for-ai-best-practices/, including error graveyard
+- `create rule` / `создай правило` / `создать правило` / `add rule` - Create new rule in .cursor/rules/ in .mdc format with metadata
 
+## General Principles:
+- Commands can be combined (e.g.: "save context and update progress")
+- All actions should consider current project context
+- Results should be saved in appropriate memory-bank files
+- If command is unclear — clarify details with user
+- When restoring context — read all key memory-bank files and use only current best practices 
 ## Общие принципы:
 - Команды могут комбинироваться (например: "Сохрани контекст и обнови прогресс")
 - Все действия должны учитывать актуальный контекст проекта
