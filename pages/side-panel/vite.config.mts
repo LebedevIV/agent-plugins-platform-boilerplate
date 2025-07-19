@@ -5,6 +5,7 @@ const rootDir = resolve(import.meta.dirname);
 const srcDir = resolve(rootDir, 'src');
 
 export default {
+  base: './', // <--- ВАЖНО для Chrome Extension!
   resolve: {
     alias: {
       '@src': srcDir,
