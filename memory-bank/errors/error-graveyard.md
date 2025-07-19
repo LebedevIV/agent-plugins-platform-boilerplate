@@ -1,4 +1,4 @@
-# Кладбище ошибок (Error Graveyard)
+# Error graveyard (Error Graveyard)
 
 ## Назначение
 

@@ -1,4 +1,4 @@
-# Прогресс разработки Agent-Plugins-Platform
+# Development progress Agent-Plugins-Platform
 
 ## Автоматизация: Отслеживание статуса Pull Request
 

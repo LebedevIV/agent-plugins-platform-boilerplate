@@ -1,5 +1,5 @@
 ---
-description: Правило Git workflow - только develop в main, обязательные PR для всех изменений
+description: Git workflow rule - только develop в main, обязательные PR для всех изменений
 globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
 alwaysApply: trueaiPriority: normal
 aiCategory: development-practices

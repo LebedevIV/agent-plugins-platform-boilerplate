@@ -1,9 +1,3 @@
----
-description: Главная документация по правилам проекта и AI onboarding - структура, CLI скрипты, использование
-globs: ["**/*"]
-alwaysApply: trueaiPriority: normal
-aiCategory: general
----
 
 # .cursor/rules: Project Rules & AI Onboarding
 
@@ -13,7 +7,7 @@ This directory contains all rules and standards for automation and AI assistants
 - Each rule is a separate .mdc file (one rule — one file)
 - Grouped by topic: development principles, architecture, plugin standards, UI/UX, workflow, documentation, etc.
 - Each file contains: a short description, globs, the rule itself, and (optionally) examples or related links
-- All rules are in English (except user commands, which remain in Russian)
+- All rules are in English for international compatibility
 - README and index.mdc help with navigation and search
 
 ## CLI Scripts
@@ -103,23 +97,18 @@ This directory contains all rules and standards for automation and AI assistants
       workflow.mdc
 ```
 
-<<<<<<< HEAD
-## Кросс-ссылки на организационные best practices
-
-- [Инструкция по переносу best practices и автоматизаций](../../docs/for-ai-best-practices/transfer-best-practices.md)
-- [Организационные знания и правила (memory-bank)](../../memory-bank/README.md)
-=======
----
 ## AI Fallback Rule
 
 If an AI agent cannot answer a question from its own memory-bank, it must first check the .rules directory, then the memory-bank directory. See [doc/ai-fallback.mdc](./doc/ai-fallback.mdc).
----
 
----
 ## Main GitHub Repository
 
 https://github.com/LebedevIV/agent-plugins-platform-boilerplate
----
+
+## How to Use
+- The AI assistant should always refer to specific .mdc files when making decisions
+- To add a new rule: create a separate .mdc file in the appropriate section (preferably via the CLI)
+- To find a rule: use index.mdc or README.md, or search by file name 
 >>>>>>> origin/develop
 
 ## How to Use

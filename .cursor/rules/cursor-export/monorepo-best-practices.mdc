@@ -1,5 +1,5 @@
 ---
-description: Лучшие практики для работы с монорепозиторием - структура, зависимости, TypeScript, barrel exports
+description: Best practices for monorepo work - структура, зависимости, TypeScript, barrel exports
 globs: ["**/*"]
 alwaysApply: false
 aiCategory: general---

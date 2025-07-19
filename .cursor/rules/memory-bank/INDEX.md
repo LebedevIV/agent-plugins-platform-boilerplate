@@ -8,41 +8,41 @@
 
 ## Categories
 
-### 📋 [Core](./core/) - Основные файлы контекста
-- activeContext.md - Текущий контекст проекта
-- progress.md - Прогресс разработки
+### 📋 [Core](./core/) - Core context files
+- activeContext.md - Current project context
+- progress.md - Development progress
 - projectbrief.md - Краткое описание проекта
 - session-log.md - Лог сессий разработки
 
-### ❌ [Errors](./errors/) - Ошибки и решения
-- errors.md - Кладбище ошибок (основной файл)
+### ❌ [Errors](./errors/) - Errors and solutions
+- errors.md - Error graveyard (основной файл)
 - build-errors.md - Ошибки сборки
 - runtime-errors.md - Runtime ошибки
 - ui-errors.md - UI/UX ошибки
 
-### 🏗️ [Architecture](./architecture/) - Архитектурные решения
+### 🏗️ [Architecture](./architecture/) - Architectural decisions
 - decisions.md - Принятые решения
 - patterns.md - Системные паттерны
 - state-management.md - Управление состоянием
 - component-structure.md - Структура компонентов
 - routing.md - Маршрутизация
 
-### 🔧 [Development](./development/) - Процесс разработки
+### 🔧 [Development](./development/) - Development process
 - testing-results.md - Результаты тестирования
 - debugging-guide.md - Руководство по отладке
 - devtools-guide.md - Работа с DevTools
 - version-management.md - Управление версиями
 
-### 🎨 [UI](./ui/) - UI/UX контекст
+### 🎨 [UI](./ui/) - UI/UX context
 - component-library.md - Библиотека компонентов
 - styling-patterns.md - Паттерны стилизации
 - responsive-design.md - Адаптивный дизайн
 
-### 📅 [Planning](./planning/) - Планирование
+### 📅 [Planning](./planning/) - Planning
 - feature-roadmap.md - Roadmap фич
 - optimization-plans.md - Планы оптимизации
 
-### 🌍 [Context](./context/) - Контекстная информация
+### 🌍 [Context](./context/) - Contextual information
 - tech-stack.md - Технический стек
 - dependencies.md - Зависимости проекта
 - environment.md - Окружение разработки

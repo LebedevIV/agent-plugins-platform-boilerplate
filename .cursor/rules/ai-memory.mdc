@@ -1,78 +1,73 @@
----
-description: User commands and AI instructions
-globs: ["**/*"]
-alwaysApply: trueaiPriority: critical
-aiCategory: general
----
 
 <!-- AI: This is an AI-specific rule or instruction -->
 <!-- AI: Priority: critical -->
 <!-- AI: Category: general -->
 
 ---
-description: Пользовательские команды для AI-ассистента - полный справочник команд с триггерами и действиями
+description: User commands for AI assistant - complete command reference with triggers and actions
 globs: ["**/*"]
-alwaysApply: trueaiPriority: critical
+alwaysApply: true
+aiPriority: critical
 aiCategory: general
 ---
 
-# AI Memory Bank - Пользовательские команды
+# AI Memory Bank - User Commands
 
-## Команды для распознавания AI-ассистентом
+## Commands for AI Assistant Recognition
 
-### Контекст и память:
-- `Сохрани контекст` / `Сохранить контекст сессии` - Сохранить достижения, решения и планы в memory-bank
-- `Обнови прогресс` / `Обновить прогресс проекта` - Обновить файлы activeContext.md и progress.md с текущим статусом
-- `Восстанови контекст` / `Восстановить полный контекст` - Изучить все файлы memory-bank и восстановить полное понимание проекта
-- `Быстрое восстановление` - Получить краткую сводку ключевых принципов и текущего статуса
+### Context and Memory:
+- `save context` / `save session context` - Save achievements, decisions and plans to memory-bank
+- `update progress` / `update project progress` - Update activeContext.md and progress.md files with current status
+- `restore context` / `restore full context` - Study all memory-bank files and restore complete project understanding
+- `quick restore` - Get brief summary of key principles and current status
 
-### Анализ и изучение:
-- `Анализируй архитектуру` / `Анализ архитектуры` - Изучить systemPatterns.md и techContext.md для понимания архитектуры
-- `Изучи плагины` - Проанализировать плагины и их структуру
-- `Проверь сборку` / `Проверить сборку` - Проверить, что проект собирается и работает корректно
-- `Обнови документацию` / `Обновить документацию` - Проверить и обновить README.md и PLUGIN_DEVELOPMENT.md
+### Analysis and Research:
+- `analyze architecture` / `architecture analysis` - Study systemPatterns.md and techContext.md for architecture understanding
+- `study plugins` - Analyze plugins and their structure
+- `check build` / `verify build` - Verify that project builds and works correctly
+- `update documentation` / `refresh documentation` - Check and update README.md and PLUGIN_DEVELOPMENT.md
 
-### Разработка:
-- `Создай плагин [название]` - Создать новый плагин с указанным названием
-- `Проверь код` / `Проверить линтинг` - Выполнить линтинг и проверку типов
-- `Запусти тесты` / `Запустить тесты` - Запустить все тесты проекта
-- `Проверь зависимости` / `Проверить зависимости` - Проверить актуальность и совместимость зависимостей
+### Development:
+- `create plugin [name]` - Create new plugin with specified name
+- `check code` / `run linting` - Execute linting and type checking
+- `run tests` / `execute tests` - Run all project tests
+- `check dependencies` / `verify dependencies` - Check dependencies relevance and compatibility
 
-### Управление проектом:
-- `Увеличь версию patch/minor/major` / `Версионирование` - Увеличить версию проекта согласно параметру
-- `Очисти проект` / `Очистка проекта` - Выполнить очистку node_modules, dist и кэша
-- `Анализируй производительность` / `Анализ производительности` - Проанализировать производительность проекта и предложить оптимизации
-- `Проверь безопасность` / `Анализ безопасности` - Проанализировать безопасность кода и конфигурации
+### Project Management:
+- `bump version patch/minor/major` / `versioning` - Increase project version according to parameter
+- `clean project` / `project cleanup` - Execute cleanup of node_modules, dist and cache
+- `analyze performance` / `performance analysis` - Analyze project performance and suggest optimizations
+- `check security` / `security analysis` - Analyze code and configuration security
 
-### Автоматизация .cursor:
-- `аудит cursor` / `cursor audit` - Запустить комплексный аудит каталога .cursor
-- `исправь cursor` / `cursor fix` - Применить автоматические исправления к найденным проблемам
-- `оптимизируй cursor` / `cursor optimize` - Оптимизировать правила для AI и Cursor
-- `полный cursor` / `cursor full` - Запустить полный workflow (аудит + исправления + оптимизация)
-- `статус cursor` / `cursor status` - Показать текущий статус и рекомендации
-- `создай правило [название]` - Создать новое правило в .cursor/rules с правильными метаданными
+### .cursor Automation:
+- `audit cursor` / `cursor audit` - Run comprehensive audit of .cursor directory
+- `fix cursor` / `cursor fix` - Apply automatic fixes to found issues
+- `optimize cursor` / `cursor optimize` - Optimize rules for AI and Cursor
+- `full cursor` / `cursor full` - Run complete workflow (audit + fixes + optimization)
+- `cursor status` / `status cursor` - Show current status and recommendations
+- `create rule [name]` - Create new rule in .cursor/rules with proper metadata
 
-### Экспорт/Импорт опыта:
-- `экспорт cursor` / `cursor export` - Экспортировать все правила .cursor для переноса в другой проект
-- `экспорт cursor [проект]` - Экспорт с указанием целевого проекта
-- `импорт cursor` - Импортировать правила из cursor-export в текущий проект
-- `внедри best practices` - Внедрить все автоматизации и стандарты из .cursor в проект
-- `аудит проекта` - Провести аудит на соответствие best practices
+### Experience Export/Import:
+- `export cursor` / `cursor export` - Export all .cursor rules for transfer to another project
+- `export cursor [project]` - Export with target project specification
+- `import cursor` - Import rules from cursor-export to current project
+- `implement best practices` - Implement all automations and standards from .cursor to project
+- `audit project` - Conduct audit for best practices compliance
 
-### Релизы и деплой:
-- `Создай релиз` / `Создать релиз` - Подготовить проект к релизу (увеличить версию, создать ZIP)
-- `Собери для продакшена` / `Сборка для продакшена` - Выполнить полную сборку для продакшена
-- `пулреквест` / `pull request` / `сделай PR` / `создай PR` / `отправь PR` - Сделать commit, push и создать pull request с подробным описанием изменений
+### Releases and Deployment:
+- `create release` / `prepare release` - Prepare project for release (bump version, create ZIP)
+- `build for production` / `production build` - Execute complete production build
+- `pull request` / `create PR` / `make PR` / `submit PR` - Make commit, push and create pull request with detailed change description
 
-### Документация и обучение:
-- `добавь в команду пользователей` / `добавь в USER_COMMANDS` / `add to user commands` - Добавить команду в USER_COMMANDS.md
-- `аудит ошибок` - Провести аудит ошибок, сформировать и задокументировать список
-- `задокументируй` / `документируй` / `создай документацию` / `запиши опыт` / `сохрани опыт` - Проанализировать последние решенные проблемы и разместить по карте назначения файлов: универсальные правила → .cursor/rules/, проектно-специфичное → memory-bank/ (по структуре MEMORY_BANK_STRUCTURE.md)
-- `создай правило` / `создать правило` / `add rule` - Создать новое правило в .cursor/rules/ в формате .mdc с метаданными
+### Documentation and Learning:
+- `add to user commands` / `add to USER_COMMANDS` - Add command to USER_COMMANDS.md
+- `audit errors` - Conduct error audit, form and document list
+- `document` / `create documentation` / `save experience` / `record experience` - Analyze recently solved problems and place according to file assignment map: universal rules → .cursor/rules/, project-specific → memory-bank/ (by MEMORY_BANK_STRUCTURE.md structure)
+- `create rule` / `add rule` - Create new rule in .cursor/rules/ in .mdc format with metadata
 
-## Общие принципы:
-- Команды могут комбинироваться (например: "Сохрани контекст и обнови прогресс")
-- Все действия должны учитывать актуальный контекст проекта
-- Результаты сохранять в соответствующих файлах memory-bank
-- Если команда неясна — уточнить детали у пользователя
-- При восстановлении контекста — читать все ключевые файлы memory-bank и использовать только актуальные best practices 
+## General Principles:
+- Commands can be combined (e.g.: "save context and update progress")
+- All actions should consider current project context
+- Save results in appropriate memory-bank files
+- If command is unclear — clarify details with user
+- When restoring context — read all key memory-bank files and use only current best practices 

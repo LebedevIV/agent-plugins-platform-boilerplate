@@ -2,46 +2,46 @@
 
 ## Categories:
 
-### 📋 [Core](./core/) - Основные файлы контекста
-- activeContext.md - Текущий контекст проекта
-- progress.md - Прогресс разработки
+### 📋 [Core](./core/) - Core context files
+- activeContext.md - Current project context
+- progress.md - Development progress
 - projectbrief.md - Краткое описание проекта
 - session-log.md - Лог сессий разработки
 
-### ❌ [Errors](./errors/) - Ошибки и решения
-- errors.md - Кладбище ошибок (основной файл)
+### ❌ [Errors](./errors/) - Errors and solutions
+- errors.md - Error graveyard (основной файл)
 - build-errors.md - Ошибки сборки
 - runtime-errors.md - Runtime ошибки
 - ui-errors.md - UI/UX ошибки
 
-### 🏗️ [Architecture](./architecture/) - Архитектурные решения
+### 🏗️ [Architecture](./architecture/) - Architectural decisions
 - decisions.md - Принятые решения
 - patterns.md - Системные паттерны
 - security.md - Архитектура безопасности
 - comprehensive.md - Комплексная архитектура
 
-### 🔧 [Development](./development/) - Процесс разработки
+### 🔧 [Development](./development/) - Development process
 - testing-results.md - Результаты тестирования
 - debugging-guide.md - Руководство по отладке
 - devtools-guide.md - Работа с DevTools
 - version-management.md - Управление версиями
 
-### 🎨 [UI](./ui/) - UI/UX контекст
+### 🎨 [UI](./ui/) - UI/UX context
 - side-panel.md - Улучшения side-panel
 - chat-context.md - Контекст чата
 - lazy-sync.md - Ленивая синхронизация
 
-### 📅 [Planning](./planning/) - Планирование
+### 📅 [Planning](./planning/) - Planning
 - future-plans.md - Планы развития
 - optimization-plans.md - Планы оптимизации
 - roadmap.md - Roadmap проекта
 
-### 🌍 [Context](./context/) - Контекстная информация
+### 🌍 [Context](./context/) - Contextual information
 - tech-context.md - Технический контекст
 - product-context.md - Продуктовый контекст
 - environment.md - Окружение разработки
 
-### 🗑️ [Deprecated](./deprecated/) - Устаревшие файлы
+### 🗑️ [Deprecated](./deprecated/) - Deprecated files
 - Старые файлы, дубликаты, мигрированные версии
 
 ## Quick Navigation:

@@ -31,7 +31,7 @@ node cursor-manager.cjs create-memory-structure [project-type]
 memory-bank/
 ├── core/
 │   ├── activeContext.md      # Текущий контекст React проекта
-│   ├── progress.md           # Прогресс разработки React компонентов
+│   ├── progress.md           # Development progress React компонентов
 │   ├── projectbrief.md       # Описание React проекта
 │   └── session-log.md        # Лог сессий React разработки
 ├── errors/
@@ -40,7 +40,7 @@ memory-bank/
 │   ├── runtime-errors.md     # Runtime ошибки React
 │   └── ui-errors.md          # UI/UX ошибки
 ├── architecture/
-│   ├── decisions.md          # Архитектурные решения React
+│   ├── decisions.md          # Architectural decisions React
 │   ├── patterns.md           # React паттерны
 │   ├── state-management.md   # Управление состоянием
 │   └── component-structure.md # Структура компонентов
@@ -62,7 +62,7 @@ memory-bank/
 │   ├── dependencies.md       # Зависимости проекта
 │   └── environment.md        # Окружение разработки
 └── deprecated/
-    └── old-files.md          # Устаревшие файлы
+    └── old-files.md          # Deprecated files
 ```
 
 #### **Chrome Extension Project:**
@@ -70,7 +70,7 @@ memory-bank/
 memory-bank/
 ├── core/
 │   ├── activeContext.md      # Текущий контекст extension
-│   ├── progress.md           # Прогресс разработки extension
+│   ├── progress.md           # Development progress extension
 │   ├── projectbrief.md       # Описание extension
 │   └── session-log.md        # Лог сессий разработки
 ├── errors/
@@ -79,7 +79,7 @@ memory-bank/
 │   ├── permission-errors.md  # Ошибки разрешений
 │   └── api-errors.md         # Ошибки Chrome APIs
 ├── architecture/
-│   ├── decisions.md          # Архитектурные решения
+│   ├── decisions.md          # Architectural decisions
 │   ├── background-scripts.md # Background scripts
 │   ├── content-scripts.md    # Content scripts
 │   └── popup-structure.md    # Структура popup
@@ -101,7 +101,7 @@ memory-bank/
 │   ├── permissions.md        # Требуемые разрешения
 │   └── environment.md        # Окружение разработки
 └── deprecated/
-    └── old-files.md          # Устаревшие файлы
+    └── old-files.md          # Deprecated files
 ```
 
 ## 🔄 **Автоматизация процессов memory-bank**

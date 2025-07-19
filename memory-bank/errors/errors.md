@@ -1,4 +1,4 @@
-# Кладбище ошибок (Resolved Issues)
+# Error graveyard (Resolved Issues)
 
 ## DevTools Panel Issue (RESOLVED ✅)
 
@@ -177,7 +177,7 @@ const getCurrentUrl = async () => {
 
 --- 
 
-# Кладбище ошибок: ESLint, commitlint, Husky (flat config + type: module)
+# Error graveyard: ESLint, commitlint, Husky (flat config + type: module)
 
 ## Проблема
 - Ошибки при коммите из-за несовместимости некоторых плагинов ESLint с flat config (ESLint 9+).

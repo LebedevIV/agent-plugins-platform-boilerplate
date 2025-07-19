@@ -15,7 +15,7 @@ aiCategory: ai-optimization
 - [Ai Memory](ai-memory.mdc) — User commands and AI instructions
 - [Ai Optimization](ai-optimization.mdc) — AI-specific instructions and optimizations for .cursor rules
 - [Ai Memory](cursor-export/ai-memory.mdc) — User commands and AI instructions
-- [Environment](cursor-export/environment.mdc) — Критические ограничения окружения - Node.js версия, popup vs sidepanel
+- [Environment](cursor-export/environment.mdc) — Critical environment constraints - Node.js version, popup vs sidepanel
 
 ## High Priority Rules
 *Should be applied to most code and decisions*
@@ -53,9 +53,9 @@ aiCategory: ai-optimization
 ## Normal Priority Rules
 *Apply when appropriate*
 
-- [README](README.mdc) — Главная документация по правилам проекта и AI onboarding - структура, CLI скрипты, использование
+- [README](README.mdc) — Main project rules documentation and AI onboarding - structure, CLI scripts, usage
 - [Development Guidelines](cursor-export/dev/development-guidelines.mdc) — General development guidelines
-- [Git Workflow](cursor-export/dev/git-workflow.mdc) — Правило Git workflow - только develop в main, обязательные PR для всех изменений
+- [Git Workflow](cursor-export/dev/git-workflow.mdc) — Git workflow rule - only develop to main, mandatory PR for all changes
 - [Security And Deployment](cursor-export/dev/security-and-deployment.mdc) — Security rule for -and-deployment
 - [Testing And Debugging](cursor-export/dev/testing-and-debugging.mdc) — Testing and debugging standards
 - [Typescript](cursor-export/dev/typescript.mdc) — TypeScript-specific guidelines
@@ -63,7 +63,7 @@ aiCategory: ai-optimization
 - [Memorybank Quality](cursor-export/doc/memorybank-quality.mdc) — Quality standards for memory-bank
 - [Restore Context](cursor-export/doc/restore-context.mdc) — Context restoration procedures
 - [Index](cursor-export/index.mdc) — index rule
-- [Monorepo Best Practices](cursor-export/monorepo-best-practices.mdc) — Лучшие практики для работы с монорепозиторием - структура, зависимости, TypeScript, barrel exports
+- [Monorepo Best Practices](cursor-export/monorepo-best-practices.mdc) — Best practices for monorepo work - structure, dependencies, TypeScript, barrel exports
 - [Plugin Best Practices](cursor-export/plugin/plugin-best-practices.mdc) — Plugin standard for best-practices
 - [Plugin Documentation](cursor-export/plugin/plugin-documentation.mdc) — Plugin standard for documentation
 - [Plugin Error Handling](cursor-export/plugin/plugin-error-handling.mdc) — Plugin standard for error-handling
@@ -72,7 +72,7 @@ aiCategory: ai-optimization
 - [Plugin Structure](cursor-export/plugin/plugin-structure.mdc) — Plugin standard for structure
 - [Plugin Testing](cursor-export/plugin/plugin-testing.mdc) — Plugin standard for testing
 - [Validation](cursor-export/security/validation.mdc) — Input validation and data sanitization rules
-- [Typescript Build Troubleshooting](cursor-export/typescript-build-troubleshooting.mdc) — Руководство по устранению ошибок TypeScript сборки - типы, barrel exports, зависимости, TailwindCSS
+- [Typescript Build Troubleshooting](cursor-export/typescript-build-troubleshooting.mdc) — TypeScript build error troubleshooting guide - types, barrel exports, dependencies, TailwindCSS
 - [Ui Accessibility](cursor-export/ui/ui-accessibility.mdc) — UI standard for accessibility
 - [Ui Animation](cursor-export/ui/ui-animation.mdc) — UI standard for animation
 - [Ui Error Handling](cursor-export/ui/ui-error-handling.mdc) — UI standard for error-handling

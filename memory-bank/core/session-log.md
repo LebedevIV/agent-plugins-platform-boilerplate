@@ -69,6 +69,6 @@
 
 - **activeContext.md**: Текущие задачи и фокус работы
 - **progress.md**: Общий прогресс и достижения
-- **systemPatterns.md**: Архитектурные решения
+- **systemPatterns.md**: Architectural decisions
 - **techContext.md**: Технологические решения
 - **user-commands.md**: Команды для работы с контекстом 

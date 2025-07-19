@@ -1,11 +1,11 @@
 ---
-description: Критические ограничения окружения - Node.js версия, popup vs sidepanel
+description: Critical environment constraints - Node.js версия, popup vs sidepanel
 globs: ["**/*"]
 alwaysApply: trueaiPriority: critical
 aiCategory: general
 ---
 
-# Критические ограничения окружения
+# Critical environment constraints
 
 - **popup не используется**, основной интерфейс — **sidepanel**. Все ошибки popup можно игнорировать, если они не влияют на работу sidepanel.
 
