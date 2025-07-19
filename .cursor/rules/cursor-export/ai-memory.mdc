@@ -11,7 +11,7 @@ aiCategory: general
 ## Commands for AI Assistant Recognition
 
 ### Context and Memory:
-- `save context` / `Сохрани контекст` / `Сохранить контекст сессии` - Save achievements, decisions and plans to memory-bank
+- `save context` / `Сохрани контекст` / `Сохранить контекст сессии` - Save achievements, decisions and plans to memory-bank in English for AI/LLM compatibility (automatically translates and commits)
 - `update progress` / `Обнови прогресс` / `Обновить прогресс проекта` - Update activeContext.md and progress.md with current status
 - `restore context` / `Восстанови контекст` / `Восстановить полный контекст` - Study all memory-bank files and restore full project understanding
 - `quick restore` / `Быстрое восстановление` - Get brief summary of key principles and current status

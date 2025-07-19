@@ -34,6 +34,9 @@ node .cursor/rules/command-sync.cjs sync
 
 # Export for Cursor AI memory-bank
 node .cursor/rules/command-sync.cjs export
+
+# Translate context to English
+node .cursor/rules/command-sync.cjs translate-context
 ```
 
 ## File Formats
@@ -62,6 +65,36 @@ Format optimized for Cursor AI memory-bank:
 - `save context` / `Сохрани контекст` / `Сохранить контекст сессии` - Save achievements, decisions and plans to memory-bank
 ```
 
+## Context Translation System
+
+### Automatic Context Translation
+The system automatically translates context to English for AI/LLM compatibility:
+
+```bash
+# Save context with automatic translation and commit
+node .cursor/rules/save-context.cjs save
+
+# Only translate without committing
+node .cursor/rules/save-context.cjs translate-only
+```
+
+### Features
+- ✅ **Automatic translation** from Russian to English
+- ✅ **Backup creation** before translation
+- ✅ **Git integration** with automatic commits
+- ✅ **Comprehensive coverage** of all context terminology
+- ✅ **Error handling** with safe fallbacks
+
+### Translation Coverage
+- **Headers and titles** - All section headers
+- **Task status** - Completed tasks, current focus, next steps
+- **Principles** - Working principles and guidelines
+- **Technical context** - Architecture and standards
+- **Command system** - Command categories and descriptions
+- **User experience** - UX priorities and metrics
+- **Development plans** - Short, medium, and long-term goals
+- **Status indicators** - Readiness and completion status
+
 ## Integration with Cursor AI Memory-Bank
 
 ### Manual Integration
@@ -87,7 +120,7 @@ Planned features:
 ## Command Categories
 
 ### 📝 Context and Memory
-- `save context` - Save achievements, decisions and plans
+- `save context` - Save achievements, decisions and plans in English (automatic translation)
 - `update progress` - Update project status files
 - `restore context` - Restore full project understanding
 - `quick restore` - Get brief summary
