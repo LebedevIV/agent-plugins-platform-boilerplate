@@ -1,326 +1,576 @@
 #!/usr/bin/env node
 
-const CursorAuditor = require('./audit-cursor.cjs');
-const CursorFixer = require('./fix-cursor.cjs');
-const AIOptimizer = require('./optimize-for-ai.cjs');
-const CursorExporter = require('./export-cursor.cjs');
-const DocumentationHelper = require('./documentation-helper.cjs');
-const MemoryBankOrganizer = require('./memory-bank-organizer.cjs');
+const fs = require('fs');
+const path = require('path');
 
 class CursorManager {
   constructor() {
-    this.auditor = new CursorAuditor();
-    this.fixer = new CursorFixer();
-    this.optimizer = new AIOptimizer();
-    this.exporter = new CursorExporter();
-    this.docHelper = new DocumentationHelper();
-    this.memoryOrganizer = new MemoryBankOrganizer();
+    this.cursorDir = path.join(process.cwd(), '.cursor', 'rules');
+    this.memoryBankDir = path.join(process.cwd(), 'memory-bank');
   }
 
-  async run(command, options = {}) {
-    console.log('🎯 Cursor Manager - .cursor automation system\n');
+  async executeCommand(command, options = {}, args = []) {
+    console.log(`🚀 Executing: ${command}\n`);
     
-    switch (command) {
-      case 'audit':
-        await this.audit(options);
-        break;
-      case 'fix':
-        await this.fix(options);
-        break;
-      case 'optimize':
-        await this.optimize(options);
-        break;
-      case 'full':
-        await this.fullWorkflow(options);
-        break;
-      case 'status':
-        await this.status();
-        break;
-      case 'export':
-        await this.export(options);
-        break;
-      case 'document':
-        await this.document(options);
-        break;
-      case 'organize-memory':
-        await this.organizeMemory(options);
-        break;
-      case 'help':
-        this.showHelp();
-        break;
-      default:
-        console.log('❌ Unknown command. Use "help" to see available commands.');
-        process.exit(1);
-    }
-  }
-
-  async audit(options = {}) {
-    console.log('🔍 Running .cursor audit...\n');
-    
-    const stats = await this.auditor.audit();
-    
-    if (options.json) {
-      console.log(JSON.stringify(stats, null, 2));
-    }
-    
-    return stats;
-  }
-
-  async fix(options = {}) {
-    console.log('🔧 Running .cursor fixes...\n');
-    
-    if (options.auditFirst !== false) {
-      await this.audit();
-    }
-    
-    await this.fixer.fix();
-    
-    if (options.auditAfter !== false) {
-      console.log('\n🔍 Post-fix audit...\n');
-      await this.audit();
-    }
-  }
-
-  async optimize(options = {}) {
-    console.log('🤖 Running AI optimization...\n');
-    
-    if (options.auditFirst !== false) {
-      await this.audit();
-    }
-    
-    await this.optimizer.optimize();
-    
-    if (options.auditAfter !== false) {
-      console.log('\n🔍 Post-optimization audit...\n');
-      await this.audit();
-    }
-  }
-
-  async fullWorkflow(options = {}) {
-    console.log('🚀 Running full .cursor workflow...\n');
-    
-    // 1. Аудит
-    console.log('Step 1: Audit');
-    const initialStats = await this.audit();
-    
-    // 2. Исправления
-    console.log('\nStep 2: Fixes');
-    await this.fix({ auditFirst: false, auditAfter: false });
-    
-    // 3. Оптимизация
-    console.log('\nStep 3: AI Optimization');
-    await this.optimize({ auditFirst: false, auditAfter: false });
-    
-    // 4. Финальный аудит
-    console.log('\nStep 4: Final Audit');
-    const finalStats = await this.audit();
-    
-    // 5. Отчет о результатах
-    this.generateWorkflowReport(initialStats, finalStats);
-  }
-
-  async status() {
-    console.log('📊 .cursor status report...\n');
-    
-    const stats = await this.audit();
-    
-    console.log('='.repeat(50));
-    console.log('📈 CURRENT STATUS');
-    console.log('='.repeat(50));
-    
-    // Общая статистика
-    console.log(`📁 Total files: ${stats.totalFiles}`);
-    console.log(`📋 .mdc files: ${stats.mdcFiles}`);
-    console.log(`📄 .md files: ${stats.mdFiles}`);
-    console.log(`✅ Files with metadata: ${stats.filesWithMetadata}`);
-    console.log(`⚠️ Files without metadata: ${stats.filesWithoutMetadata}`);
-    
-    // Проблемы
-    const totalIssues = stats.duplicateContent.length + 
-                       stats.brokenLinks.length + 
-                       stats.invalidMetadata.length + 
-                       stats.missingFiles.length;
-    
-    console.log(`\n🔍 Issues found: ${totalIssues}`);
-    
-    if (totalIssues === 0) {
-      console.log('🎉 .cursor is in perfect condition!');
-    } else {
-      console.log('🔧 Run "fix" to resolve issues');
-    }
-    
-    // Рекомендации
-    console.log('\n💡 Recommendations:');
-    
-    if (stats.mdFiles > 0) {
-      console.log('   • Convert .md files to .mdc for better AI integration');
-    }
-    
-    if (stats.filesWithoutMetadata > 0) {
-      console.log('   • Add metadata to .mdc files');
-    }
-    
-    if (stats.duplicateContent.length > 0) {
-      console.log('   • Remove duplicate files');
-    }
-    
-    if (stats.brokenLinks.length > 0) {
-      console.log('   • Fix broken links');
-    }
-    
-    console.log('\n' + '='.repeat(50));
-  }
-
-  async export(options = {}) {
-    console.log('📦 Running .cursor export...\n');
-    
-    const targetProject = options.targetProject || null;
-    await this.exporter.export(targetProject);
-  }
-
-  async document(options = {}) {
-    console.log('📝 Running documentation helper...\n');
-    
-    const content = options.content;
-    const type = options.type || 'auto';
-    
-    if (!content) {
-      console.log('❌ Error: Content is required for documentation');
-      console.log('Usage: node cursor-manager.cjs document "content" [type]');
+    try {
+      switch (command) {
+        case 'audit':
+          await this.auditCursor();
+          break;
+        case 'fix':
+          await this.fixCursor();
+          break;
+        case 'optimize':
+          await this.optimizeCursor();
+          break;
+        case 'full':
+          await this.fullWorkflow();
+          break;
+        case 'status':
+          await this.showStatus();
+          break;
+        case 'create-rule':
+          await this.createRule(options.name, options.content);
+          break;
+        case 'export':
+          await this.exportRules(options.project);
+          break;
+        case 'import':
+          await this.importRules();
+          break;
+        case 'memory-add':
+          await this.memoryAdd(options.content, options);
+          break;
+        case 'memory-update':
+          await this.memoryUpdate(options);
+          break;
+        case 'memory-restore':
+          await this.memoryRestore(options);
+          break;
+        case 'memory-audit':
+          await this.memoryAudit();
+          break;
+        case 'memory-structure':
+          await this.memoryStructure(options.type);
+          break;
+        case 'memory-report':
+          await this.memoryReport(options.type);
+          break;
+        case 'memory-search':
+          const query = args[1];
+          await this.memorySearch(query, options);
+          break;
+        case 'document':
+          await this.document(options.content, options.type);
+          break;
+        default:
+          console.log(`❌ Unknown command: ${command}`);
+          this.showHelp();
+      }
+    } catch (error) {
+      console.error(`❌ Error executing ${command}:`, error.message);
       process.exit(1);
     }
-    
-    await this.docHelper.documentExperience(content, type);
   }
 
-  async organizeMemory(options = {}) {
-    console.log('🧠 Running memory bank organizer...\n');
+  async auditCursor() {
+    console.log('🔍 Auditing .cursor rules...\n');
     
-    const cleanup = options.cleanup || false;
+    const DocumentationHelper = require('./documentation-helper.cjs');
+    const helper = new DocumentationHelper();
     
-    if (cleanup) {
-      await this.memoryOrganizer.cleanup();
+    // Проверяем структуру .cursor
+    const issues = [];
+    
+    // Проверяем наличие обязательных файлов
+    const requiredFiles = [
+      'cursor-export/ai-memory.mdc',
+      'doc/documentation-map.mdc',
+      'dev/development-principles.mdc'
+    ];
+    
+    for (const file of requiredFiles) {
+      const filePath = path.join(this.cursorDir, file);
+      if (!fs.existsSync(filePath)) {
+        issues.push(`Missing required file: ${file}`);
+      }
+    }
+    
+    // Проверяем метаданные в .mdc файлах
+    const mdcFiles = this.findMdcFiles();
+    for (const file of mdcFiles) {
+      const content = fs.readFileSync(file, 'utf8');
+      if (!content.includes('description:') || !content.includes('aiPriority:')) {
+        issues.push(`Missing metadata in: ${path.relative(this.cursorDir, file)}`);
+      }
+    }
+    
+    if (issues.length === 0) {
+      console.log('✅ .cursor rules audit passed - no issues found');
     } else {
-      await this.memoryOrganizer.reorganize();
+      console.log('❌ Found issues:');
+      issues.forEach(issue => console.log(`  - ${issue}`));
+    }
+    
+    return issues;
+  }
+
+  async fixCursor() {
+    console.log('🔧 Fixing .cursor rules...\n');
+    
+    const issues = await this.auditCursor();
+    
+    if (issues.length === 0) {
+      console.log('✅ No fixes needed');
+      return;
+    }
+    
+    // Автоматические исправления
+    for (const issue of issues) {
+      if (issue.includes('Missing metadata')) {
+        await this.fixMetadata(issue);
+      }
+    }
+    
+    console.log('✅ Fixes applied');
+  }
+
+  async optimizeCursor() {
+    console.log('⚡ Optimizing .cursor rules...\n');
+    
+    // Оптимизация структуры
+    await this.optimizeStructure();
+    
+    // Оптимизация метаданных
+    await this.optimizeMetadata();
+    
+    console.log('✅ Optimization completed');
+  }
+
+  async fullWorkflow() {
+    console.log('🔄 Running full workflow...\n');
+    
+    await this.auditCursor();
+    await this.fixCursor();
+    await this.optimizeCursor();
+    
+    console.log('✅ Full workflow completed');
+  }
+
+  async showStatus() {
+    console.log('📊 .cursor rules status:\n');
+    
+    const mdcFiles = this.findMdcFiles();
+    const categories = this.getCategories();
+    
+    console.log(`📁 Total .mdc files: ${mdcFiles.length}`);
+    console.log(`📂 Categories: ${Object.keys(categories).length}`);
+    
+    for (const [category, count] of Object.entries(categories)) {
+      console.log(`  - ${category}: ${count} files`);
+    }
+    
+    // Проверяем memory-bank
+    if (fs.existsSync(this.memoryBankDir)) {
+      const memoryFiles = this.findMemoryFiles();
+      console.log(`\n🧠 Memory bank files: ${memoryFiles.length}`);
     }
   }
 
-  generateWorkflowReport(initialStats, finalStats) {
-    console.log('\n📊 WORKFLOW REPORT');
-    console.log('='.repeat(50));
+  async createRule(name, content) {
+    console.log(`📝 Creating rule: ${name}\n`);
     
-    const initialIssues = initialStats.duplicateContent.length + 
-                         initialStats.brokenLinks.length + 
-                         initialStats.invalidMetadata.length + 
-                         initialStats.missingFiles.length;
+    const DocumentationHelper = require('./documentation-helper.cjs');
+    const helper = new DocumentationHelper();
     
-    const finalIssues = finalStats.duplicateContent.length + 
-                       finalStats.brokenLinks.length + 
-                       finalStats.invalidMetadata.length + 
-                       finalStats.missingFiles.length;
+    await helper.documentExperience(content, 'general-practice');
     
-    console.log(`🔧 Issues resolved: ${initialIssues - finalIssues}`);
-    console.log(`📈 Metadata improvement: ${finalStats.filesWithMetadata - initialStats.filesWithMetadata} files`);
-    console.log(`🤖 AI optimization: Applied to all .mdc files`);
+    console.log(`✅ Rule created: ${name}`);
+  }
+
+  async exportRules(project = 'default') {
+    console.log(`📤 Exporting rules to cursor-export...\n`);
     
-    if (finalIssues === 0) {
-      console.log('\n🎉 .cursor is now fully optimized for AI and Cursor!');
-    } else {
-      console.log(`\n⚠️ ${finalIssues} issues remain (may require manual attention)`);
+    const exportDir = path.join(this.cursorDir, 'cursor-export');
+    if (!fs.existsSync(exportDir)) {
+      fs.mkdirSync(exportDir, { recursive: true });
     }
     
-    console.log('\n' + '='.repeat(50));
+    const mdcFiles = this.findMdcFiles();
+    let exportedCount = 0;
+    
+    for (const file of mdcFiles) {
+      const relativePath = path.relative(this.cursorDir, file);
+      const exportPath = path.join(exportDir, relativePath);
+      
+      const dir = path.dirname(exportPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      
+      fs.copyFileSync(file, exportPath);
+      exportedCount++;
+    }
+    
+    // Создаем индекс экспорта
+    const exportIndex = this.generateExportIndex(mdcFiles, project);
+    const indexPath = path.join(exportDir, 'EXPORT_INDEX.md');
+    fs.writeFileSync(indexPath, exportIndex);
+    
+    console.log(`✅ Exported ${exportedCount} rules to cursor-export`);
+  }
+
+  async importRules() {
+    console.log('📥 Importing rules from cursor-export...\n');
+    
+    const exportDir = path.join(this.cursorDir, 'cursor-export');
+    if (!fs.existsSync(exportDir)) {
+      console.log('❌ No cursor-export directory found');
+      return;
+    }
+    
+    const exportedFiles = this.findExportedFiles();
+    let importedCount = 0;
+    
+    for (const file of exportedFiles) {
+      const relativePath = path.relative(exportDir, file);
+      const importPath = path.join(this.cursorDir, relativePath);
+      
+      const dir = path.dirname(importPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      
+      fs.copyFileSync(file, importPath);
+      importedCount++;
+    }
+    
+    console.log(`✅ Imported ${importedCount} rules from cursor-export`);
+  }
+
+  // Memory Bank Management
+
+  async memoryAdd(content, options = {}) {
+    const MemoryBankManager = require('./memory-bank-manager.cjs');
+    const manager = new MemoryBankManager();
+    
+    await manager.addEntry(content, options);
+  }
+
+  async memoryUpdate(options = {}) {
+    const MemoryBankManager = require('./memory-bank-manager.cjs');
+    const manager = new MemoryBankManager();
+    
+    await manager.updateContext(options);
+  }
+
+  async memoryRestore(options = {}) {
+    const MemoryBankManager = require('./memory-bank-manager.cjs');
+    const manager = new MemoryBankManager();
+    
+    const context = await manager.restoreContext(options);
+    console.log(JSON.stringify(context, null, 2));
+  }
+
+  async memoryAudit() {
+    const MemoryBankAuditor = require('./memory-bank-auditor.cjs');
+    const auditor = new MemoryBankAuditor();
+    
+    await auditor.audit();
+  }
+
+  async memoryStructure(type = 'react-typescript') {
+    const MemoryBankStructureCreator = require('./memory-bank-structure-creator.cjs');
+    const creator = new MemoryBankStructureCreator();
+    
+    await creator.createStructure(type);
+  }
+
+  async memoryReport(type = 'full') {
+    const MemoryBankManager = require('./memory-bank-manager.cjs');
+    const manager = new MemoryBankManager();
+    
+    const report = await manager.generateReport({ type });
+    console.log(JSON.stringify(report, null, 2));
+  }
+
+  async memorySearch(query, options = {}) {
+    const MemoryBankManager = require('./memory-bank-manager.cjs');
+    const manager = new MemoryBankManager();
+    
+    const results = await manager.searchMemory(query, options);
+    console.log(JSON.stringify(results, null, 2));
+  }
+
+  async document(content, type = 'auto') {
+    const DocumentationHelper = require('./documentation-helper.cjs');
+    const helper = new DocumentationHelper();
+    
+    await helper.documentExperience(content, type);
+  }
+
+  // Вспомогательные методы
+
+  findMdcFiles() {
+    const files = [];
+    
+    function scanDir(dir) {
+      if (!fs.existsSync(dir)) return;
+      
+      const items = fs.readdirSync(dir);
+      for (const item of items) {
+        const fullPath = path.join(dir, item);
+        const stat = fs.statSync(fullPath);
+        
+        if (stat.isDirectory()) {
+          scanDir(fullPath);
+        } else if (item.endsWith('.mdc')) {
+          files.push(fullPath);
+        }
+      }
+    }
+    
+    scanDir(this.cursorDir);
+    return files;
+  }
+
+  findMemoryFiles() {
+    const files = [];
+    
+    function scanDir(dir) {
+      if (!fs.existsSync(dir)) return;
+      
+      const items = fs.readdirSync(dir);
+      for (const item of items) {
+        const fullPath = path.join(dir, item);
+        const stat = fs.statSync(fullPath);
+        
+        if (stat.isDirectory()) {
+          scanDir(fullPath);
+        } else if (item.endsWith('.md')) {
+          files.push(fullPath);
+        }
+      }
+    }
+    
+    scanDir(this.memoryBankDir);
+    return files;
+  }
+
+  findExportedFiles() {
+    const exportDir = path.join(this.cursorDir, 'cursor-export');
+    const files = [];
+    
+    function scanDir(dir) {
+      if (!fs.existsSync(dir)) return;
+      
+      const items = fs.readdirSync(dir);
+      for (const item of items) {
+        const fullPath = path.join(dir, item);
+        const stat = fs.statSync(fullPath);
+        
+        if (stat.isDirectory()) {
+          scanDir(fullPath);
+        } else if (item.endsWith('.mdc')) {
+          files.push(fullPath);
+        }
+      }
+    }
+    
+    scanDir(exportDir);
+    return files;
+  }
+
+  getCategories() {
+    const categories = {};
+    const mdcFiles = this.findMdcFiles();
+    
+    for (const file of mdcFiles) {
+      const relativePath = path.relative(this.cursorDir, file);
+      const category = relativePath.split(path.sep)[0];
+      categories[category] = (categories[category] || 0) + 1;
+    }
+    
+    return categories;
+  }
+
+  async fixMetadata(issue) {
+    const filePath = issue.match(/in: (.+)/)[1];
+    const fullPath = path.join(this.cursorDir, filePath);
+    
+    if (!fs.existsSync(fullPath)) return;
+    
+    const content = fs.readFileSync(fullPath, 'utf8');
+    
+    // Добавляем базовые метаданные если их нет
+    if (!content.includes('description:')) {
+      const newContent = content.replace(
+        /^---\n/,
+        `---
+description: Auto-generated rule
+globs: ["**/*"]
+alwaysApply: false
+aiPriority: normal
+aiCategory: general
+---
+`
+      );
+      fs.writeFileSync(fullPath, newContent);
+    }
+  }
+
+  async optimizeStructure() {
+    // Оптимизация структуры каталогов
+    const categories = ['dev', 'doc', 'ui', 'workflow', 'architecture', 'security', 'plugin'];
+    
+    for (const category of categories) {
+      const categoryDir = path.join(this.cursorDir, category);
+      if (!fs.existsSync(categoryDir)) {
+        fs.mkdirSync(categoryDir, { recursive: true });
+      }
+    }
+  }
+
+  async optimizeMetadata() {
+    const mdcFiles = this.findMdcFiles();
+    
+    for (const file of mdcFiles) {
+      const content = fs.readFileSync(file, 'utf8');
+      
+      // Оптимизируем метаданные
+      let optimized = content;
+      
+      // Добавляем aiPriority если нет
+      if (!content.includes('aiPriority:')) {
+        optimized = optimized.replace(
+          /^---\n/,
+          `---
+aiPriority: normal
+`
+        );
+      }
+      
+      // Добавляем aiCategory если нет
+      if (!content.includes('aiCategory:')) {
+        optimized = optimized.replace(
+          /^---\n/,
+          `---
+aiCategory: general
+`
+        );
+      }
+      
+      if (optimized !== content) {
+        fs.writeFileSync(file, optimized);
+      }
+    }
+  }
+
+  generateExportIndex(files, project) {
+    const date = new Date().toISOString().split('T')[0];
+    
+    let index = `# Cursor Rules Export - ${project}
+
+**Exported:** ${date}
+**Total files:** ${files.length}
+
+## Files
+
+`;
+    
+    const categories = {};
+    for (const file of files) {
+      const relativePath = path.relative(this.cursorDir, file);
+      const category = relativePath.split(path.sep)[0];
+      
+      if (!categories[category]) {
+        categories[category] = [];
+      }
+      categories[category].push(relativePath);
+    }
+    
+    for (const [category, categoryFiles] of Object.entries(categories)) {
+      index += `### ${category}\n`;
+      for (const file of categoryFiles) {
+        index += `- [${file}](./${file})\n`;
+      }
+      index += '\n';
+    }
+    
+    return index;
   }
 
   showHelp() {
     console.log(`
-🎯 Cursor Manager - .cursor automation system
+Cursor Manager - CLI Tool
 
-USAGE:
+Usage:
   node cursor-manager.cjs <command> [options]
 
-COMMANDS:
-  audit     - Run comprehensive audit of .cursor directory
-  fix       - Apply automatic fixes to found issues
-  optimize  - Optimize rules for AI and Cursor
-  full      - Run complete workflow (audit + fix + optimize)
-  status    - Show current status and recommendations
-  export    - Export .cursor rules for transfer to another project
-  document  - Document experience using documentation map
-  organize-memory - Reorganize memory-bank structure
-  help      - Show this help message
+Commands:
+  audit              - Audit .cursor rules
+  fix                - Fix .cursor issues
+  optimize           - Optimize .cursor rules
+  full               - Run full workflow (audit + fix + optimize)
+  status             - Show .cursor status
+  create-rule <name> - Create new rule
+  export [project]   - Export rules to cursor-export
+  import             - Import rules from cursor-export
 
-OPTIONS:
-  --json          - Output audit results as JSON
-  --no-audit-first  - Skip audit before fixes/optimization
-  --no-audit-after   - Skip audit after fixes/optimization
-  --target=PROJECT - Target project for export
-  --type=TYPE     - Content type for documentation (auto, error, practice, etc.)
-  --cleanup       - Clean up deprecated files (for organize-memory)
+Memory Bank Commands:
+  memory-add <content> [options]     - Add entry to memory-bank
+  memory-update [options]            - Update active context
+  memory-restore [options]           - Restore context from memory-bank
+  memory-audit                       - Audit memory-bank structure
+  memory-structure <type>            - Create memory-bank structure
+  memory-report [type]               - Generate memory-bank report
 
-EXAMPLES:
-  node cursor-manager.cjs audit
-  node cursor-manager.cjs fix
-  node cursor-manager.cjs optimize
-  node cursor-manager.cjs full
-  node cursor-manager.cjs status
-  node cursor-manager.cjs export
-  node cursor-manager.cjs export my-new-project
-  node cursor-manager.cjs document "Error: Failed to resolve package"
-  node cursor-manager.cjs document "Best practice: Use ESM-only packages" --type=practice
-  node cursor-manager.cjs organize-memory
-  node cursor-manager.cjs organize-memory --cleanup
-  node cursor-manager.cjs audit --json
+Documentation Commands:
+  document <content> [type]          - Document experience
 
-WORKFLOW:
-  1. audit    - Find issues and generate report
-  2. fix      - Automatically resolve common issues
-  3. optimize - Add AI-specific optimizations
-  4. full     - Complete workflow for maximum optimization
-
-FEATURES:
-  ✅ Comprehensive file scanning
-  ✅ Metadata validation and fixing
-  ✅ Duplicate content detection
-  ✅ Broken link detection and fixing
-  ✅ AI-specific optimizations
-  ✅ Priority and category assignment
-  ✅ Automatic index generation
-  ✅ Detailed reporting and recommendations
-`);
+Options:
+  --type=<type>       Entry type (error, decision, progress, etc.)
+  --category=<cat>    Category (core, errors, architecture, etc.)
+  --priority=<pri>    Priority (critical, high, medium, low)
+  --tags=<tags>       Comma-separated tags
+  --full              Full context restoration
+  --content=<text>    Content for rule or entry
+    `);
   }
 }
 
 // CLI обработка
 async function main() {
   const args = process.argv.slice(2);
+  
+  if (args.length === 0) {
+    const manager = new CursorManager();
+    manager.showHelp();
+    process.exit(1);
+  }
+  
   const command = args[0];
+  const options = parseOptions(args.slice(1));
+  
+  const manager = new CursorManager();
+  await manager.executeCommand(command, options, args);
+}
+
+function parseOptions(args) {
   const options = {};
   
-  // Парсим опции
-  for (let i = 1; i < args.length; i++) {
-    const arg = args[i];
-    if (arg === '--json') {
-      options.json = true;
-    } else if (arg === '--no-audit-first') {
-      options.auditFirst = false;
-    } else if (arg === '--no-audit-after') {
-      options.auditAfter = false;
-    } else if (arg.startsWith('--target=')) {
-      options.targetProject = arg.split('=')[1];
-    } else if (arg.startsWith('--type=')) {
-      options.type = arg.split('=')[1];
-    } else if (command === 'document' && !options.content) {
-      // Для команды document первый аргумент - это контент
+  for (const arg of args) {
+    if (arg.startsWith('--')) {
+      const [key, value] = arg.slice(2).split('=');
+      options[key] = value;
+    } else if (!options.name) {
+      options.name = arg;
+    } else if (!options.content) {
       options.content = arg;
-    } else if (!command && arg !== 'help') {
-      // Если это не опция и не команда help, считаем это целевым проектом
-      options.targetProject = arg;
     }
   }
   
-  const manager = new CursorManager();
-  await manager.run(command, options);
+  return options;
 }
 
 if (require.main === module) {

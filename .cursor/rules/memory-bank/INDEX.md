@@ -1,6 +1,12 @@
-# Memory Bank - Main Index
+# Memory Bank - react-typescript Project
 
-## Categories:
+## Project Information
+
+**Type:** react-typescript
+**Created:** 2025-07-19
+**Last Updated:** 2025-07-19
+
+## Categories
 
 ### 📋 [Core](./core/) - Основные файлы контекста
 - activeContext.md - Текущий контекст проекта
@@ -17,8 +23,9 @@
 ### 🏗️ [Architecture](./architecture/) - Архитектурные решения
 - decisions.md - Принятые решения
 - patterns.md - Системные паттерны
-- security.md - Архитектура безопасности
-- comprehensive.md - Комплексная архитектура
+- state-management.md - Управление состоянием
+- component-structure.md - Структура компонентов
+- routing.md - Маршрутизация
 
 ### 🔧 [Development](./development/) - Процесс разработки
 - testing-results.md - Результаты тестирования
@@ -27,33 +34,32 @@
 - version-management.md - Управление версиями
 
 ### 🎨 [UI](./ui/) - UI/UX контекст
-- side-panel.md - Улучшения side-panel
-- chat-context.md - Контекст чата
-- lazy-sync.md - Ленивая синхронизация
+- component-library.md - Библиотека компонентов
+- styling-patterns.md - Паттерны стилизации
+- responsive-design.md - Адаптивный дизайн
 
 ### 📅 [Planning](./planning/) - Планирование
-- future-plans.md - Планы развития
+- feature-roadmap.md - Roadmap фич
 - optimization-plans.md - Планы оптимизации
-- roadmap.md - Roadmap проекта
 
 ### 🌍 [Context](./context/) - Контекстная информация
-- tech-context.md - Технический контекст
-- product-context.md - Продуктовый контекст
+- tech-stack.md - Технический стек
+- dependencies.md - Зависимости проекта
 - environment.md - Окружение разработки
 
-### 🗑️ [Deprecated](./deprecated/) - Устаревшие файлы
-- Старые файлы, дубликаты, мигрированные версии
-
-## Quick Navigation:
+## Quick Navigation
 
 - **Current Status**: [activeContext.md](./core/activeContext.md)
 - **Progress**: [progress.md](./core/progress.md)
 - **Errors**: [errors.md](./errors/errors.md)
 - **Architecture**: [decisions.md](./architecture/decisions.md)
-- **Testing**: [testing-results.md](./development/testing-results.md)
 
-## Structure Rules:
+## AI Commands
 
-See [MEMORY_BANK_STRUCTURE.md](./MEMORY_BANK_STRUCTURE.md) for detailed organization rules.
+- `создай запись в memory-bank` - Создать новую запись
+- `обнови контекст` - Обновить активный контекст
+- `восстанови контекст` - Восстановить полный контекст
+- `аудит memory-bank` - Провести аудит
 
-Last updated: 2025-07-19
+---
+*Auto-generated for react-typescript project on 2025-07-19*

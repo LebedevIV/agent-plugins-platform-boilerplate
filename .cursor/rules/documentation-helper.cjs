@@ -351,6 +351,17 @@ This file contains ${contentType.replace('-', ' ')} guidelines and best practice
   }
 }
 
+// Memory Bank Management
+const memoryCommands = {
+  'memory-add': 'Добавить запись в memory-bank',
+  'memory-update': 'Обновить запись в memory-bank',
+  'memory-restore': 'Восстановить контекст из memory-bank',
+  'memory-search': 'Поиск в memory-bank',
+  'memory-audit': 'Аудит memory-bank',
+  'memory-structure': 'Создать структуру memory-bank',
+  'memory-report': 'Генерировать отчет по memory-bank'
+};
+
 // CLI обработка
 async function main() {
   const args = process.argv.slice(2);
@@ -358,14 +369,100 @@ async function main() {
   if (args.length === 0) {
     console.log('Usage: node documentation-helper.cjs <content> [type]');
     console.log('Types: auto, error, practice, automation, architecture, project');
+    console.log('\nMemory Bank Commands:');
+    console.log('  memory-add <content> [options] - Add entry to memory-bank');
+    console.log('  memory-update <context> - Update active context');
+    console.log('  memory-restore [options] - Restore context from memory-bank');
+    console.log('  memory-search <query> [options] - Search in memory-bank');
+    console.log('  memory-audit - Audit memory-bank structure');
+    console.log('  memory-structure <type> - Create memory-bank structure');
+    console.log('  memory-report [type] - Generate memory-bank report');
     process.exit(1);
   }
   
+  const command = args[0];
+  
+  // Обработка memory-bank команд
+  if (command.startsWith('memory-')) {
+    const MemoryBankManager = require('./memory-bank-manager.cjs');
+    const manager = new MemoryBankManager();
+    
+    switch (command) {
+      case 'memory-add':
+        const content = args[1];
+        const options = parseOptions(args.slice(2));
+        await manager.addEntry(content, options);
+        break;
+      case 'memory-update':
+        const contextData = parseContextData(args.slice(1));
+        await manager.updateContext(contextData);
+        break;
+      case 'memory-restore':
+        const restoreOptions = parseOptions(args.slice(1));
+        const context = await manager.restoreContext(restoreOptions);
+        console.log(JSON.stringify(context, null, 2));
+        break;
+      case 'memory-search':
+        const query = args[1];
+        const searchOptions = parseOptions(args.slice(2));
+        const results = await manager.searchMemory(query, searchOptions);
+        console.log(JSON.stringify(results, null, 2));
+        break;
+      case 'memory-audit':
+        const MemoryBankAuditor = require('./memory-bank-auditor.cjs');
+        const auditor = new MemoryBankAuditor();
+        await auditor.audit();
+        break;
+      case 'memory-structure':
+        const projectType = args[1] || 'react-typescript';
+        const MemoryBankStructureCreator = require('./memory-bank-structure-creator.cjs');
+        const creator = new MemoryBankStructureCreator();
+        await creator.createStructure(projectType);
+        break;
+      case 'memory-report':
+        const reportOptions = parseOptions(args.slice(1));
+        const report = await manager.generateReport(reportOptions);
+        console.log(JSON.stringify(report, null, 2));
+        break;
+      default:
+        console.log(`Unknown memory command: ${command}`);
+        process.exit(1);
+    }
+    return;
+  }
+  
+  // Стандартная обработка документации
   const content = args[0];
   const type = args[1] || 'auto';
   
   const helper = new DocumentationHelper();
   await helper.documentExperience(content, type);
+}
+
+function parseOptions(args) {
+  const options = {};
+  
+  for (const arg of args) {
+    if (arg.startsWith('--')) {
+      const [key, value] = arg.slice(2).split('=');
+      options[key] = value;
+    }
+  }
+  
+  return options;
+}
+
+function parseContextData(args) {
+  const contextData = {};
+  
+  for (const arg of args) {
+    if (arg.startsWith('--')) {
+      const [key, value] = arg.slice(2).split('=');
+      contextData[key] = value;
+    }
+  }
+  
+  return contextData;
 }
 
 if (require.main === module) {

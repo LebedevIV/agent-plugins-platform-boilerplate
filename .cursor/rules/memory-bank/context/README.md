@@ -1,11 +1,21 @@
-# Context Information - Index
+# Context Information - react-typescript
 
 ## Files in this category:
 
-
+- [dependencies](./dependencies.md)
+- [deployment](./deployment.md)
+- [environment](./environment.md)
+- [tech-stack](./tech-stack.md)
 
 ## Description:
 
-Технический и продуктовый контекст. Окружение разработки.
+Технический и продуктовый контекст, окружение разработки.
 
-## Last updated: 2025-07-19
+## AI Commands:
+
+- `добавь в context` - Добавить запись в эту категорию
+- `обнови context` - Обновить файлы в категории
+- `покажи context` - Показать содержимое категории
+
+---
+*Auto-generated for react-typescript project*
