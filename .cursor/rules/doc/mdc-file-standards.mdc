@@ -1,7 +1,8 @@
 ---
 description: Standards for .mdc file creation
-globs: ["**/*"]
-alwaysApply: true
+globs: ["**/*.md", "**/*.mdc", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+alwaysApply: trueaiPriority: medium
+aiCategory: documentation
 ---
 
 # Стандарты создания правил в .cursor/rules

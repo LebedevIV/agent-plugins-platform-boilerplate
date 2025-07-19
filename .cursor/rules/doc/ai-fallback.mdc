@@ -1,7 +1,12 @@
+<!-- AI: This is an AI-specific rule or instruction -->
+<!-- AI: Priority: medium -->
+<!-- AI: Category: documentation -->
+
 ---
 description: Правило fallback для AI - приоритет источников информации при отсутствии ответа в memory-bank
-globs: ["**/*"]
-alwaysApply: true
+globs: ["**/*.md", "**/*.mdc", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+alwaysApply: trueaiPriority: medium
+aiCategory: documentation
 ---
 
 # AI Fallback Rule

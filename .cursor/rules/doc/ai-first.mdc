@@ -1,7 +1,12 @@
+<!-- AI: This is an AI-specific rule or instruction -->
+<!-- AI: Priority: medium -->
+<!-- AI: Category: documentation -->
+
 ---
 description: AI-First Documentation Standards - analytical comments and AI-oriented documentation
-globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
-alwaysApply: true
+globs: ["**/*.md", "**/*.mdc", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+alwaysApply: trueaiPriority: medium
+aiCategory: documentation
 ---
 
 # AI-First Documentation Standards

@@ -1,7 +1,12 @@
+<!-- AI: This is a development principle that should be applied to all code -->
+<!-- AI: Priority: high -->
+<!-- AI: Category: development-practices -->
+
 ---
 description: Development principle code - dev principle 06 config as code
-globs: ["**/*"]
-alwaysApply: true
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: trueaiPriority: high
+aiCategory: development-practices
 ---
 
 # Development Principle 6: Configuration as Code

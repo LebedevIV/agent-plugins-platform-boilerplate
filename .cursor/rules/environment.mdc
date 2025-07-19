@@ -1,7 +1,8 @@
 ---
 description: Критические ограничения окружения - Node.js версия, popup vs sidepanel
 globs: ["**/*"]
-alwaysApply: true
+alwaysApply: trueaiPriority: critical
+aiCategory: general
 ---
 
 # Критические ограничения окружения

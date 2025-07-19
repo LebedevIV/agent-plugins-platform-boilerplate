@@ -1,7 +1,8 @@
 ---
 description: Plugin standard for testing
-globs: ["plugins/**/*", "**/*.py", "**/*.json"]
-alwaysApply: false
+globs: ["public/plugins/**/*", "**/*.py", "**/*.json", "**/*.ts", "**/*.js"]
+alwaysApply: falseaiPriority: normal
+aiCategory: plugin-development
 ---
 
 # Plugin Testing Requirements

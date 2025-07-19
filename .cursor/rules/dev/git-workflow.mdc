@@ -1,7 +1,8 @@
 ---
 description: Правило Git workflow - только develop в main, обязательные PR для всех изменений
-globs: ["**/*"]
-alwaysApply: true
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: trueaiPriority: normal
+aiCategory: development-practices
 ---
 
 # Git Workflow Rule

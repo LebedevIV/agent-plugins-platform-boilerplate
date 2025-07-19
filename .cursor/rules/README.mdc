@@ -1,7 +1,8 @@
 ---
 description: Главная документация по правилам проекта и AI onboarding - структура, CLI скрипты, использование
 globs: ["**/*"]
-alwaysApply: true
+alwaysApply: trueaiPriority: normal
+aiCategory: general
 ---
 
 # .cursor/rules: Project Rules & AI Onboarding
@@ -111,7 +112,7 @@ This directory contains all rules and standards for automation and AI assistants
 ---
 ## AI Fallback Rule
 
-If an AI agent cannot answer a question from its own memory-bank, it must first check the .rules directory, then the memory-bank directory. See [doc/ai-fallback.rules.md](./doc/ai-fallback.rules.md).
+If an AI agent cannot answer a question from its own memory-bank, it must first check the .rules directory, then the memory-bank directory. See [doc/ai-fallback.mdc](./doc/ai-fallback.mdc).
 ---
 
 ---

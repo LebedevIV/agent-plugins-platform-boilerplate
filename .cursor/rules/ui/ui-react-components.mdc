@@ -1,7 +1,8 @@
 ---
 description: UI standard for react-components
-globs: ["pages/**/*", "**/*.tsx", "**/*.css"]
-alwaysApply: false
+globs: ["pages/**/*", "**/*.tsx", "**/*.css", "**/*.scss", "packages/ui/**/*"]
+alwaysApply: falseaiPriority: normal
+aiCategory: user-interface
 ---
 
 # React Component Standards

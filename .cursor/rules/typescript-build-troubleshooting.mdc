@@ -1,7 +1,8 @@
 ---
 description: Руководство по устранению ошибок TypeScript сборки - типы, barrel exports, зависимости, TailwindCSS
-globs: ["**/*.ts", "**/*.tsx", "**/*.json", "**/*.mts", "**/*.cjs"]
-alwaysApply: true
+globs: ["**/*"]
+alwaysApply: trueaiPriority: normal
+aiCategory: general
 ---
 
 # TypeScript Build Troubleshooting Rules

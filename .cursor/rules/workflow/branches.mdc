@@ -1,7 +1,8 @@
 ---
 description: Git branch management rules
-globs: ["**/*"]
-alwaysApply: true
+globs: ["**/*.ts", "**/*.js", "**/*.json", "**/*.md", "**/*.mdc"]
+alwaysApply: trueaiPriority: medium
+aiCategory: process-management
 ---
 
 # Rule

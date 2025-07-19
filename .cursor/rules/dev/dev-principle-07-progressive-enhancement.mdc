@@ -1,7 +1,12 @@
+<!-- AI: This is a development principle that should be applied to all code -->
+<!-- AI: Priority: high -->
+<!-- AI: Category: development-practices -->
+
 ---
 description: Development principle enhancement - dev principle 07 progressive enhancement
-globs: ["**/*"]
-alwaysApply: true
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: trueaiPriority: high
+aiCategory: development-practices
 ---
 
 # Development Principle 7: Progressive Enhancement

@@ -1,7 +1,8 @@
 ---
 description: Security rule for -and-deployment
-globs: ["**/*"]
-alwaysApply: true
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: trueaiPriority: normal
+aiCategory: development-practices
 ---
 
 # Security Best Practices

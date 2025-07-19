@@ -1,7 +1,12 @@
+<!-- AI: This is a development principle that should be applied to all code -->
+<!-- AI: Priority: high -->
+<!-- AI: Category: development-practices -->
+
 ---
 description: Development principle safe - dev principle 04 fail fast safe
-globs: ["**/*"]
-alwaysApply: true
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: trueaiPriority: high
+aiCategory: development-practices
 ---
 
 # Development Principle 4: Fail Fast, Fail Safe

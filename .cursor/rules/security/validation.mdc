@@ -1,7 +1,8 @@
 ---
 description: Input validation and data sanitization rules
-globs: ["**/*"]
-alwaysApply: true
+globs: ["**/*.ts", "**/*.js", "**/*.py", "**/*.json", "platform-core/**/*"]
+alwaysApply: trueaiPriority: normal
+aiCategory: security
 ---
 
 # Rule

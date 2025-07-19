@@ -1,7 +1,8 @@
 ---
 description: Quality standards for memory-bank
-globs: ["**/*"]
-alwaysApply: true
+globs: ["**/*.md", "**/*.mdc", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+alwaysApply: trueaiPriority: medium
+aiCategory: documentation
 ---
 
 # Memory-Bank Quality Checklist

@@ -1,7 +1,8 @@
 ---
 description: TypeScript-specific guidelines
-globs: ["**/*.ts", "**/*.tsx", "**/*.json"]
-alwaysApply: false
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: falseaiPriority: normal
+aiCategory: development-practices
 ---
 
 # Rule

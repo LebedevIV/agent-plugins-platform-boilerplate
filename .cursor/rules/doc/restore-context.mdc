@@ -1,7 +1,8 @@
 ---
 description: Context restoration procedures
-globs: ["**/*"]
-alwaysApply: true
+globs: ["**/*.md", "**/*.mdc", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+alwaysApply: trueaiPriority: medium
+aiCategory: documentation
 ---
 
 # Восстанови контекст

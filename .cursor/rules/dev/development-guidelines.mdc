@@ -1,7 +1,8 @@
 ---
 description: General development guidelines
-globs: ["**/*"]
-alwaysApply: true
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: trueaiPriority: normal
+aiCategory: development-practices
 ---
 
 # Development Guidelines

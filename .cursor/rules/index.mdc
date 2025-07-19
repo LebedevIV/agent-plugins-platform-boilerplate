@@ -1,7 +1,8 @@
 ---
 description: index rule
 globs: ["**/*"]
-alwaysApply: false
+alwaysApply: falseaiPriority: normal
+aiCategory: general
 ---
 
 # Index of Modular Rules
