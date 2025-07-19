@@ -5,6 +5,7 @@ const CursorFixer = require('./fix-cursor.cjs');
 const AIOptimizer = require('./optimize-for-ai.cjs');
 const CursorExporter = require('./export-cursor.cjs');
 const DocumentationHelper = require('./documentation-helper.cjs');
+const MemoryBankOrganizer = require('./memory-bank-organizer.cjs');
 
 class CursorManager {
   constructor() {
@@ -13,6 +14,7 @@ class CursorManager {
     this.optimizer = new AIOptimizer();
     this.exporter = new CursorExporter();
     this.docHelper = new DocumentationHelper();
+    this.memoryOrganizer = new MemoryBankOrganizer();
   }
 
   async run(command, options = {}) {
@@ -39,6 +41,9 @@ class CursorManager {
         break;
       case 'document':
         await this.document(options);
+        break;
+      case 'organize-memory':
+        await this.organizeMemory(options);
         break;
       case 'help':
         this.showHelp();
@@ -188,6 +193,18 @@ class CursorManager {
     await this.docHelper.documentExperience(content, type);
   }
 
+  async organizeMemory(options = {}) {
+    console.log('🧠 Running memory bank organizer...\n');
+    
+    const cleanup = options.cleanup || false;
+    
+    if (cleanup) {
+      await this.memoryOrganizer.cleanup();
+    } else {
+      await this.memoryOrganizer.reorganize();
+    }
+  }
+
   generateWorkflowReport(initialStats, finalStats) {
     console.log('\n📊 WORKFLOW REPORT');
     console.log('='.repeat(50));
@@ -230,6 +247,7 @@ COMMANDS:
   status    - Show current status and recommendations
   export    - Export .cursor rules for transfer to another project
   document  - Document experience using documentation map
+  organize-memory - Reorganize memory-bank structure
   help      - Show this help message
 
 OPTIONS:
@@ -238,6 +256,7 @@ OPTIONS:
   --no-audit-after   - Skip audit after fixes/optimization
   --target=PROJECT - Target project for export
   --type=TYPE     - Content type for documentation (auto, error, practice, etc.)
+  --cleanup       - Clean up deprecated files (for organize-memory)
 
 EXAMPLES:
   node cursor-manager.cjs audit
@@ -249,6 +268,8 @@ EXAMPLES:
   node cursor-manager.cjs export my-new-project
   node cursor-manager.cjs document "Error: Failed to resolve package"
   node cursor-manager.cjs document "Best practice: Use ESM-only packages" --type=practice
+  node cursor-manager.cjs organize-memory
+  node cursor-manager.cjs organize-memory --cleanup
   node cursor-manager.cjs audit --json
 
 WORKFLOW:
