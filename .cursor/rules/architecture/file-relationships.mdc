@@ -1,4 +1,12 @@
-# Карта взаимосвязей файлов системы чатов плагинов
+---
+description: File organization patterns and relationships - universal project structure guidelines
+globs: ["**/*"]
+alwaysApply: true
+aiPriority: high
+aiCategory: system-design
+---
+
+# Карта взаимосвязей файлов
 
 ## Структура файлов и их назначение
 

@@ -45,8 +45,8 @@ class DocumentationHelper {
     
     // Best practices
     if (text.includes('best practice') || text.includes('практика') || text.includes('паттерн')) {
-      if (text.includes('разработка') || text.includes('development')) {
-        return 'dev-practice';
+      if (text.includes('разработка') || text.includes('development') || text.includes('принципы')) {
+        return 'dev-principles';
       }
       if (text.includes('документация') || text.includes('documentation')) {
         return 'doc-practice';
@@ -59,6 +59,12 @@ class DocumentationHelper {
       }
       if (text.includes('плагин') || text.includes('plugin')) {
         return 'plugin-practice';
+      }
+      if (text.includes('дата') || text.includes('время') || text.includes('date') || text.includes('time')) {
+        return 'date-patterns';
+      }
+      if (text.includes('файл') || text.includes('структура') || text.includes('file') || text.includes('structure')) {
+        return 'file-patterns';
       }
       return 'general-practice';
     }
@@ -125,6 +131,8 @@ class DocumentationHelper {
         return path.join(this.rulesDir, 'ui', 'ui-error-handling.mdc');
       
       // Best practices → .cursor/rules/
+      case 'dev-principles':
+        return path.join(this.rulesDir, 'dev', 'development-principles.mdc');
       case 'dev-practice':
         return path.join(this.rulesDir, 'dev', 'development-guidelines.mdc');
       case 'doc-practice':
@@ -135,6 +143,10 @@ class DocumentationHelper {
         return path.join(this.rulesDir, 'workflow', 'ci-automation.mdc');
       case 'plugin-practice':
         return path.join(this.rulesDir, 'plugin', 'plugin-best-practices.mdc');
+      case 'date-patterns':
+        return path.join(this.rulesDir, 'dev', 'date-time-patterns.mdc');
+      case 'file-patterns':
+        return path.join(this.rulesDir, 'architecture', 'file-relationships.mdc');
       
       // Автоматизация → .cursor/rules/workflow/
       case 'ci-automation':

@@ -1,3 +1,11 @@
+---
+description: Date and time patterns for AI assistants - universal guidelines for handling dates
+globs: ["**/*"]
+alwaysApply: true
+aiPriority: high
+aiCategory: development-practices
+---
+
 # Паттерны работы с датами и временем
 
 ## Проблема

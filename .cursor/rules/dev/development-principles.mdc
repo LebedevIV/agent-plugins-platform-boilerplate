@@ -1,4 +1,12 @@
-# 🛡️ Принципы разработки Agent-Plugins-Platform
+---
+description: Development principles for all projects - universal guidelines and best practices
+globs: ["**/*"]
+alwaysApply: true
+aiPriority: critical
+aiCategory: development-practices
+---
+
+# 🛡️ Принципы разработки
 
 ## Краткая сводка (для быстрого понимания)
 
