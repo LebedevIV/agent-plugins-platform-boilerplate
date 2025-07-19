@@ -4,6 +4,7 @@ const CursorAuditor = require('./audit-cursor.cjs');
 const CursorFixer = require('./fix-cursor.cjs');
 const AIOptimizer = require('./optimize-for-ai.cjs');
 const CursorExporter = require('./export-cursor.cjs');
+const DocumentationHelper = require('./documentation-helper.cjs');
 
 class CursorManager {
   constructor() {
@@ -11,6 +12,7 @@ class CursorManager {
     this.fixer = new CursorFixer();
     this.optimizer = new AIOptimizer();
     this.exporter = new CursorExporter();
+    this.docHelper = new DocumentationHelper();
   }
 
   async run(command, options = {}) {
@@ -34,6 +36,9 @@ class CursorManager {
         break;
       case 'export':
         await this.export(options);
+        break;
+      case 'document':
+        await this.document(options);
         break;
       case 'help':
         this.showHelp();
@@ -168,6 +173,21 @@ class CursorManager {
     await this.exporter.export(targetProject);
   }
 
+  async document(options = {}) {
+    console.log('📝 Running documentation helper...\n');
+    
+    const content = options.content;
+    const type = options.type || 'auto';
+    
+    if (!content) {
+      console.log('❌ Error: Content is required for documentation');
+      console.log('Usage: node cursor-manager.cjs document "content" [type]');
+      process.exit(1);
+    }
+    
+    await this.docHelper.documentExperience(content, type);
+  }
+
   generateWorkflowReport(initialStats, finalStats) {
     console.log('\n📊 WORKFLOW REPORT');
     console.log('='.repeat(50));
@@ -209,6 +229,7 @@ COMMANDS:
   full      - Run complete workflow (audit + fix + optimize)
   status    - Show current status and recommendations
   export    - Export .cursor rules for transfer to another project
+  document  - Document experience using documentation map
   help      - Show this help message
 
 OPTIONS:
@@ -216,6 +237,7 @@ OPTIONS:
   --no-audit-first  - Skip audit before fixes/optimization
   --no-audit-after   - Skip audit after fixes/optimization
   --target=PROJECT - Target project for export
+  --type=TYPE     - Content type for documentation (auto, error, practice, etc.)
 
 EXAMPLES:
   node cursor-manager.cjs audit
@@ -225,6 +247,8 @@ EXAMPLES:
   node cursor-manager.cjs status
   node cursor-manager.cjs export
   node cursor-manager.cjs export my-new-project
+  node cursor-manager.cjs document "Error: Failed to resolve package"
+  node cursor-manager.cjs document "Best practice: Use ESM-only packages" --type=practice
   node cursor-manager.cjs audit --json
 
 WORKFLOW:
@@ -263,6 +287,11 @@ async function main() {
       options.auditAfter = false;
     } else if (arg.startsWith('--target=')) {
       options.targetProject = arg.split('=')[1];
+    } else if (arg.startsWith('--type=')) {
+      options.type = arg.split('=')[1];
+    } else if (command === 'document' && !options.content) {
+      // Для команды document первый аргумент - это контент
+      options.content = arg;
     } else if (!command && arg !== 'help') {
       // Если это не опция и не команда help, считаем это целевым проектом
       options.targetProject = arg;
