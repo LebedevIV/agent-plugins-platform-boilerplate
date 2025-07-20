@@ -3,10 +3,24 @@
 const fs = require('fs');
 const path = require('path');
 
+function getProtectedFilesFromMap() {
+  const mapPath = path.join(process.cwd(), '.cursor/rules/doc/documentation-map.mdc');
+  if (!fs.existsSync(mapPath)) return [];
+  const content = fs.readFileSync(mapPath, 'utf-8');
+  const protectedSection = content.split('## 🛡️ Protected/Administrative Files')[1];
+  if (!protectedSection) return [];
+  return protectedSection
+    .split('\n')
+    .filter(line => line.trim().startsWith('- '))
+    .map(line => line.replace(/^-\s+/, '').split('—')[0].trim())
+    .filter(Boolean);
+}
+
 class MemoryBankOrganizer {
   constructor() {
     this.memoryBankDir = path.join(process.cwd(), 'memory-bank');
     this.structurePath = path.join(this.memoryBankDir, 'MEMORY_BANK_STRUCTURE.md');
+    this.protectedFiles = getProtectedFilesFromMap();
   }
 
   async reorganize() {
@@ -116,6 +130,10 @@ class MemoryBankOrganizer {
 
   async moveFiles(fileAnalysis) {
     for (const file of fileAnalysis) {
+      if (this.protectedFiles.includes(`memory-bank/${file.name}`)) {
+        console.log(`🔒 Protected: ${file.name} — оставлен в корне memory-bank`);
+        continue;
+      }
       const targetDir = path.join(this.memoryBankDir, file.category);
       const targetPath = path.join(targetDir, file.name);
       
