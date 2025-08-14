@@ -1,6 +1,6 @@
 {
   "name": "@extension/dev-utils",
-  "version": "0.5.360",
+  "version": "0.5.368",
   "description": "chrome extension - dev utils",
   "type": "module",
   "private": true,
@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "@extension/tsconfig": "workspace:*",
-    "@extension/shared": "workspace:*"
+    "@extension/shared": "workspace:*",
+    "fflate": "^0.8.2"
   }
 }
