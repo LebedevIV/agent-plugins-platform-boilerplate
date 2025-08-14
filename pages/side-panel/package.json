@@ -1,6 +1,6 @@
 {
   "name": "@extension/sidepanel",
-  "version": "0.5.169",
+  "version": "0.5.360",
   "description": "chrome extension - side panel",
   "type": "module",
   "private": true,
@@ -28,12 +28,10 @@
   "devDependencies": {
     "@extension/tailwindcss-config": "workspace:*",
     "@extension/tsconfig": "workspace:*",
-    "@extension/vite-config": "workspace:*"
-  },
-  "postcss": {
-    "plugins": {
-      "tailwindcss": {},
-      "autoprefixer": {}
-    }
+    "@extension/vite-config": "workspace:*",
+    "@vitejs/plugin-react-swc": "^3.10.2",
+    "tailwindcss": "^4.1.11",
+    "autoprefixer": "^10.4.21",
+    "@tailwindcss/postcss": "^4.1.11"
   }
 }

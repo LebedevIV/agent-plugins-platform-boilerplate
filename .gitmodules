@@ -4,3 +4,6 @@
 [submodule "external/chrome-extension-boilerplate-react-vite"]
 	path = external/chrome-extension-boilerplate-react-vite
 	url = https://github.com/Jonghakseo/chrome-extension-boilerplate-react-vite
+[submodule "external/vite-react-ts"]
+	path = external/vite-react-ts
+	url = https://github.com/doinel1a/vite-react-ts

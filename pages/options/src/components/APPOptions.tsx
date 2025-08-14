@@ -1,13 +1,15 @@
-import React, { useEffect } from 'react';
+import type React from 'react';
+import { useEffect } from 'react';
 import { PROJECT_URL_OBJECT } from '@extension/shared';
 import { useAIKeys, usePlugins, useTabs, useTranslations } from '../hooks';
 import { IDELayout, PluginsTab, SettingsTab } from './index';
+import LocalErrorBoundary from './LocalErrorBoundary';
 
 export const APPOptions: React.FC<{ isLight: boolean }> = ({ isLight }) => {
-  // Определяем язык из браузера или используем английский по умолчанию
+  // AI-First: Определяем язык из браузера или используем английский по умолчанию
   const browserLocale = chrome.i18n?.getUILanguage?.() || 'en';
   const locale = browserLocale.startsWith('ru') ? 'ru' : 'en';
-  
+
   const { t } = useTranslations(locale);
   const { activeTab, switchTab, isActiveTab } = useTabs('plugins');
   const { plugins, selectedPlugin, loading, error, selectPlugin, updatePluginSetting } = usePlugins();
@@ -21,10 +23,10 @@ export const APPOptions: React.FC<{ isLight: boolean }> = ({ isLight }) => {
     updateKey,
     updateCustomKeyName,
     getStatusText,
-    getStatusClass
+    getStatusClass,
   } = useAIKeys();
 
-  // Make sure we have a selected plugin when tab is 'plugins'
+  // AI-First: Гарантируем, что выбран хотя бы один плагин при открытии вкладки
   useEffect(() => {
     if (activeTab === 'plugins' && plugins.length > 0 && !selectedPlugin) {
       selectPlugin(plugins[0]);
@@ -35,43 +37,45 @@ export const APPOptions: React.FC<{ isLight: boolean }> = ({ isLight }) => {
     chrome.tabs.create(PROJECT_URL_OBJECT);
   };
 
+  // AI-First: Весь layout обёрнут в ErrorBoundary для защиты UX
   return (
-    <IDELayout
-      activeTab={activeTab}
-      onTabChange={switchTab}
-      selectedPlugin={selectedPlugin}
-      onGithubClick={handleGithubClick}
-      locale={locale}
-      onUpdatePluginSetting={updatePluginSetting}
-      isLight={isLight}
-    >
-      {isActiveTab('plugins') && (
-        <PluginsTab
-          plugins={plugins}
-          selectedPlugin={selectedPlugin}
-          onSelectPlugin={selectPlugin}
-          loading={loading}
-          error={error}
-          locale={locale}
-          onUpdatePluginSetting={updatePluginSetting}
-        />
-      )}
+    <LocalErrorBoundary>
+      <IDELayout
+        activeTab={activeTab}
+        onTabChange={switchTab}
+        selectedPlugin={selectedPlugin}
+        onGithubClick={handleGithubClick}
+        locale={locale}
+        onUpdatePluginSetting={updatePluginSetting}
+        isLight={isLight}>
+        {isActiveTab('plugins') && (
+          <PluginsTab
+            plugins={plugins}
+            selectedPlugin={selectedPlugin}
+            onSelectPlugin={selectPlugin}
+            loading={loading}
+            error={error}
+            locale={locale}
+            onUpdatePluginSetting={updatePluginSetting}
+          />
+        )}
 
-      {isActiveTab('settings') && (
-        <SettingsTab
-          aiKeys={aiKeys}
-          customKeys={customKeys}
-          onSave={saveAIKeys}
-          onTest={testAIKeys}
-          onAddCustomKey={addCustomKey}
-          onRemoveCustomKey={removeCustomKey}
-          onUpdateKey={updateKey}
-          onUpdateCustomKeyName={updateCustomKeyName}
-          getStatusText={(status) => getStatusText(status, t)}
-          getStatusClass={getStatusClass}
-          locale={locale}
-        />
-      )}
-    </IDELayout>
+        {isActiveTab('settings') && (
+          <SettingsTab
+            aiKeys={aiKeys}
+            customKeys={customKeys}
+            onSave={saveAIKeys}
+            onTest={testAIKeys}
+            onAddCustomKey={addCustomKey}
+            onRemoveCustomKey={removeCustomKey}
+            onUpdateKey={updateKey}
+            onUpdateCustomKeyName={updateCustomKeyName}
+            getStatusText={status => getStatusText(status, t)}
+            getStatusClass={getStatusClass}
+            locale={locale}
+          />
+        )}
+      </IDELayout>
+    </LocalErrorBoundary>
   );
-}; 
+};

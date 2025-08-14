@@ -48,6 +48,51 @@ Chrome в manjaro ставится только через Flatpack, но мож
 
 chromium --remote-debugging-port=9222
 
+
+## Запуск даже из flatpack:
+
+Чтобы вручную открыть браузер в том же режиме, что и e2e тесты (WebdriverIO запускает Chrome с определёнными флагами), вы можете использовать следующую команду для запуска Chrome с нужными параметрами из терминала:
+
+```bash
+google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-e2e-profile --disable-web-security --disable-site-isolation-trials --disable-features=IsolateOrigins,site-per-process --auto-open-devtools-for-tabs
+```
+
+**Пояснения:**
+- `--remote-debugging-port=9222` — позволяет инструментам (например, WebdriverIO) подключаться к браузеру.
+- `--user-data-dir=/tmp/chrome-e2e-profile` — отдельный профиль, чтобы не мешать вашей основной сессии.
+- `--disable-web-security` и другие — отключают часть защит, чтобы расширения и тесты работали стабильнее.
+- `--auto-open-devtools-for-tabs` — автоматически открывает DevTools для каждой вкладки (можно убрать, если не нужно).
+
+---
+
+### Как донастроить браузер для e2e:
+
+1. **Откройте браузер этой командой.**
+2. Перейдите в chrome://extensions/
+3. Включите "Режим разработчика".
+4. Найдите ваше расширение и закрепите его иконку на панели (ПКМ → "Показать в панели инструментов").
+5. Откройте нужную вкладку (например, ozon.ru) и вручную активируйте sidepanel, если требуется.
+6. Проверьте, что sidepanel появляется и плагин Ozon analyzer отображается.
+
+---
+
+**Если у вас Chromium, команда будет:**
+```bash
+chromium --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-e2e-profile --disable-web-security --disable-site-isolation-trials --disable-features=IsolateOrigins,site-per-process --auto-open-devtools-for-tabs
+```
+
+---
+
+**Если браузер установлен как flatpak:**
+```bash
+flatpak run com.google.Chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-e2e-profile --disable-web-security --disable-site-isolation-trials --disable-features=IsolateOrigins,site-per-process --auto-open-devtools-for-tabs
+```
+или
+```bash
+flatpak run org.chromium.Chromium --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-e2e-profile --disable-web-security --disable-site-isolation-trials --disable-features=IsolateOrigins,site-per-process --auto-open-devtools-for-tabs
+```
+
+
 ---
 
 ## [Manjaro] Решение проблемы с remote debugging (9222) для Chrome/Chromium

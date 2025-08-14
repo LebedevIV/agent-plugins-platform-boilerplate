@@ -1,0 +1,23 @@
+---
+description: UI standard for forms
+globs: ["pages/**/*", "**/*.tsx", "**/*.css", "**/*..css", "packages/ui/**/*"]
+alwaysApply: falseaiPriority: normal
+aiCategory: user-interface
+---
+
+# UI Form Standards
+- Client-sIDE and server-sIDE validation
+- Show validation errors clearly
+- ProvIDE clear success feedback
+- Auto-save forms where appropriate
+- Support common keyboard shortc.ts
+
+description: Form standards for all UI compone.ts
+globs:
+  - pages/*/src/compone.ts/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

@@ -1,0 +1,1 @@
+import initAppWithShadow from '@extension/shared/lib/utils/init-app-with-shadow'; 

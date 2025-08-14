@@ -1,0 +1,23 @@
+---
+description: UI standard for performance
+globs: ["pages/**/*", "**/*.tsx", "**/*.css", "**/*..css", "packages/ui/**/*"]
+alwaysApply: falseaiPriority: normal
+aiCategory: user-interface
+---
+
+# UI Performance Standards
+- Lazy load compone.ts and routes
+- Use React.memo and useMemo appropriately
+- Split code into smaller bundles
+- Optimize images for web
+- Implement appropriate caching strategies
+
+description: Performance standards for all UI compone.ts
+globs:
+  - pages/*/src/compone.ts/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

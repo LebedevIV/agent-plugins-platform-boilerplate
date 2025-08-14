@@ -1,191 +1,256 @@
 # Agent Plugins Platform
 
-Браузерное расширение, которое позволяет выполнять Python плагины в браузере с использованием Pyodide и MCP протокола.
+A comprehensive platform for developing and managing AI agent plugins with automatic internationalization and protection systems.
 
-## 🚀 Возможности
+I apologize for abandoning it for so long - personal circumstances + I was waiting for development plans https://github.com/nanobrowser/nanobrowser so as not to duplicate functionality.
 
-- **Python в браузере**: Выполнение Python кода через Pyodide
-- **MCP протокол**: Стандартизированная коммуникация между JavaScript и Python
-- **Плагинная архитектура**: Модульная система плагинов
-- **Безопасность**: Песочница для изолированного выполнения
-- **Современный UI**: React + TypeScript + Tailwind CSS
+## 🌍 **Internationalization & Protection Systems**
 
-## 📁 Архитектура проекта
+### **Automatic Context Translation**
+- **Command**: `Сохрани контекст` / `Save context`
+- **Automatic translation** of context to English for AI/LLM compatibility
+- **Backup creation** before translation
+- **Git integration** with automatic commits
 
-```
-agent-plugins-platform/
-├── platform-core/           # Основная логика платформы
-│   ├── core/               # Ядро системы (PluginManager, HostAPI, WorkflowEngine)
-│   ├── bridge/             # MCP Bridge и Pyodide Worker
-│   ├── public/             # Плагины, Pyodide, wheels
-│   ├── src/                # Background scripts
-│   └── ui/                 # UI компоненты
-├── pages/                  # Страницы расширения
-│   ├── options/            # Страница настроек
-│   ├── popup/              # Popup окно
-│   ├── side-panel/         # Боковая панель
-│   └── ...
-├── packages/               # Внутренние пакеты
-└── tests/                  # Тесты
-```
+### **Complete .cursor Protection**
+- **Automatic protection** of all `.cursor` files
+- **Real-time translation** to English
+- **Git hooks** for automatic protection on commits/pushes
+- **Comprehensive coverage** of technical terminology
 
-## 🛠️ Установка и разработка
+### **Auto Translate Requests**
+- **Automatic translation** of user requests to English
+- **Rule creation** with English templates
+- **Interactive mode** for guided creation
+- **Command-line interface** for quick creation
 
-### 🚀 Быстрый старт
-**Для новых разработчиков**: 
-- [QUICK_START.md](QUICK_START.md) - быстрый старт (3 шага)
-- [DEVELOPER_SETUP.md](DEVELOPER_SETUP.md) - полное руководство по настройке среды разработки
+## 🚀 **Quick Start**
 
-### Требования
-- Node.js >= 22.15.1
-- pnpm >= 10.11.0
-- Cursor IDE (рекомендуется для лучшей работы с ИИ-ассистентом)
-
-### Установка зависимостей
+### **1. Protect .cursor Directory**
 ```bash
-pnpm install
+# Complete protection (recommended)
+node .cursor/rules/protect-cursor.cjs protect
+
+# Check protection status
+node .cursor/rules/protect-cursor.cjs check
+
+# Install protection system
+node .cursor/rules/protect-cursor.cjs install
 ```
 
-### Разработка
+### **2. Save Context in English**
 ```bash
-# Запуск в режиме разработки
-pnpm dev
+# Save context with automatic translation
+node .cursor/rules/save-context.cjs save
 
-# Сборка для продакшена
-pnpm build
-
-# Создание ZIP архива
-pnpm zip
+# Only translate without committing
+node .cursor/rules/save-context.cjs translate-only
 ```
 
-**Полный список команд для сборки, очистки, запуска и разработки:**
-- [Developer Commands (developer-commands.md)](docs/developer-commands.md)
-
-#### Dev-команды для отдельных пакетов/страниц
-
+### **3. Create Rules with Auto Translation**
 ```bash
-# Быстрый запуск разработки только для одной страницы/пакета:
-pnpm --filter pages/options dev
-pnpm --filter pages/side-panel dev
-pnpm --filter packages/ui dev
-```
-- Используйте эти команды для ускорения разработки, если меняются только отдельные части проекта.
-- Можно запускать несколько dev-серверов параллельно для разных страниц.
+# Create rule with automatic translation
+node .cursor/rules/create-rule.cjs "создай правило для архитектуры"
 
-### Тестирование
+# Interactive mode for guided creation
+node .cursor/rules/auto-translate-requests.cjs interactive
+```
+
+### **4. Use NPM Scripts**
 ```bash
-# E2E тесты
-pnpm e2e
-
-# Линтинг
-pnpm lint
-
-# Проверка типов
-pnpm type-check
+npm run protect-cursor    # Complete .cursor protection
+npm run check-cursor      # Check .cursor status
+npm run install-cursor-hooks # Install Git hooks
+npm run create-rule       # Create rule with auto translation
+npm run interactive-rules # Interactive rule creation
 ```
 
-**Подробные команды и настройки**: См. [DEVELOPER_SETUP.md](DEVELOPER_SETUP.md)
+## 🛡️ **Protection Features**
 
-## 🔌 Разработка плагинов
+### **For .cursor Directory**
+- ✅ **Automatic translation** of all files to English
+- ✅ **Git hooks** for real-time protection
+- ✅ **Backup system** with timestamped files
+- ✅ **Comprehensive terminology** coverage (500+ terms)
+- ✅ **Error handling** with safe fallbacks
 
-### Быстрый старт
+### **For Context Files**
+- ✅ **Automatic translation** of context to English
+- ✅ **Backup creation** before translation
+- ✅ **Git integration** with automatic commits
+- ✅ **AI/LLM compatibility** optimization
+
+### **For User Requests**
+- ✅ **Automatic translation** of requests to English
+- ✅ **Rule creation** with English templates
+- ✅ **Interactive mode** for guided creation
+- ✅ **Command-line interface** for quick creation
+
+## 📋 **Available Commands**
+
+### **Context Management**
+- `Сохрани контекст` - Save context in English (automatic translation)
+- `Обнови прогресс` - Update project progress
+- `Восстанови контекст` - Restore full project context
+- `Быстрое восстановление` - Quick context summary
+
+### **Development**
+- `Анализируй архитектуру` - Analyze project architecture
+- `Изучи плагины` - Study existing plugins
+- `Проверь сборку` - Check project build
+- `Создай плагин [название]` - Create new plugin
+
+### **Project Management**
+- `Увеличь версию [patch|minor|major]` - Bump version
+- `Очисти проект` - Clean project files
+- `Анализируй производительность` - Performance analysis
+- `Проверь безопасность` - Security analysis
+
+## 🔧 **System Components**
+
+### **Cursor Protection System**
+- **`cursor-protector.cjs`** - Main translation engine
+- **`cursor-git-hook.cjs`** - Git hooks for automatic protection
+- **`protect-cursor.cjs`** - Complete protection manager
+- **`context-translator.cjs`** - Context translation system
+
+### **Auto Translate Requests System**
+- **`request-translator.cjs`** - Request translation engine
+- **`auto-translate-requests.cjs`** - Interactive system management
+- **`create-rule.cjs`** - Quick rule creation utility
+
+### **Command Synchronization**
+- **`command-sync.cjs`** - Synchronize commands across all sources
+- **`save-context.cjs`** - Save context with automatic translation
+- **`USER_COMMANDS.md`** - User-friendly command reference
+
+## 📁 **File Structure**
+
+```
+.cursor/
+├── rules/
+│   ├── cursor-protector.cjs           # Main translation engine
+│   ├── cursor-git-hook.cjs            # Git hooks
+│   ├── protect-cursor.cjs             # Protection manager
+│   ├── context-translator.cjs         # Context translator
+│   ├── request-translator.cjs         # Request translator
+│   ├── auto-translate-requests.cjs    # Interactive system
+│   ├── create-rule.cjs                # Quick rule creator
+│   ├── command-sync.cjs               # Command synchronization
+│   ├── save-context.cjs               # Context saver
+│   └── doc/                           # Documentation
+├── backup/                            # Backup directory
+└── [protected files]                  # All files in English
+
+memory-bank/
+├── core/
+│   ├── activeContext.md               # Active context (English)
+│   ├── progress.md                    # Progress tracking (English)
+│   └── backup/                        # Context backups
+└── [other memory-bank files]
+```
+
+## 🌟 **Key Benefits**
+
+### **For AI/LLM Compatibility**
+- **Universal accessibility** - Any AI assistant can read all files
+- **Language consistency** - All content in English
+- **Better understanding** - Clear terminology for AI processing
+- **Reduced confusion** - No mixed language content
+
+### **For International Community**
+- **Global accessibility** - Ready for international developers
+- **Standardized format** - Consistent English documentation
+- **Easy sharing** - No language barriers
+- **Professional appearance** - English for global audience
+
+### **For Development Workflow**
+- **Automatic process** - No manual translation needed
+- **Safe operation** - Backups created automatically
+- **Git integration** - Seamless workflow integration
+- **Error prevention** - Blocks problematic commits/pushes
+
+## 🔄 **Workflow Integration**
+
+### **Automatic Protection**
+1. **Write in any language** - System automatically translates
+2. **Git operations** - Hooks ensure protection
+3. **Commit/push** - Automatic translation and validation
+4. **Backup safety** - Original files always preserved
+
+### **Rule Creation**
+1. **Write request in Russian** - System automatically translates
+2. **Review translation** - Check confidence and accuracy
+3. **Confirm creation** - Rule is created in English
+4. **Edit as needed** - Add specific content and details
+5. **Commit changes** - Git integration handles the rest
+
+### **Manual Protection**
 ```bash
-# Создание нового плагина
-mkdir public/plugins/my-plugin
-# Создайте manifest.json, mcp_server.py, icon.svg
+# Protect .cursor directory
+npm run protect-cursor
+
+# Save context in English
+npm run save-context
+
+# Create rule with auto translation
+npm run create-rule "your request"
+
+# Check protection status
+npm run check-cursor
 ```
 
-### Структура плагина
-```
-public/plugins/plugin-name/
-├── manifest.json      # Метаданные и разрешения плагина
-├── mcp_server.py      # Python MCP сервер
-├── workflow.json      # Определение workflow (опционально)
-└── icon.svg          # Иконка плагина (опционально)
-```
+## 📚 **Documentation**
 
-**Подробное руководство**: См. [PLUGIN_DEVELOPMENT.md](PLUGIN_DEVELOPMENT.md)
+- **`.cursor/rules/doc/cursor-protection-system.mdc`** - Complete protection system guide
+- **`.cursor/rules/doc/context-translation-system.mdc`** - Context translation guide
+- **`.cursor/rules/doc/auto-translate-requests.mdc`** - Auto translate requests guide
+- **`.cursor/rules/doc/command-synchronization.mdc`** - Command system guide
+- **`USER_COMMANDS.md`** - User command reference
 
-## 🔧 Конфигурация
+## 🛠️ **Troubleshooting**
 
-### Основные файлы
-- **Настройки**: `pages/options/src/Options.tsx`
-- **Компоненты**: `pages/options/src/components/`
-- **Стили**: `pages/options/src/Options.css`
+### **Common Issues**
+1. **Files not translated** - Check `.cursorignore` exclusions
+2. **Git hooks not working** - Run `npm run install-cursor-hooks`
+3. **Translation quality** - Check backup files for original content
+4. **Rule creation fails** - Check file permissions and git status
 
-### Alias для импортов
-- `@platform-core` — core, bridge, хуки, UI
-- `@platform-public` — public/plugins, public/pyodide, public/wheels
-
-**Подробная конфигурация**: См. [DEVELOPER_SETUP.md](DEVELOPER_SETUP.md)
-
-## 🧪 Тестирование
-
+### **Debug Commands**
 ```bash
-pnpm e2e    # E2E тесты
-pnpm test   # Unit тесты
+# Check protection status
+node .cursor/rules/protect-cursor.cjs check
+
+# Test translation
+node .cursor/rules/cursor-protector.cjs protect
+
+# Test request translation
+node .cursor/rules/request-translator.cjs analyze "your request"
+
+# Verify Git hooks
+ls -la .git/hooks/
 ```
 
-**Подробное тестирование**: См. [DEVELOPER_SETUP.md](DEVELOPER_SETUP.md)
+## 🎯 **Future Enhancements**
 
-## 📦 Сборка и деплой
+- **API integration** with translation services
+- **Machine learning** for better translations
+- **Real-time translation** during editing
+- **Multi-language support** for other languages
+- **IDE plugins** for real-time protection
 
-```bash
-pnpm build        # Сборка для Chrome Web Store
-pnpm build:firefox # Сборка для Firefox Add-ons
-pnpm zip          # Создание ZIP архива
-```
+## 🤝 **Contributing**
 
-**Подробная сборка**: См. [DEVELOPER_SETUP.md](DEVELOPER_SETUP.md)
+This platform is designed for international collaboration. All contributions should:
+- Use English for all documentation and code comments
+- Follow the established protection systems
+- Maintain AI/LLM compatibility
+- Support global accessibility
 
-## 🔒 Безопасность
+## 📄 **License**
 
-- Валидация манифестов плагинов
-- Песочница для изолированного выполнения
-- Принцип минимальных привилегий
-- Аудит кода плагинов
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-**Подробная безопасность**: См. [DEVELOPER_SETUP.md](DEVELOPER_SETUP.md)
-
-## 📄 Лицензия
-
-MIT License - см. файл [LICENSE](LICENSE)
-
-## 🤝 Вклад в проект
-
-1. Fork репозитория
-2. Создайте feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit изменения (`git commit -m 'Add amazing feature'`)
-4. Push в branch (`git push origin feature/amazing-feature`)
-5. Откройте Pull Request
-
-## 📞 Поддержка
-
-Если у вас есть вопросы или проблемы, создайте issue в репозитории.
-
-## Как открыть вкладку Agent Platform Tools (DevTools расширения)
-
-1. Откройте любую страницу (например, Ozon).
-2. Нажмите F12, чтобы открыть стандартные DevTools браузера.
-3. В верхнем меню DevTools найдите вкладку **Agent Platform Tools** (если не видно — нажмите на `>>` справа от вкладок).
-4. Перейдите на вкладку **Agent Platform Tools** — откроется интерфейс расширения.
-5. Для инспекции консоли этой вкладки используйте **ПКМ → Просмотреть код** внутри панели (F12 работает только для основной страницы).
-6. В открывшейся консоли будет доступен `chrome.runtime` и все API расширения.
-
-**Важно:**
-- Все тестовые скрипты и логи рекомендуется запускать и смотреть именно в этой вкладке или через боковую панель расширения.
-- Название вкладки уникальное, чтобы не путать с системной вкладкой DevTools.
-
-<<<<<<< HEAD
-## Организационные best practices и автоматизация
-
-- [Инструкция по переносу best practices и автоматизаций (для пользователя)](docs/transfer-best-practices-user.md)
-- [AI best practices (только для AI-ассистентов, EN)](docs/for-ai-best-practices/README.md)
-- [Организационные знания и правила (memory-bank, EN, только для AI)](memory-bank/README.md)
-=======
 ---
-## AI Knowledge Fallback
 
-If the AI agent cannot answer a question from its own memory-bank, it must first consult the .cursor/rules directory, and if no answer is found there, then consult the memory-bank directory. See [.cursor/rules/doc/ai-fallback.rules.md](.cursor/rules/doc/ai-fallback.rules.md) for details.
----
->>>>>>> origin/develop
+**Ready for international collaboration with automatic AI/LLM compatibility!** 🌍🤖

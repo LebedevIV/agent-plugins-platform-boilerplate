@@ -1,0 +1,39 @@
+---
+description: create rule for architecture project
+globs: ["**/*"]
+alwaysApply: false
+aiPriority: normal
+aiCategory: rules
+createdFrom: "создай правило для архитектуры проекта"
+translatedAt: "2025-07-19T02:58:58.601Z"
+---
+
+# create rule for architecture project
+
+## Overview
+
+This rule was created based on the request: "создай правило для архитектуры проекта"
+
+## Description
+
+create rule for architecture project
+
+## Implementation
+
+<!-- Add implementation details here -->
+
+## Usage
+
+<!-- Add usage examples here -->
+
+## Examples
+
+<!-- Add code examples here -->
+
+## Notes
+
+<!-- Add additional notes here -->
+
+---
+*Generated automatically from user request: "создай правило для архитектуры проекта"*
+*Translated to English for AI/LLM compatibility*

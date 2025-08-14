@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { withPageConfig } from '@extension/vite-config';
+import react from '@vitejs/plugin-react-swc';
 import { readFileSync } from 'node:fs';
 
 const rootDir = resolve(import.meta.dirname);
@@ -15,7 +15,8 @@ function versionReplacePlugin() {
   };
 }
 
-export default withPageConfig({
+export default {
+  base: './', // <--- ВАЖНО для Chrome Extension!
   resolve: {
     alias: {
       '@src': srcDir,
@@ -24,6 +25,13 @@ export default withPageConfig({
   publicDir: resolve(rootDir, 'public'),
   build: {
     outDir: resolve(rootDir, '..', '..', 'dist', 'options'),
+    sourcemap: true,
+    minify: true,
+    reportCompressedSize: true,
+    emptyOutDir: true,
+    rollupOptions: {
+      external: ['chrome', 'unenv/node/process', 'unenv/polyfill/globalthis'],
+    },
   },
-  plugins: [versionReplacePlugin()],
-});
+  plugins: [react(), versionReplacePlugin()],
+};

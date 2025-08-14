@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { Plugin } from '../hooks/usePlugins';
 import type { TabType } from '../hooks/useTabs';
 import type React from 'react';
+import ToggleButton from './ToggleButton';
 
 interface IDELayoutProps {
   children: React.ReactNode;
@@ -122,39 +123,42 @@ export const IDELayout: React.FC<IDELayoutProps> = ({
           </button>
         </nav>
         {/* Theme toggle button */}
-        <button
-          className="theme-toggle-btn"
-          title={isLight ? 'Переключить на тёмную тему' : 'Переключить на светлую тему'}
-          style={{ margin: '16px auto 0', display: 'block' }}
-          onClick={() => import('@extension/storage').then(m => m.exampleThemeStorage.toggle())}>
-          {isLight ? (
-            // Moon icon (тёмный контур)
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#334155" strokeWidth="2">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-            </svg>
-          ) : (
-            // Sun icon (симметричная)
-            <svg
-              width="40"
-              height="40"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#e2e8f0"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round">
-              <circle cx="12" cy="12" r="5" />
-              <line x1="12" y1="1" x2="12" y2="3" />
-              <line x1="12" y1="21" x2="12" y2="23" />
-              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-              <line x1="1" y1="12" x2="3" y2="12" />
-              <line x1="21" y1="12" x2="23" y2="12" />
-              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-            </svg>
-          )}
-        </button>
+        <div style={{ margin: '16px auto 0', display: 'flex', justifyContent: 'center' }}>
+          {/* AI-First: Переключатель темы через ToggleButton с иконками */}
+          <ToggleButton
+            checked={isLight}
+            onChange={() => import('@extension/storage').then(m => m.exampleThemeStorage.toggle())}
+            iconOn={
+              // Sun icon (светлая тема)
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#e2e8f0"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round">
+                <circle cx="12" cy="12" r="5" />
+                <line x1="12" y1="1" x2="12" y2="3" />
+                <line x1="12" y1="21" x2="12" y2="23" />
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                <line x1="1" y1="12" x2="3" y2="12" />
+                <line x1="21" y1="12" x2="23" y2="12" />
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+              </svg>
+            }
+            iconOff={
+              // Moon icon (тёмная тема)
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#334155" strokeWidth="2">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+              </svg>
+            }
+            label={isLight ? t('options.theme.light') : t('options.theme.dark')}
+          />
+        </div>
       </aside>
       <main className="ide-main-content">{children}</main>
       {/* Резайзер */}

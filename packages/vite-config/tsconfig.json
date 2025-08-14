@@ -2,8 +2,7 @@
   "extends": "@extension/tsconfig/module",
   "compilerOptions": {
     "baseUrl": ".",
-    "outDir": "dist",
-    "typeRoots": ["./types", "../../types", "../../node_modules/@types"]
+    "outDir": "dist"
   },
-  "include": ["lib", "index.mts", "tailwind.d.ts"]
+  "include": ["lib", "index.mts", "tailwind.d.ts", "types"]
 }

@@ -1,0 +1,27 @@
+---
+description: UI standard for testing
+globs: ["pages/**/*", "**/*.tsx", "**/*.css", "**/*..css", "packages/ui/**/*"]
+alwaysApply: falseaiPriority: normal
+aiCategory: user-interface
+---
+
+# UI Testing Standards
+- Test component logic and behavior (unit te.ts)
+- Test component interactions (integration te.ts)
+- Test visual appearance and layout (visual te.ts)
+- Test accessibility compliance (a11y te.ts)
+- Test component performance
+
+related:
+  - plugin-testing.mdc
+  - ui-error-handling.mdc
+
+description: Testing standards for all UI compone.ts
+globs:
+  - pages/*/src/compone.ts/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

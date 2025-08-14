@@ -2,10 +2,11 @@
 import { PluginControlPanel } from './components/PluginControlPanel'; // Панель управления выбранным плагином
 import { ToastNotifications } from './components/ToastNotifications'; // Всплывающие уведомления
 // === Общие/shared утилиты и хуки (используются во всех частях расширения) ===
-import { withErrorBoundary, withSuspense, useStorage } from '@extension/shared'; // HOC для обработки ошибок, Suspense и хук для работы с хранилищем
+import { useStorage } from '@extension/shared'; // HOC для обработки ошибок, Suspense и хук для работы с хранилищем
 import { exampleThemeStorage } from '@extension/storage'; // Пример хранилища для темы
-import { cn, ErrorDisplay, LoadingSpinner } from '@extension/ui'; // Утилита для классов, компонент ошибки и спиннер
-import { PluginCard } from '@extension/ui/lib/components/PluginCard'; // Общий компонент карточки плагина (React)
+import { cn } from '@extension/ui'; // Утилита для классов
+import LocalErrorBoundary from './components/LocalErrorBoundary';
+import PluginCard from './components/PluginCard';
 // === React хуки ===
 import { useState, useEffect, useCallback, useRef } from 'react';
 // === Типы для локальных компонентов ===
@@ -352,93 +353,96 @@ const SidePanel = () => {
   };
 
   return (
-    <div className={cn('App', isLight ? 'bg-slate-50' : 'bg-gray-800')}>
-      <header className={cn('App-header', isLight ? 'text-gray-900' : 'text-gray-100')}>
-        <div className="header-controls">
-          <button
-            onClick={exampleThemeStorage.toggle}
-            className="theme-toggle-btn"
-            title={isLight ? 'Переключить на темную тему' : 'Переключить на светлую тему'}>
-            {isLight ? (
+    <LocalErrorBoundary>
+      {/* AI-First: Основной layout сайдпанели, все визуальные компоненты локальные */}
+      <div className={cn('App', isLight ? 'bg-slate-50' : 'bg-gray-800')}>
+        <header className={cn('App-header', isLight ? 'text-gray-900' : 'text-gray-100')}>
+          <div className="header-controls">
+            <ToggleButton
+              isLight={isLight}
+              onToggle={exampleThemeStorage.toggle}
+              title={isLight ? 'Переключить на темную тему' : 'Переключить на светлую тему'}>
+              {isLight ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                </svg>
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="5" />
+                  <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+                </svg>
+              )}
+            </ToggleButton>
+
+            <button onClick={() => chrome.runtime.openOptionsPage()} className="settings-btn" title="Открыть настройки">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09A1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09A1.65 1.65 0 0 0-1.51 1z" />
               </svg>
-            ) : (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="5" />
-                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-              </svg>
-            )}
-          </button>
-
-          <button onClick={() => chrome.runtime.openOptionsPage()} className="settings-btn" title="Открыть настройки">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09A1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09A1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
-          </button>
-        </div>
-      </header>
-
-      <main className="side-panel-main">
-        <section className="plugins-section">
-          <h3>Доступные плагины</h3>
-          <div className="plugins-grid">
-            {(() => {
-              console.log('[SidePanel] === РЕНДЕР ===');
-              console.log('[SidePanel] Состояние plugins:', plugins);
-              console.log('[SidePanel] Состояние currentTabUrl:', currentTabUrl);
-
-              const filteredPlugins = plugins.filter(isPluginAllowedOnHost);
-              console.log('[SidePanel] Всего плагинов:', plugins.length);
-              console.log('[SidePanel] Отфильтрованных плагинов:', filteredPlugins.length);
-              console.log('[SidePanel] Отфильтрованные плагины:', filteredPlugins);
-
-              return filteredPlugins.map(plugin => (
-                <PluginCard
-                  key={plugin.id}
-                  id={plugin.id}
-                  name={plugin.name}
-                  version={plugin.version}
-                  description={plugin.description}
-                  icon={plugin.icon}
-                  iconUrl={plugin.iconUrl}
-                  enabled={plugin.settings?.enabled ?? true}
-                  selected={selectedPlugin?.id === plugin.id}
-                  onClick={() => handlePluginClick(plugin)}
-                  onToggle={async (enabled: boolean): Promise<void> => {
-                    await handleUpdatePluginSetting(plugin.id, 'enabled', enabled);
-                  }}
-                />
-              ));
-            })()}
+            </button>
           </div>
-        </section>
-        {/* Удалена секция с LogManager */}
-      </main>
+        </header>
 
-      {/* Панель управления плагином */}
-      {showControlPanel && selectedPlugin && (
-        <PluginControlPanel
-          plugin={selectedPlugin}
-          currentView={panelView}
-          isRunning={runningPlugin === selectedPlugin.id}
-          isPaused={pausedPlugin === selectedPlugin.id}
-          currentTabUrl={currentTabUrl}
-          onViewChange={setPanelView}
-          onStart={handleStartPlugin}
-          onPause={handlePausePlugin}
-          onStop={handleStopPlugin}
-          onClose={handleClosePanel}
-          onUpdateSetting={handleUpdatePluginSetting}
-        />
-      )}
+        <main className="side-panel-main">
+          <section className="plugins-section">
+            <h3>Доступные плагины</h3>
+            <div className="plugins-grid">
+              {(() => {
+                console.log('[SidePanel] === РЕНДЕР ===');
+                console.log('[SidePanel] Состояние plugins:', plugins);
+                console.log('[SidePanel] Состояние currentTabUrl:', currentTabUrl);
 
-      <ToastNotifications toasts={toasts} onRemove={removeToast} />
-    </div>
+                const filteredPlugins = plugins.filter(isPluginAllowedOnHost);
+                console.log('[SidePanel] Всего плагинов:', plugins.length);
+                console.log('[SidePanel] Отфильтрованных плагинов:', filteredPlugins.length);
+                console.log('[SidePanel] Отфильтрованные плагины:', filteredPlugins);
+
+                return filteredPlugins.map(plugin => (
+                  <PluginCard
+                    key={plugin.id}
+                    id={plugin.id}
+                    name={plugin.name}
+                    version={plugin.version}
+                    description={plugin.description}
+                    icon={plugin.icon}
+                    iconUrl={plugin.iconUrl}
+                    enabled={plugin.settings?.enabled ?? true}
+                    selected={selectedPlugin?.id === plugin.id}
+                    onClick={() => handlePluginClick(plugin)}
+                    onToggle={async (enabled: boolean): Promise<void> => {
+                      await handleUpdatePluginSetting(plugin.id, 'enabled', enabled);
+                    }}
+                  />
+                ));
+              })()}
+            </div>
+          </section>
+          {/* Удалена секция с LogManager */}
+        </main>
+
+        {/* Панель управления плагином */}
+        {showControlPanel && selectedPlugin && (
+          <PluginControlPanel
+            plugin={selectedPlugin}
+            currentView={panelView}
+            isRunning={runningPlugin === selectedPlugin.id}
+            isPaused={pausedPlugin === selectedPlugin.id}
+            currentTabUrl={currentTabUrl}
+            onViewChange={setPanelView}
+            onStart={handleStartPlugin}
+            onPause={handlePausePlugin}
+            onStop={handleStopPlugin}
+            onClose={handleClosePanel}
+            onUpdateSetting={handleUpdatePluginSetting}
+          />
+        )}
+
+        <ToastNotifications toasts={toasts} onRemove={removeToast} />
+      </div>
+    </LocalErrorBoundary>
   );
 };
 
-export default withErrorBoundary(withSuspense(SidePanel, <LoadingSpinner />), ErrorDisplay);
+export default SidePanel;
 
 // TODO: Миниатюризация карточек и панель управления плагином

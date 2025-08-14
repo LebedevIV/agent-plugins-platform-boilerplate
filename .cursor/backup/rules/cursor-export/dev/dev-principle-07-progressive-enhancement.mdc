@@ -1,0 +1,34 @@
+---
+description: Development principle enhancement - dev principle 07 progressive enhancement
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: trueaiPriority: high
+aiCategory: development-practices
+---
+
+<!-- AI: This is a development principle that should be applied to all code -->
+<!-- AI: Priority: high -->
+<!-- AI: Category: development-practices -->
+
+---
+description: Development principle enhancement - dev principle 07 progressive enhancement
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: trueaiPriority: high
+aiCategory: development-practices
+---
+
+# Development Principle 7: Progressive Enhancement
+- Core functionality: Basic functionality always works
+- Feature detection: Detect browser capabilities
+- Graceful Degradation: Degrade functionality, not complete failure
+- Performance budget: Performance budget for new features
+- Accessibility baseline: Minimum accessibility level for all
+
+description: Progressive enhancement in all development
+globs:
+  - *
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

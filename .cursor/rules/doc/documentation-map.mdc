@@ -1,0 +1,196 @@
+# Documentation Map - Карта назначения файлов
+
+## Команда "задокументируй" - четкие правила размещения
+
+### 🎯 **Универсальные правила и best practices → `.cursor/rules/`**
+
+**Критерии для `.cursor/rules/`:**
+- ✅ Применимо к любым проектам
+- ✅ Проверенные Patterns и подходы
+- ✅ Автоматизация и workflow
+- ✅ Standards разработки
+- ✅ Documentation и структуры
+
+**Файлы назначения:**
+- `dev/dev-principle-*.mdc` - Principles разработки
+- `dev/development-principles.mdc` - универсальные Principles разработки
+- `dev/date-time-patterns.mdc` - Patterns работы с Dateми
+- `workflow/ci-automation.mdc` - CI/CD автоматизация
+- `workflow/experience-transfer.mdc` - перенос опыта
+- `doc/ai-first.mdc` - Standards документации
+- `ui/ui-*.mdc` - UI/UX Standards
+- `plugin/plugin-*.mdc` - Standards плагинов
+- `security/validation.mdc` - правила безопасности
+- `architecture/architecture-*.mdc` - архитектурные Principles
+- `architecture/file-relationships.mdc` - Patterns организации файлов
+
+### 🧠 **Проектно-специфичный контекст → `memory-bank/`**
+
+**Критерии для `memory-bank/`:**
+- ✅ Уникален для данного проекта
+- ✅ Текущий Status и прогресс
+- ✅ История ошибок и решений
+- ✅ Принятые архитектурные решения
+- ✅ Планы развития проекта
+
+**Файлы назначения:**
+- `errors.md` - кладбище ошибок и решений
+- `progress.md` - прогресс разработки
+- `activeContext.md` - текущий контекст
+- `architecture-decisions.md` - принятые решения
+- `future-plans.md` - планы развития
+- `testing-resu.ts.md` - результаты тестирования
+- `sIDE-panel-improveme.ts.md` - улучшения UI
+- `version-management.md` - управление версиями
+
+## 📋 **Детальная карта по Typeам контента**
+
+### **Errors and solutions:**
+```
+Type ошибки → Файл назначения
+├── build/TypeScript → memory-bank/errors.md
+├── Runtime/UI → memory-bank/errors.md  
+├── Архитектурная → memory-bank/architecture-decisions.md
+├── Security → .cursor/rules/security/validation.mdc
+├── Performance → .cursor/rules/architecture/architecture-performance.mdc
+└── UI/UX → .cursor/rules/ui/ui-*.mdc
+```
+
+### **Best practices:**
+```
+Type практики → Файл назначения
+├── Development → .cursor/rules/dev/dev-principle-*.mdc
+├── Documentation → .cursor/rules/doc/ai-first.mdc
+├── Testing → .cursor/rules/dev/testing-troubleshooting.mdc
+├── CI/CD → .cursor/rules/workflow/ci-automation.mdc
+├── Git workflow → .cursor/rules/workflow/branches.mdc
+└── Plugins → .cursor/rules/plugin/plugin-*.mdc
+```
+
+### **Автоматизация:**
+```
+Type automation → Файл назначения
+├── CI/CD → .cursor/rules/workflow/ci-automation.mdc
+├── build → .cursor/rules/dev/TypeScript-build-troubleshooting.mdc
+├── Testing → .cursor/rules/dev/testing-troubleshooting.mdc
+├── Деплой → .cursor/rules/workflow/automation.mdc
+└── Monitoring → .cursor/rules/architecture/architecture-observability.mdc
+```
+
+### **Architectural decisions:**
+```
+Type решения → Файл назначения
+├── Проектно-специфичное → memory-bank/architecture-decisions.md
+├── Универсальное → .cursor/rules/architecture/architecture-*.mdc
+├── Security → .cursor/rules/architecture/architecture-security.mdc
+├── Performance → .cursor/rules/architecture/architecture-performance.mdc
+└── Plugins → .cursor/rules/architecture/architecture-plugin.mdc
+```
+
+## 🔄 **Workflow команды "задокументируй"**
+
+### **1. Анализ контента:**
+```bash
+# Определить Type контента
+- Error/решение?
+- Best practice?
+- Автоматизация?
+- Архитектурное решение?
+- Проектно-специфичное?
+```
+
+### **2. Выбор файла назначения:**
+```bash
+# По карте выше определить правильный файл
+# Check существование файла
+# Create если не существует
+```
+
+### **3. Структурированное добавление:**
+```bash
+# Для .cursor/rules/:
+- Add метаdata (description, globs, alwaysApply)
+- Структурировать по Categoryм
+- Add cross-references
+
+# Для memory-bank/:
+- Add дату и контекст
+- Связать с существующими записями
+- Update индексы
+```
+
+### **4. Validation:**
+```bash
+# Check:
+- Нет дублирования
+- Правильная структура
+- Актуальные ссылки
+- Соответствие стандартам
+```
+
+## 🚫 **Запрещенные действия:**
+
+### **НЕ размещать в `.cursor/rules/`:**
+- ❌ Проектно-специфичные ошибки
+- ❌ Текущий Status проекта
+- ❌ История конкретных решений
+- ❌ Планы развития проекта
+- ❌ Результаты тестирования
+
+### **НЕ размещать в `memory-bank/`:**
+- ❌ Универсальные правила
+- ❌ Best practices для всех проектов
+- ❌ Автоматизация и workflow
+- ❌ Standards документации
+- ❌ UI/UX Standards
+
+## 📊 **examples правильного размещения:**
+
+### **Пример 1: Error сборки TypeScript**
+```
+Проблема: "Failed to resolve entry for package '@extension/vite-config'"
+Решение: "Перевести пакет на ESM-only, main: dist/index..js"
+
+Размещение: memory-bank/errors.md
+Причина: Проектно-специфичная Error сборки
+```
+
+### **Пример 2: Best practice для ESM пакетов**
+```
+Практика: "Использовать только ESM-экспорт для внутренних пакетов"
+Обоснование: "Упрощает сборку, устраняет ошибки Vite/esbuild"
+
+Размещение: .cursor/rules/dev/TypeScript-build-troubleshooting.mdc
+Причина: Универсальная практика для всех проектов
+```
+
+### **Пример 3: CI/CD автоматизация**
+```
+Автоматизация: "GitHub Actions для проверки .cursor rules"
+Workflow: "Verification структуры, метаданных, дубликатов"
+
+Размещение: .cursor/rules/workflow/ci-automation.mdc
+Причина: Универсальная автоматизация
+```
+
+## ✅ **Результат:**
+
+Четкая карта назначения файлов обеспечивает:
+- **Нет дублирования** - каждый Type контента в правильном месте
+- **Нет рассинхронизации** - четкие критерии размещения
+- **Легкий поиск** - структурированная организация
+- **Эффективный перенос** - только универсальные правила в .cursor
+- **Консистентность** - единообразные подходы
+description:
+globs:
+alwaysApply: false
+---
+
+## 🛡️ Protected/Administrative Files
+
+Следующие файлы считаются административными и защищёнными — их нельзя удалять, перемещать или переименовывать автоматизацией (органайзерами, скриптами и т.д.):
+
+- memory-bank/chrome-extension-manual-restore.md — опыт ручного восстановления расширения, запрещено удалять/перемещать автоматизацией
+- (добавляйте сюда другие важные административные файлы по мере необходимости)
+
+---

@@ -1,0 +1,309 @@
+# Memory Bank Controller - Система управления memory-bank
+
+## 🎯 **Принцип: Memory-bank полностью подчинен .cursor правилам**
+
+### **Обоснование:**
+- ✅ Оба каталога предназначены исключительно для AI
+- ✅ Единая система правил и стандартов
+- ✅ Автоматизация всех процессов
+- ✅ Консистентность и предсказуемость
+- ✅ Масштабируемость и поддерживаемость
+
+## 📋 **Структура управления memory-bank**
+
+### **1. Автоматическое создание структуры**
+```bash
+# Команда для создания структуры memory-bank
+node cursor-manager..js create-memory-structure [project-type]
+
+# Поддерживаемые Typeы проектов:
+- React-TypeScript    # React + TypeScript проекты
+- node-API           # Node.js API проекты
+- chrome-extension   # Chrome Extension проекты
+- monorepo           # Монорепозитории
+- fullstack          # Full-stack приложения
+```
+
+### **2. Шаблоны структуры для разных Typeов проектов**
+
+#### **React TypeScript Project:**
+```
+memory-bank/
+├── core/
+│   ├── activeContext.md      # Текущий контекст React проекта
+│   ├── progress.md           # Development progress React компонентов
+│   ├── projectbrief.md       # Description React проекта
+│   └── session-log.md        # Лог сессий React разработки
+├── errors/
+│   ├── errors.md             # Ошибки React/TypeScript
+│   ├── build-errors.md       # Ошибки сборки Vite/Webpack
+│   ├── runtime-errors.md     # Runtime ошибки React
+│   └── ui-errors.md          # UI/UX ошибки
+├── architecture/
+│   ├── decisions.md          # Architectural decisions React
+│   ├── patterns.md           # React Patterns
+│   ├── State-management.md   # Управление Stateм
+│   └── component-structure.md # Структура компонентов
+├── development/
+│   ├── testing-resu.ts.md    # Результаты тестирования React
+│   ├── debugging-guIDE.md    # Debugging React приложений
+│   ├── devtools-guIDE.md     # React DevTools
+│   └── version-management.md # Управление версиями
+├── ui/
+│   ├── component-library.md  # Библиотека компонентов
+│   ├── styling-patterns.md   # Patterns стилизации
+│   └── responsive-design.md  # Адаптивный Design
+├── planning/
+│   ├── feature-roadmap.md    # Roadmap фич
+│   ├── optimization-plans.md # Планы оптимизации
+│   └── migration-plans.md    # Планы миграции
+├── context/
+│   ├── tech-stack.md         # Технический стек
+│   ├── dependencies.md       # Dependencies проекта
+│   └── environment.md        # Окружение разработки
+└── deprecated/
+    └── old-files.md          # Deprecated files
+```
+
+#### **Chrome Extension Project:**
+```
+memory-bank/
+├── core/
+│   ├── activeContext.md      # Текущий контекст extension
+│   ├── progress.md           # Development progress extension
+│   ├── projectbrief.md       # Description extension
+│   └── session-log.md        # Лог сессий разработки
+├── errors/
+│   ├── errors.md             # Ошибки extension
+│   ├── manifest-errors.md    # Ошибки manifest.json
+│   ├── permission-errors.md  # Ошибки разрешений
+│   └── API-errors.md         # Ошибки Chrome APIs
+├── architecture/
+│   ├── decisions.md          # Architectural decisions
+│   ├── background-scri.ts.md # Background scri.ts
+│   ├── content-scri.ts.md    # Content scri.ts
+│   └── popup-structure.md    # Структура popup
+├── development/
+│   ├── testing-resu.ts.md    # Testing extension
+│   ├── debugging-guIDE.md    # Debugging extension
+│   ├── devtools-guIDE.md     # Chrome DevTools
+│   └── version-management.md # Управление версиями
+├── ui/
+│   ├── popup-design.md       # Design popup
+│   ├── options-page.md       # Страница настроек
+│   └── content-ui.md         # UI в content scri.ts
+├── planning/
+│   ├── feature-roadmap.md    # Roadmap фич
+│   ├── store-publishing.md   # Публикация в store
+│   └── user-feedback.md      # Обратная связь пользователей
+├── context/
+│   ├── chrome-APIs.md        # Используемые Chrome APIs
+│   ├── permissions.md        # Требуемые разрешения
+│   └── environment.md        # Окружение разработки
+└── deprecated/
+    └── old-files.md          # Deprecated files
+```
+
+## 🔄 **Автоматизация процессов memory-bank**
+
+### **1. Автоматическое создание записей**
+```bash
+# Команды для автоматического создания записей
+node cursor-manager..js memory-add "content" --type=error --category=build
+node cursor-manager..js memory-add "content" --type=decision --category=architecture
+node cursor-manager..js memory-add "content" --type=progress --category=feature
+```
+
+### **2. Автоматическое обновление контекста**
+```bash
+# Обновление активного контекста
+node cursor-manager..js memory-update-context --auto
+node cursor-manager..js memory-update-progress --auto
+node cursor-manager..js memory-update-session --auto
+```
+
+### **3. Автоматическое Recovery контекста**
+```bash
+# Recovery полного контекста
+node cursor-manager..js memory-restore --full
+node cursor-manager..js memory-restore --quick
+node cursor-manager..js memory-restore --category=errors
+```
+
+## 📝 **Правила создания и сохранения контекста**
+
+### **1. Структура записей (унифицированная)**
+```markdown
+## [YYYY-MM-DD HH:MM:SS] - Краткое Description
+
+**Type:** error|decision|progress|context|plan
+**Category:** build|runtime|architecture|ui|testing|planning
+**Priority:** critical|high|medium|low
+
+**Контекст:** Description ситуации и обстоятельств
+
+**Детали:** Подробная информация о проблеме/решении
+
+**Решение/Результат:** Что было сделано и результат
+
+**Status:** ✅ Решено | 🔄 In Progress | ❌ Проблема | 📋 План
+
+**Связанные файлы:** 
+- .cursor/rules/dev/development-principles.mdc
+- memory-bank/errors/build-errors.md
+
+**Теги:** #React #TypeScript #build #vite
+
+**AI Команды:**
+- `аудит cursor` - для проверки .cursor правил
+- `задокументируй` - для создания документации
+```
+
+### **2. Автоматические теги и категоризация**
+```JavaScript
+// Автоматическое определение тегов
+const autoTags = {
+  'React': /React.jsx|component|hook/i,
+  'TypeScript': /TypeScript.ts|type|interface/i,
+  'build': /build|compile|vite|webpack/i,
+  'runtime': /runtime|error|crash|exception/i,
+  'ui': /ui|ux|component|styling/i,
+  'testing': /test|spec|jest|cypress/i,
+  'architecture': /architecture|pattern|structure/i
+};
+```
+
+### **3. Автоматическое связывание с .cursor правилами**
+```JavaScript
+// Автоматическое создание связей
+const ruleConnections = {
+  'error': '.cursor/rules/dev/error-handling.mdc',
+  'architecture': '.cursor/rules/architecture/patterns.mdc',
+  'testing': '.cursor/rules/dev/testing-troubleshooting.mdc',
+  'ui': '.cursor/rules/ui/ui-patterns.mdc',
+  'build': '.cursor/rules/dev/build-troubleshooting.mdc'
+};
+```
+
+## 🤖 **AI Команды для управления memory-bank**
+
+### **1. Команды создания и обновления**
+```bash
+# Создание новой записи
+"создай запись в memory-bank" / "add memory entry"
+"добавь ошибку в memory-bank" / "add error to memory"
+"запиши решение в memory-bank" / "record solution"
+
+# Обновление существующих записей
+"обнови контекст" / "update context"
+"обнови прогресс" / "update progress"
+"обнови сессию" / "update session"
+```
+
+### **2. Команды восстановления и поиска**
+```bash
+# Recovery контекста
+"восстанови контекст" / "restore context"
+"восстанови полный контекст" / "restore full context"
+"быстрое Recovery" / "quick restore"
+
+# Поиск информации
+"найди в memory-bank" / "search memory"
+"покажи ошибки" / "show errors"
+"покажи решения" / "show solutions"
+```
+
+### **3. Команды управления структурой**
+```bash
+# Управление структурой
+"создай структуру memory-bank" / "create memory structure"
+"реорганизуй memory-bank" / "reorganize memory"
+"очисти memory-bank" / "clean memory"
+"аудит memory-bank" / "audit memory"
+```
+
+## 🔧 **Integration с существующими .cursor правилами**
+
+### **1. Обновление documentation-helper..js**
+```JavaScript
+// Add поддержку memory-bank команд
+const memoryCommands = {
+  'memory-add': 'Add запись в memory-bank',
+  'memory-update': 'Update запись в memory-bank',
+  'memory-restore': 'Восстановить контекст из memory-bank',
+  'memory-search': 'Поиск в memory-bank',
+  'memory-audit': 'Аудит memory-bank'
+};
+```
+
+### **2. Обновление ai-memory.mdc**
+```markdown
+### Memory Bank Management:
+- `создай запись в memory-bank` - Create новую запись с автоматической категоризацией
+- `обнови контекст` - Update activeContext.md с текущим Statusом
+- `восстанови контекст` - Восстановить полный контекст из memory-bank
+- `аудит memory-bank` - Провести аудит и оптимизацию memory-bank
+- `реорганизуй memory-bank` - Реорганизовать структуру по новым правилам
+```
+
+### **3. Обновление cursor-manager..js**
+```JavaScript
+// Add команды управления memory-bank
+case 'memory-add':
+  await this.memoryAdd(options);
+  break;
+case 'memory-update':
+  await this.memoryUpdate(options);
+  break;
+case 'memory-restore':
+  await this.memoryRestore(options);
+  break;
+case 'memory-audit':
+  await this.memoryAudit(options);
+  break;
+```
+
+## 📊 **Автоматические отчеты и аналитика**
+
+### **1. Отчеты по memory-bank**
+```bash
+# Генерация отчетов
+node cursor-manager..js memory-report --type=errors
+node cursor-manager..js memory-report --type=progress
+node cursor-manager..js memory-report --type=full
+```
+
+### **2. Аналитика использования**
+```JavaScript
+// Метрики memory-bank
+const metrics = {
+  totalEntries: 0,
+  entriesByCategory: {},
+  entriesByType: {},
+  recentActivity: [],
+  mostReferencedRules: [],
+  errorResolutionRate: 0
+};
+```
+
+## ✅ **Результат полной интеграции**
+
+### **Преимущества:**
+- ✅ **Единая система правил** - все управляется через .cursor
+- ✅ **Автоматизация** - Minimum ручного вмешательства
+- ✅ **Консистентность** - единообразные форматы и структуры
+- ✅ **Масштабируемость** - легко добавлять новые Typeы проектов
+- ✅ **AI-Optimization** - все правила учитывают потребности AI
+- ✅ **Воспроизводимость** - одинаковые результаты на разных проектах
+
+### **Workflow:**
+1. **Создание проекта** → Автоматическое создание структуры memory-bank
+2. **Development** → Автоматическое создание записей через AI команды
+3. **Recovery контекста** → Автоматическое чтение и анализ memory-bank
+4. **Аудит и Optimization** → Регулярные проверки и улучшения
+
+**Memory-bank теперь полностью интегрирован с .cursor правилами!** 🚀
+description:
+globs:
+alwaysApply: false
+---

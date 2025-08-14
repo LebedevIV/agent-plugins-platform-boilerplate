@@ -1,0 +1,69 @@
+---
+description: AI-oriented documentation standards
+globs: ["**/*.md", "**/*.mdc", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+alwaysApply: trueaiPriority: medium
+aiCategory: documentation
+---
+
+<!-- AI: This is an AI-specific rule or instruction -->
+<!-- AI: Priority: medium -->
+<!-- AI: Category: documentation -->
+
+---
+description: AI-First Documentation Standards - analytical comme.ts and AI-oriented documentation
+globs: ["**/*.md", "**/*.mdc", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+alwaysApply: trueaiPriority: medium
+aiCategory: documentation
+---
+
+# AI-First Documentation Standards
+
+## Основные Principles
+- **Analytical comme.ts**: Add comme.ts explaining logic and architectural decisions for AI understanding
+- **Context explanations**: Explain "why", not just "what" the code does
+- **Architectural comme.ts**: Document component relationships and data flows
+- **Business logic**: Explain complex business logic and decisions made
+- **TODO comme.ts**: Leave TODO with explanation of planned improveme.ts
+
+## examples правильного использования
+
+### ✅ Аналитические Comme.ts:
+```TypeScript
+// AI: This function is required for plugin isolation - preve.ts direct DOM access
+function createSandboxedEnvironment() {
+  // Implementation...
+}
+
+/**
+ * AI: Example usage - this component handles plugin communication
+ * through a secure message passing system
+ */
+export function PluginBridge() {
+  // Implementation...
+}
+```
+
+### ✅ Объяснение контекста:
+```TypeScript
+// AI: Using setTimeout here because Chrome extension APIs are async
+// and we need to ensure DOM is ready before accessing eleme.ts
+setTimeout(() => {
+  initializePlugin();
+}, 100);
+```
+
+### ✅ TODO с объяснением:
+```TypeScript
+// TODO: AI - Replace with Web Workers for better performance
+// Current implementation blocks main thread during heavy computations
+function proceSSLargedataset(data) {
+  // Implementation...
+}
+```
+
+## Recommendations
+1. **Всегда объясняйте "почему"** - не только что делает код
+2. **Используйте префикс "AI:"** для комментариев, предназначенных для AI
+3. **Документируйте архитектурные решения** и их обоснование
+4. **Объясняйте сложную бизнес-логику** с примерами
+5. **Оставляйте TODO с контекстом** для будущих улучшений

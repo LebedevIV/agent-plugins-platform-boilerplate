@@ -1,0 +1,34 @@
+---
+description: Development principle harm - dev principle 01 do no harm
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: trueaiPriority: high
+aiCategory: development-practices
+---
+
+<!-- AI: This is a development principle that should be applied to all code -->
+<!-- AI: Priority: high -->
+<!-- AI: Category: development-practices -->
+
+---
+description: Development principle harm - dev principle 01 do no harm
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: trueaiPriority: high
+aiCategory: development-practices
+---
+
+# Development Principle 1: Do No Harm
+- Security first: Any changes must improve system security, not weaken it
+- Backward compatibility: Changes must not break existing functionality
+- Gradual implementation: Implement changes step by step with rollback capability
+- Testing: All changes must pass thorough testing before deployment
+- Monitoring: Track impact of changes on performance and stability
+
+description: 'Do No Harm' principle for all development
+globs:
+  - *
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

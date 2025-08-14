@@ -1,0 +1,387 @@
+# Auto Translate Requests System
+
+## Overview
+
+The Auto Translate Requests System automatically translates user requests from Russian to English when creating .cursor rules, ensuring that all rules are created in English for maximum AI/LLM compatibility.
+
+## Key Features
+
+### 🤖 **Automatic Translation**
+- **Real-time translation** of user requests to English
+- **Comprehensive coverage** of technical terminology
+- **High accuracy** with confidence scoring
+- **Context-aware** translation for .cursor rules
+
+### 📝 **Rule Creation**
+- **Automatic file generation** with proper structure
+- **English-only content** for AI/LLM compatibility
+- **Git integration** with automatic staging
+- **Template-based** rule generation
+
+### 🔧 **Multiple Interfaces**
+- **Command-line interface** for quick rule creation
+- **Interactive mode** for guided rule creation
+- **NPM scripts** for easy integration
+- **Direct API** for programmatic use
+
+## System Components
+
+### **1. Request Translator (`request-translator.cjs`)**
+Core translation engine with comprehensive terminology coverage:
+- **Translation mappings** - 500+ technical terms
+- **Request analysis** - pattern detection and confidence scoring
+- **English prompt generation** - AI-ready prompts
+- **Context preservation** - maintains original request information
+
+### **2. Auto Translate Requests (`auto-translate-requests.cjs`)**
+Complete system management:
+- **Interactive mode** - guided rule creation
+- **Setup automation** - system configuration
+- **Rule creation** - automatic file generation
+- **Integration management** - npm scripts and helpers
+
+### **3. Quick Rule Creator (`create-rule.cjs`)**
+Fast rule creation utility:
+- **One-command creation** - translate and create in one step
+- **Automatic staging** - git integration
+- **Template generation** - structured rule files
+- **Progress feedback** - clear status updates
+
+## Usage
+
+### **Quick Rule Creation (Recommended)**
+```bash
+# Create rule with automatic translation
+node .cursor/rules/create-rule.cjs "создай правило для архитектуры"
+
+# Using npm script
+npm run create-rule "добавь правило безопасности"
+```
+
+### **Interactive Mode**
+```bash
+# Start interactive mode
+node .cursor/rules/auto-translate-requests.cjs interactive
+
+# Using npm script
+npm run interactive-rules
+```
+
+### **Direct Translation**
+```bash
+# Translate request only
+node .cursor/rules/request-translator.cjs translate "напиши правило для тестирования"
+
+# Analyze request
+node .cursor/rules/request-translator.cjs analyze "создай файл в .cursor"
+```
+
+### **System Setup**
+```bash
+# Setup auto translation system
+node .cursor/rules/auto-translate-requests.cjs setup
+```
+
+## Translation Coverage
+
+### **Request Patterns**
+- **Creation requests** - создай, добавь, напиши, сделай
+- **File types** - правило, файл, документ, конфигурация
+- **Locations** - в .cursor, в rules, в папку
+- **Content types** - с описанием, с примерами, с инструкциями
+
+### **Technical Terminology**
+- **Development terms** - разработка → development
+- **Architecture terms** - архитектура → architecture
+- **Security terms** - безопасность → security
+- **Performance terms** - производительность → performance
+- **Quality terms** - качество → quality
+
+### **Common Phrases**
+- **Important notes** - важные примечания
+- **Best practices** - лучшие практики
+- **Requirements** - требования
+- **Recommendations** - рекомендации
+
+## Generated Rule Structure
+
+### **File Format**
+```markdown
+---
+description: [translated request]
+globs: ["**/*"]
+alwaysApply: false
+aiPriority: normal
+aiCategory: rules
+createdFrom: "[original request]"
+translatedAt: "[timestamp]"
+---
+
+# [translated request]
+
+## Overview
+
+This rule was created based on the request: "[original request]"
+
+## Description
+
+[translated request]
+
+## Implementation
+
+<!-- Add implementation details here -->
+
+## Usage
+
+<!-- Add usage examples here -->
+
+## Examples
+
+<!-- Add code examples here -->
+
+## Notes
+
+<!-- Add additional notes here -->
+
+---
+*Generated automatically from user request: "[original request]"*
+*Translated to English for AI/LLM compatibility*
+```
+
+### **Metadata Fields**
+- **description** - Translated request description
+- **globs** - File patterns this rule applies to
+- **alwaysApply** - Whether rule should always be applied
+- **aiPriority** - Priority level for AI processing
+- **aiCategory** - Category for AI organization
+- **createdFrom** - Original user request
+- **translatedAt** - Translation timestamp
+
+## Workflow Integration
+
+### **For Users**
+1. **Write request in Russian** - System automatically translates
+2. **Review translation** - Check confidence and accuracy
+3. **Confirm creation** - Rule is created in English
+4. **Edit as needed** - Add specific content and details
+5. **Commit changes** - Git integration handles the rest
+
+### **For AI Assistants**
+1. **Receive English prompt** - All requests translated automatically
+2. **Create English rules** - No manual translation needed
+3. **Follow templates** - Consistent structure and format
+4. **Maintain compatibility** - All content in English
+
+### **For Development**
+1. **Automatic protection** - Rules created in English
+2. **Git integration** - Automatic staging and commits
+3. **Template consistency** - Standardized rule structure
+4. **Backup preservation** - Original requests preserved
+
+## Configuration
+
+### **Auto Translate Config**
+```json
+{
+  "enabled": true,
+  "autoTranslate": true,
+  "createEnglishPrompts": true,
+  "backupOriginalRequests": true,
+  "confidenceThreshold": 70,
+  "patterns": {
+    "ruleCreation": ["создай", "добавь", "напиши", "сделай"],
+    "fileCreation": ["файл", "документ", "правило"],
+    "cursorRequests": [".cursor", "cursor", "rules"]
+  }
+}
+```
+
+### **NPM Scripts**
+```json
+{
+  "scripts": {
+    "create-rule": "node .cursor/rules/create-rule.cjs",
+    "translate-request": "node .cursor/rules/request-translator.cjs translate",
+    "interactive-rules": "node .cursor/rules/auto-translate-requests.cjs interactive"
+  }
+}
+```
+
+## Benefits
+
+### **For AI/LLM Compatibility**
+- **Universal accessibility** - Any AI assistant can read rules
+- **Language consistency** - All rules in English
+- **Better understanding** - Clear terminology for AI processing
+- **Reduced confusion** - No mixed language content
+
+### **For International Community**
+- **Global accessibility** - Ready for international developers
+- **Standardized format** - Consistent English documentation
+- **Easy sharing** - No language barriers
+- **Professional appearance** - English for global audience
+
+### **For Development Workflow**
+- **Automatic process** - No manual translation needed
+- **Safe operation** - Original requests preserved
+- **Git integration** - Seamless workflow integration
+- **Template consistency** - Standardized rule structure
+
+## Best Practices
+
+### **For Users**
+1. **Use clear requests** - Specific and descriptive requests
+2. **Trust automatic translation** - System is comprehensive
+3. **Review generated content** - Edit templates as needed
+4. **Use English for new content** - Maintain consistency
+
+### **For AI Assistants**
+1. **Always create rules in English**
+2. **Trust the translation system** - It handles Russian requests
+3. **Follow generated templates** - Maintain consistency
+4. **Use standard terminology** - From translation mappings
+
+### **For Developers**
+1. **Extend translation mappings** - Add missing terms as needed
+2. **Test translation quality** - Verify accuracy
+3. **Maintain templates** - Keep them up to date
+4. **Monitor confidence scores** - Improve low-confidence translations
+
+## Error Handling
+
+### **Translation Errors**
+- **Partial translation** - System continues with available mappings
+- **Confidence scoring** - Clear indication of translation quality
+- **Original preservation** - Original request always saved
+- **Manual fallback** - Option to edit manually
+
+### **Creation Errors**
+- **Directory creation** - Automatic directory structure
+- **File conflicts** - Unique filename generation
+- **Git integration** - Graceful handling of git errors
+- **Template fallback** - Basic template if generation fails
+
+### **System Errors**
+- **Graceful degradation** - System continues with available features
+- **Error reporting** - Clear error messages
+- **Recovery options** - Multiple ways to create rules
+- **User guidance** - Clear instructions for resolution
+
+## Troubleshooting
+
+### **Common Issues**
+
+#### **Poor translation quality**
+1. Check confidence score in analysis
+2. Extend translation mappings if needed
+3. Use more specific terminology
+4. Report missing terms for improvement
+
+#### **Rule creation fails**
+1. Check file permissions
+2. Verify directory structure
+3. Check git status
+4. Use manual creation as fallback
+
+#### **Interactive mode issues**
+1. Check Node.js version compatibility
+2. Verify readline module availability
+3. Check terminal compatibility
+4. Use command-line mode as alternative
+
+### **Debug Commands**
+```bash
+# Test translation quality
+node .cursor/rules/request-translator.cjs analyze "your request"
+
+# Check system status
+node .cursor/rules/auto-translate-requests.cjs setup
+
+# Verify file creation
+ls -la .cursor/rules/
+
+# Check git status
+git status
+```
+
+## Future Enhancements
+
+### **Planned Features**
+- **API integration** with translation services
+- **Machine learning** for better translations
+- **Custom translation mappings** per project
+- **Multi-language support** for other languages
+- **Real-time translation** during typing
+- **Translation quality scoring**
+
+### **Integration Ideas**
+- **IDE plugins** for real-time translation
+- **Web interface** for rule creation
+- **API endpoints** for programmatic access
+- **Collaborative translation** for community contributions
+
+## Examples
+
+### **Example 1: Architecture Rule**
+```bash
+# User request (Russian)
+node .cursor/rules/create-rule.cjs "создай правило для архитектуры проекта"
+
+# Generated English rule
+---
+description: create rule for architecture project
+globs: ["**/*"]
+alwaysApply: false
+aiPriority: normal
+aiCategory: rules
+createdFrom: "создай правило для архитектуры проекта"
+translatedAt: "2025-07-19T02:58:58.601Z"
+---
+
+# create rule for architecture project
+
+## Overview
+
+This rule was created based on the request: "создай правило для архитектуры проекта"
+```
+
+### **Example 2: Security Rule**
+```bash
+# User request (Russian)
+node .cursor/rules/create-rule.cjs "добавь правило безопасности для API"
+
+# Generated English rule
+---
+description: add security rule for API
+globs: ["**/*"]
+alwaysApply: false
+aiPriority: high
+aiCategory: security
+createdFrom: "добавь правило безопасности для API"
+translatedAt: "2025-07-19T02:59:15.123Z"
+---
+
+# add security rule for API
+
+## Overview
+
+This rule was created based on the request: "добавь правило безопасности для API"
+```
+
+## Conclusion
+
+The Auto Translate Requests System ensures that all .cursor rules are automatically created in English for maximum AI/LLM compatibility. This creates a seamless workflow where users can write requests in Russian, and the system automatically translates and creates English rules.
+
+**Key Benefits:**
+- ✅ **Automatic translation** of user requests
+- ✅ **English-only rule creation**
+- ✅ **AI/LLM compatibility**
+- ✅ **Git integration**
+- ✅ **Template consistency**
+- ✅ **Error handling and recovery**
+
+**Usage:** Simply use `node .cursor/rules/create-rule.cjs "your request in Russian"` to automatically translate and create English rules for maximum AI/LLM compatibility.
+description:
+globs:
+alwaysApply: false
+---

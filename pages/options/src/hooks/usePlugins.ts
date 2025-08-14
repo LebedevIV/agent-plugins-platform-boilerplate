@@ -1,6 +1,6 @@
 import { useStorage } from '@extension/shared';
 import { pluginSettingsStorage, updatePluginSettings } from '@extension/storage';
-import { useState, useEffect, useCallback } from 'react';
+import * as React from 'react';
 import type { PluginSettings } from '@extension/storage';
 
 interface Plugin {
@@ -78,14 +78,14 @@ const mockPlugins = [
 ];
 
 const usePlugins = () => {
-  const [plugins, setPlugins] = useState<Plugin[]>([]);
-  const [selectedPlugin, setSelectedPlugin] = useState<Plugin | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const [plugins, setPlugins] = React.useState<Plugin[]>([]);
+  const [selectedPlugin, setSelectedPlugin] = React.useState<Plugin | null>(null);
+  const [loading, setLoading] = React.useState<boolean>(true);
+  const [error, setError] = React.useState<string | null>(null);
   // Получаем настройки плагинов из хранилища
   const pluginSettings = useStorage(pluginSettingsStorage);
 
-  useEffect(() => {
+  React.useEffect(() => {
     const fetchPlugins = async () => {
       try {
         setLoading(true);
@@ -143,7 +143,7 @@ const usePlugins = () => {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps -- Убираем зависимость от pluginSettings для предотвращения бесконечного цикла
 
   // Обновляем выбранный плагин при изменении настроек
-  useEffect(() => {
+  React.useEffect(() => {
     if (selectedPlugin && pluginSettings) {
       const currentSettings = pluginSettings[selectedPlugin.id] || {
         enabled: true,
@@ -165,43 +165,46 @@ const usePlugins = () => {
     }
   }, [pluginSettings, selectedPlugin?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- Зависим только от pluginSettings и ID выбранного плагина
 
-  const selectPlugin = useCallback((plugin: Plugin) => {
+  const selectPlugin = React.useCallback((plugin: Plugin) => {
     console.log('[usePlugins] Selecting plugin:', plugin);
     setSelectedPlugin(plugin);
   }, []);
 
   // Функция для обновления настроек плагина
-  const updatePluginSetting = useCallback(async (pluginId: string, setting: keyof PluginSettings, value: boolean) => {
-    try {
-      // Отправляем сообщение в background script для обновления настроек
-      const response = await chrome.runtime.sendMessage({
-        type: 'UPDATE_PLUGIN_SETTING',
-        pluginId,
-        setting,
-        value,
-      });
+  const updatePluginSetting = React.useCallback(
+    async (pluginId: string, setting: keyof PluginSettings, value: boolean) => {
+      try {
+        // Отправляем сообщение в background script для обновления настроек
+        const response = await chrome.runtime.sendMessage({
+          type: 'UPDATE_PLUGIN_SETTING',
+          pluginId,
+          setting,
+          value,
+        });
 
-      if (response?.error) {
-        throw new Error(response.error);
+        if (response?.error) {
+          throw new Error(response.error);
+        }
+
+        // После успешного обновления в background, обновляем локальный state
+        await updatePluginSettings(pluginId, { [setting]: value });
+
+        // Синхронизируем массив plugins мгновенно
+        setPlugins(prevPlugins =>
+          prevPlugins.map(plugin =>
+            plugin.id === pluginId ? { ...plugin, settings: { ...plugin.settings, [setting]: value } } : plugin,
+          ),
+        );
+
+        console.log(`[usePlugins] Updated plugin setting for ${pluginId}:`, setting, '=', value);
+        return true;
+      } catch (error) {
+        console.error(`[usePlugins] Failed to update plugin setting for ${pluginId}:`, error);
+        throw error;
       }
-
-      // После успешного обновления в background, обновляем локальный state
-      await updatePluginSettings(pluginId, { [setting]: value });
-
-      // Синхронизируем массив plugins мгновенно
-      setPlugins(prevPlugins =>
-        prevPlugins.map(plugin =>
-          plugin.id === pluginId ? { ...plugin, settings: { ...plugin.settings, [setting]: value } } : plugin,
-        ),
-      );
-
-      console.log(`[usePlugins] Updated plugin setting for ${pluginId}:`, setting, '=', value);
-      return true;
-    } catch (error) {
-      console.error(`[usePlugins] Failed to update plugin setting for ${pluginId}:`, error);
-      throw error;
-    }
-  }, []);
+    },
+    [],
+  );
 
   return {
     plugins,

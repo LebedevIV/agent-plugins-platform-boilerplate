@@ -1,7 +1,7 @@
 import { createRoot } from 'react-dom/client';
 import type { ReactElement } from 'react';
 
-export const initAppWithShadow = ({ id, app, inlineCss }: { id: string; inlineCss: string; app: ReactElement }) => {
+export default function initAppWithShadow({ id, app, inlineCss }: { id: string; inlineCss: string; app: ReactElement }) {
   const root = document.createElement('div');
   root.id = id;
 

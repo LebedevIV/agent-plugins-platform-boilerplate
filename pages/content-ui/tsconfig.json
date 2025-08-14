@@ -3,9 +3,11 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@src/*": ["src/*"]
+      "@src/*": ["src/*"],
+      "@extension/shared/*": ["../../packages/shared/dist/*"],
+      "@extension/shared": ["../../packages/shared/dist/index.mjs"]
     },
-    "types": ["chrome", "node", "./tailwind.d.ts"]
+    "types": ["chrome"]
   },
   "include": ["src", "tailwind.config.ts", "build.mts"]
 }

@@ -1,0 +1,39 @@
+---
+description: General development guIDElines
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.py", "**/*.md"]
+alwaysApply: false
+aiCategory: development-practices---
+
+# Development GuIDElines
+
+## JavaScript/TypeScript
+- Use ES6+ and async/await.
+- Modular architecture, clear separation of concerns.
+- Error handling and structured logging are required.
+- Use TypeScript for type safety.
+- Prefer functional patterns where possible.
+
+## Python (Plugins)
+- Use MCP protocol for communication.
+- Use async/await for I/O operations.
+- Always validate inp.ts and handle errors.
+- Plugins should be single-purpose.
+- Document all plugin APIs clearly.
+
+# Security First
+- Validate manife.ts and permissions.
+- Sanitize data between.js and Python.
+- Sandbox all plugins.
+- Apply the principle of least privilege.
+- Audit all plugin code.
+
+# Performance ConsIDErations
+- Lazy-load plugins and PyodIDE when possible.
+- cache repeated operations.
+- Monitor memory usage and clean up resources.
+- Optimize bundle size and loading time.
+- Use WebWorkers for non-blocking tasks.
+description:
+globs:
+alwaysApply: false
+---

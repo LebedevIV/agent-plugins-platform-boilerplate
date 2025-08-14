@@ -269,3 +269,19 @@
   --ready-border: #3b82f6;
   --ready-icon: #dbeafe;
 } 
+
+.draft-status-loader {
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-top: 2px solid transparent;
+  border-radius: 50%;
+  animation: draft-spin 1s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+@keyframes draft-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+} 

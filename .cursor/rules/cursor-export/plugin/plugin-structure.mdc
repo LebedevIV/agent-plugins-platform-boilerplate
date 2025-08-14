@@ -1,0 +1,60 @@
+---
+description: Plugin standard for structure
+globs: ["public/plugins/**/*", "**/*.py", "**/*.json", "**/*.ts", "**/*.js"]
+alwaysApply: falseaiPriority: normal
+aiCategory: plugin-development
+---
+
+# Plugin Structure
+
+## Directory Layout
+```
+public/plugins/plugin-name/
+├── manifest.json      # Plugin metadata and permissions
+├── mcp_server.py      # Python MCP protocol implementation
+├── workflow.json      # Plugin workflow definition (optional)
+└──.icon.svg           # Plugin.icon
+```
+
+## Manifest.json Example
+``.json
+{
+  "name": "Plugin Name",
+  "version": "1.0.0",
+  "description": "Plugin description",
+  "main_server": "mcp_server.py",
+  "required_secr.ts": ["openai_API_key", "weather_API_key"],
+  "API_permissions": {
+    "openai": {
+      "domains": ["API.openai.com"],
+      "endpoi.ts": ["/v1/chat/completions"],
+      "methods": ["POST"],
+      "rate_limit": "100/hour"
+    }
+  },
+  "network_policy": {
+    "allowed_domains": ["API.openai.com"],
+    "WebSock.ts": "denied"
+  },
+  "API_schemas": {
+    "openai": {
+      "chat_completions": {
+        "type": "object",
+        "required": ["prompt"],
+        "properties": {
+          "prompt": {"type": "string", "maxLength": 4000}
+        }
+      }
+    }
+  }
+}
+```
+description: Plugin directory and manifest requireme.ts
+globs:
+  - public/plugins/*
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

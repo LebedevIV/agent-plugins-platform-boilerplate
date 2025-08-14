@@ -63,7 +63,8 @@ export const PluginCard: React.FC<PluginCardProps> = ({
       onKeyDown={handleKeyDown}
       tabIndex={onClick ? 0 : -1}
       role={onClick ? 'button' : undefined}
-      aria-label={onClick ? `Выбрать плагин ${name}` : undefined}>
+      aria-label={onClick ? `Выбрать плагин ${name}` : undefined}
+      data-testid={`plugin-card-${id}`}>
       <img
         className="plugin-card-icon"
         src={iconUrl || `plugins/${id}/${icon || 'icon.svg'}`}
