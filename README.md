@@ -2,6 +2,8 @@
 
 A comprehensive platform for developing and managing AI agent plugins with automatic internationalization and protection systems.
 
+I apologize for abandoning it for so long - personal circumstances + I was waiting for development plans https://github.com/nanobrowser/nanobrowser so as not to duplicate functionality.
+
 ## 🌍 **Internationalization & Protection Systems**
 
 ### **Automatic Context Translation**
