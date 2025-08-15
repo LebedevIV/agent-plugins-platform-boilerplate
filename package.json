@@ -30,7 +30,6 @@
     "lint": "turbo lint --continue",
     "lint:fix": "turbo lint:fix --continue",
     "format": "turbo format --continue -- --cache --cache-location node_modules/.cache/.prettiercache",
-    "prepare": "husky",
     "update-version": "bash bash-scripts/update_version.sh",
     "copy-env": "bash bash-scripts/copy_env.sh",
     "set-global-env": "bash bash-scripts/set_global_env.sh",
@@ -45,19 +44,14 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "@vitejs/plugin-react-swc": "^3.7.2",
-    "vite": "^6.0.11",
-    "typescript": "^5.7.3",
+    "@types/node": "^24.3.0",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react-swc": "^3.7.2",
     "rimraf": "^6.0.1",
-    "turbo": "^2.5.5"
-  },
-  "lint-staged": {
-    "*.js": ["eslint --fix", "prettier --write"],
-    "*.ts": ["eslint --fix", "prettier --write"],
-    "memory-bank/**/*.md": ["prettier --write"],
-    ".cursor/**/*.md": ["prettier --write"]
+    "turbo": "^2.5.5",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.11"
   },
   "packageManager": "pnpm@10.11.0",
   "engines": {
