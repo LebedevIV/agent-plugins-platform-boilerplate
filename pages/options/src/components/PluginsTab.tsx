@@ -32,10 +32,10 @@ const PluginsTab = function ({
   }, [plugins, selectedPlugin, onSelectPlugin]);
 
   if (loading) return <LoadingSpinner />;
-  if (error) return <ErrorDisplay error={{ message: error }} />;
-  if (!plugins) return <ErrorDisplay error={{ message: 'plugins равен null или undefined' }} />;
+  if (error) return <ErrorDisplay error={new Error(error)} />;
+  if (!plugins) return <ErrorDisplay error={new Error('plugins равен null или undefined')} />;
   if (!Array.isArray(plugins)) {
-    return <ErrorDisplay error={{ message: `plugins не является массивом. plugins = ${JSON.stringify(plugins)}` }} />;
+    return <ErrorDisplay error={new Error(`plugins не является массивом. plugins = ${JSON.stringify(plugins)}`)} />;
   }
   if (plugins.length === 0) {
     return <p>Нет доступных плагинов.</p>;
@@ -63,7 +63,7 @@ const PluginsTab = function ({
 
   return (
     <>
-      <h2>{t('options.plugins.title')}</h2>
+      <h2>{t('options_plugins_title')}</h2>
       <div className="plugins-list">{renderPlugins()}</div>
     </>
   );

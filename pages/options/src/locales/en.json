@@ -1,58 +1,13 @@
 {
-  "options": {
-    "title": "Agent-Plugins-Platform",
-    "subtitle": "Plugin Management Panel",
-    "tabs": {
-      "plugins": "Plugins",
-      "settings": "Settings"
-    },
-    "plugins": {
-      "title": "Available Plugins",
-      "loading": "Loading plugins...",
-      "error": "Error loading plugins",
-      "version": "v{version}",
-      "details": {
-        "title": "Plugin Details",
-        "version": "Version",
-        "description": "Description",
-        "mainServer": "Main Server",
-        "hostPermissions": "Host Permissions",
-        "permissions": "Permissions",
-        "selectPlugin": "Select a plugin from the list on the left."
-      }
-    },
-    "settings": {
-      "title": "Platform Settings",
-      "aiKeys": {
-        "title": "AI Model API Keys",
-        "fixedKeys": {
-          "geminiFlash": "Google Gemini (Flash) - Basic Analysis",
-          "gemini25": "Gemini 2.5 Pro - Deep Analysis"
-        },
-        "customKeys": {
-          "title": "Custom API Keys",
-          "addButton": "+ Add New Key",
-          "namePlaceholder": "Enter key name",
-          "keyPlaceholder": "Enter API key"
-        },
-        "status": {
-          "configured": "Configured",
-          "notConfigured": "Not Configured",
-          "testing": "Testing..."
-        },
-        "badges": {
-          "free": "Free"
-        },
-        "actions": {
-          "save": "Save All Keys",
-          "test": "Test Connections"
-        },
-        "messages": {
-          "saved": "Settings saved!",
-          "saveError": "Error saving settings",
-          "testComplete": "Testing completed!"
-        }
-      }
-    }
-  }
-} 
+  "options_settings_title": "Settings",
+  "options_plugins_title": "Plugins",
+  "options_plugins_details_title": "Plugin Details",
+  "options_settings_aiKeys_title": "AI Keys",
+  "options_settings_aiKeys_badges_free": "Free",
+  "options_settings_aiKeys_customKeys_title": "Custom Keys",
+  "options_settings_aiKeys_customKeys_namePlaceholder": "Enter key name",
+  "options_settings_aiKeys_customKeys_keyPlaceholder": "Enter your API key",
+  "options_settings_aiKeys_customKeys_addButton": "Add Key",
+  "options_settings_aiKeys_actions_save": "Save",
+  "options_settings_aiKeys_actions_test": "Test"
+}
