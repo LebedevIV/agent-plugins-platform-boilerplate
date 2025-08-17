@@ -20,14 +20,14 @@ const PluginDetails = (props: PluginDetailsProps) => {
   if (!selectedPlugin || typeof selectedPlugin !== 'object') {
     return (
       <div className="plugin-details">
-        <h2>{t('options.plugins.details.title')}</h2>
+        <h2>{t('options_plugins_details_title')}</h2>
         <p>{t('options.plugins.details.selectPlugin')}</p>
       </div>
     );
   }
 
   const settings = selectedPlugin.settings || { enabled: true, autorun: false };
-  const hostPermissions = selectedPlugin.manifest?.host_permissions || selectedPlugin.host_permissions || [];
+  const hostPermissions = selectedPlugin.manifest?.host_permissions || [];
 
   const handleSettingChange = async (setting: string, value: boolean) => {
     if (onUpdateSetting) {
@@ -45,11 +45,10 @@ const PluginDetails = (props: PluginDetailsProps) => {
   return (
     <LocalErrorBoundary>
       <div className="plugin-details">
-        <h2>{t('options.plugins.details.title')}</h2>
+        <h2>{selectedPlugin.name}</h2>
         <div className="details-header-divider"></div>
         <div className="plugin-detail-content active">
           <div className="detail-section">
-            <h3>{selectedPlugin.name}</h3>
             <p>
               <strong>Версия:</strong> v{selectedPlugin.version}
             </p>
