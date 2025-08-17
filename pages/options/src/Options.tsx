@@ -1,5 +1,5 @@
 import '@src/Options.css';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { SettingsTab } from './components/SettingsTab';
 import { PluginsTab } from './components/PluginsTab';
@@ -12,11 +12,27 @@ const Options = function () {
   const [activeTab, setActiveTab] = useState('plugins');
   const { plugins, selectedPlugin, selectPlugin, loading, error } = usePlugins();
   const { t } = useTranslations();
+  const [layout, setLayout] = useState<number[] | undefined>();
+
+  useEffect(() => {
+    chrome.storage.local.get(['optionsPanelLayout'], result => {
+      if (result.optionsPanelLayout) {
+        console.log('Loaded layout:', result.optionsPanelLayout);
+        setLayout(result.optionsPanelLayout);
+      }
+    });
+  }, []);
+
+  const handleLayout = (sizes: number[]) => {
+    console.log('Saving layout:', sizes);
+    setLayout(sizes);
+    chrome.storage.local.set({ optionsPanelLayout: sizes });
+  };
 
   return (
     <LocalErrorBoundary>
-      <PanelGroup direction="horizontal" className="ide-layout">
-        <Panel defaultSize={20} minSize={15}>
+      <PanelGroup direction="horizontal" className="ide-layout" onLayout={handleLayout}>
+        <Panel defaultSize={layout ? layout : 20} minSize={15}>
           <div className="ide-sidebar-left">
             <div className="tab-nav">
               <button
@@ -33,7 +49,7 @@ const Options = function () {
           </div>
         </Panel>
         <PanelResizeHandle />
-        <Panel>
+        <Panel defaultSize={layout ? layout : undefined}>
           <div className="ide-main-content">
             {activeTab === 'settings' && (
               <div className="tab-content active">
@@ -67,7 +83,7 @@ const Options = function () {
           </div>
         </Panel>
         <PanelResizeHandle />
-        <Panel defaultSize={40} minSize={30}>
+        <Panel defaultSize={layout ? layout : 40} minSize={30}>
           <div className="ide-sidebar-right">
             {activeTab === 'plugins' && <PluginDetails selectedPlugin={selectedPlugin} />}
           </div>
