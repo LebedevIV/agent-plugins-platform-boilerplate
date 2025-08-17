@@ -16,7 +16,7 @@ const Options = function () {
 
   useEffect(() => {
     chrome.storage.local.get(['optionsPanelLayout'], result => {
-      if (result.optionsPanelLayout) {
+      if (result.optionsPanelLayout && Array.isArray(result.optionsPanelLayout)) {
         console.log('Loaded layout:', result.optionsPanelLayout);
         setLayout(result.optionsPanelLayout);
       }
@@ -49,7 +49,7 @@ const Options = function () {
           </div>
         </Panel>
         <PanelResizeHandle />
-        <Panel defaultSize={layout ? layout : undefined}>
+        <Panel defaultSize={layout ? layout : 30}>
           <div className="ide-main-content">
             {activeTab === 'settings' && (
               <div className="tab-content active">
@@ -83,7 +83,7 @@ const Options = function () {
           </div>
         </Panel>
         <PanelResizeHandle />
-        <Panel defaultSize={layout ? layout : 40} minSize={30}>
+        <Panel defaultSize={layout ? layout : 50} minSize={30}>
           <div className="ide-sidebar-right">
             {activeTab === 'plugins' && <PluginDetails selectedPlugin={selectedPlugin} />}
           </div>
