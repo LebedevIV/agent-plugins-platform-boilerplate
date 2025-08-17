@@ -1,5 +1,6 @@
 import '@src/Options.css';
 import { useState } from 'react';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { SettingsTab } from './components/SettingsTab';
 import { PluginsTab } from './components/PluginsTab';
 import LocalErrorBoundary from './components/LocalErrorBoundary';
@@ -14,56 +15,64 @@ const Options = function () {
 
   return (
     <LocalErrorBoundary>
-      <div className="ide-layout">
-        <div className="ide-sidebar-left">
-          <div className="tab-nav">
-            <button
-              className={`tab-button ${activeTab === 'settings' ? 'active' : ''}`}
-              onClick={() => setActiveTab('settings')}>
-              {t('options_settings_title')}
-            </button>
-            <button
-              className={`tab-button ${activeTab === 'plugins' ? 'active' : ''}`}
-              onClick={() => setActiveTab('plugins')}>
-              {t('options_plugins_title')}
-            </button>
+      <PanelGroup direction="horizontal" className="ide-layout">
+        <Panel defaultSize={20} minSize={15}>
+          <div className="ide-sidebar-left">
+            <div className="tab-nav">
+              <button
+                className={`tab-button ${activeTab === 'settings' ? 'active' : ''}`}
+                onClick={() => setActiveTab('settings')}>
+                {t('options_settings_title')}
+              </button>
+              <button
+                className={`tab-button ${activeTab === 'plugins' ? 'active' : ''}`}
+                onClick={() => setActiveTab('plugins')}>
+                {t('options_plugins_title')}
+              </button>
+            </div>
           </div>
-        </div>
-        <div className="ide-main-content">
-          {activeTab === 'settings' && (
-            <div className="tab-content active">
-              <SettingsTab
-                aiKeys={[]}
-                customKeys={[]}
-                onSave={() => {}}
-                onTest={() => {}}
-                onAddCustomKey={() => {}}
-                onRemoveCustomKey={() => {}}
-                onUpdateKey={() => {}}
-                onUpdateCustomKeyName={() => {}}
-                getStatusText={() => ''}
-                getStatusClass={() => ''}
-                theme="light"
-                setTheme={() => {}}
-              />
-            </div>
-          )}
-          {activeTab === 'plugins' && (
-            <div className="tab-content active">
-              <PluginsTab
-                plugins={plugins}
-                selectedPlugin={selectedPlugin}
-                onSelectPlugin={selectPlugin}
-                loading={loading}
-                error={error}
-              />
-            </div>
-          )}
-        </div>
-        <div className="ide-sidebar-right">
-          {activeTab === 'plugins' && <PluginDetails selectedPlugin={selectedPlugin} />}
-        </div>
-      </div>
+        </Panel>
+        <PanelResizeHandle />
+        <Panel>
+          <div className="ide-main-content">
+            {activeTab === 'settings' && (
+              <div className="tab-content active">
+                <SettingsTab
+                  aiKeys={[]}
+                  customKeys={[]}
+                  onSave={() => {}}
+                  onTest={() => {}}
+                  onAddCustomKey={() => {}}
+                  onRemoveCustomKey={() => {}}
+                  onUpdateKey={() => {}}
+                  onUpdateCustomKeyName={() => {}}
+                  getStatusText={() => ''}
+                  getStatusClass={() => ''}
+                  theme="light"
+                  setTheme={() => {}}
+                />
+              </div>
+            )}
+            {activeTab === 'plugins' && (
+              <div className="tab-content active">
+                <PluginsTab
+                  plugins={plugins}
+                  selectedPlugin={selectedPlugin}
+                  onSelectPlugin={selectPlugin}
+                  loading={loading}
+                  error={error}
+                />
+              </div>
+            )}
+          </div>
+        </Panel>
+        <PanelResizeHandle />
+        <Panel defaultSize={40} minSize={30}>
+          <div className="ide-sidebar-right">
+            {activeTab === 'plugins' && <PluginDetails selectedPlugin={selectedPlugin} />}
+          </div>
+        </Panel>
+      </PanelGroup>
     </LocalErrorBoundary>
   );
 };

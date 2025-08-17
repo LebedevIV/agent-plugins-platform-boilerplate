@@ -27,17 +27,15 @@ code {
 
 /* IDE Layout */
 .ide-layout {
-  display: grid;
-  grid-template-columns: 250px 1fr 300px;
+  display: flex;
   height: 100vh;
   gap: 0;
   background-color: #2d3748;
   position: relative;
-  grid-template-rows: 1fr;
 }
 
 /* Resizable panels */
-.resize-handle {
+[data-panel-resize-handle-id] {
   width: 6px;
   height: 100%;
   cursor: col-resize;
@@ -51,7 +49,8 @@ code {
   background-clip: content-box;
 }
 
-.resize-handle:hover, .resize-handle:active {
+[data-panel-resize-handle-id]:hover,
+[data-panel-resize-handle-id][data-active='true'] {
   background-color: rgba(99, 179, 237, 0.5);
 }
 
