@@ -48,7 +48,11 @@ const Options = function () {
         className="ide-layout"
         onLayout={handleLayout}
         id="options-panel-group">
-        <Panel defaultSize={layout ? layout : 20} minSize={15} id="sidebar-left-panel">
+        <Panel
+          defaultSize={20}
+          minSize={15}
+          id="sidebar-left-panel"
+          className="flex flex-col">
           <div className="ide-sidebar-left" id="sidebar-left-content">
             <div className="tab-nav" id="tab-navigation">
               <button
@@ -64,9 +68,9 @@ const Options = function () {
                 {t('options_plugins_title')}
               </button>
             </div>
-            <div id="theme-switcher">
-              <ThemeSwitcher theme={theme} setTheme={handleSetTheme} />
-            </div>
+          </div>
+          <div id="theme-switcher" className="mb-auto p-2 flex justify-center">
+            <ThemeSwitcher theme={theme} setTheme={handleSetTheme} />
           </div>
         </Panel>
         <PanelResizeHandle id="sidebar-left-resize-handle" />
