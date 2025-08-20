@@ -17,6 +17,9 @@ const Options = function () {
   const { t } = useTranslations();
   const [theme, setTheme] = useState<Theme>('system');
 
+  // Определяем, показывать ли правую панель (только для вкладки plugins)
+  const showRightPanel = activeTab === 'plugins';
+
   useEffect(() => {
     chrome.storage.local.get(['theme'], result => {
       if (result.theme) {
@@ -41,10 +44,10 @@ const Options = function () {
         direction="horizontal"
         className="ide-layout"
         onLayout={handleLayout}
-        autoSaveId="options-panel-layout"
+        autoSaveId={showRightPanel ? "options-panel-layout-plugins" : "options-panel-layout-settings"}
         id="options-panel-group">
         <Panel
-          defaultSize={20}
+          defaultSize={showRightPanel ? 20 : 20}
           minSize={15}
           id="sidebar-left-panel"
           className="flex flex-col">
@@ -69,7 +72,7 @@ const Options = function () {
           </div>
         </Panel>
         <PanelResizeHandle id="sidebar-left-resize-handle" />
-        <Panel defaultSize={30} id="main-content-panel">
+        <Panel defaultSize={showRightPanel ? 30 : 80} id="main-content-panel">
           <div className="ide-main-content" id="main-content">
             {activeTab === 'settings' && (
               <div className="tab-content active" id="settings-tab-content">
@@ -106,18 +109,22 @@ const Options = function () {
             )}
           </div>
         </Panel>
-        <PanelResizeHandle id="sidebar-right-resize-handle" />
-        <Panel defaultSize={50} minSize={30} id="sidebar-right-panel">
-          <div className="ide-sidebar-right" id="sidebar-right-content">
-            {activeTab === 'plugins' && (
-              <div id="plugin-details-container">
-                <div id="plugin-details">
-                  <PluginDetails selectedPlugin={selectedPlugin} />
-                </div>
+        {showRightPanel && (
+          <>
+            <PanelResizeHandle id="sidebar-right-resize-handle" />
+            <Panel defaultSize={50} minSize={30} id="sidebar-right-panel">
+              <div className="ide-sidebar-right" id="sidebar-right-content">
+                {activeTab === 'plugins' && (
+                  <div id="plugin-details-container">
+                    <div id="plugin-details">
+                      <PluginDetails selectedPlugin={selectedPlugin} />
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </Panel>
+            </Panel>
+          </>
+        )}
       </PanelGroup>
     </LocalErrorBoundary>
   );
