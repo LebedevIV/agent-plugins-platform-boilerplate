@@ -1,17 +1,36 @@
 import React from 'react';
 
 interface ThemeSwitcherProps {
+  theme: 'light' | 'dark' | 'system';
   isLight: boolean;
   onToggle: () => void;
 }
 
-const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isLight, onToggle }) => {
+const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ theme, isLight, onToggle }) => {
   const getIcon = () => {
-    return isLight ? '🌙' : '☀️'; // Moon for light theme (to switch to dark), Sun for dark theme (to switch to light)
+    switch (theme) {
+      case 'light':
+        return '🌙'; // Moon - to switch to dark
+      case 'dark':
+        return '💻'; // System icon - to switch to system
+      case 'system':
+        return '☀️'; // Sun - to switch to light
+      default:
+        return '🌙';
+    }
   };
 
   const getTitle = () => {
-    return isLight ? 'Переключить на темную тему' : 'Переключить на светлую тему';
+    switch (theme) {
+      case 'light':
+        return 'Переключить на темную тему';
+      case 'dark':
+        return 'Переключить на системную тему';
+      case 'system':
+        return 'Переключить на светлую тему';
+      default:
+        return 'Переключить тему';
+    }
   };
 
   const buttonStyle: React.CSSProperties = {

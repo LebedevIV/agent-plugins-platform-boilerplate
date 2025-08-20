@@ -22,11 +22,13 @@ const Options = function () {
   const [activeTab, setActiveTab] = useState('plugins');
   const { plugins, selectedPlugin, selectPlugin, loading, error } = usePlugins();
   const { t } = useTranslations();
+  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
   const [isLight, setIsLight] = useState(true);
 
   useEffect(() => {
     const loadTheme = async () => {
       const state = await exampleThemeStorage.get();
+      setTheme(state.theme);
       setIsLight(state.isLight);
     };
     loadTheme();
@@ -77,7 +79,7 @@ const Options = function () {
             </div>
           </div>
           <div id="theme-switcher" className="mb-auto p-2 flex justify-center">
-            <ThemeSwitcher isLight={isLight} onToggle={exampleThemeStorage.toggle} />
+            <ThemeSwitcher theme={theme} isLight={isLight} onToggle={exampleThemeStorage.toggle} />
           </div>
         </Panel>
         <PanelResizeHandle id="sidebar-left-resize-handle" />
@@ -97,7 +99,7 @@ const Options = function () {
                     onUpdateCustomKeyName={() => {}}
                     getStatusText={() => ''}
                     getStatusClass={() => ''}
-                    theme={isLight ? 'light' : 'dark'}
+                    theme={theme === 'system' ? (isLight ? 'light' : 'dark') : theme}
                     setTheme={() => {}}
                   />
                 </div>
