@@ -15,15 +15,10 @@ const Options = function () {
   const [activeTab, setActiveTab] = useState('plugins');
   const { plugins, selectedPlugin, selectPlugin, loading, error } = usePlugins();
   const { t } = useTranslations();
-  const [layout, setLayout] = useState<number[] | undefined>();
   const [theme, setTheme] = useState<Theme>('system');
 
   useEffect(() => {
-    chrome.storage.local.get(['optionsPanelLayout', 'theme'], result => {
-      if (result.optionsPanelLayout && Array.isArray(result.optionsPanelLayout)) {
-        console.log('Loaded layout:', result.optionsPanelLayout);
-        setLayout(result.optionsPanelLayout);
-      }
+    chrome.storage.local.get(['theme'], result => {
       if (result.theme) {
         setTheme(result.theme);
       }
@@ -32,7 +27,6 @@ const Options = function () {
 
   const handleLayout = (sizes: number[]) => {
     console.log('Saving layout:', sizes);
-    setLayout(sizes);
     chrome.storage.local.set({ optionsPanelLayout: sizes });
   };
 
@@ -44,13 +38,13 @@ const Options = function () {
   return (
     <LocalErrorBoundary>
       <PanelGroup
-        key={JSON.stringify(layout)}
         direction="horizontal"
         className="ide-layout"
         onLayout={handleLayout}
+        autoSaveId="options-panel-layout"
         id="options-panel-group">
         <Panel
-          defaultSize={layout && layout.length > 0 ? layout[0] : 20}
+          defaultSize={20}
           minSize={15}
           id="sidebar-left-panel"
           className="flex flex-col">
@@ -75,7 +69,7 @@ const Options = function () {
           </div>
         </Panel>
         <PanelResizeHandle id="sidebar-left-resize-handle" />
-        <Panel defaultSize={layout && layout.length > 1 ? layout[1] : 30} id="main-content-panel">
+        <Panel defaultSize={30} id="main-content-panel">
           <div className="ide-main-content" id="main-content">
             {activeTab === 'settings' && (
               <div className="tab-content active" id="settings-tab-content">
@@ -113,7 +107,7 @@ const Options = function () {
           </div>
         </Panel>
         <PanelResizeHandle id="sidebar-right-resize-handle" />
-        <Panel defaultSize={layout && layout.length > 2 ? layout[2] : 50} minSize={30} id="sidebar-right-panel">
+        <Panel defaultSize={50} minSize={30} id="sidebar-right-panel">
           <div className="ide-sidebar-right" id="sidebar-right-content">
             {activeTab === 'plugins' && (
               <div id="plugin-details-container">
