@@ -44,12 +44,13 @@ const Options = function () {
   return (
     <LocalErrorBoundary>
       <PanelGroup
+        key={JSON.stringify(layout)}
         direction="horizontal"
         className="ide-layout"
         onLayout={handleLayout}
         id="options-panel-group">
         <Panel
-          defaultSize={20}
+          defaultSize={layout && layout.length > 0 ? layout[0] : 20}
           minSize={15}
           id="sidebar-left-panel"
           className="flex flex-col">
@@ -74,7 +75,7 @@ const Options = function () {
           </div>
         </Panel>
         <PanelResizeHandle id="sidebar-left-resize-handle" />
-        <Panel defaultSize={30} id="main-content-panel">
+        <Panel defaultSize={layout && layout.length > 1 ? layout[1] : 30} id="main-content-panel">
           <div className="ide-main-content" id="main-content">
             {activeTab === 'settings' && (
               <div className="tab-content active" id="settings-tab-content">
@@ -112,7 +113,7 @@ const Options = function () {
           </div>
         </Panel>
         <PanelResizeHandle id="sidebar-right-resize-handle" />
-        <Panel defaultSize={50} minSize={30} id="sidebar-right-panel">
+        <Panel defaultSize={layout && layout.length > 2 ? layout[2] : 50} minSize={30} id="sidebar-right-panel">
           <div className="ide-sidebar-right" id="sidebar-right-content">
             {activeTab === 'plugins' && (
               <div id="plugin-details-container">
