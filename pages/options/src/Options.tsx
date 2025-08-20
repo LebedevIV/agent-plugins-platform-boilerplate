@@ -8,6 +8,13 @@ import { usePlugins } from './hooks/usePlugins';
 import { useTranslations } from './hooks/useTranslations';
 import PluginDetails from './components/PluginDetails';
 import ThemeSwitcher from './components/ThemeSwitcher';
+import { useStorage } from '@extension/shared';
+import { exampleThemeStorage } from '@extension/storage';
+
+type ThemeStorageState = {
+  theme: 'light' | 'dark';
+  isLight: boolean;
+};
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -15,27 +22,29 @@ const Options = function () {
   const [activeTab, setActiveTab] = useState('plugins');
   const { plugins, selectedPlugin, selectPlugin, loading, error } = usePlugins();
   const { t } = useTranslations();
-  const [theme, setTheme] = useState<Theme>('system');
+  const [isLight, setIsLight] = useState(true);
+
+  useEffect(() => {
+    const loadTheme = async () => {
+      const state = await exampleThemeStorage.get();
+      setIsLight(state.isLight);
+    };
+    loadTheme();
+
+    // Подписываемся на изменения
+    const unsubscribe = exampleThemeStorage.subscribe(() => {
+      loadTheme();
+    });
+
+    return unsubscribe;
+  }, []);
 
   // Определяем, показывать ли правую панель (только для вкладки plugins)
   const showRightPanel = activeTab === 'plugins';
 
-  useEffect(() => {
-    chrome.storage.local.get(['theme'], result => {
-      if (result.theme) {
-        setTheme(result.theme);
-      }
-    });
-  }, []);
-
   const handleLayout = (sizes: number[]) => {
     console.log('Saving layout:', sizes);
     chrome.storage.local.set({ optionsPanelLayout: sizes });
-  };
-
-  const handleSetTheme = (newTheme: Theme) => {
-    setTheme(newTheme);
-    chrome.storage.local.set({ theme: newTheme });
   };
 
   return (
@@ -68,7 +77,7 @@ const Options = function () {
             </div>
           </div>
           <div id="theme-switcher" className="mb-auto p-2 flex justify-center">
-            <ThemeSwitcher theme={theme} setTheme={handleSetTheme} />
+            <ThemeSwitcher isLight={isLight} onToggle={exampleThemeStorage.toggle} />
           </div>
         </Panel>
         <PanelResizeHandle id="sidebar-left-resize-handle" />
@@ -88,7 +97,7 @@ const Options = function () {
                     onUpdateCustomKeyName={() => {}}
                     getStatusText={() => ''}
                     getStatusClass={() => ''}
-                    theme="light"
+                    theme={isLight ? 'light' : 'dark'}
                     setTheme={() => {}}
                   />
                 </div>

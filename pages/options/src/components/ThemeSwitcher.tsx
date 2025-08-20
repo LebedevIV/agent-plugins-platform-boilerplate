@@ -1,31 +1,17 @@
 import React from 'react';
 
-type Theme = 'light' | 'dark' | 'system';
-
 interface ThemeSwitcherProps {
-  theme: Theme;
-  setTheme: (theme: Theme) => void;
+  isLight: boolean;
+  onToggle: () => void;
 }
 
-const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ theme, setTheme }) => {
-  const cycleTheme = () => {
-    const themes: Theme[] = ['light', 'dark', 'system'];
-    const currentIndex = themes.indexOf(theme);
-    const nextIndex = (currentIndex + 1) % themes.length;
-    setTheme(themes[nextIndex]);
+const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isLight, onToggle }) => {
+  const getIcon = () => {
+    return isLight ? '🌙' : '☀️'; // Moon for light theme (to switch to dark), Sun for dark theme (to switch to light)
   };
 
-  const getIcon = () => {
-    switch (theme) {
-      case 'light':
-        return '☀️'; // Sun icon
-      case 'dark':
-        return '🌙'; // Moon icon
-      case 'system':
-        return '💻'; // System icon
-      default:
-        return null;
-    }
+  const getTitle = () => {
+    return isLight ? 'Переключить на темную тему' : 'Переключить на светлую тему';
   };
 
   const buttonStyle: React.CSSProperties = {
@@ -44,7 +30,7 @@ const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ theme, setTheme }) => {
   };
 
   return (
-    <button onClick={cycleTheme} style={buttonStyle}>
+    <button onClick={onToggle} style={buttonStyle} title={getTitle()}>
       {getIcon()}
     </button>
   );
