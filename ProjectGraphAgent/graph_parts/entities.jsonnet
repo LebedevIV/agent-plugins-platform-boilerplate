@@ -13,123 +13,106 @@ local DefaultMetadata = templates.DefaultMetadata;
     'package.json': FileEntity(
         'PackageManagementFile',
         'package.json',
-        'Defines project metadata, scripts, dependencies, and build configurations.',
+        'Определяет метаданные проекта, скрипты, зависимости и конфигурации сборки.',
         Metadata(1.0, 'Gemini-1.5-Pro')
     ) + {
         sections: [
-            { name: 'scripts', purpose: 'Defines command-line scripts for development, building, and starting the app.' },
-            { name: 'dependencies', purpose: 'Lists runtime libraries required by the application.' },
-            { name: 'devDependencies', purpose: 'Lists libraries needed for development and building, but not for runtime.' },
-            { name: 'build', purpose: 'Configuration for electron-builder to package the application for different OS.' },
+            { name: 'scripts', purpose: 'Определяет командные скрипты для разработки, сборки и запуска приложения.' },
+            { name: 'dependencies', purpose: 'Список библиотек, необходимых для работы приложения.' },
+            { name: 'devDependencies', purpose: 'Список библиотек для разработки и сборки.' },
         ],
     },
-    'src/App.tsx': Component(
-        name='App.tsx',
-        path='src/App.tsx',
-        purpose='The main application component, defines the overall layout and routes.',
+    // --- Chrome Extension ---
+    // Note: Chrome extension components are managed separately and not included in this graph
+
+    // --- Core Platform ---
+    // Note: Platform-core components are managed separately and not included in this graph
+
+    // --- UI Components ---
+    // Note: UI components are managed separately and not included in this graph
+
+    // --- Packages ---
+    'packages/dev-utils/package.json': FileEntity(
+        kind='PackageConfig',
+        path='packages/dev-utils/package.json',
+        purpose='Конфигурация пакета утилит для разработки.',
         metadata=DefaultMetadata()
     ),
-    'src/i18n.ts': FileEntity(
-        kind='I18nConfiguration',
-        path='src/i18n.ts',
-        purpose='Internationalization setup using i18next.',
+    'packages/hmr/package.json': FileEntity(
+        kind='PackageConfig',
+        path='packages/hmr/package.json',
+        purpose='Конфигурация пакета горячей перезагрузки модулей.',
         metadata=DefaultMetadata()
     ),
-    'src/icons/tsx_viewer.ico': FileEntity(
-        kind='Asset',
-        path='src/icons/tsx_viewer.ico',
-        purpose='Application icon in ICO format.',
+    'packages/i18n/package.json': FileEntity(
+        kind='PackageConfig',
+        path='packages/i18n/package.json',
+        purpose='Конфигурация пакета интернационализации.',
         metadata=DefaultMetadata()
     ),
-    'src/icons/tsx_viewer.png': FileEntity(
-        kind='Asset',
-        path='src/icons/tsx_viewer.png',
-        purpose='Application icon in PNG format.',
+
+    // --- Documentation ---
+    // Note: Documentation files are managed separately and not included in this graph
+
+    // --- Memory Bank ---
+    'memory-bank/INDEX.md': FileEntity(
+        kind='MemoryBankIndex',
+        path='memory-bank/INDEX.md',
+        purpose='Главный индексный файл системы памяти с навигацией по категориям и быстрым доступом.',
         metadata=DefaultMetadata()
     ),
-    'src/index.css': FileEntity(
-        kind='Styling',
-        path='src/index.css',
-        purpose='Global CSS styles for the application.',
+    'memory-bank/architecture/README.md': FileEntity(
+        kind='MemoryBank',
+        path='memory-bank/architecture/README.md',
+        purpose='Документация архитектуры в системе памяти.',
         metadata=DefaultMetadata()
     ),
-    'src/main.tsx': FileEntity(
-        kind='EntryPoint',
-        path='src/main.tsx',
-        purpose='The main entry point for the React application.',
+    'memory-bank/development/README.md': FileEntity(
+        kind='MemoryBank',
+        path='memory-bank/development/README.md',
+        purpose='Информация о разработке в системе памяти.',
         metadata=DefaultMetadata()
     ),
-    'src/tsx_viewer.desktop': FileEntity(
-        kind='DesktopEntry',
-        path='src/tsx_viewer.desktop',
-        purpose='Desktop entry file for Linux systems.',
+    'memory-bank/audit_logs.md': FileEntity(
+        kind='MemoryBankAudit',
+        path='memory-bank/audit_logs.md',
+        purpose='Логи аудита системы памяти для отслеживания изменений и проверок.',
         metadata=DefaultMetadata()
     ),
-    'src/window.d.ts': FileEntity(
-        kind='TypeScriptDefinition',
-        path='src/window.d.ts',
-        purpose='TypeScript declaration file for window object.',
+    'memory-bank/drift.md': FileEntity(
+        kind='MemoryBankDrift',
+        path='memory-bank/drift.md',
+        purpose='Документация дрейфа системы памяти - расхождений между ожидаемой и реальной структурой.',
         metadata=DefaultMetadata()
     ),
-    'electron/main.js': FileEntity(
-        kind='ElectronMainProcess',
-        path='electron/main.js',
-        purpose='The main process for the Electron application.',
+    'memory-bank/diagrams/graph.mmd': FileEntity(
+        kind='MemoryBankDiagram',
+        path='memory-bank/diagrams/graph.mmd',
+        purpose='Диаграмма Mermaid для визуализации структуры системы памяти.',
         metadata=DefaultMetadata()
     ),
-    'electron/preload.js': FileEntity(
-        kind='ElectronPreloadScript',
-        path='electron/preload.js',
-        purpose='Preload script for the Electron application, used for secure IPC.',
+
+    // --- Source Code ---
+    'src/background.ts': FileEntity(
+        kind='BackgroundScript',
+        path='src/background.ts',
+        purpose='Фоновый скрипт для основного приложения.',
         metadata=DefaultMetadata()
     ),
-    'test/emoji.json': FileEntity(
-        kind='TestData',
-        path='test/emoji.json',
-        purpose='Test data in JSON format.',
+    'src/matches/all/index.tsx': Component(
+        name='AllMatches',
+        path='src/matches/all/index.tsx',
+        purpose='Компонент для отображения всех совпадений.',
         metadata=DefaultMetadata()
     ),
-    'test/simple-test.tsx': FileEntity(
-        kind='TestFile',
-        path='test/simple-test.tsx',
-        purpose='A simple test file for a React component.',
+    'src/matches/example/index.tsx': Component(
+        name='ExampleMatches',
+        path='src/matches/example/index.tsx',
+        purpose='Пример компонента для отображения совпадений.',
         metadata=DefaultMetadata()
     ),
-    'test/test-component.tsx': FileEntity(
-        kind='TestComponent',
-        path='test/test-component.tsx',
-        purpose='A React component used for testing purposes.',
-        metadata=DefaultMetadata()
-    ),
-    'test/workout_program.tsx': FileEntity(
-        kind='TestFile',
-        path='test/workout_program.tsx',
-        purpose='A test file for a workout program component.',
-        metadata=DefaultMetadata()
-    ),
-    'test/workout_program_emoji.tsx': FileEntity(
-        kind='TestFile',
-        path='test/workout_program_emoji.tsx',
-        purpose='A test file for a workout program component with emojis.',
-        metadata=DefaultMetadata()
-    ),
-    'public/index.html': FileEntity(
-        kind='HTML',
-        path='public/index.html',
-        purpose='The main HTML file for the application.',
-        metadata=DefaultMetadata()
-    ),
-    'public/locales/en/translation.json': FileEntity(
-        kind='Locale',
-        path='public/locales/en/translation.json',
-        purpose='English translation file.',
-        metadata=DefaultMetadata()
-    ),
-    'public/locales/ru/translation.json': FileEntity(
-        kind='Locale',
-        path='public/locales/ru/translation.json',
-        purpose='Russian translation file.',
-        metadata=DefaultMetadata()
-    ),
+
+    // --- Tests ---
+    // Note: Test configurations are managed separately and not included in this graph
     // ... other entities
 }

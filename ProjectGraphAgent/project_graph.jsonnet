@@ -4,9 +4,9 @@
 
 {
     schemaVersion: '1.7',
-    projectName: 'tsx_viewer',
-    projectUrl: 'https://github.com/01esyaLebedeva/tsx_viewer',
-    description: 'TSX viewer and editor application, supporting both web and Electron environments.',
+    projectName: 'agent_plugins_platform',
+    projectUrl: 'https://github.com/01esyaLebedeva/agent_plugins_platform',
+    description: 'Платформа для разработки и управления плагинами агентов с поддержкой браузерных расширений, UI компонентов и модульной архитектуры.',
 
     meta: (import 'graph_parts/meta.jsonnet'),
 

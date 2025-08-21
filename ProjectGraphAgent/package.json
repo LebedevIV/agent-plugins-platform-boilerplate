@@ -33,9 +33,9 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
+    "jsonnet": "^0.5.0-beta",
     "minimatch": "^9.0.3"
   },
-  "devDependencies": {},
   "bugs": {
     "url": "https://github.com/LebedevIV/ProjectGraphAgent/issues"
   },

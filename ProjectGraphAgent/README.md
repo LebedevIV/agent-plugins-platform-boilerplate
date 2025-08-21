@@ -11,6 +11,17 @@ ProjectGraphAgent is a Jsonnet-driven project control system designed for AI age
 
 
 
+
+
+
+
+
+
+
+
+
+
+
 ## Structure
 
 *   `project_graph.jsonnet`
@@ -83,15 +94,206 @@ Add to `.github/workflows/*.yml`:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
 ## AI Assistant Command Mapping
 
 To streamline interaction with AI assistants, you can configure them to trigger `npm run graph:audit` and `npm run graph:commit` using simpler, more conversational commands. Below are examples of how to set this up for various AI assistants, based on the definitions in `graph_parts/ai_commands.jsonnet`.
 
 **Important:** The exact syntax and capabilities may vary between AI assistants. Refer to your specific AI's documentation for precise configuration details.
 
-### For Cursor (`.cursor/rules/general-rules.mdc`)
+### For Kilocode (`.kilocode/rules/general-rules.md`)
 
 ```markdown
+## Graph Audit
+- **Trigger Phrase:** "graph-audit"
+- **Action:** Run `node project_graph/scripts/graph_generator.mjs`
+- **Description:** Executes the project graph audit script to check for discrepancies between the graph definition and actual project files.
+
+## Graph Commit
+- **Trigger Phrase:** "graph-commit"
+- **Action:** Run `npm run graph:commit`
+- **Description:** Executes the AI Committer script to automatically categorize and commit staged changes based on project_graph.jsonnet rules.
+
+## Sync Ai Commands
+- **Trigger Phrase:** "sync-ai-commands"
+- **Action:** Run `npm run sync:ai-commands`
+- **Description:** Synchronizes AI command definitions across various AI assistant rule files.
+
+```
+
+
+## Graph Audit
+- **Trigger Phrase:** "graph-audit"
+- **Action:** Run `node project_graph/scripts/graph_generator.mjs`
+- **Description:** Executes the project graph audit script to check for discrepancies between the graph definition and actual project files.
+
+## Graph Commit
+- **Trigger Phrase:** "graph-commit"
+- **Action:** Run `npm run graph:commit`
+- **Description:** Executes the AI Committer script to automatically categorize and commit staged changes based on project_graph.jsonnet rules.
+
+## Sync Ai Commands
+- **Trigger Phrase:** "sync-ai-commands"
+- **Action:** Run `npm run sync:ai-commands`
+- **Description:** Synchronizes AI command definitions across various AI assistant rule files.
+
+```
+
+
+## Graph Audit
+- **Trigger Phrase:** "graph-audit"
+- **Action:** Run `node project_graph/scripts/graph_generator.mjs`
+- **Description:** Executes the project graph audit script to check for discrepancies between the graph definition and actual project files.
+
+## Graph Commit
+- **Trigger Phrase:** "graph-commit"
+- **Action:** Run `npm run graph:commit`
+- **Description:** Executes the AI Committer script to automatically categorize and commit staged changes based on project_graph.jsonnet rules.
+
+## Sync Ai Commands
+- **Trigger Phrase:** "sync-ai-commands"
+- **Action:** Run `npm run sync:ai-commands`
+- **Description:** Synchronizes AI command definitions across various AI assistant rule files.
+
+```
+
+
+## Graph Audit
+- **Trigger Phrase:** "graph-audit"
+- **Action:** Run `node project_graph/scripts/graph_generator.mjs`
+- **Description:** Executes the project graph audit script to check for discrepancies between the graph definition and actual project files.
+
+## Graph Commit
+- **Trigger Phrase:** "graph-commit"
+- **Action:** Run `npm run graph:commit`
+- **Description:** Executes the AI Committer script to automatically categorize and commit staged changes based on project_graph.jsonnet rules.
+
+## Sync Ai Commands
+- **Trigger Phrase:** "sync-ai-commands"
+- **Action:** Run `npm run sync:ai-commands`
+- **Description:** Synchronizes AI command definitions across various AI assistant rule files.
+
+```
+
+
+## Graph Audit
+- **Trigger Phrase:** "graph-audit"
+- **Action:** Run `node project_graph/scripts/graph_generator.mjs`
+- **Description:** Executes the project graph audit script to check for discrepancies between the graph definition and actual project files.
+
+## Graph Commit
+- **Trigger Phrase:** "graph-commit"
+- **Action:** Run `npm run graph:commit`
+- **Description:** Executes the AI Committer script to automatically categorize and commit staged changes based on project_graph.jsonnet rules.
+
+## Sync Ai Commands
+- **Trigger Phrase:** "sync-ai-commands"
+- **Action:** Run `npm run sync:ai-commands`
+- **Description:** Synchronizes AI command definitions across various AI assistant rule files.
+
+```
+
+
+## Graph Audit
+- **Trigger Phrase:** "graph-audit"
+- **Action:** Run `node project_graph/scripts/graph_generator.mjs`
+- **Description:** Executes the project graph audit script to check for discrepancies between the graph definition and actual project files.
+
+## Graph Commit
+- **Trigger Phrase:** "graph-commit"
+- **Action:** Run `npm run graph:commit`
+- **Description:** Executes the AI Committer script to automatically categorize and commit staged changes based on project_graph.jsonnet rules.
+
+## Sync Ai Commands
+- **Trigger Phrase:** "sync-ai-commands"
+- **Action:** Run `npm run sync:ai-commands`
+- **Description:** Synchronizes AI command definitions across various AI assistant rule files.
+
+```
+
+
+## Graph Audit
+- **Trigger Phrase:** "graph-audit"
+- **Action:** Run `node project_graph/scripts/graph_generator.mjs`
+- **Description:** Executes the project graph audit script to check for discrepancies between the graph definition and actual project files.
+
+## Graph Commit
+- **Trigger Phrase:** "graph-commit"
+- **Action:** Run `npm run graph:commit`
+- **Description:** Executes the AI Committer script to automatically categorize and commit staged changes based on project_graph.jsonnet rules.
+
+## Sync Ai Commands
+- **Trigger Phrase:** "sync-ai-commands"
+- **Action:** Run `npm run sync:ai-commands`
+- **Description:** Synchronizes AI command definitions across various AI assistant rule files.
+
+```
+
+
+## Graph Audit
+- **Trigger Phrase:** "graph-audit"
+- **Action:** Run `node project_graph/scripts/graph_generator.mjs`
+- **Description:** Executes the project graph audit script to check for discrepancies between the graph definition and actual project files.
+
+## Graph Commit
+- **Trigger Phrase:** "graph-commit"
+- **Action:** Run `npm run graph:commit`
+- **Description:** Executes the AI Committer script to automatically categorize and commit staged changes based on project_graph.jsonnet rules.
+
+## Sync Ai Commands
+- **Trigger Phrase:** "sync-ai-commands"
+- **Action:** Run `npm run sync:ai-commands`
+- **Description:** Synchronizes AI command definitions across various AI assistant rule files.
+
+```
+
+
+## Graph Audit
+- **Trigger Phrase:** "graph-audit"
+- **Action:** Run `node project_graph/scripts/graph_generator.mjs`
+- **Description:** Executes the project graph audit script to check for discrepancies between the graph definition and actual project files.
+
+## Graph Commit
+- **Trigger Phrase:** "graph-commit"
+- **Action:** Run `npm run graph:commit`
+- **Description:** Executes the AI Committer script to automatically categorize and commit staged changes based on project_graph.jsonnet rules.
+
+## Sync Ai Commands
+- **Trigger Phrase:** "sync-ai-commands"
+- **Action:** Run `npm run sync:ai-commands`
+- **Description:** Synchronizes AI command definitions across various AI assistant rule files.
+
+```
+
+
+## Graph Audit
+- **Trigger Phrase:** "graph-audit"
+- **Action:** Run `node project_graph/scripts/graph_generator.mjs`
+- **Description:** Executes the project graph audit script to check for discrepancies between the graph definition and actual project files.
+
+## Graph Commit
+- **Trigger Phrase:** "graph-commit"
+- **Action:** Run `npm run graph:commit`
+- **Description:** Executes the AI Committer script to automatically categorize and commit staged changes based on project_graph.jsonnet rules.
+
+## Sync Ai Commands
+- **Trigger Phrase:** "sync-ai-commands"
+- **Action:** Run `npm run sync:ai-commands`
+- **Description:** Synchronizes AI command definitions across various AI assistant rule files.
+
+```
+
+
 ## Graph Audit
 - **Trigger Phrase:** "graph-audit"
 - **Action:** Run `node project_graph/scripts/graph_generator.mjs`
@@ -159,10 +361,18 @@ To streamline interaction with AI assistants, you can configure them to trigger 
 
 
 
+
+
+
+
+
+
+
+
 ## Drift
 
 - observedNotDeclared: 0
-- declaredNotObserved: 13
+- declaredNotObserved: 10
 
 
 ## Development Workflow
