@@ -1,6 +1,6 @@
 {
   "name": "@extension/options",
-  "version": "0.5.368",
+  "version": "0.5.442",
   "description": "chrome extension - options",
   "type": "module",
   "private": true,
@@ -23,7 +23,8 @@
     "@extension/shared": "workspace:*",
     "@extension/storage": "workspace:*",
     "@extension/ui": "workspace:*",
-    "@extension/i18n": "workspace:*"
+    "@extension/i18n": "workspace:*",
+    "react-resizable-panels": "^2.0.22"
   },
   "devDependencies": {
     "@extension/tailwindcss-config": "workspace:*",

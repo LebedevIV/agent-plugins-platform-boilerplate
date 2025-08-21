@@ -1,8 +1,9 @@
 // === Локальные компоненты для сайдпанели (React, TypeScript) ===
 import { PluginControlPanel } from './components/PluginControlPanel'; // Панель управления выбранным плагином
 import { ToastNotifications } from './components/ToastNotifications'; // Всплывающие уведомления
+import ToggleButton from './components/ToggleButton'; // Кнопка переключения темы
 // === Общие/shared утилиты и хуки (используются во всех частях расширения) ===
-import { useStorage } from '@extension/shared'; // HOC для обработки ошибок, Suspense и хук для работы с хранилищем
+import { useStorage } from '@extension/shared'; // Хук для работы с хранилищем
 import { exampleThemeStorage } from '@extension/storage'; // Пример хранилища для темы
 import { cn } from '@extension/ui'; // Утилита для классов
 import LocalErrorBoundary from './components/LocalErrorBoundary';
@@ -39,7 +40,22 @@ const SidePanel = () => {
   const [pausedPlugin, setPausedPlugin] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [currentTabUrl, setCurrentTabUrl] = useState<string | null>(null);
-  const { isLight } = useStorage(exampleThemeStorage);
+  const [isLight, setIsLight] = useState(true);
+
+  useEffect(() => {
+    const loadTheme = async () => {
+      const state = await exampleThemeStorage.get();
+      setIsLight(state.isLight);
+    };
+    loadTheme();
+
+    // Подписываемся на изменения
+    const unsubscribe = exampleThemeStorage.subscribe(() => {
+      loadTheme();
+    });
+
+    return unsubscribe;
+  }, []);
 
   const portRef = useRef<chrome.runtime.Port | null>(null);
 
@@ -358,21 +374,23 @@ const SidePanel = () => {
       <div className={cn('App', isLight ? 'bg-slate-50' : 'bg-gray-800')}>
         <header className={cn('App-header', isLight ? 'text-gray-900' : 'text-gray-100')}>
           <div className="header-controls">
-            <ToggleButton
-              isLight={isLight}
-              onToggle={exampleThemeStorage.toggle}
-              title={isLight ? 'Переключить на темную тему' : 'Переключить на светлую тему'}>
-              {isLight ? (
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                </svg>
-              ) : (
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="5" />
-                  <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-                </svg>
-              )}
-            </ToggleButton>
+            <button
+              onClick={exampleThemeStorage.toggle}
+              title={isLight ? 'Переключить на темную тему' : 'Переключить на светлую тему'}
+              style={{
+                background: 'none',
+                border: '1px solid #d1d5db',
+                borderRadius: '50%',
+                width: '40px',
+                height: '40px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                fontSize: '20px'
+              }}>
+              {isLight ? '🌙' : '☀️'}
+            </button>
 
             <button onClick={() => chrome.runtime.openOptionsPage()} className="settings-btn" title="Открыть настройки">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -399,20 +417,11 @@ const SidePanel = () => {
 
                 return filteredPlugins.map(plugin => (
                   <PluginCard
-                    key={plugin.id}
-                    id={plugin.id}
-                    name={plugin.name}
-                    version={plugin.version}
-                    description={plugin.description}
-                    icon={plugin.icon}
-                    iconUrl={plugin.iconUrl}
-                    enabled={plugin.settings?.enabled ?? true}
-                    selected={selectedPlugin?.id === plugin.id}
-                    onClick={() => handlePluginClick(plugin)}
-                    onToggle={async (enabled: boolean): Promise<void> => {
-                      await handleUpdatePluginSetting(plugin.id, 'enabled', enabled);
-                    }}
-                  />
+                     key={plugin.id}
+                     plugin={plugin}
+                     selected={selectedPlugin?.id === plugin.id}
+                     onClick={() => handlePluginClick(plugin)}
+                   />
                 ));
               })()}
             </div>
@@ -428,12 +437,10 @@ const SidePanel = () => {
             isRunning={runningPlugin === selectedPlugin.id}
             isPaused={pausedPlugin === selectedPlugin.id}
             currentTabUrl={currentTabUrl}
-            onViewChange={setPanelView}
             onStart={handleStartPlugin}
             onPause={handlePausePlugin}
             onStop={handleStopPlugin}
             onClose={handleClosePanel}
-            onUpdateSetting={handleUpdatePluginSetting}
           />
         )}
 

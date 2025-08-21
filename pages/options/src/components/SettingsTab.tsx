@@ -44,7 +44,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
 
   return (
     <div className="tab-content active">
-      <h2>{t('options.settings.title')}</h2>
+      <h2>{t('options_settings_title')}</h2>
       <div className="settings-sections">
         <div className="settings-section">
           <h3>Общие настройки</h3>
@@ -96,7 +96,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       </div>
       <div className="settings-container">
         <div className="settings-section">
-          <h3>{t('options.settings.aiKeys.title')}</h3>
+          <h3>{t('options_settings_aiKeys_title')}</h3>
 
           {/* Фиксированные ключи */}
           {aiKeys.map(key => (
@@ -104,14 +104,14 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               <div className="ai-key-header">
                 <h4>{key.name}</h4>
                 <span className={cn('key-status', getStatusClass(key.status))}>{getStatusText(key.status)}</span>
-                {key.isFree && <span className="key-badge free">{t('options.settings.aiKeys.badges.free')}</span>}
+                {key.isFree && <span className="key-badge free">{t('options_settings_aiKeys_badges_free')}</span>}
               </div>
               <div className="ai-key-input">
                 <input
                   type="password"
                   value={key.key}
                   onChange={e => onUpdateKey(key.id, e.target.value, false)}
-                  placeholder={t('options.settings.aiKeys.customKeys.keyPlaceholder')}
+                  placeholder={t('options_settings_aiKeys_customKeys_keyPlaceholder')}
                 />
               </div>
             </div>
@@ -119,7 +119,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
 
           {/* Пользовательские ключи */}
           <div className="custom-keys-section">
-            <h4>{t('options.settings.aiKeys.customKeys.title')}</h4>
+            <h4>{t('options_settings_aiKeys_customKeys_title')}</h4>
             {customKeys.map(key => (
               <div key={key.id} className="ai-key-item custom-key">
                 <div className="ai-key-header">
@@ -128,7 +128,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                     value={key.name}
                     onChange={e => onUpdateCustomKeyName(key.id, e.target.value)}
                     className="key-name-input"
-                    placeholder={t('options.settings.aiKeys.customKeys.namePlaceholder')}
+                    placeholder={t('options_settings_aiKeys_customKeys_namePlaceholder')}
                   />
                   <button onClick={() => onRemoveCustomKey(key.id)} className="remove-key-btn">
                     ✕
@@ -139,22 +139,22 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                     type="password"
                     value={key.key}
                     onChange={e => onUpdateKey(key.id, e.target.value, true)}
-                    placeholder={t('options.settings.aiKeys.customKeys.keyPlaceholder')}
+                    placeholder={t('options_settings_aiKeys_customKeys_keyPlaceholder')}
                   />
                 </div>
               </div>
             ))}
             <button onClick={onAddCustomKey} className="add-key-btn">
-              {t('options.settings.aiKeys.customKeys.addButton')}
+              {t('options_settings_aiKeys_customKeys_addButton')}
             </button>
           </div>
 
           <div className="settings-actions">
             <button onClick={onSave} className="save-btn">
-              {t('options.settings.aiKeys.actions.save')}
+              {t('options_settings_aiKeys_actions_save')}
             </button>
             <button onClick={onTest} className="test-btn">
-              {t('options.settings.aiKeys.actions.test')}
+              {t('options_settings_aiKeys_actions_test')}
             </button>
           </div>
         </div>

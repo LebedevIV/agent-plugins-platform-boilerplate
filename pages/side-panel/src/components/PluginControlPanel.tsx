@@ -7,6 +7,24 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import './PluginControlPanel.css';
 import type React from 'react';
 
+// Определение типа Plugin для PluginControlPanel
+type Plugin = {
+  id: string;
+  name: string;
+  version: string;
+  description?: string;
+  icon?: string;
+  iconUrl?: string;
+  manifest?: Record<string, unknown>;
+  host_permissions?: string[];
+  settings?: {
+    enabled?: boolean;
+    autorun?: boolean;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
 // Новый тип для сообщений чата
 interface ChatMessage {
   id: string;
@@ -46,8 +64,6 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       pluginId: plugin.id,
       pageKey: getPageKey(currentTabUrl),
       debounceMs: 1000, // 1 секунда задержки
-      minLength: 10, // Минимум 10 символов для синхронизации
-      maxLength: 1000, // Максимум 1000 символов
     });
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -365,10 +381,10 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
           <div className="chat-header">
             <h4>Чат</h4>
             <div className="chat-actions">
-              <button onClick={handleClearChat} disabled={loading || error}>
+              <button onClick={handleClearChat} disabled={loading || !!error}>
                 {loading ? 'Очистка...' : error ? 'Ошибка' : 'Очистить чат'}
               </button>
-              <button onClick={handleExportChat} disabled={loading || error}>
+              <button onClick={handleExportChat} disabled={loading || !!error}>
                 {loading ? 'Экспорт...' : error ? 'Ошибка' : 'Экспортировать'}
               </button>
             </div>
@@ -401,7 +417,14 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
             <button onClick={handleSendMessage} disabled={!message.trim()} style={{ marginLeft: 8 }}>
               Отправить
             </button>
-            <DraftStatus isDraftSaved={isDraftSaved} isDraftLoading={isDraftLoading} draftError={draftError} />
+            <DraftStatus
+              isDraftSaved={isDraftSaved}
+              isDraftLoading={isDraftLoading}
+              draftError={draftError}
+              messageLength={message.length}
+              minLength={10}
+              maxLength={1000}
+            />
           </div>
         </div>
         <PluginDetails plugin={plugin} />

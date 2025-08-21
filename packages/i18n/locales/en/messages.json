@@ -41,5 +41,53 @@
   },
   "displayErrorReset": {
     "message": "Run Again"
+  },
+  "options": {
+    "description": "Options page title",
+    "message": "Options"
+  },
+  "options_settings_title": {
+    "description": "Settings tab title",
+    "message": "Settings"
+  },
+  "options_plugins_title": {
+    "description": "Plugins tab title",
+    "message": "Plugins"
+  },
+  "options_plugins_details_title": {
+    "description": "Plugin details title",
+    "message": "Plugin Details"
+  },
+  "options_settings_aiKeys_title": {
+    "description": "AI Keys section title",
+    "message": "AI Keys"
+  },
+  "options_settings_aiKeys_badges_free": {
+    "description": "Free badge for AI keys",
+    "message": "Free"
+  },
+  "options_settings_aiKeys_customKeys_title": {
+    "description": "Custom keys section title",
+    "message": "Custom Keys"
+  },
+  "options_settings_aiKeys_customKeys_namePlaceholder": {
+    "description": "Placeholder for custom key name",
+    "message": "Enter key name"
+  },
+  "options_settings_aiKeys_customKeys_keyPlaceholder": {
+    "description": "Placeholder for custom key value",
+    "message": "Enter your API key"
+  },
+  "options_settings_aiKeys_customKeys_addButton": {
+    "description": "Add key button text",
+    "message": "Add Key"
+  },
+  "options_settings_aiKeys_actions_save": {
+    "description": "Save button text",
+    "message": "Save"
+  },
+  "options_settings_aiKeys_actions_test": {
+    "description": "Test button text",
+    "message": "Test"
   }
 }

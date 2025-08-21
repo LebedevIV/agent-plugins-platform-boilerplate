@@ -4,7 +4,7 @@ interface ToggleButtonProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
   disabled?: boolean;
-  label?: string;
+  label?: React.ReactNode;
   iconOn?: React.ReactNode; // AI-First: иконка для состояния ON
   iconOff?: React.ReactNode; // AI-First: иконка для состояния OFF
 }

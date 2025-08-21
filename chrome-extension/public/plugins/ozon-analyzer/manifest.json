@@ -1,6 +1,6 @@
 {
   "name": "Ozon Analyzer",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Анализатор товаров Ozon с проверкой соответствия описания и состава",
   "author": "APP Team",
   "main_server": "mcp_server.py",

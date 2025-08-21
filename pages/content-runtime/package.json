@@ -1,6 +1,6 @@
 {
   "name": "@extension/content-runtime-script",
-  "version": "0.5.368",
+  "version": "0.5.442",
   "description": "chrome extension - content runtime script",
   "type": "module",
   "private": true,
@@ -27,6 +27,7 @@
     "@extension/tsconfig": "workspace:*",
     "@extension/vite-config": "workspace:*",
     "@extension/hmr": "workspace:*",
-    "@extension/shared": "workspace:*"
+    "@extension/shared": "workspace:*",
+    "tsx": "^4.16.2"
   }
 }

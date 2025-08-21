@@ -122,44 +122,50 @@ chrome.runtime.onMessage.addListener(
 
       if (msg.type === 'GET_PLUGINS') {
         console.log('[background] Processing GET_PLUGINS request');
+
+        // Полноценная логика загрузки плагинов
         (async () => {
           try {
-            const plugins: Plugin[] = await getAvailablePlugins();
-            console.log('[background] getAvailablePlugins raw result:', plugins);
+            console.log('[background] Getting available plugins...');
+            const plugins = await getAvailablePlugins();
+            console.log('[background] getAvailablePlugins result:', plugins);
+
+            console.log('[background] Getting plugin settings...');
             const allSettings = await pluginSettingsStorage.get();
-            console.log('[background] allSettings:', allSettings);
-            const pluginsWithSettings = await Promise.all(
-              plugins.map(async (plugin: Plugin) => {
-                const settings = allSettings[plugin.id] || {
-                  enabled: true,
-                  autorun: false,
-                };
-                return {
-                  ...plugin,
-                  settings,
-                };
-              }),
-            );
-            try {
-              const json = JSON.stringify(pluginsWithSettings);
-              console.log('[background] pluginsWithSettings JSON:', json);
-            } catch (e) {
-              console.error('[background] pluginsWithSettings JSON.stringify error:', e);
-            }
+            console.log('[background] Plugin settings:', allSettings);
+
+            const pluginsWithSettings = plugins.map((plugin: Plugin) => {
+              const settings = allSettings[plugin.id] || {
+                enabled: true,
+                autorun: false,
+              };
+              return {
+                ...plugin,
+                settings,
+              };
+            });
+
+            console.log('[background] Final plugins data:', pluginsWithSettings.length, 'plugins');
+
+            // Пытаемся отправить ответ
             try {
               sendResponse({ plugins: pluginsWithSettings });
-            } catch (e) {
-              console.error('[background] sendResponse error:', e);
+              console.log('[background] Successfully sent plugins response');
+            } catch (sendError) {
+              console.error('[background] Failed to send response:', sendError);
             }
+
           } catch (error) {
-            console.error('[background] Error in getAvailablePlugins:', error);
+            console.error('[background] Error processing GET_PLUGINS:', error);
             try {
               sendResponse({ error: (error as Error).message });
-            } catch (e) {
-              console.error('[background] sendResponse error (catch):', e);
+              console.log('[background] Sent error response');
+            } catch (sendError) {
+              console.error('[background] Failed to send error response:', sendError);
             }
           }
         })();
+
         return true;
       }
 
