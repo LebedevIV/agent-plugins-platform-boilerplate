@@ -58,7 +58,7 @@ const Options = function () {
         autoSaveId={showRightPanel ? "options-panel-layout-plugins" : "options-panel-layout-settings"}
         id="options-panel-group">
         <Panel
-          defaultSize={showRightPanel ? 20 : 20}
+          defaultSize={20}
           minSize={15}
           id="sidebar-left-panel"
           className="flex flex-col">
