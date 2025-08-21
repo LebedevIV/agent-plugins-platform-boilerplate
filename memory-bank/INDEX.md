@@ -20,12 +20,15 @@
 - comprehensive-architecture.md - Comprehensive architecture
 - security-architecture.md - Security architecture
 - systemPatterns.md - System patterns
+- platform-core-analysis.md - Platform-core role analysis
 
 ### 🔧 [Development](./development/) - Development process
 - testing-results.md - Testing results
 - debug-testing-guide.md - Debug testing guide
 - devtools-testing-guide.md - DevTools work
 - version-management.md - Version management
+- barrel-exports-best-practices.md - Barrel exports best practices
+- user-commands.md - User commands for AI assistant
 
 ### 🎨 [UI](./ui/) - UI/UX context
 - side-panel-improvements.md - Side panel improvements
@@ -52,9 +55,13 @@
 - **Errors**: [errors.md](./errors/errors.md)
 - **Architecture**: [architecture-decisions.md](./architecture/architecture-decisions.md)
 - **Testing**: [testing-results.md](./development/testing-results.md)
+- **User Commands**: [user-commands.md](./development/user-commands.md)
+- **Barrel Exports**: [barrel-exports-best-practices.md](./development/barrel-exports-best-practices.md)
+- **Cursor Rules**: [cursor-user-rules-simple.md](./cursor-user-rules-simple.md)
+- **Cursor Memories**: [cursor-saved-memories.md](./cursor-saved-memories.md)
 
 ## Structure Rules:
 
 See [MEMORY_BANK_STRUCTURE.md](./MEMORY_BANK_STRUCTURE.md) for detailed organization rules.
 
-Last updated: 2024-07-19 
+Last updated: 2025-08-21
