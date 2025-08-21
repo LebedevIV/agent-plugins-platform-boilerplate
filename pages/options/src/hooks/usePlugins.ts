@@ -1,4 +1,4 @@
-import { useStorage } from '@extension/shared';
+ import { useStorage } from '@extension/shared';
 import { pluginSettingsStorage, updatePluginSettings } from '@extension/storage';
 import * as React from 'react';
 import type { PluginSettings } from '@extension/storage';
@@ -116,6 +116,7 @@ const usePlugins = () => {
         setError((e as Error).message);
         setPlugins([]);
         setLoading(false);
+        return () => {}; // Return empty cleanup function
       }
     };
 
