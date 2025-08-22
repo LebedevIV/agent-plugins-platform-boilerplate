@@ -22,7 +22,7 @@ type Theme = 'light' | 'dark' | 'system';
 const Options = function () {
   const [activeTab, setActiveTab] = useState('settings');
   const { plugins, selectedPlugin, selectPlugin, loading, error } = usePlugins();
-   const { t } = useTranslations('ru');
+  const { t } = useTranslations('ru');
    const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
    const [isLight, setIsLight] = useState(true);
 
@@ -39,6 +39,14 @@ const Options = function () {
      getStatusText,
      getStatusClass,
    } = useAIKeys();
+
+   console.log('[Options] AI Keys initialized:', { aiKeys, customKeys });
+   console.log('[Options] Functions available:', {
+     saveAIKeys: typeof saveAIKeys,
+     testAIKeys: typeof testAIKeys,
+     addCustomKey: typeof addCustomKey,
+     updateKey: typeof updateKey
+   });
 
   useEffect(() => {
     const loadTheme = async () => {

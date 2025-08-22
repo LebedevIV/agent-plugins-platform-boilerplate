@@ -35,12 +35,16 @@ interface PluginManifest {
 // Убраны mock данные - теперь используем только данные из background script
 
 const usePlugins = () => {
-  const [plugins, setPlugins] = React.useState<Plugin[]>([]);
-  const [selectedPlugin, setSelectedPlugin] = React.useState<Plugin | null>(null);
-  const [loading, setLoading] = React.useState<boolean>(true);
-  const [error, setError] = React.useState<string | null>(null);
-  // Получаем настройки плагинов из хранилища
-  const [pluginSettings, setPluginSettings] = React.useState<Record<string, PluginSettings>>({});
+   const [plugins, setPlugins] = React.useState<Plugin[]>([]);
+   const [selectedPlugin, setSelectedPlugin] = React.useState<Plugin | null>(null);
+   const [loading, setLoading] = React.useState<boolean>(true);
+   const [error, setError] = React.useState<string | null>(null);
+   // Получаем настройки плагинов из хранилища
+   const [pluginSettings, setPluginSettings] = React.useState<Record<string, PluginSettings>>({});
+
+   // Реф для отслеживания активного порта и предотвращения дублирования
+   const activePortRef = React.useRef<chrome.runtime.Port | null>(null);
+   const isLoadingRef = React.useRef<boolean>(false);
 
   React.useEffect(() => {
     const loadSettings = async () => {
@@ -63,15 +67,31 @@ const usePlugins = () => {
   }, []);
 
   React.useEffect(() => {
+    // Предотвращаем дублирование запросов
+    if (isLoadingRef.current) {
+      console.log('[usePlugins] Request already in progress, skipping...');
+      return;
+    }
+
     const fetchPlugins = () => {
       try {
+        // Если уже есть активный порт, отключаем его
+        if (activePortRef.current) {
+          console.log('[usePlugins] Disconnecting existing port');
+          activePortRef.current.disconnect();
+          activePortRef.current = null;
+        }
+
         setLoading(true);
         setError(null);
+        isLoadingRef.current = true;
 
         console.log('Connecting to background script via port...');
 
-        // Используем port-based communication как в sidepanel
+        // Используем port-based communication
         const port = chrome.runtime.connect();
+        activePortRef.current = port;
+
         console.log('Port connected:', port.name);
 
         const messageListener = (msg: ExtensionMessage) => {
@@ -89,33 +109,83 @@ const usePlugins = () => {
             });
             setPlugins(processedPlugins);
             setLoading(false);
+            isLoadingRef.current = false;
           } else if (msg.type === 'PLUGINS_ERROR') {
             console.error('Error from background script:', msg.error);
             setError(msg.error || 'Ошибка загрузки плагинов');
             setPlugins([]);
             setLoading(false);
+            isLoadingRef.current = false;
           }
         };
 
         const disconnectListener = () => {
           console.log('Port disconnected');
+          activePortRef.current = null;
+          // Если порт был отключен до получения ответа, показываем ошибку
+          if (isLoadingRef.current) {
+            setError('Соединение с background скриптом потеряно');
+            setLoading(false);
+            isLoadingRef.current = false;
+          }
         };
 
         port.onMessage.addListener(messageListener);
         port.onDisconnect.addListener(disconnectListener);
 
-        // Запрашиваем плагины
-        port.postMessage({ type: 'GET_PLUGINS' });
-        console.log('Sent GET_PLUGINS message via port');
+        // Добавляем таймаут для ожидания ответа
+        const timeoutId = setTimeout(() => {
+          if (isLoadingRef.current) {
+            console.error('Timeout waiting for background script response');
+            setError('Превышено время ожидания ответа от background скрипта');
+            setLoading(false);
+            isLoadingRef.current = false;
+            if (activePortRef.current) {
+              activePortRef.current.disconnect();
+              activePortRef.current = null;
+            }
+          }
+        }, 10000); // 10 секунд таймаут
+
+        // Проверяем готовность порта и отправляем сообщение
+        const sendMessage = () => {
+          try {
+            if (activePortRef.current) {
+              activePortRef.current.postMessage({ type: 'GET_PLUGINS' });
+              console.log('Sent GET_PLUGINS message via port');
+            } else {
+              throw new Error('Port is not available');
+            }
+          } catch (error) {
+            console.error('Failed to send message via port:', error);
+            setError('Не удалось отправить запрос к background скрипту');
+            setLoading(false);
+            isLoadingRef.current = false;
+            clearTimeout(timeoutId);
+            if (activePortRef.current) {
+              activePortRef.current.disconnect();
+              activePortRef.current = null;
+            }
+          }
+        };
+
+        // Небольшая задержка для инициализации порта
+        setTimeout(sendMessage, 100);
 
         return () => {
-          port.disconnect();
+          clearTimeout(timeoutId);
+          if (activePortRef.current) {
+            activePortRef.current.disconnect();
+            activePortRef.current = null;
+          }
+          isLoadingRef.current = false;
         };
       } catch (e) {
         console.error('[usePlugins] Failed to connect to background:', e);
         setError((e as Error).message);
         setPlugins([]);
         setLoading(false);
+        isLoadingRef.current = false;
         return () => {}; // Return empty cleanup function
       }
     };
