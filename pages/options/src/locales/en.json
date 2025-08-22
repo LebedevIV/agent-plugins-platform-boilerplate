@@ -64,5 +64,18 @@
   "options_settings_aiKeys_customKeys_keyPlaceholder": "Enter API key",
   "options_settings_aiKeys_customKeys_namePlaceholder": "Enter key name",
   "options_settings_aiKeys_actions_save": "Save all keys",
-  "options_settings_aiKeys_actions_test": "Test connections"
+  "options_settings_aiKeys_actions_test": "Test connections",
+  "options_settings_general_title": "General Settings",
+  "options_settings_general_autoUpdate": "Automatic plugin updates",
+  "options_settings_general_showNotifications": "Show notifications",
+  "options_settings_general_theme": "Interface theme:",
+  "options_settings_general_theme_light": "Light",
+  "options_settings_general_theme_dark": "Dark",
+  "options_settings_general_theme_system": "System",
+  "options_settings_security_title": "Security",
+  "options_settings_security_checkSignatures": "Verify plugin signatures",
+  "options_settings_security_isolatedMode": "Isolated execution mode",
+  "options_settings_performance_title": "Performance",
+  "options_settings_performance_maxPlugins": "Maximum number of active plugins:",
+  "options_settings_performance_cacheData": "Cache plugin data"
 }
