@@ -138,20 +138,35 @@ export const useAIKeys = () => {
     setCustomKeys(prev => prev.map(key => (key.id === id ? { ...key, name } : key)));
   };
 
-  // Функция для создания getStatusText с привязанной функцией t
-  const createGetStatusText = (t: (key: string) => string) => {
-    return (status: string) => {
-      switch (status) {
-        case 'configured':
-          return t('options.settings.aiKeys.status.configured');
-        case 'not_configured':
-          return t('options.settings.aiKeys.status.notConfigured');
-        case 'testing':
-          return t('options.settings.aiKeys.status.testing');
-        default:
-          return 'Неизвестно';
-      }
+  // Функция для получения текста статуса с поддержкой локализации
+  const getStatusText = (status: string) => {
+    // Импортируем переводы
+    const enTranslations = {
+      'options.settings.aiKeys.status.configured': 'Configured',
+      'options.settings.aiKeys.status.notConfigured': 'Not Configured',
+      'options.settings.aiKeys.status.testing': 'Testing...'
     };
+
+    const ruTranslations = {
+      'options.settings.aiKeys.status.configured': 'Настроен',
+      'options.settings.aiKeys.status.notConfigured': 'Не настроен',
+      'options.settings.aiKeys.status.testing': 'Тестирование...'
+    };
+
+    // Определяем язык браузера или используем русский по умолчанию
+    const userLang = navigator.language.startsWith('en') ? 'en' : 'ru';
+    const translations = userLang === 'en' ? enTranslations : ruTranslations;
+
+    switch (status) {
+      case 'configured':
+        return translations['options.settings.aiKeys.status.configured'];
+      case 'not_configured':
+        return translations['options.settings.aiKeys.status.notConfigured'];
+      case 'testing':
+        return translations['options.settings.aiKeys.status.testing'];
+      default:
+        return 'Неизвестно';
+    }
   };
 
   const getStatusClass = (status: string) => {
@@ -176,7 +191,7 @@ export const useAIKeys = () => {
     removeCustomKey,
     updateKey,
     updateCustomKeyName,
-    createGetStatusText,
+    getStatusText,
     getStatusClass,
   };
 };

@@ -36,12 +36,9 @@ const Options = function () {
      removeCustomKey,
      updateKey,
      updateCustomKeyName,
-     createGetStatusText,
+     getStatusText,
      getStatusClass,
    } = useAIKeys();
-
-   // Create getStatusText function with current translation
-   const getStatusText = createGetStatusText(t);
 
   useEffect(() => {
     const loadTheme = async () => {
@@ -115,7 +112,7 @@ const Options = function () {
                     onRemoveCustomKey={removeCustomKey}
                     onUpdateKey={updateKey}
                     onUpdateCustomKeyName={updateCustomKeyName}
-                    getStatusText={getStatusText}
+                    getStatusText={(status) => getStatusText(status)}
                     getStatusClass={getStatusClass}
                     theme={theme === 'system' ? (isLight ? 'light' : 'dark') : theme}
                     setTheme={(newTheme) => setTheme(newTheme)}
