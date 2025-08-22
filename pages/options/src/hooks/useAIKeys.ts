@@ -33,9 +33,21 @@ export const useAIKeys = () => {
   ]);
   const [customKeys, setCustomKeys] = React.useState<AIKey[]>([]);
 
-  // Load AI keys on mount
+  // Рефы для отложенного сохранения ключей
+  const saveTimeoutsRef = React.useRef<Record<string, NodeJS.Timeout>>({});
+
+  // Load AI keys on mount and cleanup timeouts on unmount
   React.useEffect(() => {
     loadAIKeys();
+
+    // Cleanup function
+    return () => {
+      // Очищаем все активные таймауты
+      Object.values(saveTimeoutsRef.current).forEach(timeout => {
+        clearTimeout(timeout);
+      });
+      saveTimeoutsRef.current = {};
+    };
   }, []);
 
   const loadAIKeys = async () => {
@@ -233,6 +245,9 @@ export const useAIKeys = () => {
   };
 
   const updateKey = (id: string, value: string, isCustom = false) => {
+    console.log(`[useAIKeys] Updating key ${id} with value:`, value ? 'present' : 'empty');
+
+    // Обновляем состояние немедленно для лучшего UX
     if (isCustom) {
       setCustomKeys(prev => prev.map(key => (key.id === id ? {
         ...key,
@@ -246,6 +261,57 @@ export const useAIKeys = () => {
         status: value ? 'configured' : 'not_configured'
       } : key)));
     }
+
+    // Отменяем предыдущий таймаут для этого ключа
+    if (saveTimeoutsRef.current[id]) {
+      clearTimeout(saveTimeoutsRef.current[id]);
+    }
+
+    // Устанавливаем новый таймаут для отложенного сохранения
+    saveTimeoutsRef.current[id] = setTimeout(async () => {
+      try {
+        console.log(`[useAIKeys] Auto-saving key ${id} after delay`);
+        if (value) {
+          await APIKeyManager.saveEncryptedKey(id, value);
+        } else {
+          await APIKeyManager.removeKey(id);
+        }
+
+        // Для пользовательских ключей также обновляем метаданные
+        if (isCustom) {
+          const result = await chrome.storage.local.get(['customKeys']);
+          const customKeysMetadata = result.customKeys || [];
+          const updatedMetadata = customKeysMetadata.map((key: any) =>
+            key.id === id ? { ...key, name: key.name } : key
+          );
+
+          // Если ключ не существует в метаданных, добавляем его
+          const existingKeyIndex = updatedMetadata.findIndex((key: any) => key.id === id);
+          if (existingKeyIndex === -1 && value) {
+            updatedMetadata.push({
+              id,
+              name: `Пользовательский ключ ${customKeysMetadata.length + 1}`,
+              isFixed: false,
+              isFree: false,
+            });
+          }
+
+          await chrome.storage.local.set({
+            customKeys: updatedMetadata.filter((key: any) => {
+              // Убираем из метаданных ключи, которые были удалены
+              return value || key.id !== id;
+            }),
+          });
+        }
+
+        console.log(`[useAIKeys] Key ${id} auto-saved successfully`);
+      } catch (error) {
+        console.error(`[useAIKeys] Failed to auto-save key ${id}:`, error);
+      } finally {
+        // Убираем таймаут из рефа
+        delete saveTimeoutsRef.current[id];
+      }
+    }, 1000); // 1 секунда задержки перед сохранением
   };
 
   const updateCustomKeyName = (id: string, name: string) => {
