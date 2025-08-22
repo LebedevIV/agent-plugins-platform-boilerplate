@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { useTranslations } from './useTranslations';
 
 export interface AIKey {
   id: string;
@@ -10,6 +11,7 @@ export interface AIKey {
 }
 
 export const useAIKeys = () => {
+  const { t } = useTranslations('ru');
   const [aiKeys, setAiKeys] = React.useState<AIKey[]>([
     {
       id: 'gemini-flash',
@@ -43,12 +45,15 @@ export const useAIKeys = () => {
           prev.map(key => ({
             ...key,
             key: result.aiKeys[key.id] || '',
-            status: result.aiKeys[key.id] ? 'configured' : 'not_configured',
+            status: (result.aiKeys[key.id] ? 'configured' : 'not_configured') as AIKey['status'],
           })),
         );
       }
       if (result.customKeys) {
-        setCustomKeys(result.customKeys);
+        setCustomKeys((result.customKeys as AIKey[]).map((key: AIKey) => ({
+          ...key,
+          status: (key.key ? 'configured' : 'not_configured') as AIKey['status']
+        })));
       }
     } catch (error) {
       console.error('Failed to load AI keys:', error);
@@ -79,28 +84,36 @@ export const useAIKeys = () => {
       setAiKeys(prev =>
         prev.map(key => ({
           ...key,
-          status: key.key ? 'configured' : 'not_configured',
+          status: (key.key ? 'configured' : 'not_configured') as AIKey['status'],
         })),
       );
 
       setCustomKeys(updatedCustomKeys);
 
-      alert('Настройки сохранены!');
+      alert(t('options.settings.aiKeys.messages.saved'));
     } catch (error) {
       console.error('Failed to save AI keys:', error);
-      alert('Ошибка при сохранении настроек');
+      alert(t('options.settings.aiKeys.messages.saveError'));
     }
   };
 
   const testAIKeys = async () => {
-    // Simulate testing
+    // Set testing status
     setAiKeys(prev =>
       prev.map(key => ({
         ...key,
-        status: 'testing',
+        status: 'testing' as const,
       })),
     );
 
+    setCustomKeys(prev =>
+      prev.map(key => ({
+        ...key,
+        status: 'testing' as const,
+      })),
+    );
+
+    // Simulate API testing with timeout
     setTimeout(() => {
       setAiKeys(prev =>
         prev.map(key => ({
@@ -108,7 +121,15 @@ export const useAIKeys = () => {
           status: key.key ? 'configured' : 'not_configured',
         })),
       );
-      alert('Тестирование завершено!');
+
+      setCustomKeys(prev =>
+        prev.map(key => ({
+          ...key,
+          status: key.key ? 'configured' : 'not_configured',
+        })),
+      );
+
+      alert(t('options.settings.aiKeys.messages.testComplete'));
     }, 2000);
   };
 
@@ -117,7 +138,7 @@ export const useAIKeys = () => {
       id: `custom-${Date.now()}`,
       name: `Пользовательский ключ ${customKeys.length + 1}`,
       key: '',
-      status: 'not_configured',
+      status: 'not_configured' as const,
     };
     setCustomKeys(prev => [...prev, newKey]);
   };
@@ -128,44 +149,39 @@ export const useAIKeys = () => {
 
   const updateKey = (id: string, value: string, isCustom = false) => {
     if (isCustom) {
-      setCustomKeys(prev => prev.map(key => (key.id === id ? { ...key, key: value } : key)));
+      setCustomKeys(prev => prev.map(key => (key.id === id ? {
+        ...key,
+        key: value,
+        status: value ? 'configured' : 'not_configured'
+      } : key)));
     } else {
-      setAiKeys(prev => prev.map(key => (key.id === id ? { ...key, key: value } : key)));
+      setAiKeys(prev => prev.map(key => (key.id === id ? {
+        ...key,
+        key: value,
+        status: value ? 'configured' : 'not_configured'
+      } : key)));
     }
   };
 
   const updateCustomKeyName = (id: string, name: string) => {
-    setCustomKeys(prev => prev.map(key => (key.id === id ? { ...key, name } : key)));
+    setCustomKeys(prev => prev.map(key => (key.id === id ? {
+      ...key,
+      name,
+      status: key.key ? 'configured' : 'not_configured'
+    } : key)));
   };
 
   // Функция для получения текста статуса с поддержкой локализации
   const getStatusText = (status: string) => {
-    // Импортируем переводы
-    const enTranslations = {
-      'options.settings.aiKeys.status.configured': 'Configured',
-      'options.settings.aiKeys.status.notConfigured': 'Not Configured',
-      'options.settings.aiKeys.status.testing': 'Testing...'
-    };
-
-    const ruTranslations = {
-      'options.settings.aiKeys.status.configured': 'Настроен',
-      'options.settings.aiKeys.status.notConfigured': 'Не настроен',
-      'options.settings.aiKeys.status.testing': 'Тестирование...'
-    };
-
-    // Определяем язык браузера или используем русский по умолчанию
-    const userLang = navigator.language.startsWith('en') ? 'en' : 'ru';
-    const translations = userLang === 'en' ? enTranslations : ruTranslations;
-
     switch (status) {
       case 'configured':
-        return translations['options.settings.aiKeys.status.configured'];
+        return t('options.settings.aiKeys.status.configured');
       case 'not_configured':
-        return translations['options.settings.aiKeys.status.notConfigured'];
+        return t('options.settings.aiKeys.status.notConfigured');
       case 'testing':
-        return translations['options.settings.aiKeys.status.testing'];
+        return t('options.settings.aiKeys.status.testing');
       default:
-        return 'Неизвестно';
+        return t('options.settings.aiKeys.status.notConfigured');
     }
   };
 

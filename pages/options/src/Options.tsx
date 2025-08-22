@@ -20,9 +20,9 @@ type ThemeStorageState = {
 type Theme = 'light' | 'dark' | 'system';
 
 const Options = function () {
-   const [activeTab, setActiveTab] = useState('plugins');
-   const { plugins, selectedPlugin, selectPlugin, loading, error } = usePlugins();
-   const { t } = useTranslations();
+  const [activeTab, setActiveTab] = useState('settings');
+  const { plugins, selectedPlugin, selectPlugin, loading, error } = usePlugins();
+   const { t } = useTranslations('ru');
    const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
    const [isLight, setIsLight] = useState(true);
 
@@ -112,7 +112,7 @@ const Options = function () {
                     onRemoveCustomKey={removeCustomKey}
                     onUpdateKey={updateKey}
                     onUpdateCustomKeyName={updateCustomKeyName}
-                    getStatusText={(status) => getStatusText(status)}
+                    getStatusText={getStatusText}
                     getStatusClass={getStatusClass}
                     theme={theme === 'system' ? (isLight ? 'light' : 'dark') : theme}
                     setTheme={(newTheme) => setTheme(newTheme)}

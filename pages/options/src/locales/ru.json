@@ -54,5 +54,15 @@
         }
       }
     }
-  }
-} 
+  },
+  "options_settings_title": "Настройки Платформы",
+  "options_plugins_title": "Доступные плагины",
+  "options_settings_aiKeys_title": "API Ключи нейросетей",
+  "options_settings_aiKeys_badges_free": "Бесплатный",
+  "options_settings_aiKeys_customKeys_title": "Пользовательские API ключи",
+  "options_settings_aiKeys_customKeys_addButton": "+ Добавить новый ключ",
+  "options_settings_aiKeys_customKeys_keyPlaceholder": "Введите API ключ",
+  "options_settings_aiKeys_customKeys_namePlaceholder": "Введите название ключа",
+  "options_settings_aiKeys_actions_save": "Сохранить все ключи",
+  "options_settings_aiKeys_actions_test": "Тестировать подключения"
+}
