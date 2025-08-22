@@ -64,18 +64,26 @@ export const useAIKeys = () => {
         }
       });
 
+      // Update custom keys status before saving
+      const updatedCustomKeys = customKeys.map(key => ({
+        ...key,
+        status: (key.key ? 'configured' : 'not_configured') as AIKey['status']
+      }));
+
       await chrome.storage.local.set({
         aiKeys: keysToSave,
-        customKeys: customKeys,
+        customKeys: updatedCustomKeys,
       });
 
-      // Update status
+      // Update status for both aiKeys and customKeys
       setAiKeys(prev =>
         prev.map(key => ({
           ...key,
           status: key.key ? 'configured' : 'not_configured',
         })),
       );
+
+      setCustomKeys(updatedCustomKeys);
 
       alert('Настройки сохранены!');
     } catch (error) {
@@ -130,8 +138,9 @@ export const useAIKeys = () => {
     setCustomKeys(prev => prev.map(key => (key.id === id ? { ...key, name } : key)));
   };
 
-  const getStatusText = (status: string, t?: (key: string) => string) => {
-    if (t) {
+  // Функция для создания getStatusText с привязанной функцией t
+  const createGetStatusText = (t: (key: string) => string) => {
+    return (status: string) => {
       switch (status) {
         case 'configured':
           return t('options.settings.aiKeys.status.configured');
@@ -140,21 +149,9 @@ export const useAIKeys = () => {
         case 'testing':
           return t('options.settings.aiKeys.status.testing');
         default:
-          return 'Unknown';
+          return 'Неизвестно';
       }
-    }
-
-    // Fallback to hardcoded Russian text
-    switch (status) {
-      case 'configured':
-        return 'Настроен';
-      case 'not_configured':
-        return 'Не настроен';
-      case 'testing':
-        return 'Тестирование...';
-      default:
-        return 'Неизвестно';
-    }
+    };
   };
 
   const getStatusClass = (status: string) => {
@@ -179,7 +176,7 @@ export const useAIKeys = () => {
     removeCustomKey,
     updateKey,
     updateCustomKeyName,
-    getStatusText,
+    createGetStatusText,
     getStatusClass,
   };
 };

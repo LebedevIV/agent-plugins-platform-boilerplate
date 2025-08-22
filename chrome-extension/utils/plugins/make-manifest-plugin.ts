@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 import type { ManifestType } from '@extension/shared';
 import type { PluginOption } from 'vite';
 
-const manifestFile = resolve(import.meta.dirname, '..', '..', 'manifest.js');
+const manifestFile = resolve(import.meta.dirname, '..', '..', 'manifest.cjs');
 const refreshFilePath = resolve(
   import.meta.dirname,
   '..',
@@ -76,7 +76,9 @@ export default (config: { outDir: string }): PluginOption => {
     },
     async writeBundle() {
       const outDir = config.outDir;
-      const manifest = await getManifestWithCacheBurst();
+      const manifestModule = await getManifestWithCacheBurst();
+      // Extract manifest from the nested structure
+      const manifest = manifestModule.default?.default || manifestModule.default || manifestModule;
       makeManifest(manifest, outDir);
     },
   };
