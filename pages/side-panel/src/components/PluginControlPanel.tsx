@@ -58,6 +58,8 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   onStop,
   onClose,
 }) => {
+  // Состояние для активной вкладки в панели управления
+  const [activeTab, setActiveTab] = useState<PanelView>('chat');
   // Используем хук для ленивой синхронизации
   const { message, setMessage, isDraftSaved, isDraftLoading, draftError, loadDraft, clearDraft, draftText } =
     useLazyChatSync({
@@ -376,8 +378,23 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
           <button onClick={onClose}>Закрыть</button>
         </div>
       </div>
+      <div className="panel-tabs">
+        <button
+          className={`tab-btn ${activeTab === 'chat' ? 'active' : ''}`}
+          onClick={() => setActiveTab('chat')}
+        >
+          Чат
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'details' ? 'active' : ''}`}
+          onClick={() => setActiveTab('details')}
+        >
+          Детали
+        </button>
+      </div>
       <div className="panel-content">
-        <div className="chat-view">
+        {activeTab === 'chat' && (
+          <div className="chat-view">
           <div className="chat-header">
             <h4>Чат</h4>
             <div className="chat-actions">
@@ -427,7 +444,10 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
             />
           </div>
         </div>
-        <PluginDetails plugin={plugin} />
+        )}
+        {activeTab === 'details' && (
+          <PluginDetails plugin={plugin} />
+        )}
       </div>
     </div>
   );
