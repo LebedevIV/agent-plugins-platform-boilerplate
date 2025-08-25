@@ -2,15 +2,15 @@
 import { exec } from 'child_process';
 import fs from 'fs/promises';
 import path from 'path';
-import minimatch from 'minimatch';
+import { minimatch } from 'minimatch';
 import readline from 'readline';
 
-const PROJECT_ROOT = process.cwd();
-const PROJECT_GRAPH_DIR = path.join(PROJECT_ROOT, 'ProjectGraphAgent');
+const PROJECT_ROOT = path.dirname(process.cwd()); // Родительская директория ProjectGraphAgent
+const PROJECT_GRAPH_DIR = process.cwd(); // Мы находимся в ProjectGraphAgent
 const GRAPH_SOURCE = path.join(PROJECT_GRAPH_DIR, 'project_graph.jsonnet');
 const CACHE_DIR = path.join(PROJECT_GRAPH_DIR, '.cache');
 const COMPILED_GRAPH = path.join(CACHE_DIR, 'graph.json');
-const AUDIT_DIRECTORIES = ['src', 'electron', 'test', 'public'];
+const AUDIT_DIRECTORIES = ['src', 'ui', 'docs', 'memory-bank', 'platform-core', 'types', 'test-scripts'];
 const README_PATH = path.join(PROJECT_GRAPH_DIR, 'README.md');
 const SETTINGS_PATH = path.join(PROJECT_GRAPH_DIR, 'settings.json');
 const MEMORY_BANK_DIR = path.join(PROJECT_ROOT, 'memory-bank');
@@ -77,16 +77,21 @@ async function handleMemoryBankSettings(settings) {
 }
 
 async function getAllFiles(dirPath, arrayOfFiles = []) {
-    const files = await fs.readdir(dirPath);
+    const fullDirPath = path.join(PROJECT_ROOT, dirPath);
+    try {
+        const files = await fs.readdir(fullDirPath);
 
-    for (const file of files) {
-        const fullPath = path.join(dirPath, file);
-        const stat = await fs.stat(fullPath);
-        if (stat.isDirectory()) {
-            await getAllFiles(fullPath, arrayOfFiles);
-        } else {
-            arrayOfFiles.push(path.relative(PROJECT_ROOT, fullPath));
+        for (const file of files) {
+            const fullPath = path.join(fullDirPath, file);
+            const stat = await fs.stat(fullPath);
+            if (stat.isDirectory()) {
+                await getAllFiles(path.join(dirPath, file), arrayOfFiles);
+            } else {
+                arrayOfFiles.push(path.relative(PROJECT_ROOT, fullPath));
+            }
         }
+    } catch (error) {
+        console.warn(`Directory not found: ${fullDirPath}`);
     }
     return arrayOfFiles;
 }
@@ -101,7 +106,7 @@ async function generateSettingsFile() {
         console.log('ProjectGraphAgent/settings.json not found. Generating default settings...');
         const jsonnetSnippet = "local templates = import 'graph_parts/templates.jsonnet'; templates.ProjectSettings()";
         try {
-            const compiledSettings = await run(`jsonnet -J ${PROJECT_GRAPH_DIR} -e "${jsonnetSnippet}"`);
+            const compiledSettings = await run(`jsonnet -J ${PROJECT_GRAPH_DIR} -e "${jsonnetSnippet}"`, { cwd: PROJECT_ROOT });
             const defaultSettings = JSON.parse(compiledSettings);
             await fs.writeFile(SETTINGS_PATH, JSON.stringify(defaultSettings, null, 2));
             console.log(`Generated default settings file at ${SETTINGS_PATH}`);
@@ -495,7 +500,7 @@ async function runGenerator() {
     // 3. Compile Jsonnet to JSON
     console.log(`Compiling ${GRAPH_SOURCE}...`);
     await fs.mkdir(CACHE_DIR, { recursive: true });
-    await run(`jsonnet -J ${PROJECT_GRAPH_DIR} --ext-str timestamp='${new Date().toISOString()}' -o ${COMPILED_GRAPH} ${GRAPH_SOURCE}`);
+    await run(`jsonnet -J ${PROJECT_GRAPH_DIR} --ext-str timestamp='${new Date().toISOString()}' -o ${COMPILED_GRAPH} ${GRAPH_SOURCE}`, { cwd: PROJECT_ROOT });
     const graph = JSON.parse(await fs.readFile(COMPILED_GRAPH, 'utf-8'));
 
     // 4. Generate README.md

@@ -27,19 +27,25 @@ const PLUGIN_DIRS = ['ozon-analyzer', 'google-helper', 'test-plugin', 'time-test
 
 export async function getAvailablePlugins(): Promise<Plugin[]> {
   const plugins: Plugin[] = [];
-  
+  console.log('[plugin-manager] Starting getAvailablePlugins with dirs:', PLUGIN_DIRS);
+
   for (const dirName of PLUGIN_DIRS) {
     try {
+      console.log(`[plugin-manager] Processing plugin: ${dirName}`);
       const manifestUrl = chrome.runtime.getURL(`plugins/${dirName}/manifest.json`);
+      console.log(`[plugin-manager] Manifest URL for ${dirName}:`, manifestUrl);
+
       const response = await fetch(manifestUrl);
+      console.log(`[plugin-manager] Fetch response for ${dirName}:`, response.status, response.statusText);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch manifest: ${response.statusText}`);
       }
 
       const manifest: PluginManifest = await response.json();
-      
-      plugins.push({
+      console.log(`[plugin-manager] Parsed manifest for ${dirName}:`, manifest);
+
+      const plugin = {
         id: dirName,
         name: manifest.name,
         version: manifest.version,
@@ -47,13 +53,22 @@ export async function getAvailablePlugins(): Promise<Plugin[]> {
         icon: manifest.icon,
         iconUrl: chrome.runtime.getURL(`plugins/${dirName}/${manifest.icon || 'icon.svg'}`),
         manifest
-      });
+      };
+
+      console.log(`[plugin-manager] Created plugin object for ${dirName}:`, plugin);
+      plugins.push(plugin);
 
     } catch (error) {
-      console.error(`Failed to load plugin from '${dirName}':`, error);
+      console.error(`[plugin-manager] Failed to load plugin from '${dirName}':`, error);
+      console.error(`[plugin-manager] Error details for ${dirName}:`, {
+        message: (error as Error).message,
+        stack: (error as Error).stack
+      });
     }
   }
-  
+
+  console.log('[plugin-manager] Final plugins array:', plugins);
+  console.log('[plugin-manager] Returning', plugins.length, 'plugins');
   return plugins;
 }
 

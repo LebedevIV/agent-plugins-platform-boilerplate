@@ -28,12 +28,18 @@ describe('Webextension Side Panel', () => {
     });
     await expect(browser).toHaveTitle('Side Panel');
 
-    // 2.1. Кликаем по карточке плагина Ozon analyser
-    const ozonCard = await $('[data-testid="plugin-card-ozon-analyzer"]').getElement();
-    await ozonCard.click();
+    // 2.1. Кликаем по первой доступной карточке плагина
+    const pluginCards = await $$('.plugin-card');
+    if (pluginCards.length === 0) {
+      throw new Error('Не найдено ни одного плагина');
+    }
 
-    // 3. Переключаемся на вкладку "Чат" (замените селектор на ваш)
-    const chatTab = await $('[data-testid="chat-tab"]').getElement();
+    const firstPluginCard = pluginCards[0];
+    console.log('Кликаем по первому плагину:', await firstPluginCard.getText());
+    await firstPluginCard.click();
+
+    // 3. Переключаемся на вкладку "Чат"
+    const chatTab = await $('button.tab-btn').getElement();
     await chatTab.click();
 
     // 4. Читаем логи sidepanel и background
@@ -50,9 +56,9 @@ describe('Webextension Side Panel', () => {
     });
 
     // 5. Вводим и отправляем сообщение
-    const chatInput = await $('[data-testid="chat-input"]').getElement();
+    const chatInput = await $('textarea').getElement();
     await chatInput.setValue('Тестовое сообщение из e2e');
-    const sendBtn = await $('[data-testid="chat-send"]').getElement();
+    const sendBtn = await $('button').getElement();
     await sendBtn.click();
 
     // 6. Проверяем, что сообщение появилось, иначе собираем дампы для диагностики
@@ -61,7 +67,7 @@ describe('Webextension Side Panel', () => {
     try {
       await browser.waitUntil(
         async () => {
-          const messages = await $$('[data-testid="chat-message"]');
+          const messages = await $$('div[style*="border: 1px solid #ccc"]');
           return messages.some(async m => (await m.getText()).includes('Тестовое сообщение из e2e'));
         },
         { timeout: 5000, timeoutMsg: 'Сообщение не появилось в чате' },
@@ -85,13 +91,13 @@ describe('Webextension Side Panel', () => {
       fs.writeFileSync('background_logs.txt', backgroundLogs.join('\n'));
 
       // Пробуем получить состояние чата (input, send, tab)
-      const chatInputVal = await $('[data-testid="chat-input"]')
+      const chatInputVal = await $('textarea')
         .getValue()
         .catch(() => 'input not found');
-      const chatTabExists = await $('[data-testid="chat-tab"]')
+      const chatTabExists = await $('button.tab-btn')
         .isExisting()
         .catch(() => false);
-      const chatMessagesCount = (await $$('[data-testid="chat-message"]')).length;
+      const chatMessagesCount = (await $$('div[style*="border: 1px solid #ccc"]')).length;
       fs.writeFileSync(
         'sidepanel_chat_state.txt',
         `input: ${chatInputVal}\ntab: ${chatTabExists}\nmessages: ${chatMessagesCount}`,

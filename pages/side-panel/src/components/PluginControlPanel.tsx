@@ -58,6 +58,8 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   onStop,
   onClose,
 }) => {
+  // Состояние для активной вкладки в панели управления
+  const [activeTab, setActiveTab] = useState<PanelView>('chat');
   // Используем хук для ленивой синхронизации
   const { message, setMessage, isDraftSaved, isDraftLoading, draftError, loadDraft, clearDraft, draftText } =
     useLazyChatSync({
@@ -92,104 +94,207 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   const pluginId = plugin.id;
   const pageKey = getPageKey(currentTabUrl);
 
+  // Вспомогательная функция для отправки сообщений в background без ожидания ответа
+  const sendMessageToBackground = useCallback((message: any): void => {
+    const messageId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+    const messageWithId = { ...message, messageId };
+
+    console.log('[PluginControlPanel] sendMessageToBackground:', messageWithId);
+    chrome.runtime.sendMessage(messageWithId);
+  }, []);
+
+  // Вспомогательная функция для обработки ответа чата
+  const processChatResponse = useCallback((response: any) => {
+    console.log('[PluginControlPanel] Анализ chatData:', {
+      response,
+      hasMessages: response && 'messages' in response,
+      hasChat: response && 'chat' in response,
+      messagesValue: response?.messages,
+      chatValue: response?.chat,
+      isMessagesArray: Array.isArray(response?.messages),
+      isChatArray: Array.isArray(response?.chat),
+      responseType: typeof response,
+      responseKeys: response ? Object.keys(response) : 'response is null/undefined',
+    });
+
+    // Обработка разных форматов ответа с дополнительной диагностикой
+    let messagesArray = null;
+
+    if (response && Array.isArray(response.messages)) {
+      // Формат: { messages: [...] }
+      messagesArray = response.messages;
+      console.log('[PluginControlPanel] ✅ Используем формат с messages:', {
+        length: messagesArray.length,
+        firstMessage: messagesArray[0],
+        sampleMessage: messagesArray[0] ? {
+          id: messagesArray[0].id,
+          content: messagesArray[0].content,
+          role: messagesArray[0].role,
+          timestamp: messagesArray[0].timestamp,
+        } : 'no messages'
+      });
+    } else if (response && Array.isArray(response.chat)) {
+      // Формат: { chat: [...] }
+      messagesArray = response.chat;
+      console.log('[PluginControlPanel] ✅ Используем формат с chat:', {
+        length: messagesArray.length,
+        firstMessage: messagesArray[0]
+      });
+    } else if (response && response.chat && Array.isArray(response.chat.messages)) {
+      // Формат: { chat: { messages: [...] } }
+      messagesArray = response.chat.messages;
+      console.log('[PluginControlPanel] ✅ Используем вложенный формат:', {
+        length: messagesArray.length,
+        firstMessage: messagesArray[0]
+      });
+    } else if (response && response.error) {
+      // Обработка ошибок от background
+      console.error('[PluginControlPanel] ❌ Background вернул ошибку:', response.error);
+      setError(`Ошибка от background: ${response.error}`);
+      setMessages([]);
+      return;
+    } else {
+      console.warn('[PluginControlPanel] ⚠️ Неизвестный формат ответа:', {
+        response,
+        responseType: typeof response,
+        responseKeys: response ? Object.keys(response) : 'no keys',
+        responseStringified: JSON.stringify(response)
+      });
+      messagesArray = [];
+    }
+
+    console.log('[PluginControlPanel] Финальный messagesArray:', {
+      messagesArray,
+      isArray: Array.isArray(messagesArray),
+      length: messagesArray?.length,
+      firstMessage: messagesArray?.[0],
+      firstMessageType: messagesArray?.[0] ? typeof messagesArray[0] : 'none',
+    });
+
+    // Конвертация сообщений из формата background в формат компонента
+    if (Array.isArray(messagesArray) && messagesArray.length > 0) {
+      // Конвертируем сообщения из формата background в формат компонента
+      const convertedMessages: ChatMessage[] = messagesArray
+        .filter((msg: any) => msg && typeof msg === 'object') // Фильтруем null и не-объекты
+        .map((msg: any, index: number) => ({
+          id: msg.id || String(msg.timestamp || Date.now() + index),
+          text: msg.content || msg.text || '',
+          isUser: msg.role ? msg.role === 'user' : !!msg.isUser,
+          timestamp: msg.timestamp || Date.now(),
+        }));
+
+      console.log('[PluginControlPanel] ✅ Успешная конвертация сообщений:', {
+        originalCount: messagesArray.length,
+        convertedCount: convertedMessages.length,
+        firstConverted: convertedMessages[0],
+        allConverted: convertedMessages.map(m => ({ id: m.id, text: m.text.substring(0, 50), isUser: m.isUser }))
+      });
+
+      setMessages(convertedMessages);
+    } else {
+      console.log('[PluginControlPanel] ⚠️ messagesArray пустой или не массив, устанавливаем пустой массив');
+      setMessages([]);
+    }
+  }, []);
+
   // Загрузка истории чата при монтировании или смене плагина/страницы
-  const loadChat = useCallback(async () => {
+  const loadChat = useCallback(() => {
     setLoading(true);
     setError(null);
-    try {
-      console.log('[PluginControlPanel] loadChat запрос:', { pluginId, pageKey });
-      const chat = await chrome.runtime.sendMessage({
-        type: 'GET_PLUGIN_CHAT',
-        pluginId,
-        pageKey,
-      });
-      console.log('[PluginControlPanel] chat из background:', {
-        pluginId,
-        pageKey,
-        chat,
-        typeofChat: typeof chat,
-        chatKeys: chat ? Object.keys(chat) : undefined,
-        messages: chat?.messages,
-        isArray: Array.isArray(chat?.messages),
-        messagesLength: chat?.messages?.length,
-      });
-      console.log(
-        '[PluginControlPanel] loadChat RAW:',
-        chat,
-        typeof chat,
-        chat && chat.messages,
-        Array.isArray(chat?.messages),
-        Object.keys(chat || {}),
-        chat?.messages && chat?.messages.length,
-        chat?.messages && chat?.messages[0],
-      );
-      const messages = chat?.messages || chat?.chat?.messages;
-      if (Array.isArray(messages)) {
-        console.log('[PluginControlPanel] messages для setMessages:', messages);
-        setMessages(messages);
-      } else if (chat && chat.error) {
-        console.error('[PluginControlPanel] Ошибка получения чата:', chat.error, chat.details);
-        alert('Ошибка получения чата: ' + chat.error + (chat.details ? '\n' + chat.details : ''));
-        setMessages([]);
-        return;
-      } else {
-        setMessages([]);
-        console.log('[PluginControlPanel] setMessages: []');
-      }
-    } catch (e) {
-      setError('Ошибка загрузки истории чата');
-      console.error('[PluginControlPanel] loadChat error:', e);
-    } finally {
-      setLoading(false);
-    }
-  }, [pluginId, pageKey]);
+
+    console.log('[PluginControlPanel] loadChat запрос:', { pluginId, pageKey });
+
+    sendMessageToBackground({
+      type: 'GET_PLUGIN_CHAT',
+      pluginId,
+      pageKey,
+    });
+  }, [pluginId, pageKey, sendMessageToBackground]);
 
   // Добавить useEffect для вызова loadChat при монтировании и смене pluginId/pageKey
   useEffect(() => {
     loadChat();
   }, [loadChat]);
 
-  // Событийная синхронизация чата между вкладками
+  // Событийная синхронизация чата между вкладками и обработка результатов сохранения сообщений
   useEffect(() => {
-    const handleChatUpdate = (event: { type: string; pluginId: string; pageKey: string; messages?: ChatMessage[] }) => {
+    const handleChatUpdate = (event: { type: string; pluginId: string; pageKey: string; messages?: ChatMessage[]; messageId?: string; response?: any }) => {
       if (event?.type === 'PLUGIN_CHAT_UPDATED' && event.pluginId === pluginId && event.pageKey === pageKey) {
-        // Перезагружаем историю чата
-        chrome.runtime
-          .sendMessage({
-            type: 'GET_PLUGIN_CHAT',
-            pluginId,
-            pageKey,
-          })
-          .then(chat => {
-            if (chat && Array.isArray(chat.messages)) {
-              setMessages(
-                chat.messages.map(
-                  (msg: {
-                    id?: string;
-                    content?: string;
-                    text?: string;
-                    role?: string;
-                    isUser?: boolean;
-                    timestamp?: number;
-                  }) => ({
-                    id: msg.id || String(msg.timestamp || Date.now()),
-                    text: msg.content || msg.text,
-                    isUser: msg.role ? msg.role === 'user' : !!msg.isUser,
-                    timestamp: msg.timestamp || Date.now(),
-                  }),
-                ),
-              );
-            } else {
-              setMessages([]);
-            }
-          });
+        console.log('[PluginControlPanel] handleChatUpdate - обновление чата получено');
+        // Запрашиваем актуальные данные чата
+        sendMessageToBackground({
+          type: 'GET_PLUGIN_CHAT',
+          pluginId,
+          pageKey,
+        });
+      }
+
+      // Обработка ответов на GET_PLUGIN_CHAT с messageId
+      if (event?.type === 'GET_PLUGIN_CHAT_RESPONSE' && event.messageId && event.response) {
+        console.log('[PluginControlPanel] handleChatUpdate - получен ответ на GET_PLUGIN_CHAT:', event.response);
+
+        setLoading(false); // Останавливаем загрузку при получении ответа
+
+        if (event.response.error) {
+          console.error('[PluginControlPanel] handleChatUpdate error:', event.response.error);
+          setError(`Ошибка загрузки чата: ${event.response.error}`);
+          setMessages([]);
+        } else {
+          processChatResponse(event.response);
+          console.log('[PluginControlPanel] handleChatUpdate: чат успешно обновлен');
+        }
+      }
+
+      // Обработка результатов сохранения сообщений
+      if (event?.type === 'SAVE_PLUGIN_CHAT_MESSAGE_RESPONSE') {
+        console.log('[PluginControlPanel] handleChatUpdate - результат сохранения сообщения:', event);
+
+        if (event.success) {
+          console.log('[PluginControlPanel] handleChatUpdate: сообщение успешно сохранено');
+        } else {
+          console.error('[PluginControlPanel] handleChatUpdate: ошибка сохранения сообщения', event.error);
+          setError(`Ошибка сохранения сообщения: ${event.error}`);
+        }
+      }
+
+      // Обработка результатов удаления чата
+      if (event?.type === 'DELETE_PLUGIN_CHAT_RESPONSE') {
+        console.log('[PluginControlPanel] handleChatUpdate - результат удаления чата:', event);
+
+        setLoading(false); // Останавливаем загрузку
+
+        if (event.success) {
+          console.log('[PluginControlPanel] handleChatUpdate: чат успешно удален');
+        } else {
+          console.error('[PluginControlPanel] handleChatUpdate: ошибка удаления чата', event.error);
+          setError(`Ошибка удаления чата: ${event.error}`);
+        }
       }
     };
+
+    // Слушатель для обработки результатов операций с чатом
+    const handleChatOperationResult = (message: any) => {
+      if (message.type === 'SAVE_PLUGIN_CHAT_MESSAGE_RESPONSE') {
+        console.log('[PluginControlPanel] handleChatOperationResult: получен результат сохранения сообщения', message);
+
+        if (message.success) {
+          console.log('[PluginControlPanel] handleChatOperationResult: сообщение успешно сохранено');
+          // Не нужно ничего делать дополнительно - обновление придет через PLUGIN_CHAT_UPDATED
+        } else {
+          console.error('[PluginControlPanel] handleChatOperationResult: ошибка сохранения сообщения', message.error);
+          setError(`Ошибка сохранения сообщения: ${message.error}`);
+        }
+      }
+    };
+
     chrome.runtime.onMessage.addListener(handleChatUpdate);
+    chrome.runtime.onMessage.addListener(handleChatOperationResult);
+
     return () => {
       chrome.runtime.onMessage.removeListener(handleChatUpdate);
+      chrome.runtime.onMessage.removeListener(handleChatOperationResult);
     };
-  }, [pluginId, pageKey]);
+  }, [pluginId, pageKey, processChatResponse, sendMessageToBackground]);
 
   // Восстановление черновика при возврате на вкладку 'Чат'
   useEffect(() => {
@@ -223,34 +328,36 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     }
   }, [draftText, setMessage]);
 
-  const handleSendMessage = async (): Promise<void> => {
+  const handleSendMessage = (): void => {
     console.log('[PluginControlPanel] handleSendMessage: попытка отправки', { message });
     if (!message.trim()) return;
+
     const newMessage: ChatMessage = {
       id: Date.now().toString(),
       text: message.trim(),
       isUser: true,
       timestamp: Date.now(),
     };
-    setMessage(''); // Очищаем сообщение через хук
-    try {
-      await chrome.runtime.sendMessage({
-        type: 'SAVE_PLUGIN_CHAT_MESSAGE',
-        pluginId,
-        pageKey,
-        message: {
-          role: 'user',
-          content: newMessage.text,
-          timestamp: newMessage.timestamp,
-        },
-      });
-      console.log('[PluginControlPanel] handleSendMessage: сообщение отправлено', newMessage);
-      await loadChat(); // Перезагружаем историю чата после отправки
-      await clearDraft(); // Сбрасываем черновик после отправки
-    } catch (e) {
-      setError('Ошибка сохранения сообщения');
-      console.error('[PluginControlPanel] handleSendMessage: ошибка отправки', e);
-    }
+
+    // Очищаем сообщение через хук
+    setMessage('');
+    setError(null); // Сбрасываем предыдущие ошибки
+
+    console.log('[PluginControlPanel] handleSendMessage: отправка сообщения в background');
+
+    sendMessageToBackground({
+      type: 'SAVE_PLUGIN_CHAT_MESSAGE',
+      pluginId,
+      pageKey,
+      message: {
+        role: 'user',
+        content: newMessage.text,
+        timestamp: newMessage.timestamp,
+      },
+    });
+
+    // Очищаем черновик сразу после отправки
+    clearDraft();
   };
 
   // Обработка изменения размера разделителя
@@ -323,21 +430,20 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   };
 
   // Очистка чата (удаление всей истории)
-  const handleClearChat = async (): Promise<void> => {
-    // Удалить все вызовы setSyncStatus(...)
-    try {
-      await chrome.runtime.sendMessage({
-        type: 'DELETE_PLUGIN_CHAT',
-        pluginId,
-        pageKey,
-      });
-      setMessages([]);
-      await clearDraft(); // Очищаем черновик
-      // Удалить все вызовы setSyncStatus(...)
-    } catch {
-      // Удалить все вызовы setSyncStatus(...)
-      setError('Ошибка очистки чата');
-    }
+  const handleClearChat = (): void => {
+    setLoading(true);
+    setError(null);
+
+    sendMessageToBackground({
+      type: 'DELETE_PLUGIN_CHAT',
+      pluginId,
+      pageKey,
+    });
+
+    // Очищаем локальное состояние сразу
+    setMessages([]);
+    clearDraft(); // Очищаем черновик
+    console.log('[PluginControlPanel] handleClearChat: запрос на очистку чата отправлен');
   };
 
   // Экспорт чата в JSON
@@ -376,8 +482,23 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
           <button onClick={onClose}>Закрыть</button>
         </div>
       </div>
+      <div className="panel-tabs">
+        <button
+          className={`tab-btn ${activeTab === 'chat' ? 'active' : ''}`}
+          onClick={() => setActiveTab('chat')}
+        >
+          Чат
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'details' ? 'active' : ''}`}
+          onClick={() => setActiveTab('details')}
+        >
+          Детали
+        </button>
+      </div>
       <div className="panel-content">
-        <div className="chat-view">
+        {activeTab === 'chat' && (
+          <div className="chat-view">
           <div className="chat-header">
             <h4>Чат</h4>
             <div className="chat-actions">
@@ -390,32 +511,51 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
             </div>
           </div>
           <div className="chat-messages">
-            {loading && <p>Загрузка сообщений...</p>}
-            {error && <p style={{ color: 'red' }}>{error}</p>}
-            {/* Диагностический вывод сообщений */}
-            {messages.map((msg, idx) => {
-              console.log('[PluginControlPanel] render message:', idx, msg);
-              return (
-                <div
-                  key={msg.id || idx}
-                  style={{ border: '1px solid #ccc', margin: 4, padding: 4, background: '#f9f9f9' }}>
-                  {JSON.stringify(msg)}
-                </div>
-              );
-            })}
-            {messagesEndRef.current && <div ref={messagesEndRef} />}
+            {loading && <div className="chat-loader">Загрузка сообщений...</div>}
+            {error && <div className="chat-error">{error}</div>}
+            {!loading && !error && messages.length === 0 && (
+              <div className="chat-placeholder">
+                <p>Нет сообщений</p>
+                <p className="chat-hint">Напишите первое сообщение!</p>
+              </div>
+            )}
+            {/* Отображение сообщений чата */}
+            <div className="messages-container">
+              {messages.map((msg, idx) => {
+                console.log('[PluginControlPanel] render message:', idx, msg);
+                return (
+                  <div
+                    key={msg.id || idx}
+                    className={`chat-message ${msg.isUser ? 'user' : 'bot'}`}
+                  >
+                    <div className="message-content">
+                      <span className="message-text">{msg.text}</span>
+                      <span className="message-time">
+                        {new Date(msg.timestamp).toLocaleTimeString()}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div ref={messagesEndRef} />
           </div>
-          <div className="chat-input-container">
+          <div className="chat-input">
             <textarea
               ref={textareaRef}
+              className="message-textarea"
               value={message}
               onChange={handleTextareaChange}
               onKeyPress={handleKeyPress}
               placeholder="Напишите сообщение..."
               style={{ height: `${inputHeight}px` }}
             />
-            <button onClick={handleSendMessage} disabled={!message.trim()} style={{ marginLeft: 8 }}>
-              Отправить
+            <button
+              className="send-btn"
+              onClick={handleSendMessage}
+              disabled={!message.trim()}
+            >
+              📤
             </button>
             <DraftStatus
               isDraftSaved={isDraftSaved}
@@ -427,7 +567,10 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
             />
           </div>
         </div>
-        <PluginDetails plugin={plugin} />
+        )}
+        {activeTab === 'details' && (
+          <PluginDetails plugin={plugin} />
+        )}
       </div>
     </div>
   );

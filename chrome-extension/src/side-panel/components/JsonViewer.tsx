@@ -29,10 +29,10 @@ export const JsonViewer: React.FC<JsonViewerProps> = ({ data, initialExpanded = 
         </button>
       </div>
       <div className="json-viewer-content">
-        <JsonNode 
-          data={data} 
-          key={null} 
-          level={0} 
+        <JsonNode
+          data={data}
+          nodeKey={null}
+          level={0}
           searchTerm={searchTerm}
           isCollapsed={isCollapsed}
         />
@@ -43,19 +43,19 @@ export const JsonViewer: React.FC<JsonViewerProps> = ({ data, initialExpanded = 
 
 interface JsonNodeProps {
   data: any;
-  key: string | null;
+  nodeKey: string | null;
   level: number;
   searchTerm: string;
   isCollapsed: boolean;
 }
 
-const JsonNode: React.FC<JsonNodeProps> = ({ data, key, level, searchTerm, isCollapsed }) => {
+const JsonNode: React.FC<JsonNodeProps> = ({ data, nodeKey, level, searchTerm, isCollapsed }) => {
   const [isExpanded, setIsExpanded] = useState(!isCollapsed);
   const isObject = typeof data === 'object' && data !== null;
   const isArray = Array.isArray(data);
 
   const isHighlighted = searchTerm && (
-    (key && key.toLowerCase().includes(searchTerm)) ||
+    (nodeKey && nodeKey.toLowerCase().includes(searchTerm)) ||
     (typeof data === 'string' && data.toLowerCase().includes(searchTerm))
   );
 
@@ -93,7 +93,7 @@ const JsonNode: React.FC<JsonNodeProps> = ({ data, key, level, searchTerm, isCol
           {isExpanded ? '▼' : '▶'}
         </span>
         <span className="json-viewer-key">
-          {key ? `"${key}": ` : ''}
+          {nodeKey ? `"${nodeKey}": ` : ''}
         </span>
         <span>{isArray ? '[' : '{'}</span>
         
@@ -103,7 +103,7 @@ const JsonNode: React.FC<JsonNodeProps> = ({ data, key, level, searchTerm, isCol
               <JsonNode
                 key={childKey}
                 data={data[childKey]}
-                key={childKey}
+                nodeKey={childKey}
                 level={level + 1}
                 searchTerm={searchTerm}
                 isCollapsed={isCollapsed}
@@ -121,7 +121,7 @@ const JsonNode: React.FC<JsonNodeProps> = ({ data, key, level, searchTerm, isCol
     return (
       <div className="json-viewer-node" style={nodeStyle}>
         <span className="json-viewer-key">
-          {key ? `"${key}": ` : ''}
+          {nodeKey ? `"${nodeKey}": ` : ''}
         </span>
         <span className={`json-viewer-value ${data === null ? 'null' : typeof data}`}>
           {JSON.stringify(data)}

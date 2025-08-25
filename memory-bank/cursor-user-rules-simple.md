@@ -1,4 +1,4 @@
-# Agent-Plugins-Platform Development Rules
+# Cursor User Rules для Agent-Plugins-Platform
 
 ## Core Principles
 - Always apply 10 development principles from memory-bank/development-principles.md
@@ -65,4 +65,4 @@
 - Use chrome.runtime.sendMessage for all communication
 - IndexedDB for chat persistence, LRU cache for performance
 - TypeScript for new files, ESLint compliance
-- React components with proper accessibility 
+- React components with proper accessibility

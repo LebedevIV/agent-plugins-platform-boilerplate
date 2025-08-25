@@ -47,50 +47,50 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       <h2>{t('options_settings_title')}</h2>
       <div className="settings-sections">
         <div className="settings-section">
-          <h3>Общие настройки</h3>
+          <h3>{t('options_settings_general_title')}</h3>
           <div className="setting-item">
             {/* AI-First: Переключатель автообновления плагинов */}
-            <ToggleButton checked={true} onChange={() => {}} label="Автоматическое обновление плагинов" />
+            <ToggleButton checked={true} onChange={() => {}} label={t('options_settings_general_autoUpdate')} />
           </div>
           <div className="setting-item">
             {/* AI-First: Переключатель уведомлений */}
-            <ToggleButton checked={false} onChange={() => {}} label="Показывать уведомления" />
+            <ToggleButton checked={false} onChange={() => {}} label={t('options_settings_general_showNotifications')} />
           </div>
           <div className="setting-item">
             <label>
-              Тема интерфейса:
+              {t('options_settings_general_theme')}
               <select value={theme} onChange={e => setTheme(e.target.value as 'light' | 'dark' | 'system')}>
-                <option value="light">Светлая</option>
-                <option value="dark">Тёмная</option>
-                <option value="system">Системная</option>
+                <option value="light">{t('options_settings_general_theme_light')}</option>
+                <option value="dark">{t('options_settings_general_theme_dark')}</option>
+                <option value="system">{t('options_settings_general_theme_system')}</option>
               </select>
             </label>
           </div>
         </div>
 
         <div className="settings-section">
-          <h3>Безопасность</h3>
+          <h3>{t('options_settings_security_title')}</h3>
           <div className="setting-item">
             {/* AI-First: Переключатель проверки подписи плагинов */}
-            <ToggleButton checked={true} onChange={() => {}} label="Проверять подписи плагинов" />
+            <ToggleButton checked={true} onChange={() => {}} label={t('options_settings_security_checkSignatures')} />
           </div>
           <div className="setting-item">
             {/* AI-First: Переключатель изолированного режима */}
-            <ToggleButton checked={false} onChange={() => {}} label="Изолированный режим выполнения" />
+            <ToggleButton checked={false} onChange={() => {}} label={t('options_settings_security_isolatedMode')} />
           </div>
         </div>
 
         <div className="settings-section">
-          <h3>Производительность</h3>
+          <h3>{t('options_settings_performance_title')}</h3>
           <div className="setting-item">
             <label>
-              Максимальное количество активных плагинов:
+              {t('options_settings_performance_maxPlugins')}
               <input type="number" defaultValue="10" min="1" max="50" />
             </label>
           </div>
           <div className="setting-item">
             {/* AI-First: Переключатель кэширования данных плагинов */}
-            <ToggleButton checked={false} onChange={() => {}} label="Кэширование данных плагинов" />
+            <ToggleButton checked={false} onChange={() => {}} label={t('options_settings_performance_cacheData')} />
           </div>
         </div>
       </div>

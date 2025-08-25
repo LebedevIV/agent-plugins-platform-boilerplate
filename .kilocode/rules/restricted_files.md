@@ -6,4 +6,4 @@ Files and directories that cannot be worked with (read, studied, modified)
 
 Files and directories that cannot be worked with (read, studied, modified):
 - directories: node_modules, dist, dist-zip, .cursor, .roocode, .gemini, external, backup
-- filed: .env
+- files: .env

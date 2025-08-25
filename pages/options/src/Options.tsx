@@ -6,6 +6,7 @@ import { PluginsTab } from './components/PluginsTab';
 import LocalErrorBoundary from './components/LocalErrorBoundary';
 import { usePlugins } from './hooks/usePlugins';
 import { useTranslations } from './hooks/useTranslations';
+import { useAIKeys } from './hooks/useAIKeys';
 import PluginDetails from './components/PluginDetails';
 import ThemeSwitcher from './components/ThemeSwitcher';
 import { useStorage } from '@extension/shared';
@@ -19,11 +20,33 @@ type ThemeStorageState = {
 type Theme = 'light' | 'dark' | 'system';
 
 const Options = function () {
-  const [activeTab, setActiveTab] = useState('plugins');
+  const [activeTab, setActiveTab] = useState('settings');
   const { plugins, selectedPlugin, selectPlugin, loading, error } = usePlugins();
-  const { t } = useTranslations();
-  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
-  const [isLight, setIsLight] = useState(true);
+  const { t } = useTranslations('ru');
+   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
+   const [isLight, setIsLight] = useState(true);
+
+   // AI Keys management
+   const {
+     aiKeys,
+     customKeys,
+     saveAIKeys,
+     testAIKeys,
+     addCustomKey,
+     removeCustomKey,
+     updateKey,
+     updateCustomKeyName,
+     getStatusText,
+     getStatusClass,
+   } = useAIKeys();
+
+   console.log('[Options] AI Keys initialized:', { aiKeys, customKeys });
+   console.log('[Options] Functions available:', {
+     saveAIKeys: typeof saveAIKeys,
+     testAIKeys: typeof testAIKeys,
+     addCustomKey: typeof addCustomKey,
+     updateKey: typeof updateKey
+   });
 
   useEffect(() => {
     const loadTheme = async () => {
@@ -89,18 +112,18 @@ const Options = function () {
               <div className="tab-content active" id="settings-tab-content">
                 <div id="settings-tab">
                   <SettingsTab
-                    aiKeys={[]}
-                    customKeys={[]}
-                    onSave={() => {}}
-                    onTest={() => {}}
-                    onAddCustomKey={() => {}}
-                    onRemoveCustomKey={() => {}}
-                    onUpdateKey={() => {}}
-                    onUpdateCustomKeyName={() => {}}
-                    getStatusText={() => ''}
-                    getStatusClass={() => ''}
+                    aiKeys={aiKeys}
+                    customKeys={customKeys}
+                    onSave={saveAIKeys}
+                    onTest={testAIKeys}
+                    onAddCustomKey={addCustomKey}
+                    onRemoveCustomKey={removeCustomKey}
+                    onUpdateKey={updateKey}
+                    onUpdateCustomKeyName={updateCustomKeyName}
+                    getStatusText={getStatusText}
+                    getStatusClass={getStatusClass}
                     theme={theme === 'system' ? (isLight ? 'light' : 'dark') : theme}
-                    setTheme={() => {}}
+                    setTheme={(newTheme) => setTheme(newTheme)}
                   />
                 </div>
               </div>

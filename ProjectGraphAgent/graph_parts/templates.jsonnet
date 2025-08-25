@@ -91,4 +91,62 @@
             },
         },
     },
+
+    // Path Search Functions - Вспомогательные функции для поиска по файловым путям
+    PathSearch: {
+        local pathIndex = import 'path_index.jsonnet',
+
+        // Найти entity по точному пути файла
+        findByPath(path):: pathIndex.pathIndex[path],
+
+        // Найти все entities в указанной директории
+        findByDirectory(dir):: pathIndex.directoryIndex[dir],
+
+        // Найти все файлы определенного типа (расширения)
+        findByFileType(fileType):: pathIndex.fileTypeIndex[fileType],
+
+        // Найти файлы по базовому имени (без пути)
+        findByFileName(fileName):: pathIndex.fileNameIndex[fileName],
+
+        // Проверить существование файла в индексе
+        pathExists(path):: pathIndex.utils.pathExists(path),
+
+        // Получить статистику индексов
+        getIndexStats():: pathIndex.utils.getStats(),
+
+        // Получить все доступные директории
+        getAllDirectories():: pathIndex.utils.getAllDirectories(),
+
+        // Получить все доступные типы файлов
+        getAllFileTypes():: pathIndex.utils.getAllFileTypes(),
+
+        // Поиск с использованием паттернов (простая реализация)
+        findByPattern(pattern):: [
+            entity
+            for entity in std.objectValues(pathIndex.pathIndex)
+            if std.length(std.findSubstr(pattern, entity.path)) > 0
+        ],
+
+        // Найти файлы в директории и поддиректориях
+        findInDirectoryRecursive(dir):: [
+            entity
+            for entity in std.objectValues(pathIndex.pathIndex)
+            if std.startsWith(entity.path, dir)
+        ],
+
+        // Получить родительскую директорию для пути
+        getParentDirectory(path):: std.join('/', std.slice(std.split(path, '/'), 0, std.length(std.split(path, '/')) - 1)),
+
+        // Получить расширение файла
+        getFileExtension(path):: (
+            local parts = std.split(path, '.');
+            if std.length(parts) > 1 then parts[std.length(parts) - 1] else ''
+        ),
+
+        // Получить базовое имя файла (без директорий)
+        getFileName(path):: (
+            local parts = std.split(path, '/');
+            if std.length(parts) > 0 then parts[std.length(parts) - 1] else path
+        ),
+    },
 }

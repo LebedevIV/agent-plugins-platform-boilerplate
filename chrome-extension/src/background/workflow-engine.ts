@@ -3,7 +3,7 @@
  * Executes declarative workflows
  */
 
-import { runPythonTool } from '@platform-core/bridge/mcp-bridge.js';
+import { runPythonTool } from '../../../bridge/mcp-bridge.js';
 import { hostApi } from './host-api';
 
 export interface WorkflowStep {
@@ -20,6 +20,7 @@ export interface WorkflowContext {
   steps: Record<string, any>;
   logger: any;
   page_html?: string;
+  [key: string]: any; // Allow string indexing
 }
 
 export async function runWorkflow(pluginId: string) {
@@ -39,7 +40,8 @@ export async function runWorkflow(pluginId: string) {
   logger.addMessage('ENGINE', `▶️ Запуск воркфлоу...`);
   
   // Switch to logs tab if available
-  document.querySelector('.tab-button[data-tab="logs"]')?.click();
+  const logsTab = document.querySelector('.tab-button[data-tab="logs"]') as HTMLElement;
+  logsTab?.click?.();
 
   const workflow = await loadWorkflowDefinition(pluginId, logger);
   if (!workflow) return;

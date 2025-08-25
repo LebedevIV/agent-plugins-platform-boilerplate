@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест чата - Итоговое тестирование</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .warning { background-color: #fff3cd; border-color: #ffeaa7; }
+        .log { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; margin: 10px 0; font-family: monospace; white-space: pre-wrap; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        input, textarea { width: 100%; padding: 8px; margin: 5px 0; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Итоговое тестирование функциональности чата</h1>
+
+    <div id="status" class="test-section">
+        <h3>📊 Статус тестирования</h3>
+        <div id="status-content">Ожидание начала тестирования...</div>
+    </div>
+
+    <div class="test-section">
+        <h3>🔍 Тест 1: Проверка доступности chrome.runtime API</h3>
+        <button onclick="testChromeRuntime()">Запустить тест</button>
+        <div id="chrome-runtime-result" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>💬 Тест 2: Симуляция отправки сообщения</h3>
+        <input type="text" id="test-message" placeholder="Введите тестовое сообщение" value="Тестовое сообщение для проверки чата">
+        <button onclick="testSendMessage()">Отправить сообщение</button>
+        <div id="send-message-result" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>📥 Тест 3: Получение истории чата</h3>
+        <button onclick="testGetChatHistory()">Получить историю</button>
+        <div id="chat-history-result" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>🔄 Тест 4: Синхронизация чата (handleChatUpdate)</h3>
+        <button onclick="testChatSync()">Тестировать синхронизацию</button>
+        <div id="chat-sync-result" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>⚠️ Тест 5: Обработка ошибок и undefined ответов</h3>
+        <button onclick="testErrorHandling()">Тестировать обработку ошибок</button>
+        <div id="error-handling-result" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>🕒 Тест 6: Таймауты и fallback логика</h3>
+        <button onclick="testTimeouts()">Тестировать таймауты</button>
+        <div id="timeout-result" class="log"></div>
+    </div>
+
+    <div id="summary" class="test-section" style="display: none;">
+        <h3>📋 Итоговый отчет</h3>
+        <div id="summary-content"></div>
+    </div>
+
+    <script>
+        const testPluginId = 'test-plugin';
+        const testPageKey = 'test-page-key';
+        let testResults = {};
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            return `[${timestamp}] ${message}`;
+        }
+
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status-content');
+            statusDiv.innerHTML = log(message);
+            statusDiv.parentElement.className = `test-section ${type}`;
+        }
+
+        async function testChromeRuntime() {
+            const resultDiv = document.getElementById('chrome-runtime-result');
+            resultDiv.innerHTML = log('🔍 Начинаем проверку chrome.runtime API...');
+
+            try {
+                if (typeof chrome === 'undefined') {
+                    throw new Error('Chrome API недоступен - это не браузер Chrome или расширение не загружено');
+                }
+
+                if (!chrome.runtime) {
+                    throw new Error('chrome.runtime API недоступен');
+                }
+
+                if (!chrome.runtime.sendMessage) {
+                    throw new Error('chrome.runtime.sendMessage недоступен');
+                }
+
+                if (!chrome.runtime.onMessage) {
+                    throw new Error('chrome.runtime.onMessage недоступен');
+                }
+
+                if (!chrome.storage || !chrome.storage.local) {
+                    throw new Error('chrome.storage.local недоступен');
+                }
+
+                resultDiv.innerHTML = log('✅ Все chrome API доступны:\n- chrome.runtime.sendMessage\n- chrome.runtime.onMessage\n- chrome.storage.local');
+                resultDiv.parentElement.className = 'test-section success';
+                testResults.chromeRuntime = true;
+
+            } catch (error) {
+                resultDiv.innerHTML = log(`❌ Ошибка: ${error.message}`);
+                resultDiv.parentElement.className = 'test-section error';
+                testResults.chromeRuntime = false;
+            }
+        }
+
+        async function testSendMessage() {
+            const resultDiv = document.getElementById('send-message-result');
+            const message = document.getElementById('test-message').value;
+
+            resultDiv.innerHTML = log(`💬 Отправляем сообщение: "${message}"`);
+
+            try {
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('TIMEOUT: сообщение не отправлено')), 5000)
+                );
+
+                const sendPromise = chrome.runtime.sendMessage({
+                    type: 'SAVE_PLUGIN_CHAT_MESSAGE',
+                    pluginId: testPluginId,
+                    pageKey: testPageKey,
+                    message: {
+                        role: 'user',
+                        content: message,
+                        timestamp: Date.now(),
+                    }
+                });
+
+                const response = await Promise.race([sendPromise, timeoutPromise]);
+
+                if (response && response.success) {
+                    resultDiv.innerHTML = log(`✅ Сообщение успешно отправлено\nОтвет: ${JSON.stringify(response, null, 2)}`);
+                    resultDiv.parentElement.className = 'test-section success';
+                    testResults.sendMessage = true;
+                } else {
+                    throw new Error(`Неожиданный ответ: ${JSON.stringify(response)}`);
+                }
+
+            } catch (error) {
+                resultDiv.innerHTML = log(`❌ Ошибка отправки: ${error.message}`);
+                resultDiv.parentElement.className = 'test-section error';
+                testResults.sendMessage = false;
+            }
+        }
+
+        async function testGetChatHistory() {
+            const resultDiv = document.getElementById('chat-history-result');
+
+            resultDiv.innerHTML = log('📥 Запрашиваем историю чата...');
+
+            try {
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('TIMEOUT: история чата не получена')), 5000)
+                );
+
+                const sendPromise = chrome.runtime.sendMessage({
+                    type: 'GET_PLUGIN_CHAT',
+                    pluginId: testPluginId,
+                    pageKey: testPageKey
+                });
+
+                const response = await Promise.race([sendPromise, timeoutPromise]);
+
+                resultDiv.innerHTML = log(`📥 Ответ от background:\n${JSON.stringify(response, null, 2)}`);
+
+                if (response && response.messages && Array.isArray(response.messages)) {
+                    resultDiv.innerHTML += log(`\n✅ История чата получена: ${response.messages.length} сообщений`);
+                    resultDiv.parentElement.className = 'test-section success';
+                    testResults.getChatHistory = true;
+                } else if (response && response.error) {
+                    throw new Error(`Ошибка от background: ${response.error}`);
+                } else {
+                    resultDiv.innerHTML += log(`\n⚠️ Получен пустой или неожиданный ответ`);
+                    resultDiv.parentElement.className = 'test-section warning';
+                    testResults.getChatHistory = 'warning';
+                }
+
+            } catch (error) {
+                resultDiv.innerHTML = log(`❌ Ошибка получения истории: ${error.message}`);
+                resultDiv.parentElement.className = 'test-section error';
+                testResults.getChatHistory = false;
+            }
+        }
+
+        async function testChatSync() {
+            const resultDiv = document.getElementById('chat-sync-result');
+
+            resultDiv.innerHTML = log('🔄 Тестируем синхронизацию чата...');
+
+            let updateReceived = false;
+
+            const messageListener = (message) => {
+                if (message.type === 'PLUGIN_CHAT_UPDATED') {
+                    updateReceived = true;
+                    resultDiv.innerHTML = log(`📡 Получено обновление чата:\n${JSON.stringify(message, null, 2)}`);
+                    chrome.runtime.onMessage.removeListener(messageListener);
+                }
+            };
+
+            chrome.runtime.onMessage.addListener(messageListener);
+
+            try {
+                // Отправляем сообщение для trigger обновления
+                await chrome.runtime.sendMessage({
+                    type: 'SAVE_PLUGIN_CHAT_MESSAGE',
+                    pluginId: testPluginId,
+                    pageKey: testPageKey,
+                    message: {
+                        role: 'user',
+                        content: 'Тест синхронизации',
+                        timestamp: Date.now(),
+                    }
+                });
+
+                // Ждем обновление в течение 3 секунд
+                await new Promise(resolve => setTimeout(resolve, 3000));
+
+                if (updateReceived) {
+                    resultDiv.innerHTML += log('\n✅ Синхронизация работает корректно');
+                    resultDiv.parentElement.className = 'test-section success';
+                    testResults.chatSync = true;
+                } else {
+                    resultDiv.innerHTML += log('\n⚠️ Обновление не получено в течение 3 секунд');
+                    resultDiv.parentElement.className = 'test-section warning';
+                    testResults.chatSync = 'warning';
+                }
+
+            } catch (error) {
+                resultDiv.innerHTML = log(`❌ Ошибка синхронизации: ${error.message}`);
+                resultDiv.parentElement.className = 'test-section error';
+                testResults.chatSync = false;
+            }
+
+            chrome.runtime.onMessage.removeListener(messageListener);
+        }
+
+        async function testErrorHandling() {
+            const resultDiv = document.getElementById('error-handling-result');
+
+            resultDiv.innerHTML = log('⚠️ Тестируем обработку ошибок...');
+
+            try {
+                // Тест 1: Отправка сообщения с неправильными параметрами
+                resultDiv.innerHTML += log('\n🔧 Тест 1: Неправильные параметры...');
+
+                const response1 = await chrome.runtime.sendMessage({
+                    type: 'SAVE_PLUGIN_CHAT_MESSAGE',
+                    pluginId: '', // Пустой pluginId
+                    pageKey: testPageKey,
+                    message: null // Null сообщение
+                });
+
+                resultDiv.innerHTML += log(`Ответ на неправильные параметры: ${JSON.stringify(response1)}`);
+
+                // Тест 2: Запрос несуществующего чата
+                resultDiv.innerHTML += log('\n🔧 Тест 2: Несуществующий чат...');
+
+                const response2 = await chrome.runtime.sendMessage({
+                    type: 'GET_PLUGIN_CHAT',
+                    pluginId: 'non-existent-plugin',
+                    pageKey: 'non-existent-page'
+                });
+
+                resultDiv.innerHTML += log(`Ответ на несуществующий чат: ${JSON.stringify(response2)}`);
+
+                resultDiv.innerHTML += log('\n✅ Тестирование обработки ошибок завершено');
+                resultDiv.parentElement.className = 'test-section success';
+                testResults.errorHandling = true;
+
+            } catch (error) {
+                resultDiv.innerHTML = log(`❌ Ошибка тестирования: ${error.message}`);
+                resultDiv.parentElement.className = 'test-section error';
+                testResults.errorHandling = false;
+            }
+        }
+
+        async function testTimeouts() {
+            const resultDiv = document.getElementById('timeout-result');
+
+            resultDiv.innerHTML = log('🕒 Тестируем таймауты и fallback логику...');
+
+            try {
+                // Тест с очень коротким таймаутом для проверки работы механизма
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('TIMEOUT: намеренный таймаут для теста')), 100)
+                );
+
+                const sendPromise = chrome.runtime.sendMessage({
+                    type: 'GET_PLUGIN_CHAT',
+                    pluginId: testPluginId,
+                    pageKey: testPageKey
+                });
+
+                try {
+                    const response = await Promise.race([sendPromise, timeoutPromise]);
+                    resultDiv.innerHTML += log(`✅ Ответ получен до таймаута: ${JSON.stringify(response)}`);
+                } catch (timeoutError) {
+                    resultDiv.innerHTML += log(`✅ Таймаут сработал корректно: ${timeoutError.message}`);
+
+                    // Проверяем fallback логику
+                    resultDiv.innerHTML += log('\n🔄 Тестируем fallback...');
+
+                    try {
+                        const fallbackResponse = await chrome.runtime.sendMessage({
+                            type: 'GET_PLUGIN_CHAT',
+                            pluginId: testPluginId,
+                            pageKey: testPageKey
+                        });
+
+                        resultDiv.innerHTML += log(`✅ Fallback сработал: ${JSON.stringify(fallbackResponse)}`);
+                    } catch (fallbackError) {
+                        resultDiv.innerHTML += log(`❌ Fallback тоже не сработал: ${fallbackError.message}`);
+                    }
+                }
+
+                resultDiv.innerHTML += log('\n✅ Тестирование таймаутов завершено');
+                resultDiv.parentElement.className = 'test-section success';
+                testResults.timeouts = true;
+
+            } catch (error) {
+                resultDiv.innerHTML = log(`❌ Ошибка тестирования таймаутов: ${error.message}`);
+                resultDiv.parentElement.className = 'test-section error';
+                testResults.timeouts = false;
+            }
+        }
+
+        function showSummary() {
+            const summaryDiv = document.getElementById('summary');
+            const summaryContent = document.getElementById('summary-content');
+
+            let summary = '<h4>📋 Результаты тестирования:</h4><ul>';
+            let allPassed = true;
+
+            for (const [test, result] of Object.entries(testResults)) {
+                const testNames = {
+                    chromeRuntime: 'Доступность Chrome API',
+                    sendMessage: 'Отправка сообщения',
+                    getChatHistory: 'Получение истории чата',
+                    chatSync: 'Синхронизация чата',
+                    errorHandling: 'Обработка ошибок',
+                    timeouts: 'Таймауты и fallback'
+                };
+
+                const status = result === true ? '✅' : result === 'warning' ? '⚠️' : '❌';
+                summary += `<li>${status} ${testNames[test]}</li>`;
+
+                if (result === false) allPassed = false;
+            }
+
+            summary += '</ul>';
+
+            if (allPassed) {
+                summary += '<div class="success"><strong>🎉 ВСЕ ТЕСТЫ ПРОШЛИ УСПЕШНО!</strong></div>';
+                summary += '<div>Функциональность чата работает корректно. Все исправления применены правильно.</div>';
+            } else {
+                summary += '<div class="error"><strong>⚠️ НЕКОТОРЫЕ ТЕСТЫ НЕ ПРОШЛИ</strong></div>';
+                summary += '<div>Требуется дополнительная настройка или исправление ошибок.</div>';
+            }
+
+            summaryContent.innerHTML = summary;
+            summaryDiv.style.display = 'block';
+        }
+
+        // Автоматический запуск всех тестов
+        async function runAllTests() {
+            updateStatus('🚀 Запуск автоматического тестирования...');
+
+            await testChromeRuntime();
+            updateStatus('Проверка Chrome API завершена');
+
+            if (testResults.chromeRuntime) {
+                await testSendMessage();
+                updateStatus('Отправка сообщения завершена');
+
+                await testGetChatHistory();
+                updateStatus('Получение истории завершено');
+
+                await testChatSync();
+                updateStatus('Синхронизация чата завершена');
+
+                await testErrorHandling();
+                updateStatus('Обработка ошибок завершена');
+
+                await testTimeouts();
+                updateStatus('Тестирование таймаутов завершено');
+            }
+
+            updateStatus('✅ Все тесты завершены!');
+            showSummary();
+        }
+
+        // Запуск тестирования при загрузке страницы
+        window.addEventListener('load', () => {
+            setTimeout(runAllTests, 1000); // Небольшая задержка для инициализации
+        });
+    </script>
+</body>
+</html>

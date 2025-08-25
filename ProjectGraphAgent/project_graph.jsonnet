@@ -4,9 +4,9 @@
 
 {
     schemaVersion: '1.7',
-    projectName: 'tsx_viewer',
-    projectUrl: 'https://github.com/01esyaLebedeva/tsx_viewer',
-    description: 'TSX viewer and editor application, supporting both web and Electron environments.',
+    projectName: 'agent_plugins_platform',
+    projectUrl: 'https://github.com/01esyaLebedeva/agent_plugins_platform',
+    description: 'Платформа для разработки и управления плагинами агентов с поддержкой браузерных расширений, UI компонентов и модульной архитектуры.',
 
     meta: (import 'graph_parts/meta.jsonnet'),
 
@@ -25,6 +25,12 @@
 
     // Plans/Roadmaps
     plans: import 'graph_parts/plans.jsonnet',
+
+    // Path indexes for fast file-based lookups
+    pathIndex: import 'graph_parts/path_index.jsonnet',
+
+    // Examples of how to use the path indexing system
+    pathSearchExamples: import 'graph_parts/path_search_examples.jsonnet',
 
     // Re-export commit groups from policies for unified source of truth
     commitGroups: (import 'graph_parts/policies.jsonnet').commitGroups,

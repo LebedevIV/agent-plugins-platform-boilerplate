@@ -1,13 +1,81 @@
 {
-  "options_settings_title": "Settings",
-  "options_plugins_title": "Plugins",
-  "options_plugins_details_title": "Plugin Details",
-  "options_settings_aiKeys_title": "AI Keys",
+  "options": {
+    "title": "Agent-Plugins-Platform",
+    "subtitle": "Plugin management panel",
+    "tabs": {
+      "plugins": "Plugins",
+      "settings": "Settings"
+    },
+    "plugins": {
+      "title": "Available plugins",
+      "loading": "Loading plugins...",
+      "error": "Error loading plugins",
+      "version": "v{version}",
+      "details": {
+        "title": "Plugin Details",
+        "version": "Version",
+        "description": "Description",
+        "mainServer": "Main Server",
+        "hostPermissions": "Host Permissions",
+        "permissions": "Permissions",
+        "selectPlugin": "Select a plugin from the list on the left."
+      }
+    },
+    "settings": {
+      "title": "Platform Settings",
+      "aiKeys": {
+        "title": "AI API Keys",
+        "fixedKeys": {
+          "geminiFlash": "Google Gemini (Flash) - Basic analysis",
+          "gemini25": "Gemini 2.5 Pro - Deep analysis"
+        },
+        "customKeys": {
+          "title": "Custom API keys",
+          "addButton": "+ Add new key",
+          "namePlaceholder": "Enter key name",
+          "keyPlaceholder": "Enter API key"
+        },
+        "status": {
+          "configured": "Configured",
+          "notConfigured": "Not Configured",
+          "testing": "Testing..."
+        },
+        "badges": {
+          "free": "Free"
+        },
+        "actions": {
+          "save": "Save all keys",
+          "test": "Test connections"
+        },
+        "messages": {
+          "saved": "Settings saved!",
+          "saveError": "Error saving settings",
+          "testComplete": "Testing completed!"
+        }
+      }
+    }
+  },
+  "options_settings_title": "Platform Settings",
+  "options_plugins_title": "Available plugins",
+  "options_settings_aiKeys_title": "AI API Keys",
   "options_settings_aiKeys_badges_free": "Free",
-  "options_settings_aiKeys_customKeys_title": "Custom Keys",
+  "options_settings_aiKeys_customKeys_title": "Custom API keys",
+  "options_settings_aiKeys_customKeys_addButton": "+ Add new key",
+  "options_settings_aiKeys_customKeys_keyPlaceholder": "Enter API key",
   "options_settings_aiKeys_customKeys_namePlaceholder": "Enter key name",
-  "options_settings_aiKeys_customKeys_keyPlaceholder": "Enter your API key",
-  "options_settings_aiKeys_customKeys_addButton": "Add Key",
-  "options_settings_aiKeys_actions_save": "Save",
-  "options_settings_aiKeys_actions_test": "Test"
+  "options_settings_aiKeys_actions_save": "Save all keys",
+  "options_settings_aiKeys_actions_test": "Test connections",
+  "options_settings_general_title": "General Settings",
+  "options_settings_general_autoUpdate": "Automatic plugin updates",
+  "options_settings_general_showNotifications": "Show notifications",
+  "options_settings_general_theme": "Interface theme:",
+  "options_settings_general_theme_light": "Light",
+  "options_settings_general_theme_dark": "Dark",
+  "options_settings_general_theme_system": "System",
+  "options_settings_security_title": "Security",
+  "options_settings_security_checkSignatures": "Verify plugin signatures",
+  "options_settings_security_isolatedMode": "Isolated execution mode",
+  "options_settings_performance_title": "Performance",
+  "options_settings_performance_maxPlugins": "Maximum number of active plugins:",
+  "options_settings_performance_cacheData": "Cache plugin data"
 }

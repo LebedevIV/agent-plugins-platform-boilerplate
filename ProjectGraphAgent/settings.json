@@ -14,17 +14,27 @@
       "value": true
     },
     "audit_exclude_patterns": {
-      "description": "Glob patterns to exclude from audits (applied to POSIX-style relative paths).",
+      "description": "Glob patterns to exclude from audits (applied to POSIX-style relative paths). Каталоги-исключения: node_modules, dist, dist-zip, .kilocode, .roocode, .roo, .cursor, .gemini, external, backup",
       "value": [
         "**/*.map",
-        "**/*.log"
+        "**/*.log",
+        "**/node_modules/**",
+        "**/dist/**",
+        "**/dist-zip/**",
+        "**/.kilocode/**",
+        "**/.roocode/**",
+        "**/.roo/**",
+        "**/.cursor/**",
+        "**/.gemini/**",
+        "**/external/**",
+        "**/backup/**"
       ]
     },
     "memory_bank": {
       "description": "Configuration for the memory-bank system. `update_on_audit` logs results to audit_logs.md. `instruction_path` is the path to the instruction file.",
       "value": {
-        "enabled": false,
-        "instruction_path": null,
+        "enabled": true,
+        "instruction_path": "memory-bank/INDEX.md",
         "update_on_audit": true
       }
     }
