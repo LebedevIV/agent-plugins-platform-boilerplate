@@ -11,11 +11,22 @@ const pluginChatApi = {
   // Создание чата при начале ввода (ленивая инициализация)
   async createChatIfNotExists(pluginId: string, pageKey: string): Promise<PluginChat> {
     const chatKey = `${pluginId}::${getPageKey(pageKey)}`;
+    console.log('[pluginChatApi] createChatIfNotExists: начало', {
+      pluginId,
+      pageKey,
+      chatKey,
+      normalizedPageKey: getPageKey(pageKey)
+    });
+
     const chat = await this.getOrLoadChat(chatKey);
     if (chat) {
-      console.log('[pluginChatApi] createChatIfNotExists: чат уже существует', chat);
+      console.log('[pluginChatApi] createChatIfNotExists: чат уже существует', {
+        chat,
+        messagesLength: chat.messages?.length
+      });
       return chat;
     }
+
     const now = Date.now();
     const newChat: PluginChat = {
       chatKey,
@@ -25,10 +36,33 @@ const pluginChatApi = {
       createdAt: now,
       updatedAt: now,
     };
-    await new Promise<void>(resolve => {
+
+    console.log('[pluginChatApi] createChatIfNotExists: создаём новый чат', {
+      newChat,
+      chatKey,
+      serializedSize: JSON.stringify(newChat).length
+    });
+
+    await new Promise<void>((resolve, reject) => {
       chrome.storage.local.set({ [chatKey]: newChat }, () => {
+        if (chrome.runtime.lastError) {
+          console.error('[pluginChatApi] createChatIfNotExists: ошибка создания чата', chrome.runtime.lastError);
+          reject(chrome.runtime.lastError);
+          return;
+        }
+
         console.log('[pluginChatApi] createChatIfNotExists: создан новый чат', newChat);
-        resolve();
+
+        // Проверяем, что чат действительно сохранён
+        chrome.storage.local.get([chatKey], result => {
+          const savedChat = result[chatKey];
+          console.log('[pluginChatApi] createChatIfNotExists: проверка после создания', {
+            savedChat,
+            savedChatType: typeof savedChat,
+            savedMessagesLength: savedChat?.messages?.length
+          });
+          resolve();
+        });
       });
     });
     return newChat;
@@ -39,7 +73,25 @@ const pluginChatApi = {
     return new Promise(resolve => {
       chrome.storage.local.get([chatKey], result => {
         const chat = result[chatKey] || null;
-        console.log('[pluginChatApi] getOrLoadChat:', chatKey, chat, chat?.messages);
+        console.log('[pluginChatApi] getOrLoadChat:', {
+          chatKey,
+          chat,
+          chatType: typeof chat,
+          hasChat: !!chat,
+          messages: chat?.messages,
+          messagesType: typeof chat?.messages,
+          messagesLength: chat?.messages?.length,
+          storageKeys: Object.keys(result)
+        });
+
+        // Дополнительная диагностика: проверим все ключи в storage
+        chrome.storage.local.get(null, allData => {
+          const relatedKeys = Object.keys(allData).filter(key => key.includes(chatKey.split('::')[0]));
+          console.log('[pluginChatApi] getOrLoadChat - all storage keys:', Object.keys(allData));
+          console.log('[pluginChatApi] getOrLoadChat - related keys:', relatedKeys);
+          console.log('[pluginChatApi] getOrLoadChat - all data:', allData);
+        });
+
         resolve(chat);
       });
     });
@@ -48,7 +100,16 @@ const pluginChatApi = {
   // Сохранить сообщение в чат
   async saveMessage(pluginId: string, pageKey: string, message: ChatMessage): Promise<{ success: boolean }> {
     const chatKey = `${pluginId}::${getPageKey(pageKey)}`;
-    console.log('[pluginChatApi][saveMessage] BEFORE', { chatKey, pluginId, pageKey, message });
+    console.log('[pluginChatApi][saveMessage] BEFORE', {
+      chatKey,
+      pluginId,
+      pageKey,
+      message,
+      messageType: typeof message,
+      messageKeys: Object.keys(message),
+      pageKeyNormalized: getPageKey(pageKey)
+    });
+
     let chat = await this.getOrLoadChat(chatKey);
     if (!chat) {
       console.warn('[pluginChatApi][saveMessage] чат не найден, создаём новый');
@@ -61,15 +122,57 @@ const pluginChatApi = {
         return { success: false };
       }
     }
+
+    console.log('[pluginChatApi][saveMessage] перед push:', {
+      chatMessagesLength: chat.messages?.length,
+      messageToAdd: message
+    });
+
     chat.messages.push(message);
-    console.log('[pluginChatApi][saveMessage] chat.messages после push:', chat.messages);
+    console.log('[pluginChatApi][saveMessage] chat.messages после push:', {
+      messages: chat.messages,
+      messagesLength: chat.messages.length,
+      lastMessage: chat.messages[chat.messages.length - 1]
+    });
+
     chat.updatedAt = Date.now();
+
+    // Проверяем сериализуемость данных перед сохранением
+    try {
+      const serialized = JSON.stringify(chat);
+      console.log('[pluginChatApi][saveMessage] сериализация успешна:', {
+        originalSize: JSON.stringify(chat).length,
+        messagesCount: chat.messages.length
+      });
+    } catch (serializationError) {
+      console.error('[pluginChatApi][saveMessage] ошибка сериализации:', serializationError);
+      return { success: false };
+    }
+
     await new Promise<void>(resolve => {
       chrome.storage.local.set({ [chatKey]: chat }, () => {
-        console.log('[pluginChatApi][saveMessage] AFTER set:', { chatKey, chat });
+        if (chrome.runtime.lastError) {
+          console.error('[pluginChatApi][saveMessage] chrome.storage error:', chrome.runtime.lastError);
+          resolve();
+          return;
+        }
+
+        console.log('[pluginChatApi][saveMessage] AFTER set:', {
+          chatKey,
+          chat,
+          success: true
+        });
+
         // Проверка: что реально лежит в storage после set
         chrome.storage.local.get([chatKey], result => {
-          console.log('[pluginChatApi][saveMessage] ПРОВЕРКА storage после set:', result[chatKey]);
+          const savedChat = result[chatKey];
+          console.log('[pluginChatApi][saveMessage] ПРОВЕРКА storage после set:', {
+            savedChat,
+            savedChatType: typeof savedChat,
+            savedMessagesLength: savedChat?.messages?.length,
+            savedMessages: savedChat?.messages,
+            lastSavedMessage: savedChat?.messages?.[savedChat.messages.length - 1]
+          });
         });
         resolve();
       });

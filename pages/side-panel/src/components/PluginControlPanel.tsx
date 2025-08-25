@@ -94,57 +94,238 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   const pluginId = plugin.id;
   const pageKey = getPageKey(currentTabUrl);
 
+  // Вспомогательная функция для обработки ответа чата
+  const processChatResponse = useCallback((response: any) => {
+    console.log('[PluginControlPanel] Анализ chatData:', {
+      response,
+      hasMessages: response && 'messages' in response,
+      hasChat: response && 'chat' in response,
+      messagesValue: response?.messages,
+      chatValue: response?.chat,
+      isMessagesArray: Array.isArray(response?.messages),
+      isChatArray: Array.isArray(response?.chat),
+      responseType: typeof response,
+      responseKeys: response ? Object.keys(response) : 'response is null/undefined',
+    });
+
+    // Обработка разных форматов ответа с дополнительной диагностикой
+    let messagesArray = null;
+
+    if (response && Array.isArray(response.messages)) {
+      // Формат: { messages: [...] }
+      messagesArray = response.messages;
+      console.log('[PluginControlPanel] ✅ Используем формат с messages:', {
+        length: messagesArray.length,
+        firstMessage: messagesArray[0],
+        sampleMessage: messagesArray[0] ? {
+          id: messagesArray[0].id,
+          content: messagesArray[0].content,
+          role: messagesArray[0].role,
+          timestamp: messagesArray[0].timestamp,
+        } : 'no messages'
+      });
+    } else if (response && Array.isArray(response.chat)) {
+      // Формат: { chat: [...] }
+      messagesArray = response.chat;
+      console.log('[PluginControlPanel] ✅ Используем формат с chat:', {
+        length: messagesArray.length,
+        firstMessage: messagesArray[0]
+      });
+    } else if (response && response.chat && Array.isArray(response.chat.messages)) {
+      // Формат: { chat: { messages: [...] } }
+      messagesArray = response.chat.messages;
+      console.log('[PluginControlPanel] ✅ Используем вложенный формат:', {
+        length: messagesArray.length,
+        firstMessage: messagesArray[0]
+      });
+    } else if (response && response.error) {
+      // Обработка ошибок от background
+      console.error('[PluginControlPanel] ❌ Background вернул ошибку:', response.error);
+      setError(`Ошибка от background: ${response.error}`);
+      setMessages([]);
+      return;
+    } else {
+      console.warn('[PluginControlPanel] ⚠️ Неизвестный формат ответа:', {
+        response,
+        responseType: typeof response,
+        responseKeys: response ? Object.keys(response) : 'no keys',
+        responseStringified: JSON.stringify(response)
+      });
+      messagesArray = [];
+    }
+
+    console.log('[PluginControlPanel] Финальный messagesArray:', {
+      messagesArray,
+      isArray: Array.isArray(messagesArray),
+      length: messagesArray?.length,
+      firstMessage: messagesArray?.[0],
+      firstMessageType: messagesArray?.[0] ? typeof messagesArray[0] : 'none',
+    });
+
+    // Конвертация сообщений из формата background в формат компонента
+    if (Array.isArray(messagesArray) && messagesArray.length > 0) {
+      // Конвертируем сообщения из формата background в формат компонента
+      const convertedMessages: ChatMessage[] = messagesArray
+        .filter((msg: any) => msg && typeof msg === 'object') // Фильтруем null и не-объекты
+        .map((msg: any, index: number) => ({
+          id: msg.id || String(msg.timestamp || Date.now() + index),
+          text: msg.content || msg.text || '',
+          isUser: msg.role ? msg.role === 'user' : !!msg.isUser,
+          timestamp: msg.timestamp || Date.now(),
+        }));
+
+      console.log('[PluginControlPanel] ✅ Успешная конвертация сообщений:', {
+        originalCount: messagesArray.length,
+        convertedCount: convertedMessages.length,
+        firstConverted: convertedMessages[0],
+        allConverted: convertedMessages.map(m => ({ id: m.id, text: m.text.substring(0, 50), isUser: m.isUser }))
+      });
+
+      setMessages(convertedMessages);
+    } else {
+      console.log('[PluginControlPanel] ⚠️ messagesArray пустой или не массив, устанавливаем пустой массив');
+      setMessages([]);
+    }
+  }, []);
+
   // Загрузка истории чата при монтировании или смене плагина/страницы
   const loadChat = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       console.log('[PluginControlPanel] loadChat запрос:', { pluginId, pageKey });
-      const chat = await chrome.runtime.sendMessage({
-        type: 'GET_PLUGIN_CHAT',
-        pluginId,
-        pageKey,
+
+      // ИСПРАВЛЕНИЕ: Простой и надежный подход без Promise.race
+      const response = await new Promise<any>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('TIMEOUT'));
+        }, 5000);
+
+        chrome.runtime.sendMessage({
+          type: 'GET_PLUGIN_CHAT',
+          pluginId,
+          pageKey,
+        }).then((result) => {
+          clearTimeout(timeout);
+          console.log('[PluginControlPanel] Response received:', result);
+          resolve(result);
+        }).catch((error) => {
+          clearTimeout(timeout);
+          console.error('[PluginControlPanel] Send message error:', error);
+          reject(error);
+        });
       });
-      console.log('[PluginControlPanel] chat из background:', {
-        pluginId,
-        pageKey,
-        chat,
-        typeofChat: typeof chat,
-        chatKeys: chat ? Object.keys(chat) : undefined,
-        messages: chat?.messages,
-        isArray: Array.isArray(chat?.messages),
-        messagesLength: chat?.messages?.length,
+
+      console.log('[PluginControlPanel] Response received successfully:', {
+        response,
+        typeofResponse: typeof response,
+        responseKeys: response ? Object.keys(response) : 'response is null/undefined',
+        responseStringified: JSON.stringify(response),
       });
-      console.log(
-        '[PluginControlPanel] loadChat RAW:',
-        chat,
-        typeof chat,
-        chat && chat.messages,
-        Array.isArray(chat?.messages),
-        Object.keys(chat || {}),
-        chat?.messages && chat?.messages.length,
-        chat?.messages && chat?.messages[0],
-      );
-      const messages = chat?.messages || chat?.chat?.messages;
-      if (Array.isArray(messages)) {
-        console.log('[PluginControlPanel] messages для setMessages:', messages);
-        setMessages(messages);
-      } else if (chat && chat.error) {
-        console.error('[PluginControlPanel] Ошибка получения чата:', chat.error, chat.details);
-        alert('Ошибка получения чата: ' + chat.error + (chat.details ? '\n' + chat.details : ''));
+
+      // Проверка на undefined с дополнительной диагностикой
+      if (response === undefined || response === null) {
+        console.error('[PluginControlPanel] Response is undefined/null, attempting fallback...');
+
+        // Fallback: Повторный запрос
+        try {
+          console.log('[PluginControlPanel] Attempting fallback request...');
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+          const fallbackResponse = await new Promise<any>((resolve, reject) => {
+            const fallbackTimeout = setTimeout(() => reject(new Error('FALLBACK_TIMEOUT')), 3000);
+
+            chrome.runtime.sendMessage({
+              type: 'GET_PLUGIN_CHAT',
+              pluginId,
+              pageKey,
+            }).then((result) => {
+              clearTimeout(fallbackTimeout);
+              resolve(result);
+            }).catch((error) => {
+              clearTimeout(fallbackTimeout);
+              reject(error);
+            });
+          });
+
+          console.log('[PluginControlPanel] Fallback response:', fallbackResponse);
+
+          if (fallbackResponse !== undefined && fallbackResponse !== null) {
+            // Используем fallback ответ
+            processChatResponse(fallbackResponse);
+            console.log('[PluginControlPanel] Fallback successful');
+            return;
+          } else {
+            throw new Error('Fallback response is also undefined');
+          }
+        } catch (fallbackError) {
+          console.error('[PluginControlPanel] Fallback failed:', fallbackError);
+          setError('Не удалось загрузить историю чата');
+          setMessages([]);
+          return;
+        }
+      } else {
+        // Обрабатываем успешный ответ
+        processChatResponse(response);
+      }
+
+    } catch (e) {
+      console.error('[PluginControlPanel] loadChat error:', e);
+      console.error('[PluginControlPanel] loadChat error details:', {
+        error: e,
+        message: (e as Error).message,
+        stack: (e as Error).stack,
+      });
+
+      // Fallback логика - пытаемся загрузить через альтернативный метод
+      if ((e as Error).message.includes('TIMEOUT')) {
+        console.log('[PluginControlPanel] loadChat - пытаемся fallback через повторный запрос');
+
+        try {
+          // Повторная попытка с задержкой
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+          const fallbackResponse = await new Promise<any>((resolve, reject) => {
+            const fallbackTimeout = setTimeout(() => reject(new Error('FALLBACK_TIMEOUT')), 3000);
+
+            chrome.runtime.sendMessage({
+              type: 'GET_PLUGIN_CHAT',
+              pluginId,
+              pageKey,
+            }).then((result) => {
+              clearTimeout(fallbackTimeout);
+              resolve(result);
+            }).catch((error) => {
+              clearTimeout(fallbackTimeout);
+              reject(error);
+            });
+          });
+
+          console.log('[PluginControlPanel] loadChat - fallback ответ:', fallbackResponse);
+
+          if (fallbackResponse !== undefined && fallbackResponse !== null) {
+            // Используем fallback ответ
+            processChatResponse(fallbackResponse);
+            console.log('[PluginControlPanel] loadChat - успешно использован fallback');
+            return;
+          } else {
+            throw new Error('Fallback тоже не сработал');
+          }
+        } catch (fallbackError) {
+          console.error('[PluginControlPanel] loadChat - fallback тоже не удался:', fallbackError);
+          setError('Ошибка загрузки истории чата (включая fallback)');
+          setMessages([]);
+          return;
+        }
+      } else {
+        setError('Ошибка загрузки истории чата');
         setMessages([]);
         return;
-      } else {
-        setMessages([]);
-        console.log('[PluginControlPanel] setMessages: []');
       }
-    } catch (e) {
-      setError('Ошибка загрузки истории чата');
-      console.error('[PluginControlPanel] loadChat error:', e);
     } finally {
       setLoading(false);
     }
-  }, [pluginId, pageKey]);
+  }, [pluginId, pageKey, processChatResponse]);
 
   // Добавить useEffect для вызова loadChat при монтировании и смене pluginId/pageKey
   useEffect(() => {
@@ -153,38 +334,52 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
 
   // Событийная синхронизация чата между вкладками
   useEffect(() => {
-    const handleChatUpdate = (event: { type: string; pluginId: string; pageKey: string; messages?: ChatMessage[] }) => {
+    const handleChatUpdate = async (event: { type: string; pluginId: string; pageKey: string; messages?: ChatMessage[] }) => {
       if (event?.type === 'PLUGIN_CHAT_UPDATED' && event.pluginId === pluginId && event.pageKey === pageKey) {
-        // Перезагружаем историю чата
-        chrome.runtime
-          .sendMessage({
-            type: 'GET_PLUGIN_CHAT',
-            pluginId,
-            pageKey,
-          })
-          .then(chat => {
-            if (chat && Array.isArray(chat.messages)) {
-              setMessages(
-                chat.messages.map(
-                  (msg: {
-                    id?: string;
-                    content?: string;
-                    text?: string;
-                    role?: string;
-                    isUser?: boolean;
-                    timestamp?: number;
-                  }) => ({
-                    id: msg.id || String(msg.timestamp || Date.now()),
-                    text: msg.content || msg.text,
-                    isUser: msg.role ? msg.role === 'user' : !!msg.isUser,
-                    timestamp: msg.timestamp || Date.now(),
-                  }),
-                ),
-              );
-            } else {
-              setMessages([]);
-            }
+        // Перезагружаем историю чата с улучшенной обработкой ответа
+        console.log('[PluginControlPanel] handleChatUpdate - начинаем запрос к background');
+
+        // ИСПРАВЛЕНИЕ: Упрощенная логика без сложного Promise.race
+        const sendMessagePromise = chrome.runtime.sendMessage({
+          type: 'GET_PLUGIN_CHAT',
+          pluginId,
+          pageKey,
+        });
+
+        console.log('[PluginControlPanel] handleChatUpdate - ДО ОЖИДАНИЯ sendMessagePromise:', {
+          promise: sendMessagePromise,
+          typeofPromise: typeof sendMessagePromise,
+        });
+
+        // Используем новую простую логику с таймаутом
+        const response = await new Promise<any>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('TIMEOUT'));
+          }, 5000);
+
+          sendMessagePromise.then((result) => {
+            clearTimeout(timeout);
+            console.log('[PluginControlPanel] handleChatUpdate response received:', result);
+            resolve(result);
+          }).catch((error) => {
+            clearTimeout(timeout);
+            console.error('[PluginControlPanel] handleChatUpdate send message error:', error);
+            reject(error);
           });
+        });
+
+        console.log('[PluginControlPanel] handleChatUpdate response received successfully:', {
+          response,
+          typeofResponse: typeof response,
+        });
+
+        // Обработка успешного ответа
+        if (response !== undefined && response !== null) {
+          processChatResponse(response);
+        } else {
+          console.error('[PluginControlPanel] handleChatUpdate response is undefined/null');
+          setMessages([]);
+        }
       }
     };
     chrome.runtime.onMessage.addListener(handleChatUpdate);

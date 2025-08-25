@@ -58,6 +58,8 @@ const SidePanel = () => {
   }, []);
 
   const portRef = useRef<chrome.runtime.Port | null>(null);
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting'>('connecting');
 
   // Функции для работы с уведомлениями
   const removeToast = useCallback((id: string) => {
@@ -93,27 +95,143 @@ const SidePanel = () => {
     getCurrentTabUrl();
   }, []);
 
+  // Heartbeat механизм для поддержания надежного соединения
+  const startHeartbeat = useCallback(() => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+    }
+
+    heartbeatIntervalRef.current = setInterval(async () => {
+      try {
+        const response = await chrome.runtime.sendMessage({ type: 'PING' });
+        if (response?.pong) {
+          if (connectionStatus !== 'connected') {
+            console.log('[SidePanel] Соединение с background восстановлено');
+            setConnectionStatus('connected');
+          }
+        } else {
+          throw new Error('Invalid ping response');
+        }
+      } catch (error) {
+        if (connectionStatus !== 'disconnected') {
+          console.error('[SidePanel] Соединение с background потеряно:', error);
+          setConnectionStatus('disconnected');
+        }
+      }
+    }, 10000); // Проверка каждые 10 секунд
+  }, [connectionStatus]);
+
+  // Остановка heartbeat
+  const stopHeartbeat = useCallback(() => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
-    // Открываем порт при монтировании компонента
-    const port = chrome.runtime.connect();
-    portRef.current = port;
-
-    port.onMessage.addListener(msg => {
-      if (msg.type === 'PLUGINS_RESULT') {
-        setPlugins(msg.plugins);
-      }
-      if (msg.type === 'PLUGINS_ERROR') {
-        addToastWithDeps('Ошибка загрузки плагинов: ' + msg.error, 'error');
-      }
-      // ... другие типы сообщений
-    });
-
-    // Запрашиваем плагины
-    port.postMessage({ type: 'GET_PLUGINS' });
+    console.log('[SidePanel] Запуск heartbeat механизма');
+    startHeartbeat();
 
     return () => {
-      port.disconnect();
+      console.log('[SidePanel] Остановка heartbeat механизма');
+      stopHeartbeat();
     };
+  }, [startHeartbeat, stopHeartbeat]);
+
+  // Слушатель для ответов на GET_PLUGINS
+  useEffect(() => {
+    const handlePluginResponse = (message: any) => {
+      if (message.type === 'GET_PLUGINS_RESPONSE') {
+        // Очищаем таймаут при получении ответа
+        const timeoutId = (window as any).pluginsTimeoutId;
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          (window as any).pluginsTimeoutId = null;
+        }
+
+        console.log('[SidePanel] Получен ответ GET_PLUGINS_RESPONSE:', message);
+        console.log('[SidePanel] Время получения ответа:', new Date().toISOString());
+
+        if (message.error) {
+          console.error('[SidePanel] ❌ Ошибка от background:', message.error);
+          addToastWithDeps('Ошибка загрузки плагинов: ' + message.error, 'error');
+          return;
+        }
+
+        if (message.plugins) {
+          console.log('[SidePanel] ✅ Успешный ответ получен');
+          console.log('[SidePanel] Устанавливаем плагины:', message.plugins.length, 'шт');
+          console.log('[SidePanel] Примеры плагинов:', message.plugins.slice(0, 2));
+          setPlugins(message.plugins);
+          console.log('[SidePanel] ✅ Загрузка плагинов успешно завершена');
+        } else {
+          console.error('[SidePanel] ❌ Пустой ответ от background:', message);
+          addToastWithDeps('Получен некорректный ответ от background', 'error');
+        }
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(handlePluginResponse);
+
+    return () => {
+      chrome.runtime.onMessage.removeListener(handlePluginResponse);
+    };
+  }, []);
+
+  useEffect(() => {
+    console.log('[SidePanel] useEffect: Начинаем загрузку плагинов через Message API');
+
+    // Функция для загрузки плагинов через Message API
+    const loadPluginsViaMessageAPI = async () => {
+      try {
+        console.log('[SidePanel] === НАЧАЛО ЗАГРУЗКИ ПЛАГИНОВ ===');
+        console.log('[SidePanel] Отправляем GET_PLUGINS сообщение в background');
+        console.log('[SidePanel] Время отправки:', new Date().toISOString());
+
+        // Проверяем соединение с background перед отправкой
+        try {
+          await chrome.runtime.sendMessage({ type: 'PING' });
+          console.log('[SidePanel] Background доступен');
+        } catch (pingError) {
+          console.warn('[SidePanel] Background недоступен:', pingError);
+          throw new Error('Background script недоступен');
+        }
+
+        // Отправляем запрос на получение плагинов
+        console.log('[SidePanel] Отправляем GET_PLUGINS сообщение в background');
+        console.log('[SidePanel] Время отправки:', new Date().toISOString());
+
+        const requestId = Date.now().toString();
+        await chrome.runtime.sendMessage({
+          type: 'GET_PLUGINS',
+          requestId
+        });
+
+        console.log('[SidePanel] Сообщение GET_PLUGINS отправлено, ожидаем ответ через слушатель');
+
+        // Устанавливаем таймаут на случай, если ответ не придет
+        const timeoutId = setTimeout(() => {
+          console.error('[SidePanel] ❌ Таймаут ожидания ответа GET_PLUGINS (5000ms)');
+          addToastWithDeps('Таймаут загрузки плагинов', 'error');
+        }, 5000);
+
+        // Сохраняем таймаут для очистки при получении ответа
+        (window as any).pluginsTimeoutId = timeoutId;
+      } catch (error) {
+        console.error('[SidePanel] ❌ Исключение при загрузке плагинов:', error);
+        console.error('[SidePanel] Детали ошибки:', {
+          error,
+          message: (error as Error).message,
+          stack: (error as Error).stack,
+          name: (error as Error).name
+        });
+        addToastWithDeps('Ошибка связи с background script', 'error');
+      }
+    };
+
+    // Загружаем плагины
+    loadPluginsViaMessageAPI();
   }, []);
 
   useEffect(() => {

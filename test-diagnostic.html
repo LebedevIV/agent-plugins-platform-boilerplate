@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chrome Extension Diagnostic Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            margin: 20px 0;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        .log-output {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .status {
+            padding: 5px 10px;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .status.info { background: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <h1>Chrome Extension Diagnostic Test</h1>
+    <p>This page is used to test the chrome extension's storage and messaging functionality.</p>
+
+    <div class="test-section">
+        <h2>Extension Status</h2>
+        <div id="extension-status">Checking...</div>
+        <button class="test-button" onclick="checkExtension()">Check Extension</button>
+    </div>
+
+    <div class="test-section">
+        <h2>Storage Diagnostic</h2>
+        <button class="test-button" onclick="testStorageDiagnostic()">Test Storage Diagnostic</button>
+        <div id="storage-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Chat Operations</h2>
+        <button class="test-button" onclick="testGetPluginChat()">Test GET_PLUGIN_CHAT</button>
+        <button class="test-button" onclick="testCreatePluginChat()">Test CREATE_PLUGIN_CHAT</button>
+        <button class="test-button" onclick="testSavePluginMessage()">Test SAVE_PLUGIN_CHAT_MESSAGE</button>
+        <div id="chat-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Log Output</h2>
+        <div id="log-output" class="log-output"></div>
+        <button class="test-button" onclick="clearLogs()">Clear Logs</button>
+    </div>
+
+    <script>
+        // Test data
+        const testPluginId = 'test-plugin';
+        const testPageKey = 'test-page-key-' + Date.now();
+        let logCounter = 0;
+
+        function log(message, type = 'info') {
+            const logOutput = document.getElementById('log-output');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `status ${type}`;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logOutput.appendChild(logEntry);
+            logOutput.scrollTop = logOutput.scrollHeight;
+            console.log(message);
+        }
+
+        function clearLogs() {
+            document.getElementById('log-output').innerHTML = '';
+        }
+
+        async function checkExtension() {
+            log('Checking if extension is available...');
+            try {
+                if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+                    log('✓ Chrome extension API is available', 'success');
+                    document.getElementById('extension-status').innerHTML = '<span class="status success">Extension API Available</span>';
+                } else {
+                    log('✗ Chrome extension API is not available', 'error');
+                    document.getElementById('extension-status').innerHTML = '<span class="status error">Extension API Not Available</span>';
+                }
+            } catch (error) {
+                log(`✗ Error checking extension: ${error.message}`, 'error');
+                document.getElementById('extension-status').innerHTML = `<span class="status error">Error: ${error.message}</span>`;
+            }
+        }
+
+        async function testStorageDiagnostic() {
+            log('Starting storage diagnostic test...');
+            try {
+                // Test basic chrome.storage.local availability
+                if (!chrome.storage || !chrome.storage.local) {
+                    throw new Error('chrome.storage.local is not available');
+                }
+                log('✓ chrome.storage.local is available');
+
+                // Test basic storage operations
+                log('Testing basic storage operations...');
+                const testKey = 'diagnostic-test-' + Date.now();
+                const testData = { message: 'test', timestamp: Date.now() };
+
+                // Set test data
+                await new Promise((resolve, reject) => {
+                    chrome.storage.local.set({ [testKey]: testData }, () => {
+                        if (chrome.runtime.lastError) {
+                            reject(new Error(chrome.runtime.lastError.message));
+                        } else {
+                            log('✓ Test data stored successfully');
+                            resolve();
+                        }
+                    });
+                });
+
+                // Get test data
+                const result = await new Promise((resolve, reject) => {
+                    chrome.storage.local.get([testKey], (result) => {
+                        if (chrome.runtime.lastError) {
+                            reject(new Error(chrome.runtime.lastError.message));
+                        } else {
+                            resolve(result);
+                        }
+                    });
+                });
+
+                if (result[testKey]) {
+                    log(`✓ Test data retrieved successfully: ${JSON.stringify(result[testKey])}`, 'success');
+                } else {
+                    log('✗ Test data not found', 'error');
+                }
+
+                // Clean up
+                await new Promise((resolve, reject) => {
+                    chrome.storage.local.remove([testKey], () => {
+                        if (chrome.runtime.lastError) {
+                            reject(new Error(chrome.runtime.lastError.message));
+                        } else {
+                            log('✓ Test data cleaned up');
+                            resolve();
+                        }
+                    });
+                });
+
+                document.getElementById('storage-result').innerHTML = '<span class="status success">Storage diagnostic completed successfully</span>';
+
+            } catch (error) {
+                log(`✗ Storage diagnostic error: ${error.message}`, 'error');
+                document.getElementById('storage-result').innerHTML = `<span class="status error">Storage error: ${error.message}</span>`;
+            }
+        }
+
+        async function testGetPluginChat() {
+            log(`Testing GET_PLUGIN_CHAT for plugin: ${testPluginId}, pageKey: ${testPageKey}`);
+            try {
+                const response = await chrome.runtime.sendMessage({
+                    type: 'GET_PLUGIN_CHAT',
+                    pluginId: testPluginId,
+                    pageKey: testPageKey
+                });
+
+                log(`GET_PLUGIN_CHAT response: ${JSON.stringify(response)}`);
+
+                if (response && response.messages) {
+                    log(`✓ Chat loaded with ${response.messages.length} messages`, 'success');
+                } else if (response === null || response === undefined) {
+                    log('✗ Chat returned null/undefined - this indicates the issue!', 'error');
+                } else {
+                    log(`? Unexpected response format: ${typeof response}`, 'info');
+                }
+
+                document.getElementById('chat-result').innerHTML = `<span class="status info">GET_PLUGIN_CHAT: ${response ? 'Response received' : 'Null response'}</span>`;
+
+            } catch (error) {
+                log(`✗ GET_PLUGIN_CHAT error: ${error.message}`, 'error');
+                document.getElementById('chat-result').innerHTML = `<span class="status error">GET_PLUGIN_CHAT error: ${error.message}</span>`;
+            }
+        }
+
+        async function testCreatePluginChat() {
+            log(`Testing CREATE_PLUGIN_CHAT for plugin: ${testPluginId}, pageKey: ${testPageKey}`);
+            try {
+                const response = await chrome.runtime.sendMessage({
+                    type: 'CREATE_PLUGIN_CHAT',
+                    pluginId: testPluginId,
+                    pageKey: testPageKey
+                });
+
+                log(`CREATE_PLUGIN_CHAT response: ${JSON.stringify(response)}`, 'success');
+                document.getElementById('chat-result').innerHTML = '<span class="status success">CREATE_PLUGIN_CHAT completed</span>';
+
+            } catch (error) {
+                log(`✗ CREATE_PLUGIN_CHAT error: ${error.message}`, 'error');
+                document.getElementById('chat-result').innerHTML = `<span class="status error">CREATE_PLUGIN_CHAT error: ${error.message}</span>`;
+            }
+        }
+
+        async function testSavePluginMessage() {
+            log(`Testing SAVE_PLUGIN_CHAT_MESSAGE for plugin: ${testPluginId}, pageKey: ${testPageKey}`);
+            try {
+                const testMessage = {
+                    role: 'user',
+                    content: `Test message ${Date.now()}`,
+                    timestamp: Date.now()
+                };
+
+                const response = await chrome.runtime.sendMessage({
+                    type: 'SAVE_PLUGIN_CHAT_MESSAGE',
+                    pluginId: testPluginId,
+                    pageKey: testPageKey,
+                    message: testMessage
+                });
+
+                log(`SAVE_PLUGIN_CHAT_MESSAGE response: ${JSON.stringify(response)}`, 'success');
+                document.getElementById('chat-result').innerHTML = '<span class="status success">SAVE_PLUGIN_CHAT_MESSAGE completed</span>';
+
+            } catch (error) {
+                log(`✗ SAVE_PLUGIN_CHAT_MESSAGE error: ${error.message}`, 'error');
+                document.getElementById('chat-result').innerHTML = `<span class="status error">SAVE_PLUGIN_CHAT_MESSAGE error: ${error.message}</span>`;
+            }
+        }
+
+        // Auto-check extension on page load
+        window.addEventListener('load', checkExtension);
+    </script>
+</body>
+</html>

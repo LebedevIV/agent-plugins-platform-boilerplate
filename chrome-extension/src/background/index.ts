@@ -104,6 +104,14 @@ const addPluginLog = (log: Omit<PluginLogEntry, 'timestamp'>) => {
 chrome.runtime.onMessage.addListener(
   async (message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => {
     console.log('[background] Got message:', message, 'from:', sender?.origin || sender?.id || 'unknown');
+    console.log('[background] Message timestamp:', new Date().toISOString());
+    console.log('[background] Sender details:', {
+      id: sender?.id,
+      origin: sender?.origin,
+      url: sender?.url,
+      tab: sender?.tab,
+      frameId: sender?.frameId
+    });
 
     if (
       typeof message === 'object' &&
@@ -119,26 +127,77 @@ chrome.runtime.onMessage.addListener(
 
     if (typeof message === 'object' && message !== null && 'type' in message) {
       const msg = message as ExtensionMessage;
+      console.log('[background] Processing message type:', msg.type);
+
+      if (msg.type === 'TEST_SYNC') {
+        console.log('[background] Processing TEST_SYNC request');
+        console.log('[background] TEST_SYNC timestamp:', new Date().toISOString());
+        const response = { success: true, message: 'Test sync response', timestamp: Date.now() };
+        console.log('[background] TEST_SYNC sending response:', response);
+        sendResponse(response);
+        console.log('[background] TEST_SYNC response sent');
+        return true;
+      }
+
+      if (msg.type === 'PING') {
+        console.log('[background] Processing PING request');
+        console.log('[background] PING timestamp:', new Date().toISOString());
+        sendResponse({ pong: true, timestamp: Date.now() });
+        console.log('[background] PING response sent');
+        return true;
+      }
 
       if (msg.type === 'GET_PLUGINS') {
-        console.log('[background] Processing GET_PLUGINS request');
+        console.log('[background] Processing GET_PLUGINS request from sender:', sender);
+        console.log('[background] GET_PLUGINS message timestamp:', new Date().toISOString());
 
-        // Полноценная логика загрузки плагинов
+        // АСИНХРОННАЯ ОБРАБОТКА: Возвращаем true и обрабатываем асинхронно
         (async () => {
+          console.log('[background] processGetPlugins started, timestamp:', new Date().toISOString());
+          console.log('[background] Sender details:', {
+            id: sender?.id,
+            origin: sender?.origin,
+            url: sender?.url,
+            tab: sender?.tab?.id,
+            frameId: sender?.frameId
+          });
+
           try {
             console.log('[background] Getting available plugins...');
-            const plugins = await getAvailablePlugins();
-            console.log('[background] getAvailablePlugins result:', plugins);
+            const startTime = Date.now();
 
-            console.log('[background] Getting plugin settings...');
-            const allSettings = await pluginSettingsStorage.get();
+            // Параллельное выполнение для ускорения
+            const [plugins, allSettings] = await Promise.all([
+              getAvailablePlugins(),
+              pluginSettingsStorage.get()
+            ]);
+
+            const fetchTime = Date.now() - startTime;
+            console.log(`[background] Data fetched in ${fetchTime}ms`);
+            console.log('[background] getAvailablePlugins result:', plugins);
+            console.log('[background] Plugins count:', plugins?.length || 'undefined');
             console.log('[background] Plugin settings:', allSettings);
+            console.log('[background] Settings type:', typeof allSettings);
+
+            if (!plugins || !Array.isArray(plugins)) {
+              console.error('[background] getAvailablePlugins returned invalid data:', plugins);
+              // Используем chrome.runtime.sendMessage для отправки ответа обратно
+              chrome.runtime.sendMessage({
+                type: 'GET_PLUGINS_RESPONSE',
+                error: 'Invalid plugins data from getAvailablePlugins',
+                requestId: msg.requestId // Добавляем requestId для сопоставления
+              });
+              return;
+            }
 
             const pluginsWithSettings = plugins.map((plugin: Plugin) => {
+              console.log('[background] Processing plugin:', plugin.id, plugin.name);
               const settings = allSettings[plugin.id] || {
                 enabled: true,
                 autorun: false,
               };
+              console.log('[background] Plugin settings for', plugin.id, ':', settings);
+
               return {
                 ...plugin,
                 settings,
@@ -146,19 +205,33 @@ chrome.runtime.onMessage.addListener(
             });
 
             console.log('[background] Final plugins data:', pluginsWithSettings.length, 'plugins');
+            console.log('[background] Final plugins data details:', pluginsWithSettings.map(p => ({ id: p.id, name: p.name, settings: p.settings })));
 
-            // Пытаемся отправить ответ
-            try {
-              sendResponse({ plugins: pluginsWithSettings });
-              console.log('[background] Successfully sent plugins response');
-            } catch (sendError) {
-              console.error('[background] Failed to send response:', sendError);
-            }
+            // Отправляем успешный ответ через sendMessage
+            const responseData = {
+              type: 'GET_PLUGINS_RESPONSE',
+              plugins: pluginsWithSettings,
+              requestId: msg.requestId // Добавляем requestId для сопоставления
+            };
+            console.log('[background] Sending response data:', responseData);
+            console.log('[background] About to send response via sendMessage, timestamp:', new Date().toISOString());
+
+            chrome.runtime.sendMessage(responseData);
+            console.log('[background] Successfully sent plugins response, timestamp:', new Date().toISOString());
 
           } catch (error) {
             console.error('[background] Error processing GET_PLUGINS:', error);
+            console.error('[background] Error details:', {
+              message: (error as Error).message,
+              stack: (error as Error).stack,
+              name: (error as Error).name
+            });
             try {
-              sendResponse({ error: (error as Error).message });
+              chrome.runtime.sendMessage({
+                type: 'GET_PLUGINS_RESPONSE',
+                error: (error as Error).message,
+                requestId: msg.requestId
+              });
               console.log('[background] Sent error response');
             } catch (sendError) {
               console.error('[background] Failed to send error response:', sendError);
@@ -166,11 +239,21 @@ chrome.runtime.onMessage.addListener(
           }
         })();
 
+        // ВОЗВРАЩАЕМ TRUE для поддержания канала открытым
         return true;
       }
 
       if (msg.type === 'RUN_WORKFLOW' && msg.pluginId) {
-        runPluginIfEnabled(msg.pluginId).then(result => sendResponse(result));
+        console.log('[background] Processing RUN_WORKFLOW request for:', msg.pluginId);
+        (async () => {
+          try {
+            const result = await runPluginIfEnabled(msg.pluginId);
+            sendResponse(result);
+          } catch (error) {
+            console.error('[background] Error in RUN_WORKFLOW:', error);
+            sendResponse({ error: (error as Error).message });
+          }
+        })();
         return true;
       }
 
@@ -181,14 +264,23 @@ chrome.runtime.onMessage.addListener(
         msg.value !== undefined
       ) {
         const { pluginId, setting, value } = msg;
-        updatePluginSetting(pluginId, setting, value)
-          .then(() => sendResponse({ success: true }))
-          .catch((error: unknown) => sendResponse({ error: (error as Error).message }));
+        console.log('[background] Processing UPDATE_PLUGIN_SETTING request for:', pluginId, setting, value);
+        (async () => {
+          try {
+            await updatePluginSetting(pluginId, setting, value);
+            sendResponse({ success: true });
+          } catch (error: unknown) {
+            console.error('[background] Error in UPDATE_PLUGIN_SETTING:', error);
+            sendResponse({ error: (error as Error).message });
+          }
+        })();
         return true;
       }
 
       if (msg.type === 'GET_PLUGIN_SETTINGS') {
         console.log('[background] Processing GET_PLUGIN_SETTINGS request');
+
+        // Используем синхронную обработку
         (async () => {
           try {
             const settings = await pluginSettingsStorage.get();
@@ -199,6 +291,7 @@ chrome.runtime.onMessage.addListener(
             sendResponse({ error: (error as Error).message });
           }
         })();
+
         return true;
       }
 
@@ -206,35 +299,84 @@ chrome.runtime.onMessage.addListener(
       if (msg.type === 'GET_PLUGIN_CHAT' && msg.pluginId && msg.pageKey) {
         const { pluginId, pageKey } = msg;
         const chatKey = `${pluginId}::${getPageKey(pageKey)}`;
-        pluginChatApi
-          .getOrLoadChat(chatKey)
-          .then(chat => {
+
+        console.log('[background] GET_PLUGIN_CHAT: начало обработки', {
+          pluginId,
+          pageKey,
+          chatKey,
+          normalizedPageKey: getPageKey(pageKey),
+          timestamp: Date.now()
+        });
+
+        // Используем синхронную обработку
+        (async () => {
+          try {
+            const chat = await pluginChatApi.getOrLoadChat(chatKey);
+            console.log('[background] GET_PLUGIN_CHAT: результат getOrLoadChat', {
+              chat,
+              chatType: typeof chat,
+              hasChat: !!chat,
+              messagesLength: chat?.messages?.length,
+              chatKey,
+              pageKey
+            });
+
             let safeChat = chat;
             if (chat && Array.isArray(chat.messages) && chat.messages.length > 50) {
               safeChat = { ...chat, messages: chat.messages.slice(-50) };
+              console.log('[background] GET_PLUGIN_CHAT: обрезан до 50 сообщений', {
+                originalLength: chat.messages.length,
+                newLength: safeChat.messages.length
+              });
             }
+
             try {
               const serializable = JSON.parse(JSON.stringify(safeChat));
-              console.log(
-                '[background] sendResponse(GET_PLUGIN_CHAT):',
+              console.log('[background] GET_PLUGIN_CHAT: сериализация успешна', {
                 serializable,
-                'chatKey:',
+                serializableType: typeof serializable,
+                serializableKeys: Object.keys(serializable || {}),
+                serializableMessages: serializable?.messages,
+                isArrayMessages: Array.isArray(serializable?.messages),
                 chatKey,
-                'pageKey:',
-                pageKey,
-              );
-              sendResponse(serializable || { messages: [] });
+                pageKey
+              });
+
+              const response = serializable || { messages: [] };
+              console.log('[background] GET_PLUGIN_CHAT: отправляем ответ', {
+                response,
+                responseType: typeof response,
+                responseKeys: Object.keys(response),
+                responseMessagesLength: response.messages?.length,
+                timestamp: Date.now()
+              });
+
+              sendResponse(response);
+
             } catch (err) {
-              console.error('[background] Ошибка сериализации чата:', err, safeChat);
+              console.error('[background] GET_PLUGIN_CHAT: Ошибка сериализации чата:', {
+                error: err,
+                safeChat,
+                safeChatType: typeof safeChat,
+                safeChatKeys: Object.keys(safeChat || {}),
+                timestamp: Date.now()
+              });
               sendResponse({ error: 'serialization failed', details: String(err) });
             }
-            console.log('[background] return true после sendResponse(GET_PLUGIN_CHAT)');
-          })
-          .catch(err => {
-            console.error('[background] Ошибка в getOrLoadChat:', err);
+          } catch (err) {
+            console.error('[background] GET_PLUGIN_CHAT: Ошибка в getOrLoadChat:', {
+              error: err,
+              errorMessage: String(err),
+              errorStack: (err as Error).stack,
+              pluginId,
+              pageKey,
+              chatKey,
+              timestamp: Date.now()
+            });
             sendResponse({ error: String(err) });
-            console.log('[background] return true после sendResponse(GET_PLUGIN_CHAT) [catch]');
-          });
+          }
+        })();
+
         return true;
       }
 
@@ -243,11 +385,20 @@ chrome.runtime.onMessage.addListener(
         const { pluginId, pageKey } = msg;
         const normPageKey = getPageKey(pageKey);
         console.log('[background] CREATE_PLUGIN_CHAT pageKey:', pageKey, 'norm:', normPageKey);
-        pluginChatApi.createChatIfNotExists(pluginId, normPageKey).then(chat => {
-          console.log('[background] sendResponse(CREATE_PLUGIN_CHAT):', chat);
-          sendResponse(chat);
-          broadcastChatUpdate(pluginId, normPageKey);
-        });
+
+        // Используем синхронную обработку
+        (async () => {
+          try {
+            const chat = await pluginChatApi.createChatIfNotExists(pluginId, normPageKey);
+            console.log('[background] sendResponse(CREATE_PLUGIN_CHAT):', chat);
+            sendResponse(chat);
+            broadcastChatUpdate(pluginId, normPageKey);
+          } catch (error) {
+            console.error('[background] Error creating plugin chat:', error);
+            sendResponse({ error: String(error) });
+          }
+        })();
+
         return true;
       }
 
@@ -256,10 +407,19 @@ chrome.runtime.onMessage.addListener(
         const { pluginId, pageKey, draftText } = msg;
         const normPageKey = getPageKey(pageKey);
         console.log('[background] SAVE_PLUGIN_CHAT_DRAFT pageKey:', pageKey, 'norm:', normPageKey);
-        pluginChatApi.saveDraft(pluginId, normPageKey, draftText).then(() => {
-          console.log('[background] sendResponse(SAVE_PLUGIN_CHAT_DRAFT):', { success: true });
-          sendResponse({ success: true });
-        });
+
+        // Используем синхронную обработку
+        (async () => {
+          try {
+            await pluginChatApi.saveDraft(pluginId, normPageKey, draftText);
+            console.log('[background] sendResponse(SAVE_PLUGIN_CHAT_DRAFT):', { success: true });
+            sendResponse({ success: true });
+          } catch (error) {
+            console.error('[background] Error saving plugin chat draft:', error);
+            sendResponse({ error: String(error) });
+          }
+        })();
+
         return true;
       }
 
@@ -268,28 +428,75 @@ chrome.runtime.onMessage.addListener(
         const { pluginId, pageKey } = msg;
         const normPageKey = getPageKey(pageKey);
         console.log('[background] GET_PLUGIN_CHAT_DRAFT pageKey:', pageKey, 'norm:', normPageKey);
-        pluginChatApi.getDraft(pluginId, normPageKey).then(draftText => {
-          console.log('[background] sendResponse(GET_PLUGIN_CHAT_DRAFT):', { draftText });
-          sendResponse({ draftText });
-        });
+
+        // Используем синхронную обработку
+        (async () => {
+          try {
+            const draftText = await pluginChatApi.getDraft(pluginId, normPageKey);
+            console.log('[background] sendResponse(GET_PLUGIN_CHAT_DRAFT):', { draftText });
+            sendResponse({ draftText });
+          } catch (error) {
+            console.error('[background] Error getting plugin chat draft:', error);
+            sendResponse({ error: String(error) });
+          }
+        })();
+
         return true;
       }
 
       if (msg.type === 'SAVE_PLUGIN_CHAT_MESSAGE' && msg.pluginId && msg.pageKey && msg.message) {
         const { pluginId, pageKey, message: chatMsg } = msg;
         const normPageKey = getPageKey(pageKey);
-        console.log('[background] SAVE_PLUGIN_CHAT_MESSAGE pageKey:', pageKey, 'norm:', normPageKey);
-        pluginChatApi
-          .saveMessage(pluginId, normPageKey, chatMsg as ChatMessage)
-          .then(() =>
+        console.log('[background] SAVE_PLUGIN_CHAT_MESSAGE: начало', {
+          pluginId,
+          pageKey,
+          normPageKey,
+          chatMsg,
+          chatMsgType: typeof chatMsg,
+          chatMsgKeys: Object.keys(chatMsg),
+          timestamp: Date.now()
+        });
+
+        // Используем синхронную обработку
+        (async () => {
+          try {
+            const result = await pluginChatApi.saveMessage(pluginId, normPageKey, chatMsg as ChatMessage);
+            console.log('[background] SAVE_PLUGIN_CHAT_MESSAGE: saveMessage результат', {
+              result,
+              success: result.success,
+              pluginId,
+              pageKey,
+              normPageKey,
+              timestamp: Date.now()
+            });
+
             // Удаляем черновик после отправки сообщения
-            pluginChatApi.deleteDraft(pluginId, normPageKey),
-          )
-          .then(() => {
+            await pluginChatApi.deleteDraft(pluginId, normPageKey);
+            console.log('[background] SAVE_PLUGIN_CHAT_MESSAGE: deleteDraft завершен', {
+              result,
+              pluginId,
+              pageKey,
+              normPageKey,
+              timestamp: Date.now()
+            });
+
             console.log('[background] sendResponse(SAVE_PLUGIN_CHAT_MESSAGE):', { success: true });
             sendResponse({ success: true });
             broadcastChatUpdate(pluginId, normPageKey);
-          });
+          } catch (error) {
+            console.error('[background] SAVE_PLUGIN_CHAT_MESSAGE: ошибка', {
+              error,
+              errorMessage: String(error),
+              errorStack: (error as Error).stack,
+              pluginId,
+              pageKey,
+              normPageKey,
+              timestamp: Date.now()
+            });
+            sendResponse({ success: false, error: String(error) });
+          }
+        })();
+
         return true;
       }
 
@@ -297,27 +504,39 @@ chrome.runtime.onMessage.addListener(
         const { pluginId, pageKey } = msg;
         const normPageKey = getPageKey(pageKey);
         console.log('[background] DELETE_PLUGIN_CHAT pageKey:', pageKey, 'norm:', normPageKey);
-        pluginChatApi.deleteChat(pluginId, normPageKey).then(() => {
-          console.log('[background] sendResponse(DELETE_PLUGIN_CHAT):', { success: true });
-          sendResponse({ success: true });
-          broadcastChatUpdate(pluginId, normPageKey);
-        });
+
+        // Используем синхронную обработку
+        (async () => {
+          try {
+            await pluginChatApi.deleteChat(pluginId, normPageKey);
+            console.log('[background] sendResponse(DELETE_PLUGIN_CHAT):', { success: true });
+            sendResponse({ success: true });
+            broadcastChatUpdate(pluginId, normPageKey);
+          } catch (error) {
+            console.error('[background] Error deleting plugin chat:', error);
+            sendResponse({ error: String(error) });
+          }
+        })();
+
         return true;
       }
 
       if (msg.type === 'LIST_PLUGIN_CHATS' && msg.pluginId) {
         const { pluginId } = msg;
         console.log('[background] Listing chats for plugin:', pluginId);
-        pluginChatApi
-          .listChatsForPlugin(pluginId)
-          .then(chats => {
+
+        // Используем синхронную обработку
+        (async () => {
+          try {
+            const chats = await pluginChatApi.listChatsForPlugin(pluginId);
             console.log('[background] Chats found:', chats);
             sendResponse(chats);
-          })
-          .catch(error => {
+          } catch (error) {
             console.error('[background] Error listing chats:', error);
             sendResponse([]);
-          });
+          }
+        })();
+
         return true;
       }
 
@@ -325,16 +544,19 @@ chrome.runtime.onMessage.addListener(
       if (msg.type === 'LIST_PLUGIN_CHAT_DRAFTS' && msg.pluginId) {
         const { pluginId } = msg;
         console.log('[background] Listing drafts for plugin:', pluginId);
-        pluginChatApi
-          .listDraftsForPlugin(pluginId)
-          .then(drafts => {
+
+        // Используем синхронную обработку
+        (async () => {
+          try {
+            const drafts = await pluginChatApi.listDraftsForPlugin(pluginId);
             console.log('[background] Drafts found:', drafts);
             sendResponse(drafts);
-          })
-          .catch(error => {
+          } catch (error) {
             console.error('[background] Error listing drafts:', error);
             sendResponse([]);
-          });
+          }
+        })();
+
         return true;
       }
 
@@ -384,6 +606,7 @@ chrome.runtime.onMessage.addListener(
       }
     }
     // ГАРАНТИРОВАННО возвращаем true, чтобы канал не закрывался преждевременно
+    console.log('[background] Returning true to keep channel open, timestamp:', new Date().toISOString());
     return true;
   },
 );
@@ -391,7 +614,7 @@ chrome.runtime.onMessage.addListener(
 const handleHostApiMessage = async (
   message: { command: string; data: unknown },
   sendResponse: (response: unknown) => void,
-) => {
+): Promise<boolean> => {
   try {
     switch (message.command) {
       case 'getElements': {
@@ -444,6 +667,9 @@ const handleHostApiMessage = async (
   } catch (error: unknown) {
     sendResponse({ error: (error as Error).message });
   }
+
+  // Возвращаем true для поддержки асинхронных ответов
+  return true;
 };
 
 const findTargetTab = async (): Promise<chrome.tabs.Tab> => {
@@ -513,8 +739,16 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 });
 
 exampleThemeStorage.get().then(theme => {
-  console.log('theme', theme);
+  console.log('[background] Theme loaded:', theme);
 });
 
-console.log('Background loaded');
-console.log("Edit 'chrome-extension/src/background/index.ts' and save to reload.");
+console.log('[background] Background script fully loaded and ready');
+console.log('[background] Extension ID:', chrome.runtime.id);
+console.log('[background] Available APIs:', {
+  runtime: typeof chrome.runtime,
+  tabs: typeof chrome.tabs,
+  storage: typeof chrome.storage,
+  sidePanel: typeof chrome.sidePanel,
+  scripting: typeof chrome.scripting
+});
+console.log('[background] Edit chrome-extension/src/background/index.ts and save to reload.');
