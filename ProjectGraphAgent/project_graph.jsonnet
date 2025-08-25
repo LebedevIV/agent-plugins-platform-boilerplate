@@ -26,6 +26,12 @@
     // Plans/Roadmaps
     plans: import 'graph_parts/plans.jsonnet',
 
+    // Path indexes for fast file-based lookups
+    pathIndex: import 'graph_parts/path_index.jsonnet',
+
+    // Examples of how to use the path indexing system
+    pathSearchExamples: import 'graph_parts/path_search_examples.jsonnet',
+
     // Re-export commit groups from policies for unified source of truth
     commitGroups: (import 'graph_parts/policies.jsonnet').commitGroups,
 }
