@@ -195,7 +195,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     try {
       console.log('[PluginControlPanel] loadChat запрос:', { pluginId, pageKey });
 
-      // ИСПРАВЛЕНИЕ: Простой и надежный подход без Promise.race
+      // Упрощенная и надежная логика без сложного Promise.race
       const response = await new Promise<any>((resolve, reject) => {
         const timeout = setTimeout(() => {
           reject(new Error('TIMEOUT'));
@@ -207,66 +207,28 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
           pageKey,
         }).then((result) => {
           clearTimeout(timeout);
-          console.log('[PluginControlPanel] Response received:', result);
+          console.log('[PluginControlPanel] loadChat response received:', result);
           resolve(result);
         }).catch((error) => {
           clearTimeout(timeout);
-          console.error('[PluginControlPanel] Send message error:', error);
+          console.error('[PluginControlPanel] loadChat send error:', error);
           reject(error);
         });
       });
 
-      console.log('[PluginControlPanel] Response received successfully:', {
+      console.log('[PluginControlPanel] loadChat response:', {
         response,
         typeofResponse: typeof response,
         responseKeys: response ? Object.keys(response) : 'response is null/undefined',
-        responseStringified: JSON.stringify(response),
       });
 
-      // Проверка на undefined с дополнительной диагностикой
-      if (response === undefined || response === null) {
-        console.error('[PluginControlPanel] Response is undefined/null, attempting fallback...');
-
-        // Fallback: Повторный запрос
-        try {
-          console.log('[PluginControlPanel] Attempting fallback request...');
-          await new Promise(resolve => setTimeout(resolve, 1000));
-
-          const fallbackResponse = await new Promise<any>((resolve, reject) => {
-            const fallbackTimeout = setTimeout(() => reject(new Error('FALLBACK_TIMEOUT')), 3000);
-
-            chrome.runtime.sendMessage({
-              type: 'GET_PLUGIN_CHAT',
-              pluginId,
-              pageKey,
-            }).then((result) => {
-              clearTimeout(fallbackTimeout);
-              resolve(result);
-            }).catch((error) => {
-              clearTimeout(fallbackTimeout);
-              reject(error);
-            });
-          });
-
-          console.log('[PluginControlPanel] Fallback response:', fallbackResponse);
-
-          if (fallbackResponse !== undefined && fallbackResponse !== null) {
-            // Используем fallback ответ
-            processChatResponse(fallbackResponse);
-            console.log('[PluginControlPanel] Fallback successful');
-            return;
-          } else {
-            throw new Error('Fallback response is also undefined');
-          }
-        } catch (fallbackError) {
-          console.error('[PluginControlPanel] Fallback failed:', fallbackError);
-          setError('Не удалось загрузить историю чата');
-          setMessages([]);
-          return;
-        }
-      } else {
-        // Обрабатываем успешный ответ
+      // Проверяем и обрабатываем ответ
+      if (response !== undefined && response !== null) {
         processChatResponse(response);
+        console.log('[PluginControlPanel] loadChat: успешно обработан ответ');
+      } else {
+        console.warn('[PluginControlPanel] loadChat: получен пустой ответ');
+        setMessages([]);
       }
 
     } catch (e) {
@@ -277,12 +239,12 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
         stack: (e as Error).stack,
       });
 
-      // Fallback логика - пытаемся загрузить через альтернативный метод
+      // Простая fallback логика
       if ((e as Error).message.includes('TIMEOUT')) {
-        console.log('[PluginControlPanel] loadChat - пытаемся fallback через повторный запрос');
+        console.log('[PluginControlPanel] loadChat: таймаут, пробуем fallback');
 
         try {
-          // Повторная попытка с задержкой
+          // Задержка перед повторной попыткой
           await new Promise(resolve => setTimeout(resolve, 1000));
 
           const fallbackResponse = await new Promise<any>((resolve, reject) => {
@@ -301,26 +263,22 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
             });
           });
 
-          console.log('[PluginControlPanel] loadChat - fallback ответ:', fallbackResponse);
+          console.log('[PluginControlPanel] loadChat fallback response:', fallbackResponse);
 
           if (fallbackResponse !== undefined && fallbackResponse !== null) {
-            // Используем fallback ответ
             processChatResponse(fallbackResponse);
-            console.log('[PluginControlPanel] loadChat - успешно использован fallback');
-            return;
+            console.log('[PluginControlPanel] loadChat: fallback успешен');
           } else {
-            throw new Error('Fallback тоже не сработал');
+            throw new Error('Fallback response is empty');
           }
         } catch (fallbackError) {
-          console.error('[PluginControlPanel] loadChat - fallback тоже не удался:', fallbackError);
-          setError('Ошибка загрузки истории чата (включая fallback)');
+          console.error('[PluginControlPanel] loadChat fallback failed:', fallbackError);
+          setError('Не удалось загрузить историю чата');
           setMessages([]);
-          return;
         }
       } else {
-        setError('Ошибка загрузки истории чата');
+        setError(`Ошибка загрузки чата: ${(e as Error).message}`);
         setMessages([]);
-        return;
       }
     } finally {
       setLoading(false);
@@ -336,57 +294,50 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   useEffect(() => {
     const handleChatUpdate = async (event: { type: string; pluginId: string; pageKey: string; messages?: ChatMessage[] }) => {
       if (event?.type === 'PLUGIN_CHAT_UPDATED' && event.pluginId === pluginId && event.pageKey === pageKey) {
-        // Перезагружаем историю чата с улучшенной обработкой ответа
-        console.log('[PluginControlPanel] handleChatUpdate - начинаем запрос к background');
+        console.log('[PluginControlPanel] handleChatUpdate - обновление чата получено');
 
-        // ИСПРАВЛЕНИЕ: Упрощенная логика без сложного Promise.race
-        const sendMessagePromise = chrome.runtime.sendMessage({
-          type: 'GET_PLUGIN_CHAT',
-          pluginId,
-          pageKey,
-        });
-
-        console.log('[PluginControlPanel] handleChatUpdate - ДО ОЖИДАНИЯ sendMessagePromise:', {
-          promise: sendMessagePromise,
-          typeofPromise: typeof sendMessagePromise,
-        });
-
-        // Используем новую простую логику с таймаутом
+        // Упрощенная логика загрузки чата
         const response = await new Promise<any>((resolve, reject) => {
           const timeout = setTimeout(() => {
             reject(new Error('TIMEOUT'));
           }, 5000);
 
-          sendMessagePromise.then((result) => {
+          chrome.runtime.sendMessage({
+            type: 'GET_PLUGIN_CHAT',
+            pluginId,
+            pageKey,
+          }).then((result) => {
             clearTimeout(timeout);
             console.log('[PluginControlPanel] handleChatUpdate response received:', result);
             resolve(result);
           }).catch((error) => {
             clearTimeout(timeout);
-            console.error('[PluginControlPanel] handleChatUpdate send message error:', error);
+            console.error('[PluginControlPanel] handleChatUpdate send error:', error);
             reject(error);
           });
         });
 
-        console.log('[PluginControlPanel] handleChatUpdate response received successfully:', {
+        console.log('[PluginControlPanel] handleChatUpdate response:', {
           response,
           typeofResponse: typeof response,
         });
 
-        // Обработка успешного ответа
+        // Обрабатываем ответ
         if (response !== undefined && response !== null) {
           processChatResponse(response);
+          console.log('[PluginControlPanel] handleChatUpdate: чат успешно обновлен');
         } else {
-          console.error('[PluginControlPanel] handleChatUpdate response is undefined/null');
+          console.warn('[PluginControlPanel] handleChatUpdate: получен пустой ответ');
           setMessages([]);
         }
       }
     };
+
     chrome.runtime.onMessage.addListener(handleChatUpdate);
     return () => {
       chrome.runtime.onMessage.removeListener(handleChatUpdate);
     };
-  }, [pluginId, pageKey]);
+  }, [pluginId, pageKey, processChatResponse]);
 
   // Восстановление черновика при возврате на вкладку 'Чат'
   useEffect(() => {
@@ -431,22 +382,48 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     };
     setMessage(''); // Очищаем сообщение через хук
     try {
-      await chrome.runtime.sendMessage({
-        type: 'SAVE_PLUGIN_CHAT_MESSAGE',
-        pluginId,
-        pageKey,
-        message: {
-          role: 'user',
-          content: newMessage.text,
-          timestamp: newMessage.timestamp,
-        },
+      // Исправление: Обработка ответа от background с Promise
+      const response = await new Promise<any>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('TIMEOUT'));
+        }, 5000);
+
+        chrome.runtime.sendMessage({
+          type: 'SAVE_PLUGIN_CHAT_MESSAGE',
+          pluginId,
+          pageKey,
+          message: {
+            role: 'user',
+            content: newMessage.text,
+            timestamp: newMessage.timestamp,
+          },
+        }).then((result) => {
+          clearTimeout(timeout);
+          console.log('[PluginControlPanel] handleSendMessage response received:', result);
+          resolve(result);
+        }).catch((error) => {
+          clearTimeout(timeout);
+          console.error('[PluginControlPanel] handleSendMessage send error:', error);
+          reject(error);
+        });
       });
-      console.log('[PluginControlPanel] handleSendMessage: сообщение отправлено', newMessage);
-      await loadChat(); // Перезагружаем историю чата после отправки
-      await clearDraft(); // Сбрасываем черновик после отправки
+
+      console.log('[PluginControlPanel] handleSendMessage response:', response);
+
+      // Проверяем ответ от background
+      if (response && response.success) {
+        console.log('[PluginControlPanel] handleSendMessage: сообщение успешно сохранено', newMessage);
+        await loadChat(); // Перезагружаем историю чата после отправки
+        await clearDraft(); // Сбрасываем черновик после отправки
+      } else {
+        throw new Error(response?.error || 'Неизвестная ошибка сохранения');
+      }
     } catch (e) {
-      setError('Ошибка сохранения сообщения');
       console.error('[PluginControlPanel] handleSendMessage: ошибка отправки', e);
+      setError(`Ошибка сохранения сообщения: ${(e as Error).message}`);
+
+      // Восстанавливаем сообщение в поле ввода при ошибке
+      setMessage(newMessage.text);
     }
   };
 
