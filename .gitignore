@@ -47,3 +47,6 @@ tsconfig.tsbuildinfo
 
 # compiled
 **/tailwind-output.css
+
+# Внешние репозитории для справки
+external/

@@ -297,12 +297,13 @@ chrome.runtime.onMessage.addListener(
 
       // === Работа с чатами плагинов ===
       if (msg.type === 'GET_PLUGIN_CHAT' && msg.pluginId && msg.pageKey) {
-        const { pluginId, pageKey } = msg;
+        const { pluginId, pageKey, messageId } = msg;
         const chatKey = `${pluginId}::${getPageKey(pageKey)}`;
 
         console.log('[background] GET_PLUGIN_CHAT: начало обработки', {
           pluginId,
           pageKey,
+          messageId,
           chatKey,
           normalizedPageKey: getPageKey(pageKey),
           timestamp: Date.now()
@@ -320,6 +321,22 @@ chrome.runtime.onMessage.addListener(
               chatKey,
               pageKey
             });
+
+            // Если чат не найден, возвращаем пустой объект с messages: []
+            if (!chat) {
+              console.log('[background] GET_PLUGIN_CHAT: чат не найден, возвращаем пустой массив сообщений');
+              chrome.runtime.sendMessage({
+                type: 'GET_PLUGIN_CHAT_RESPONSE',
+                messageId,
+                response: {
+                  messages: [],
+                  chatKey,
+                  pluginId,
+                  pageKey
+                }
+              });
+              return;
+            }
 
             let safeChat = chat;
             if (chat && Array.isArray(chat.messages) && chat.messages.length > 50) {
@@ -342,16 +359,27 @@ chrome.runtime.onMessage.addListener(
                 pageKey
               });
 
-              const response = serializable || { messages: [] };
+              // Возвращаем объект с полем messages для совместимости с processChatResponse
+              const response = {
+                messages: serializable?.messages || [],
+                chatKey: serializable?.chatKey,
+                pluginId: serializable?.pluginId,
+                pageKey: serializable?.pageKey
+              };
               console.log('[background] GET_PLUGIN_CHAT: отправляем ответ', {
                 response,
                 responseType: typeof response,
                 responseKeys: Object.keys(response),
                 responseMessagesLength: response.messages?.length,
+                messageId,
                 timestamp: Date.now()
               });
 
-              sendResponse(response);
+              chrome.runtime.sendMessage({
+                type: 'GET_PLUGIN_CHAT_RESPONSE',
+                messageId,
+                response
+              });
 
             } catch (err) {
               console.error('[background] GET_PLUGIN_CHAT: Ошибка сериализации чата:', {
@@ -361,7 +389,11 @@ chrome.runtime.onMessage.addListener(
                 safeChatKeys: Object.keys(safeChat || {}),
                 timestamp: Date.now()
               });
-              sendResponse({ error: 'serialization failed', details: String(err) });
+              chrome.runtime.sendMessage({
+                type: 'GET_PLUGIN_CHAT_RESPONSE',
+                messageId,
+                response: { error: 'serialization failed', details: String(err) }
+              });
             }
           } catch (err) {
             console.error('[background] GET_PLUGIN_CHAT: Ошибка в getOrLoadChat:', {
@@ -373,7 +405,11 @@ chrome.runtime.onMessage.addListener(
               chatKey,
               timestamp: Date.now()
             });
-            sendResponse({ error: String(err) });
+            chrome.runtime.sendMessage({
+              type: 'GET_PLUGIN_CHAT_RESPONSE',
+              messageId,
+              response: { error: String(err) }
+            });
           }
         })();
 
@@ -445,11 +481,12 @@ chrome.runtime.onMessage.addListener(
       }
 
       if (msg.type === 'SAVE_PLUGIN_CHAT_MESSAGE' && msg.pluginId && msg.pageKey && msg.message) {
-        const { pluginId, pageKey, message: chatMsg } = msg;
+        const { pluginId, pageKey, message: chatMsg, messageId } = msg;
         const normPageKey = getPageKey(pageKey);
         console.log('[background] SAVE_PLUGIN_CHAT_MESSAGE: начало', {
           pluginId,
           pageKey,
+          messageId,
           normPageKey,
           chatMsg,
           chatMsgType: typeof chatMsg,
@@ -480,8 +517,16 @@ chrome.runtime.onMessage.addListener(
               timestamp: Date.now()
             });
 
-            console.log('[background] sendResponse(SAVE_PLUGIN_CHAT_MESSAGE):', { success: true });
-            sendResponse({ success: true });
+            // Отправляем событие для UI компонентов с messageId
+            chrome.runtime.sendMessage({
+              type: 'SAVE_PLUGIN_CHAT_MESSAGE_RESPONSE',
+              messageId,
+              success: true,
+              pluginId,
+              pageKey: normPageKey,
+              timestamp: Date.now()
+            });
+
             broadcastChatUpdate(pluginId, normPageKey);
           } catch (error) {
             console.error('[background] SAVE_PLUGIN_CHAT_MESSAGE: ошибка', {
@@ -493,28 +538,57 @@ chrome.runtime.onMessage.addListener(
               normPageKey,
               timestamp: Date.now()
             });
-            sendResponse({ success: false, error: String(error) });
+
+            // Отправляем событие об ошибке для UI компонентов с messageId
+            chrome.runtime.sendMessage({
+              type: 'SAVE_PLUGIN_CHAT_MESSAGE_RESPONSE',
+              messageId,
+              success: false,
+              error: String(error),
+              pluginId,
+              pageKey: normPageKey,
+              timestamp: Date.now()
+            });
           }
         })();
 
-        return true;
+        return true; // ВОЗВРАЩАЕМ true для поддержания канала открытым
       }
 
       if (msg.type === 'DELETE_PLUGIN_CHAT' && msg.pluginId && msg.pageKey) {
-        const { pluginId, pageKey } = msg;
+        const { pluginId, pageKey, messageId } = msg;
         const normPageKey = getPageKey(pageKey);
-        console.log('[background] DELETE_PLUGIN_CHAT pageKey:', pageKey, 'norm:', normPageKey);
+        console.log('[background] DELETE_PLUGIN_CHAT pageKey:', pageKey, 'messageId:', messageId, 'norm:', normPageKey);
 
         // Используем синхронную обработку
         (async () => {
           try {
             await pluginChatApi.deleteChat(pluginId, normPageKey);
-            console.log('[background] sendResponse(DELETE_PLUGIN_CHAT):', { success: true });
-            sendResponse({ success: true });
+
+            // Отправляем событие для UI компонентов с messageId
+            chrome.runtime.sendMessage({
+              type: 'DELETE_PLUGIN_CHAT_RESPONSE',
+              messageId,
+              success: true,
+              pluginId,
+              pageKey: normPageKey,
+              timestamp: Date.now()
+            });
+
             broadcastChatUpdate(pluginId, normPageKey);
           } catch (error) {
             console.error('[background] Error deleting plugin chat:', error);
-            sendResponse({ error: String(error) });
+
+            // Отправляем событие об ошибке для UI компонентов с messageId
+            chrome.runtime.sendMessage({
+              type: 'DELETE_PLUGIN_CHAT_RESPONSE',
+              messageId,
+              success: false,
+              error: String(error),
+              pluginId,
+              pageKey: normPageKey,
+              timestamp: Date.now()
+            });
           }
         })();
 

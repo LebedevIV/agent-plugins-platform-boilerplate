@@ -94,6 +94,15 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   const pluginId = plugin.id;
   const pageKey = getPageKey(currentTabUrl);
 
+  // Вспомогательная функция для отправки сообщений в background без ожидания ответа
+  const sendMessageToBackground = useCallback((message: any): void => {
+    const messageId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+    const messageWithId = { ...message, messageId };
+
+    console.log('[PluginControlPanel] sendMessageToBackground:', messageWithId);
+    chrome.runtime.sendMessage(messageWithId);
+  }, []);
+
   // Вспомогательная функция для обработки ответа чата
   const processChatResponse = useCallback((response: any) => {
     console.log('[PluginControlPanel] Анализ chatData:', {
@@ -189,155 +198,103 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   }, []);
 
   // Загрузка истории чата при монтировании или смене плагина/страницы
-  const loadChat = useCallback(async () => {
+  const loadChat = useCallback(() => {
     setLoading(true);
     setError(null);
-    try {
-      console.log('[PluginControlPanel] loadChat запрос:', { pluginId, pageKey });
 
-      // Упрощенная и надежная логика без сложного Promise.race
-      const response = await new Promise<any>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error('TIMEOUT'));
-        }, 5000);
+    console.log('[PluginControlPanel] loadChat запрос:', { pluginId, pageKey });
 
-        chrome.runtime.sendMessage({
-          type: 'GET_PLUGIN_CHAT',
-          pluginId,
-          pageKey,
-        }).then((result) => {
-          clearTimeout(timeout);
-          console.log('[PluginControlPanel] loadChat response received:', result);
-          resolve(result);
-        }).catch((error) => {
-          clearTimeout(timeout);
-          console.error('[PluginControlPanel] loadChat send error:', error);
-          reject(error);
-        });
-      });
-
-      console.log('[PluginControlPanel] loadChat response:', {
-        response,
-        typeofResponse: typeof response,
-        responseKeys: response ? Object.keys(response) : 'response is null/undefined',
-      });
-
-      // Проверяем и обрабатываем ответ
-      if (response !== undefined && response !== null) {
-        processChatResponse(response);
-        console.log('[PluginControlPanel] loadChat: успешно обработан ответ');
-      } else {
-        console.warn('[PluginControlPanel] loadChat: получен пустой ответ');
-        setMessages([]);
-      }
-
-    } catch (e) {
-      console.error('[PluginControlPanel] loadChat error:', e);
-      console.error('[PluginControlPanel] loadChat error details:', {
-        error: e,
-        message: (e as Error).message,
-        stack: (e as Error).stack,
-      });
-
-      // Простая fallback логика
-      if ((e as Error).message.includes('TIMEOUT')) {
-        console.log('[PluginControlPanel] loadChat: таймаут, пробуем fallback');
-
-        try {
-          // Задержка перед повторной попыткой
-          await new Promise(resolve => setTimeout(resolve, 1000));
-
-          const fallbackResponse = await new Promise<any>((resolve, reject) => {
-            const fallbackTimeout = setTimeout(() => reject(new Error('FALLBACK_TIMEOUT')), 3000);
-
-            chrome.runtime.sendMessage({
-              type: 'GET_PLUGIN_CHAT',
-              pluginId,
-              pageKey,
-            }).then((result) => {
-              clearTimeout(fallbackTimeout);
-              resolve(result);
-            }).catch((error) => {
-              clearTimeout(fallbackTimeout);
-              reject(error);
-            });
-          });
-
-          console.log('[PluginControlPanel] loadChat fallback response:', fallbackResponse);
-
-          if (fallbackResponse !== undefined && fallbackResponse !== null) {
-            processChatResponse(fallbackResponse);
-            console.log('[PluginControlPanel] loadChat: fallback успешен');
-          } else {
-            throw new Error('Fallback response is empty');
-          }
-        } catch (fallbackError) {
-          console.error('[PluginControlPanel] loadChat fallback failed:', fallbackError);
-          setError('Не удалось загрузить историю чата');
-          setMessages([]);
-        }
-      } else {
-        setError(`Ошибка загрузки чата: ${(e as Error).message}`);
-        setMessages([]);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [pluginId, pageKey, processChatResponse]);
+    sendMessageToBackground({
+      type: 'GET_PLUGIN_CHAT',
+      pluginId,
+      pageKey,
+    });
+  }, [pluginId, pageKey, sendMessageToBackground]);
 
   // Добавить useEffect для вызова loadChat при монтировании и смене pluginId/pageKey
   useEffect(() => {
     loadChat();
   }, [loadChat]);
 
-  // Событийная синхронизация чата между вкладками
+  // Событийная синхронизация чата между вкладками и обработка результатов сохранения сообщений
   useEffect(() => {
-    const handleChatUpdate = async (event: { type: string; pluginId: string; pageKey: string; messages?: ChatMessage[] }) => {
+    const handleChatUpdate = (event: { type: string; pluginId: string; pageKey: string; messages?: ChatMessage[]; messageId?: string; response?: any }) => {
       if (event?.type === 'PLUGIN_CHAT_UPDATED' && event.pluginId === pluginId && event.pageKey === pageKey) {
         console.log('[PluginControlPanel] handleChatUpdate - обновление чата получено');
-
-        // Упрощенная логика загрузки чата
-        const response = await new Promise<any>((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            reject(new Error('TIMEOUT'));
-          }, 5000);
-
-          chrome.runtime.sendMessage({
-            type: 'GET_PLUGIN_CHAT',
-            pluginId,
-            pageKey,
-          }).then((result) => {
-            clearTimeout(timeout);
-            console.log('[PluginControlPanel] handleChatUpdate response received:', result);
-            resolve(result);
-          }).catch((error) => {
-            clearTimeout(timeout);
-            console.error('[PluginControlPanel] handleChatUpdate send error:', error);
-            reject(error);
-          });
+        // Запрашиваем актуальные данные чата
+        sendMessageToBackground({
+          type: 'GET_PLUGIN_CHAT',
+          pluginId,
+          pageKey,
         });
+      }
 
-        console.log('[PluginControlPanel] handleChatUpdate response:', {
-          response,
-          typeofResponse: typeof response,
-        });
+      // Обработка ответов на GET_PLUGIN_CHAT с messageId
+      if (event?.type === 'GET_PLUGIN_CHAT_RESPONSE' && event.messageId && event.response) {
+        console.log('[PluginControlPanel] handleChatUpdate - получен ответ на GET_PLUGIN_CHAT:', event.response);
 
-        // Обрабатываем ответ
-        if (response !== undefined && response !== null) {
-          processChatResponse(response);
-          console.log('[PluginControlPanel] handleChatUpdate: чат успешно обновлен');
-        } else {
-          console.warn('[PluginControlPanel] handleChatUpdate: получен пустой ответ');
+        setLoading(false); // Останавливаем загрузку при получении ответа
+
+        if (event.response.error) {
+          console.error('[PluginControlPanel] handleChatUpdate error:', event.response.error);
+          setError(`Ошибка загрузки чата: ${event.response.error}`);
           setMessages([]);
+        } else {
+          processChatResponse(event.response);
+          console.log('[PluginControlPanel] handleChatUpdate: чат успешно обновлен');
+        }
+      }
+
+      // Обработка результатов сохранения сообщений
+      if (event?.type === 'SAVE_PLUGIN_CHAT_MESSAGE_RESPONSE') {
+        console.log('[PluginControlPanel] handleChatUpdate - результат сохранения сообщения:', event);
+
+        if (event.success) {
+          console.log('[PluginControlPanel] handleChatUpdate: сообщение успешно сохранено');
+        } else {
+          console.error('[PluginControlPanel] handleChatUpdate: ошибка сохранения сообщения', event.error);
+          setError(`Ошибка сохранения сообщения: ${event.error}`);
+        }
+      }
+
+      // Обработка результатов удаления чата
+      if (event?.type === 'DELETE_PLUGIN_CHAT_RESPONSE') {
+        console.log('[PluginControlPanel] handleChatUpdate - результат удаления чата:', event);
+
+        setLoading(false); // Останавливаем загрузку
+
+        if (event.success) {
+          console.log('[PluginControlPanel] handleChatUpdate: чат успешно удален');
+        } else {
+          console.error('[PluginControlPanel] handleChatUpdate: ошибка удаления чата', event.error);
+          setError(`Ошибка удаления чата: ${event.error}`);
+        }
+      }
+    };
+
+    // Слушатель для обработки результатов операций с чатом
+    const handleChatOperationResult = (message: any) => {
+      if (message.type === 'SAVE_PLUGIN_CHAT_MESSAGE_RESPONSE') {
+        console.log('[PluginControlPanel] handleChatOperationResult: получен результат сохранения сообщения', message);
+
+        if (message.success) {
+          console.log('[PluginControlPanel] handleChatOperationResult: сообщение успешно сохранено');
+          // Не нужно ничего делать дополнительно - обновление придет через PLUGIN_CHAT_UPDATED
+        } else {
+          console.error('[PluginControlPanel] handleChatOperationResult: ошибка сохранения сообщения', message.error);
+          setError(`Ошибка сохранения сообщения: ${message.error}`);
         }
       }
     };
 
     chrome.runtime.onMessage.addListener(handleChatUpdate);
+    chrome.runtime.onMessage.addListener(handleChatOperationResult);
+
     return () => {
       chrome.runtime.onMessage.removeListener(handleChatUpdate);
+      chrome.runtime.onMessage.removeListener(handleChatOperationResult);
     };
-  }, [pluginId, pageKey, processChatResponse]);
+  }, [pluginId, pageKey, processChatResponse, sendMessageToBackground]);
 
   // Восстановление черновика при возврате на вкладку 'Чат'
   useEffect(() => {
@@ -371,60 +328,36 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     }
   }, [draftText, setMessage]);
 
-  const handleSendMessage = async (): Promise<void> => {
+  const handleSendMessage = (): void => {
     console.log('[PluginControlPanel] handleSendMessage: попытка отправки', { message });
     if (!message.trim()) return;
+
     const newMessage: ChatMessage = {
       id: Date.now().toString(),
       text: message.trim(),
       isUser: true,
       timestamp: Date.now(),
     };
-    setMessage(''); // Очищаем сообщение через хук
-    try {
-      // Исправление: Обработка ответа от background с Promise
-      const response = await new Promise<any>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error('TIMEOUT'));
-        }, 5000);
 
-        chrome.runtime.sendMessage({
-          type: 'SAVE_PLUGIN_CHAT_MESSAGE',
-          pluginId,
-          pageKey,
-          message: {
-            role: 'user',
-            content: newMessage.text,
-            timestamp: newMessage.timestamp,
-          },
-        }).then((result) => {
-          clearTimeout(timeout);
-          console.log('[PluginControlPanel] handleSendMessage response received:', result);
-          resolve(result);
-        }).catch((error) => {
-          clearTimeout(timeout);
-          console.error('[PluginControlPanel] handleSendMessage send error:', error);
-          reject(error);
-        });
-      });
+    // Очищаем сообщение через хук
+    setMessage('');
+    setError(null); // Сбрасываем предыдущие ошибки
 
-      console.log('[PluginControlPanel] handleSendMessage response:', response);
+    console.log('[PluginControlPanel] handleSendMessage: отправка сообщения в background');
 
-      // Проверяем ответ от background
-      if (response && response.success) {
-        console.log('[PluginControlPanel] handleSendMessage: сообщение успешно сохранено', newMessage);
-        await loadChat(); // Перезагружаем историю чата после отправки
-        await clearDraft(); // Сбрасываем черновик после отправки
-      } else {
-        throw new Error(response?.error || 'Неизвестная ошибка сохранения');
-      }
-    } catch (e) {
-      console.error('[PluginControlPanel] handleSendMessage: ошибка отправки', e);
-      setError(`Ошибка сохранения сообщения: ${(e as Error).message}`);
+    sendMessageToBackground({
+      type: 'SAVE_PLUGIN_CHAT_MESSAGE',
+      pluginId,
+      pageKey,
+      message: {
+        role: 'user',
+        content: newMessage.text,
+        timestamp: newMessage.timestamp,
+      },
+    });
 
-      // Восстанавливаем сообщение в поле ввода при ошибке
-      setMessage(newMessage.text);
-    }
+    // Очищаем черновик сразу после отправки
+    clearDraft();
   };
 
   // Обработка изменения размера разделителя
@@ -497,21 +430,20 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   };
 
   // Очистка чата (удаление всей истории)
-  const handleClearChat = async (): Promise<void> => {
-    // Удалить все вызовы setSyncStatus(...)
-    try {
-      await chrome.runtime.sendMessage({
-        type: 'DELETE_PLUGIN_CHAT',
-        pluginId,
-        pageKey,
-      });
-      setMessages([]);
-      await clearDraft(); // Очищаем черновик
-      // Удалить все вызовы setSyncStatus(...)
-    } catch {
-      // Удалить все вызовы setSyncStatus(...)
-      setError('Ошибка очистки чата');
-    }
+  const handleClearChat = (): void => {
+    setLoading(true);
+    setError(null);
+
+    sendMessageToBackground({
+      type: 'DELETE_PLUGIN_CHAT',
+      pluginId,
+      pageKey,
+    });
+
+    // Очищаем локальное состояние сразу
+    setMessages([]);
+    clearDraft(); // Очищаем черновик
+    console.log('[PluginControlPanel] handleClearChat: запрос на очистку чата отправлен');
   };
 
   // Экспорт чата в JSON
@@ -579,32 +511,51 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
             </div>
           </div>
           <div className="chat-messages">
-            {loading && <p>Загрузка сообщений...</p>}
-            {error && <p style={{ color: 'red' }}>{error}</p>}
-            {/* Диагностический вывод сообщений */}
-            {messages.map((msg, idx) => {
-              console.log('[PluginControlPanel] render message:', idx, msg);
-              return (
-                <div
-                  key={msg.id || idx}
-                  style={{ border: '1px solid #ccc', margin: 4, padding: 4, background: '#f9f9f9' }}>
-                  {JSON.stringify(msg)}
-                </div>
-              );
-            })}
-            {messagesEndRef.current && <div ref={messagesEndRef} />}
+            {loading && <div className="chat-loader">Загрузка сообщений...</div>}
+            {error && <div className="chat-error">{error}</div>}
+            {!loading && !error && messages.length === 0 && (
+              <div className="chat-placeholder">
+                <p>Нет сообщений</p>
+                <p className="chat-hint">Напишите первое сообщение!</p>
+              </div>
+            )}
+            {/* Отображение сообщений чата */}
+            <div className="messages-container">
+              {messages.map((msg, idx) => {
+                console.log('[PluginControlPanel] render message:', idx, msg);
+                return (
+                  <div
+                    key={msg.id || idx}
+                    className={`chat-message ${msg.isUser ? 'user' : 'bot'}`}
+                  >
+                    <div className="message-content">
+                      <span className="message-text">{msg.text}</span>
+                      <span className="message-time">
+                        {new Date(msg.timestamp).toLocaleTimeString()}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div ref={messagesEndRef} />
           </div>
-          <div className="chat-input-container">
+          <div className="chat-input">
             <textarea
               ref={textareaRef}
+              className="message-textarea"
               value={message}
               onChange={handleTextareaChange}
               onKeyPress={handleKeyPress}
               placeholder="Напишите сообщение..."
               style={{ height: `${inputHeight}px` }}
             />
-            <button onClick={handleSendMessage} disabled={!message.trim()} style={{ marginLeft: 8 }}>
-              Отправить
+            <button
+              className="send-btn"
+              onClick={handleSendMessage}
+              disabled={!message.trim()}
+            >
+              📤
             </button>
             <DraftStatus
               isDraftSaved={isDraftSaved}

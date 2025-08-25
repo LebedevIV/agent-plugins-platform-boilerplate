@@ -61,6 +61,49 @@ local DefaultMetadata = templates.DefaultMetadata;
         purpose='Главный индексный файл системы памяти с навигацией по категориям и быстрым доступом.',
         metadata=DefaultMetadata()
     ),
+    // --- Chrome Extension Chat Recovery Project ---
+    'memory-bank/projects/chrome-extension-chat-recovery/README.md': FileEntity(
+        kind='ProjectDocumentation',
+        path='memory-bank/projects/chrome-extension-chat-recovery/README.md',
+        purpose='Документация проекта восстановления функционала чата в Chrome Extension.',
+        metadata=DefaultMetadata()
+    ),
+    'memory-bank/projects/chrome-extension-chat-recovery/docs/project-overview.md': FileEntity(
+        kind='ProjectOverview',
+        path='memory-bank/projects/chrome-extension-chat-recovery/docs/project-overview.md',
+        purpose='Обзор проекта восстановления чата с ключевыми метриками и целями.',
+        metadata=DefaultMetadata()
+    ),
+    'memory-bank/projects/chrome-extension-chat-recovery/docs/problems-solved.md': FileEntity(
+        kind='ProblemsDocumentation',
+        path='memory-bank/projects/chrome-extension-chat-recovery/docs/problems-solved.md',
+        purpose='Документация всех решенных проблем и их решений.',
+        metadata=DefaultMetadata()
+    ),
+    'memory-bank/projects/chrome-extension-chat-recovery/architecture/chat-architecture.md': FileEntity(
+        kind='ArchitectureDocumentation',
+        path='memory-bank/projects/chrome-extension-chat-recovery/architecture/chat-architecture.md',
+        purpose='Полная архитектура чата с детальными техническими решениями.',
+        metadata=DefaultMetadata()
+    ),
+    'memory-bank/projects/chrome-extension-chat-recovery/docs/code-changes-summary.md': FileEntity(
+        kind='CodeChangesDocumentation',
+        path='memory-bank/projects/chrome-extension-chat-recovery/docs/code-changes-summary.md',
+        purpose='Сводка всех изменений в коде с техническими деталями.',
+        metadata=DefaultMetadata()
+    ),
+    'memory-bank/projects/chrome-extension-chat-recovery/testing/testing-results.md': FileEntity(
+        kind='TestingDocumentation',
+        path='memory-bank/projects/chrome-extension-chat-recovery/testing/testing-results.md',
+        purpose='Результаты тестирования с метриками качества и производительности.',
+        metadata=DefaultMetadata()
+    ),
+    'memory-bank/projects/chrome-extension-chat-recovery/docs/lessons-learned.md': FileEntity(
+        kind='LessonsLearned',
+        path='memory-bank/projects/chrome-extension-chat-recovery/docs/lessons-learned.md',
+        purpose='Выводы и уроки из проекта для будущих разработок.',
+        metadata=DefaultMetadata()
+    ),
     'memory-bank/architecture/README.md': FileEntity(
         kind='MemoryBank',
         path='memory-bank/architecture/README.md',
