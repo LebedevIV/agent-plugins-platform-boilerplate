@@ -155,6 +155,158 @@ local DefaultMetadata = templates.DefaultMetadata;
         metadata=DefaultMetadata()
     ),
 
+    // --- Chrome Extension Plugins ---
+    'chrome-extension/public/plugins/ozon-analyzer/': FileEntity(
+        kind='PluginDirectory',
+        path='chrome-extension/public/plugins/ozon-analyzer/',
+        purpose='Ozon Analyzer плагин для анализа товаров на маркетплейсе Ozon.ru с AI интеграцией.',
+        metadata=Metadata(1.0, 'Gemini-1.5-Pro')
+    ) + {
+        sections: [
+            { name: 'manifest.json', purpose: 'Конфигурация плагина с AI моделями и настройками' },
+            { name: 'workflow.json', purpose: 'Определение рабочего процесса анализа' },
+            { name: 'mcp_server.py', purpose: 'Основная Python логика обработки товаров' },
+            { name: 'README.md', purpose: 'Документация и пользовательское руководство' }
+        ],
+    },
+
+    'chrome-extension/public/plugins/ozon-analyzer/mcp_server.py': Component(
+        name='OzonMcpServer',
+        path='chrome-extension/public/plugins/ozon-analyzer/mcp_server.py',
+        purpose='MCP сервер для анализа товаров Ozon с AI поддержкой.',
+        metadata=Metadata(1.0, 'Gemini-1.5-Pro')
+    ) + {
+        sections: [
+            { name: 'analyze_ozon_product', purpose: 'Главная функция анализа продукта на основе HTML' },
+            { name: 'perform_deep_analysis', purpose: 'Функция глубокого анализа с AI и альтернативными товарами' },
+            { name: '_call_ai_model', purpose: 'Унифицированная обертка для AI API вызовов' },
+            { name: '_extract_description_and_composition', purpose: 'Парсинг описания и состава товара' },
+            { name: '_extract_categories', purpose: 'Извлечение категорий товара' },
+            { name: '_find_similar_products', purpose: 'Поиск похожих товаров через AI' },
+            { name: '_analyze_composition_vs_description', purpose: 'Сравнение состава с описанием' }
+        ],
+    },
+
+    'chrome-extension/public/plugins/ozon-analyzer/manifest.json': FileEntity(
+        kind='PluginManifest',
+        path='chrome-extension/public/plugins/ozon-analyzer/manifest.json',
+        purpose='Манифест конфигурации Ozon Analyzer плагина с настройками AI и метаданными.',
+        metadata=Metadata(1.0, 'Gemini-1.5-Pro')
+    ),
+
+    'chrome-extension/public/plugins/ozon-analyzer/workflow.json': FileEntity(
+        kind='PluginWorkflow',
+        path='chrome-extension/public/plugins/ozon-analyzer/workflow.json',
+        purpose='Определение рабочего процесса анализа товаров для APP платформы.',
+        metadata=Metadata(1.0, 'Gemini-1.5-Pro')
+    ),
+
+    'chrome-extension/public/plugins/ozon-analyzer/README.md': FileEntity(
+        kind='PluginDocumentation',
+        path='chrome-extension/public/plugins/ozon-analyzer/README.md',
+        purpose='Полная документация плагина Ozon Analyzer для пользователей и разработчиков.',
+        metadata=Metadata(1.0, 'Gemini-1.5-Pro')
+    ),
+
+    // --- Ozon Analyzer Technical Documentation ---
+    'docs/plugins/ozon-analyzer-technical-spec.md': FileEntity(
+        kind='PluginTechnicalSpecification',
+        path='docs/plugins/ozon-analyzer-technical-spec.md',
+        purpose='Техническая спецификация архитектуры, API и интеграции плагина.',
+        metadata=Metadata(1.0, 'Gemini-1.5-Pro')
+    ),
+
+    'docs/plugins/ozon-analyzer-integration-guide.md': FileEntity(
+        kind='PluginIntegrationGuide',
+        path='docs/plugins/ozon-analyzer-integration-guide.md',
+        purpose='Пошаговое руководство по интеграции и созданию аналогичных плагинов.',
+        metadata=Metadata(1.0, 'Gemini-1.5-Pro')
+    ),
+
+    'docs/plugins/ozon-analyzer-ui-documentation.md': FileEntity(
+        kind='PluginUIDocumentation',
+        path='docs/plugins/ozon-analyzer-ui-documentation.md',
+        purpose='Комплексная документация UI/UX компонентов плагина.',
+        metadata=Metadata(1.0, 'Gemini-1.5-Pro')
+    ),
+
+    // --- AI API Integration ---
+    'chrome-extension/src/background/ai-api-client.ts': Component(
+        name='AIApiClient',
+        path='chrome-extension/src/background/ai-api-client.ts',
+        purpose='Клиент для интеграции с AI API сервисами (OpenAI, Google Gemini).',
+        metadata=Metadata(1.0, 'Gemini-1.5-Pro')
+    ) + {
+        sections: [
+            { name: 'AIApiClient', purpose: 'Основной класс для AI API интеграции' },
+            { name: 'callModel', purpose: 'Универсальный метод вызова AI модели' },
+            { name: 'callGeminiApi', purpose: 'Интеграция с Google Gemini API' },
+            { name: 'callOpenAIApi', purpose: 'Интеграция с OpenAI API' },
+            { name: 'getApiKey', purpose: 'Безопасное получение API ключей' },
+            { name: 'MODEL_CONFIGS', purpose: 'Конфигурации всех поддерживаемых моделей' }
+        ],
+    },
+
+    'chrome-extension/src/background/host-api.ts': Component(
+        name='HostApi',
+        path='chrome-extension/src/background/host-api.ts',
+        purpose='API моста для связи между фоновым скриптом и Python runtime.',
+        metadata=Metadata(1.0, 'Gemini-1.5-Pro')
+    ) + {
+        sections: [
+            { name: 'hostApi', purpose: 'Основной объект API моста' },
+            { name: 'llm_call', purpose: 'Функция вызова AI моделей из Python' },
+            { name: 'get_setting', purpose: 'Функция получения настроек из Python' },
+            { name: 'sendMessageToChat', purpose: 'Отправка сообщений в UI из Python' },
+            { name: 'host_fetch', purpose: 'HTTP запросы из Python с CORS' },
+            { name: 'findTargetTab', purpose: 'Поиск целевой вкладки для анализа' }
+        ],
+    },
+
+    'chrome-extension/src/background/index.ts': Component(
+        name='BackgroundScript',
+        path='chrome-extension/src/background/index.ts',
+        purpose='Основной фоновый скрипт Chrome расширения с обработкой событий и коммуникацией.',
+        metadata=Metadata(1.0, 'Gemini-1.5-Pro')
+    ) + {
+        sections: [
+            { name: 'messageRouter', purpose: 'Центральный роутер входящих сообщений' },
+            { name: 'handleHostApiMessage', purpose: 'Обработка host API вызовов из Python' },
+            { name: 'RUN_WORKFLOW', purpose: 'Обработчик запуска рабочих процессов' },
+            { name: 'llm_call handling', purpose: 'Обработка AI API запросов' },
+            { name: 'ExtensionMessage interface', purpose: 'Типизация сообщений расширения' }
+        ],
+    },
+
+    // --- Memory Bank Documentation ---
+    'memory-bank/core/plugin-adaptations.md': FileEntity(
+        kind='MemoryBankDocumentation',
+        path='memory-bank/core/plugin-adaptations.md',
+        purpose='Документация процесса адаптации плагина Ozon Analyzer к архитектуре APP.',
+        metadata=DefaultMetadata()
+    ),
+
+    'memory-bank/architecture/plugin-system-integration.md': FileEntity(
+        kind='MemoryBankArchitecture',
+        path='memory-bank/architecture/plugin-system-integration.md',
+        purpose='Архитектурный анализ интеграции mikro-плагинов в экосистему платформы.',
+        metadata=DefaultMetadata()
+    ),
+
+    'memory-bank/development/ozon-analyzer-testing.md': FileEntity(
+        kind='MemoryBankDevelopment',
+        path='memory-bank/development/ozon-analyzer-testing.md',
+        purpose='Результаты тестирования плагина Ozon Analyzer с метриками производительности.',
+        metadata=DefaultMetadata()
+    ),
+
+    'memory-bank/ui/ozon-analyzer-ui-integration.md': FileEntity(
+        kind='MemoryBankUI',
+        path='memory-bank/ui/ozon-analyzer-ui-integration.md',
+        purpose='Документация UI/UX интеграции плагина с рекомендациями по использованию.',
+        metadata=DefaultMetadata()
+    ),
+
     // --- Tests ---
     // Note: Test configurations are managed separately and not included in this graph
     // ... other entities
