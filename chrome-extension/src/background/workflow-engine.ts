@@ -3,7 +3,7 @@
  * Executes declarative workflows
  */
 
-import { runPythonTool } from '../../../bridge/mcp-bridge.js';
+import { runPythonTool } from './mcp-bridge';
 import { hostApi } from './host-api';
 
 export interface WorkflowStep {

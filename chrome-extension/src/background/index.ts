@@ -2,6 +2,7 @@ import 'webextension-polyfill';
 import { pluginChatApi } from './plugin-chat-api';
 import { getAvailablePlugins } from './plugin-manager';
 import { getPageKey } from '../../../packages/shared/lib/utils/helpers';
+import { getApiKeyForModel, callAiModel } from './ai-api-client';
 import { exampleThemeStorage, pluginSettingsStorage, getPluginSettings } from '@extension/storage';
 import type { ChatMessage } from './plugin-chat-api';
 import type { Plugin } from './plugin-manager';
@@ -21,6 +22,9 @@ interface ExtensionMessage {
   level?: 'info' | 'success' | 'error' | 'warning' | 'debug';
   stepId?: string;
   logData?: unknown;
+  // Для идентификации сообщений и запросов:
+  requestId?: string;
+  messageId?: string;
 }
 
 // Только стандартное поведение: панель открывается/закрывается глобально по клику на иконку
@@ -247,7 +251,7 @@ chrome.runtime.onMessage.addListener(
         console.log('[background] Processing RUN_WORKFLOW request for:', msg.pluginId);
         (async () => {
           try {
-            const result = await runPluginIfEnabled(msg.pluginId);
+            const result = await runPluginIfEnabled(msg.pluginId as string);
             sendResponse(result);
           } catch (error) {
             console.error('[background] Error in RUN_WORKFLOW:', error);
@@ -733,6 +737,136 @@ const handleHostApiMessage = async (
         const response = await fetch(url);
         const data = await response.text();
         sendResponse({ data });
+        break;
+      }
+      case 'llm_call': {
+        try {
+          const { modelAlias, options, pluginId } = message.data as {
+            modelAlias: string;
+            options: any;
+            pluginId?: string
+          };
+
+          console.log('[HOST API] LLM call requested:', { modelAlias, pluginId });
+
+          // Загружаем manifest плагина для получения маппинга моделей
+          const currentPlugin = pluginId || 'ozon-analyzer';
+          const manifestUrl = chrome.runtime.getURL(`public/plugins/${currentPlugin}/manifest.json`);
+
+          let manifestResponse;
+          try {
+            manifestResponse = await fetch(manifestUrl);
+            if (!manifestResponse.ok) {
+              throw new Error(`Failed to load manifest: ${manifestResponse.status}`);
+            }
+          } catch (error) {
+            console.error('[HOST API] Error loading manifest:', error);
+            sendResponse({
+              error: true,
+              error_message: `Не удалось загрузить настройки плагина ${currentPlugin}: ${(error as Error).message}`
+            });
+            return true;
+          }
+
+          const manifest = await manifestResponse.json();
+          const aiModels = manifest.ai_models || {};
+
+          // Определяем реальную модель на основе алиаса
+          const actualModel = aiModels[modelAlias];
+          if (!actualModel) {
+            sendResponse({
+              error: true,
+              error_message: `Модель с алиасом '${modelAlias}' не найдена в манифесте плагина`
+            });
+            return true;
+          }
+
+          console.log('[HOST API] Using model:', actualModel, 'for alias:', modelAlias);
+
+          // Получаем API ключ для модели
+          const apiKey = await getApiKeyForModel(actualModel);
+          if (!apiKey) {
+            sendResponse({
+              error: true,
+              error_message: `API ключ для модели ${actualModel} не найден`
+            });
+            return true;
+          }
+
+          // Выполняем запрос к AI API
+          try {
+            const aiResponse = await callAiModel(actualModel, apiKey, options.prompt || '');
+            sendResponse({
+              response: aiResponse
+            });
+          } catch (aiError) {
+            console.error('[HOST API] AI API error:', aiError);
+            sendResponse({
+              error: true,
+              error_message: `Ошибка вызова AI API: ${(aiError as Error).message}`
+            });
+          }
+        } catch (error) {
+          console.error('[HOST API] llm_call error:', error);
+          sendResponse({
+            error: true,
+            error_message: (error as Error).message
+          });
+        }
+        break;
+      }
+      case 'get_setting': {
+        try {
+          const { settingName, defaultValue, category, pluginId } = message.data as {
+            settingName: string;
+            defaultValue?: any;
+            category?: string;
+            pluginId?: string
+          };
+
+          console.log('[HOST API] Get setting requested:', { settingName, pluginId });
+
+          // Загружаем manifest плагина для получения настроек
+          const currentPlugin = pluginId || 'ozon-analyzer';
+          const manifestUrl = chrome.runtime.getURL(`public/plugins/${currentPlugin}/manifest.json`);
+
+          let manifestResponse;
+          try {
+            manifestResponse = await fetch(manifestUrl);
+            if (!manifestResponse.ok) {
+              throw new Error(`Failed to load manifest: ${manifestResponse.status}`);
+            }
+          } catch (error) {
+            console.error('[HOST API] Error loading manifest:', error);
+            sendResponse({
+              error: true,
+              error_message: `Не удалось загрузить настройки плагина ${currentPlugin}: ${(error as Error).message}`
+            });
+            return true;
+          }
+
+          const manifest = await manifestResponse.json();
+          const settings = manifest.settings || {};
+
+          // Получаем значение настройки
+          let settingValue = settings[settingName];
+
+          if (settingValue === undefined) {
+            // Если настройка не найдена, используем значение по умолчанию
+            settingValue = defaultValue;
+            console.log(`[HOST API] Setting '${settingName}' not found, using default:`, defaultValue);
+          }
+
+          console.log(`[HOST API] Returning setting '${settingName}':`, settingValue);
+          sendResponse({ value: settingValue });
+
+        } catch (error) {
+          console.error('[HOST API] get_setting error:', error);
+          sendResponse({
+            error: true,
+            error_message: (error as Error).message
+          });
+        }
         break;
       }
       default:

@@ -1,455 +1,252 @@
-import sys
+# ==============================================================================
+# MCP Server (Библиотека Инструментов) для плагина "Ozon Analyzer"
+# ==============================================================================
+# Этот скрипт НЕ является самостоятельным сервером. Он представляет собой
+# набор Python-функций ("инструментов"), которые вызываются по требованию
+# движком `workflow-engine.js` нашей платформы.
+# Вся коммуникация с внешним миром (UI, Browser API, LLM) происходит
+# опосредованно, через вызовы JavaScript-функций, доступных в глобальном
+# объекте `js`.
+# ------------------------------------------------------------------------------
+
+# Стандартные импорты
 import json
-import asyncio
-import re
-from typing import Any, Dict, List
-# from bs4 import BeautifulSoup  # Может не работать в Pyodide
+from typing import Any, Dict, List, Protocol, runtime_checkable
 
-# Простой HTML парсер для Pyodide
-class SimpleHTMLParser:
-    def __init__(self, html):
-        self.html = html
-    
-    def find(self, tag, attrs=None):
-        # Простая реализация поиска тега
-        return SimpleHTMLElement(self.html, tag, attrs)
-    
-    def find_all(self, tag, attrs=None):
-        # Простая реализация поиска всех тегов
-        return [SimpleHTMLElement(self.html, tag, attrs)]
+# --- "Контракт" с JavaScript: Объявление типов для `js` моста ---
+# Этот блок кода критически важен для статических анализаторов (Pyright, MyPy)
+# и для автодополнения в IDE (Cursor, VS Code). Он "объясняет" анализатору,
+# какие методы существуют у глобального объекта `js`, который предоставляет
+# среда Pyodide. В реальной среде выполнения этот блок не создает новых
+# переменных, так как `js` уже будет определен.
+try:
+    @runtime_checkable
+    class JsBridge(Protocol):
+        """Описывает "контракт" API, который предоставляет JavaScript-хост."""
+        def sendMessageToChat(self, message: Dict[str, Any]) -> None: ...
+        def llm_call(self, model_alias: str, params: Dict[str, Any]) -> Any: ...
+        def get_setting(self, setting_name: str) -> Any: ...
+    js: JsBridge
+except ImportError:
+    # В минимальной среде Python `Protocol` может отсутствовать.
+    # В Pyodide это не вызовет проблем.
+    pass
 
-class SimpleHTMLElement:
-    def __init__(self, html, tag, attrs):
-        self.html = html
-        self.tag = tag
-        self.attrs = attrs or {}
-    
-    def get(self, attr, default=''):
-        return self.attrs.get(attr, default)
-    
-    def find(self, tag, attrs=None):
-        return SimpleHTMLElement(self.html, tag, attrs)
-    
-    def find_all(self, tag, attrs=None):
-        return [SimpleHTMLElement(self.html, tag, attrs)]
-    
-    def get_text(self, strip=False):
-        # Простая реализация извлечения текста
-        return "Sample text" if strip else "Sample text"
-    
-    @property
-    def text(self):
-        return "Sample text"
+# ==============================================================================
+# Секция 1: "Публичные" Инструменты
+# ------------------------------------------------------------------------------
+# Эти функции являются точками входа для `workflow-engine.js`.
+# Имя каждой функции соответствует значению `tool` в `workflow.json`,
+# например, "python.analyze_ozon_product".
+# ==============================================================================
 
-# Глобальная переменная для доступа к JavaScript API
-js = None
+async def analyze_ozon_product(input_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Главная точка входа для анализа страницы товара Ozon.
+    Эта функция оркестрирует весь процесс: парсинг, анализ, поиск аналогов
+    и формирование итогового отчета.
 
-# Конфигурация нейросетей
-AI_MODELS = {
-    "basic_analysis": "gemini-flash",
-    "detailed_comparison": "gemini-pro", 
-    "deep_analysis": "gemini-25",
-    "scraping_fallback": "gemini-flash"
-}
+    Args:
+        input_data: Словарь, содержащий `page_html` текущей страницы.
 
-async def main():
-    """Основная функция MCP сервера для анализатора Ozon"""
-    global js
-    
+    Returns:
+        Словарь с полным отчетом. Ключевые поля `description` и `composition`
+        возвращаются на верхнем уровне, чтобы быть доступными для последующих
+        шагов в `workflow.json` (например, для `perform_deep_analysis`).
+    """
     try:
-        while True:
-            line = sys.stdin.readline()
-            if not line:
-                break
-                
-            request = json.loads(line)
-            response = await process_request(request)
-            
-            sys.stdout.write(json.dumps(response) + '\n')
-            sys.stdout.flush()
-            
-    except Exception as e:
-        error_response = {
-            "error": {
-                "code": -32603,
-                "message": f"Internal error: {str(e)}"
-            }
-        }
-        sys.stdout.write(json.dumps(error_response) + '\n')
-        sys.stdout.flush()
-
-async def process_request(request: Dict[str, Any]) -> Dict[str, Any]:
-    """Обработка MCP запросов"""
-    method = request.get('method')
-    params = request.get('params', {})
-    
-    if method == 'analyze_product':
-        return await analyze_ozon_product(params)
-    elif method == 'deep_analysis':
-        return await perform_deep_analysis(params.get('description', ''), params.get('composition', ''))
-    elif method == 'ping':
-        return {"result": "pong"}
-    else:
-        return {
-            "error": {
-                "code": -32601,
-                "message": f"Method not found: {method}"
-            }
-        }
-
-async def analyze_ozon_product(params: Dict[str, Any]) -> Dict[str, Any]:
-    """Анализ товара на Ozon"""
-    try:
-        # Получаем HTML страницы
-        page_html = params.get('page_html', '')
+        page_html = input_data.get('page_html', '')
         if not page_html:
-            return {
-                "error": {
-                    "code": -32602,
-                    "message": "HTML страницы не предоставлен"
-                }
-            }
+            raise ValueError("HTML страницы не предоставлен для анализа.")
         
-        # Парсим HTML (используем встроенный парсер)
-        # soup = BeautifulSoup(page_html, 'html.parser')
-        # Временно используем простой парсинг
+        # Временная заглушка для парсера. В будущем здесь будет использоваться
+        # библиотека `beautifulsoup4`, которая будет установлена как зависимость
+        # плагина через `micropip`.
         soup = SimpleHTMLParser(page_html)
-        
-        # Проверяем, что это страница товара
-        if not page_html.startswith('https://www.ozon.ru/product/'):
+
+        # Простая проверка, что мы находимся на странице продукта.
+        # Более надежная проверка потребует реального парсинга.
+        if 'ozon.ru/product' not in page_html:
             return {
-                "result": {
-                    "message": "Это не страница товара Ozon. Перейдите на страницу товара для анализа."
-                }
+                "status": "info",
+                "message": "Это не страница товара Ozon. Плагин работает только на страницах товаров."
             }
         
-        # Извлекаем категории из breadcrumbs
-        categories = extract_categories(soup)
+        js.sendMessageToChat({"content": "Python: Начинаю анализ страницы товара..."})
+
+        # Шаг 1: Извлечение структурированных данных со страницы
+        categories = _extract_categories(soup)
+        description, composition = _extract_description_and_composition(soup)
         
-        # Извлекаем описание и состав
-        description, composition = extract_description_and_composition(soup)
+        # Шаг 2: Анализ соответствия с помощью "быстрой" AI-модели
+        js.sendMessageToChat({"content": f"Python: Описание и состав извлечены. Анализирую соответствие с помощью AI..."})
+        analysis_result = await _analyze_composition_vs_description(description, composition)
         
-        # Анализируем соответствие описания и состава
-        analysis_result = await analyze_composition_vs_description(description, composition)
+        # Шаг 3: Поиск аналогов (в данной версии - заглушка)
+        analogs = await _find_similar_products(categories, composition)
         
-        # Ищем аналоги
-        analogs = await find_similar_products(categories, composition)
+        # Шаг 4: Проверяем настройки плагина, заданные пользователем в UI
+        enable_deep_analysis = await js.get_setting("enable_deep_analysis").to_py()
         
-        # Проверяем, нужен ли глубокий анализ
-        deep_analysis_available = await check_deep_analysis_availability()
+        # Шаг 5: Формируем условное предложение для глубокого анализа
+        # Это поле будет использоваться в `workflow.json` в условии `run_if`.
+        offer_deep_analysis = enable_deep_analysis and analysis_result.get('score', 10) < 7
         
+        # Шаг 6: Собираем финальный результат
         result = {
-            "categories": categories,
+            # Эти два поля дублируются на верхнем уровне специально для того,
+            # чтобы следующий шаг в воркфлоу (`perform_deep_analysis`)
+            # мог легко получить к ним доступ через `{{steps.analyze.output.description}}`.
             "description": description,
             "composition": composition,
+            # Вся остальная информация для отображения в UI
+            "categories": categories,
             "analysis": analysis_result,
             "analogs": analogs,
-            "message": f"Анализ завершен. Оценка соответствия: {analysis_result['score']}/10"
-        }
-        
-        # Если доступен глубокий анализ, предлагаем его
-        if deep_analysis_available and analysis_result['score'] < 7:
-            result["deep_analysis_offer"] = {
-                "available": True,
-                "message": "Хотите провести более глубокий анализ с помощью Gemini 2.5 Pro?",
-                "model": AI_MODELS["deep_analysis"]
-            }
-        
-        return {"result": result}
-        
-    except Exception as e:
-        return {
-            "error": {
-                "code": -32603,
-                "message": f"Ошибка анализа товара: {str(e)}"
+            "message": f"Анализ завершен. Оценка соответствия: {analysis_result.get('score', 'N/A')}/10",
+            # Этот объект используется `workflow-engine` для принятия решения,
+            # запускать ли следующий шаг.
+            "deep_analysis_offer": {
+                "available": offer_deep_analysis,
+                "message": "Обнаружены несоответствия. Хотите провести более глубокий анализ?" if offer_deep_analysis else ""
             }
         }
-
-def extract_categories(soup: SimpleHTMLParser) -> List[str]:
-    """Извлекает категории из breadcrumbs"""
-    categories = []
-    
-    breadcrumbs = soup.find('div', {'data-widget': 'breadCrumbs'})
-    if breadcrumbs:
-        links = breadcrumbs.find_all('a')
-        for link in links:
-            href = link.get('href', '')
-            if '/category/' in href:
-                # Извлекаем название категории
-                span = link.find('span')
-                if span:
-                    categories.append(span.text.strip())
-    
-    return categories
-
-def extract_description_and_composition(soup: SimpleHTMLParser) -> tuple:
-    """Извлекает описание и состав товара"""
-    description = ""
-    composition = ""
-    
-    # Ищем div с описанием
-    description_sections = soup.find_all('div', {'id': 'section-description'})
-    
-    for section in description_sections:
-        h2 = section.find('h2')
-        if h2:
-            h2_text = h2.text.strip().lower()
-            
-            if 'описание' in h2_text:
-                # Извлекаем описание
-                desc_div = section.find('div')
-                if desc_div:
-                    description = desc_div.get_text(strip=True)
-                    
-            elif 'состав' in h2_text or 'характеристики' in h2_text:
-                # Извлекаем состав
-                comp_div = section.find('div')
-                if comp_div:
-                    composition = comp_div.get_text(strip=True)
-    
-    return description, composition
-
-async def get_ai_api_key(model_name: str) -> str:
-    """Получает API ключ для указанной нейросети"""
-    try:
-        # В реальной реализации здесь будет обращение к background script
-        # для получения сохраненных ключей
-        return "demo_key"  # Заглушка
-    except Exception as e:
-        print(f"Ошибка получения API ключа для {model_name}: {e}")
-        return ""
-
-async def call_ai_model(model_name: str, prompt: str) -> str:
-    """Вызывает указанную нейросеть с промптом с обработкой лимитов"""
-    try:
-        api_key = await get_ai_api_key(model_name)
-        if not api_key:
-            return f"Ошибка: API ключ для {model_name} не настроен"
-        
-        # Проверяем лимиты перед вызовом
-        rate_limit_info = await check_rate_limit(model_name)
-        if rate_limit_info['limited']:
-            return await handle_rate_limit(model_name, rate_limit_info, prompt)
-        
-        # В реальной реализации здесь будет вызов API нейросети
-        # Пока возвращаем заглушку
-        result = f"Ответ от {model_name}: {prompt[:50]}..."
-        
-        # Обновляем статистику использования
-        await update_usage_stats(model_name)
         
         return result
         
     except Exception as e:
-        return f"Ошибка вызова {model_name}: {str(e)}"
+        js.sendMessageToChat({"content": f"Python: Критическая ошибка при анализе - {e}"})
+        # Возвращаем стандартизированный объект ошибки
+        return { "status": "error", "message": f"Ошибка анализа товара: {str(e)}" }
 
-async def check_rate_limit(model_name: str) -> Dict[str, Any]:
-    """Проверяет лимиты для указанной модели"""
-    try:
-        # В реальной реализации здесь будет проверка лимитов API
-        # Пока возвращаем заглушку
-        return {
-            'limited': False,
-            'reset_time': None,
-            'remaining_requests': 1000
-        }
-    except Exception as e:
-        print(f"Ошибка проверки лимитов для {model_name}: {e}")
-        return {'limited': False, 'reset_time': None, 'remaining_requests': 0}
-
-async def handle_rate_limit(model_name: str, rate_limit_info: Dict[str, Any], prompt: str) -> str:
-    """Обрабатывает ситуацию с лимитами API"""
-    try:
-        # Получаем доступные альтернативные модели
-        alternative_models = await get_alternative_models(model_name)
-        
-        # Пытаемся использовать альтернативную модель
-        for alt_model in alternative_models:
-            alt_rate_limit = await check_rate_limit(alt_model)
-            if not alt_rate_limit['limited']:
-                print(f"Переключаемся на альтернативную модель: {alt_model}")
-                return await call_ai_model(alt_model, prompt)
-        
-        # Если альтернативы недоступны, возвращаем информацию о лимите
-        reset_time = rate_limit_info.get('reset_time')
-        if reset_time:
-            return f"Лимит API для {model_name} превышен. Повторить запрос после {reset_time} или использовать другую модель."
-        else:
-            return f"Лимит API для {model_name} превышен. Попробуйте позже или используйте другую модель."
-            
-    except Exception as e:
-        return f"Ошибка обработки лимита для {model_name}: {str(e)}"
-
-async def get_alternative_models(model_name: str) -> List[str]:
-    """Возвращает список альтернативных моделей"""
-    # Определяем альтернативы для каждой модели
-    alternatives = {
-        'gemini-flash': ['gemini-25'],
-        'gemini-25': ['gemini-flash'],
-        'gemini-pro': ['gemini-flash', 'gemini-25']
-    }
-    
-    return alternatives.get(model_name, [])
-
-async def update_usage_stats(model_name: str):
-    """Обновляет статистику использования модели"""
-    try:
-        # В реальной реализации здесь будет обновление статистики
-        print(f"Обновлена статистика использования для {model_name}")
-    except Exception as e:
-        print(f"Ошибка обновления статистики для {model_name}: {e}")
-
-async def check_deep_analysis_availability() -> bool:
-    """Проверяет доступность глубокого анализа"""
-    try:
-        api_key = await get_ai_api_key(AI_MODELS["deep_analysis"])
-        return bool(api_key and api_key != "demo_key")
-    except Exception as e:
-        print(f"Ошибка проверки доступности глубокого анализа: {e}")
-        return False
-
-async def perform_deep_analysis(description: str, composition: str) -> Dict[str, Any]:
-    """Выполняет глубокий анализ с помощью Gemini 2.5 Pro"""
-    try:
-        prompt = f"""
-        Проведи глубокий анализ товара с медицинской и научной точки зрения.
-        
-        Описание: {description}
-        Состав: {composition}
-        
-        Проанализируй:
-        1. Научную обоснованность заявленных свойств
-        2. Потенциальные побочные эффекты и противопоказания
-        3. Взаимодействие с другими препаратами
-        4. Эффективность по сравнению с аналогами
-        5. Рекомендации по применению
-        6. Альтернативные варианты
-        
-        Верни детальный анализ в структурированном виде.
-        """
-        
-        result = await call_ai_model(AI_MODELS["deep_analysis"], prompt)
-        
-        return {
-            "deep_analysis": result,
-            "model_used": AI_MODELS["deep_analysis"],
-            "timestamp": asyncio.get_event_loop().time()
-        }
-        
-    except Exception as e:
-        return {
-            "error": f"Ошибка глубокого анализа: {str(e)}"
-        }
-
-async def analyze_composition_vs_description(description: str, composition: str) -> Dict[str, Any]:
-    """Анализирует соответствие описания и состава с помощью нейросетей"""
+async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Выполняет глубокий, ресурсоемкий анализ с помощью самой мощной
+    AI-модели, доступной платформе.
+    """
+    description = input_data.get('description', '')
+    composition = input_data.get('composition', '')
     
     if not description or not composition:
-        return {
-            "score": 0,
-            "reasoning": "Не удалось извлечь описание или состав товара",
-            "details": []
-        }
+        return { "status": "error", "message": "Описание или состав не были переданы для глубокого анализа."}
+
+    js.sendMessageToChat({"content": "Python: Запускаю глубокий анализ..."})
+    
+    # Промпт для "экспертного" анализа.
+    prompt = f"""
+    Проведи глубокий анализ товара с медицинской и научной точки зрения.
+    Описание: {description}
+    Состав: {composition}
+    Проанализируй:
+    1. Научную обоснованность заявленных свойств.
+    2. Потенциальные побочные эффекты и противопоказания.
+    3. Эффективность по сравнению с аналогами.
+    Верни детальный анализ в структурированном виде (используй Markdown).
+    """
     
     try:
-        # Базовый анализ с помощью Gemini Flash
-        basic_prompt = f"""
-        Проанализируй соответствие описания товара и его состава.
-        
-        Описание: {description}
-        Состав: {composition}
-        
-        Оцени по шкале от 1 до 10, где:
-        1 - полное несоответствие
-        10 - полное соответствие
-        
-        Верни JSON в формате:
-        {{
-            "score": число,
-            "reasoning": "объяснение оценки",
-            "details": ["деталь 1", "деталь 2"]
-        }}
-        """
-        
-        basic_result = await call_ai_model(AI_MODELS["basic_analysis"], basic_prompt)
-        
-        # Детальное сравнение с помощью Gemini Pro
-        detailed_prompt = f"""
-        Проведи детальный анализ соответствия описания и состава товара.
-        
-        Описание: {description}
-        Состав: {composition}
-        
-        Проанализируй:
-        1. Соответствие заявленных свойств составу
-        2. Качество и полезность ингредиентов
-        3. Потенциальные риски или преимущества
-        4. Рекомендации по использованию
-        
-        Верни структурированный анализ.
-        """
-        
-        detailed_result = await call_ai_model(AI_MODELS["detailed_comparison"], detailed_prompt)
-        
-        # Парсим результат базового анализа
-        try:
-            basic_data = json.loads(basic_result)
-            score = basic_data.get("score", 5)
-            reasoning = basic_data.get("reasoning", "Анализ не удался")
-            details = basic_data.get("details", [])
-        except:
-            score = 5
-            reasoning = "Ошибка парсинга результата анализа"
-            details = []
-        
-        return {
-            "score": score,
-            "reasoning": reasoning,
-            "details": details,
-            "detailed_analysis": detailed_result,
-            "ai_models_used": [AI_MODELS["basic_analysis"], AI_MODELS["detailed_comparison"]]
-        }
-        
+        # "deep_analysis" - это псевдоним из `manifest.json` этого плагина.
+        # Платформа сама определит, какую реальную модель (например, gemini-pro)
+        # использовать, и подставит соответствующий API-ключ.
+        result = await _call_ai_model("deep_analysis", prompt)
+        return { "deep_analysis_report": result }
     except Exception as e:
-        return {
-            "score": 0,
-            "reasoning": f"Ошибка анализа: {str(e)}",
-            "details": []
-        }
-    score = max(1, min(10, score))
-    
-    reasoning = f"Оценка {score}/10: "
-    if score >= 8:
-        reasoning += "Отличное соответствие описания и состава"
-    elif score >= 6:
-        reasoning += "Хорошее соответствие с небольшими расхождениями"
-    elif score >= 4:
-        reasoning += "Среднее соответствие, есть расхождения"
-    else:
-        reasoning += "Плохое соответствие, описание не отражает реальный состав"
-    
-    return {
-        "score": score,
-        "reasoning": reasoning,
-        "details": details
-    }
+        return { "status": "error", "message": f"Ошибка глубокого анализа: {str(e)}" }
 
-async def find_similar_products(categories: List[str], composition: str) -> List[Dict[str, Any]]:
-    """Ищет аналогичные товары (заглушка)"""
-    # В реальном проекте здесь был бы поиск по API Ozon
-    analogs = []
-    
-    if categories:
-        # Симулируем поиск аналогов
-        for i, category in enumerate(categories[:3]):
-            analogs.append({
-                "name": f"Аналог в категории {category}",
-                "price": f"{1000 + i * 200} ₽",
-                "url": f"https://www.ozon.ru/search?text={category}",
-                "similarity": f"{80 - i * 10}%"
-            })
-    
-    return analogs
+# ==============================================================================
+# Секция 2: "Приватные" Вспомогательные Функции
+# ------------------------------------------------------------------------------
+# Эти функции не предназначены для прямого вызова из `workflow.json`.
+# Они инкапсулируют внутреннюю логику плагина.
+# ==============================================================================
 
-if __name__ == "__main__":
-    asyncio.run(main()) 
+async def _analyze_composition_vs_description(description: str, composition: str) -> Dict[str, Any]:
+    """Использует "быструю" AI-модель для базовой оценки соответствия."""
+    if not description or not composition:
+        return { "score": 0, "reasoning": "Не удалось извлечь описание или состав товара." }
+
+    prompt = f"""
+    Проанализируй соответствие описания товара и его состава.
+    Описание: {description}
+    Состав: {composition}
+    Оцени по шкале от 1 до 10, где 1 - полное несоответствие, 10 - полное соответствие.
+    Верни ТОЛЬКО JSON в формате: {{"score": число, "reasoning": "краткое объяснение оценки"}}
+    """
+
+    try:
+        # Используем псевдоним "basic_analysis", который в манифесте
+        # сопоставлен с быстрой и дешевой моделью типа `gemini-flash`.
+        result_str = await _call_ai_model("basic_analysis", prompt)
+        
+        # Очистка и парсинг ответа от AI. Модели часто "оборачивают"
+        # JSON в Markdown, который нужно удалить.
+        cleaned_str = result_str.strip().replace('```json', '').replace('```', '')
+        
+        # Используем стандартный и безопасный `json.loads` для парсинга.
+        try:
+            parsed = json.loads(cleaned_str)
+            # Простая валидация формата ответа
+            if isinstance(parsed, dict) and 'score' in parsed:
+                return parsed
+            else:
+                return {"score": 5, "reasoning": "Неверный формат ответа от AI (отсутствует 'score')."}
+        except json.JSONDecodeError:
+            return {"score": 5, "reasoning": f"Не удалось распарсить JSON от AI: {cleaned_str[:100]}..."}
+
+    except Exception as e:
+        return { "score": 0, "reasoning": f"Ошибка анализа AI: {str(e)}" }
+
+async def _call_ai_model(model_alias: str, prompt: str) -> str:
+    """
+    Централизованная обертка для всех вызовов LLM.
+    Делегирует всю сложную работу (управление ключами, лимитами, разрешениями)
+    платформе через `js.llm_call`.
+    """
+    try:
+        # Вызываем функцию хоста, передавая псевдоним модели и параметры.
+        response_proxy = await js.llm_call(model_alias, {"prompt": prompt})
+        # `await` дожидается выполнения JS Promise. `.to_py()` конвертирует
+        # результат (JS-объект) в Python-словарь.
+        result = response_proxy.to_py()
+
+        # Стандартизированная обработка ошибок от хоста
+        if result is None or result.get("error"):
+            error_msg = result.get("error_message", "Неизвестная ошибка") if result else "Пустой ответ от хоста"
+            raise Exception(f"Ошибка вызова API: {error_msg}")
+
+        return result.get("response", "Нет ответа от модели.")
+
+    except Exception as e:
+        # Пробрасываем ошибку выше, чтобы вызывающая функция могла ее перехватить
+        # и обработать в своей бизнес-логике.
+        raise RuntimeError(f"Ошибка при вызове модели '{model_alias}': {e}") from e
+
+def _extract_categories(soup: 'SimpleHTMLParser') -> List[str]:
+    """Заглушка для извлечения категорий."""
+    return ["Пример", "Категории"]
+
+def _extract_description_and_composition(soup: 'SimpleHTMLParser') -> tuple:
+    """Заглушка для извлечения описания и состава."""
+    return "Пример описания", "Пример состава"
+
+async def _find_similar_products(categories: List[str], composition: str) -> List[Dict[str, Any]]:
+    """Заглушка для поиска аналогов."""
+    return [{"name": "Пример аналога", "price": "1000 ₽"}]
+
+# ==============================================================================
+# Секция 3: Временные Заглушки
+# ------------------------------------------------------------------------------
+# Этот код будет заменен, когда мы добавим поддержку установки `beautifulsoup4`.
+# ==============================================================================
+class SimpleHTMLParser:
+    def __init__(self, html: str): self.html = html
+    def find(self, tag: str, attrs: Dict = None) -> 'SimpleHTMLElement': return SimpleHTMLElement(self.html, tag, attrs)
+    def find_all(self, tag: str, attrs: Dict = None) -> List['SimpleHTMLElement']: return [SimpleHTMLElement(self.html, tag, attrs)]
+class SimpleHTMLElement:
+    def __init__(self, html: str, tag: str, attrs: Dict): self.html, self.tag, self.attrs = html, tag, attrs or {}
+    def get(self, attr: str, default: str = '') -> str: return self.attrs.get(attr, default)
+    def find(self, tag: str, attrs: Dict = None) -> 'SimpleHTMLElement': return SimpleHTMLElement(self.html, tag, attrs)
+    def find_all(self, tag: str, attrs: Dict = None) -> List['SimpleHTMLElement']: return [SimpleHTMLElement(self.html, tag, attrs)]
+    def get_text(self, strip: bool = False) -> str: return "Пример текста"
+    @property
+    def text(self) -> str: return "Пример текста"

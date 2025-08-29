@@ -3,10 +3,10 @@
  * Главный скрипт для нашего UI (index.html).
  */
 
-import { getAvailablePlugins } from '../core/plugin-manager.js';
+import { getAvailablePlugins } from '../../core/plugin-manager.js';
 import { createPluginCard } from './PluginCard.js';
-import { hostApi } from '../core/host-api.js';
-import { runWorkflow } from '../core/workflow-engine.js';
+import { hostApi } from '../../core/host-api.js';
+import { runWorkflow } from '../../core/workflow-engine.js';
 
 // --- Глобальная переменная для хранения "активного" логгера ---
 // Движок будет устанавливать ее, а hostApi.sendMessageToChat - использовать.

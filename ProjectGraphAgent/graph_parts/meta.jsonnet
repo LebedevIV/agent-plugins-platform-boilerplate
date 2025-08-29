@@ -34,7 +34,19 @@
       },
       'graph_parts/templates.jsonnet': {
         type: 'MetaTemplateFile',
-        purpose: 'Defines reusable helper functions (templates) for creating entities within the graph, ensuring consistency.',
+        purpose: 'Defines reusable helper functions (templates) for creating entities within the graph, ensuring consistency. Includes PathSearch system for efficient file path indexing and lookup operations.',
+      },
+      'graph_parts/path_index.jsonnet': {
+        type: 'MetaIndexFile',
+        purpose: 'Creates searchable indexes for path-based lookups without changing the core entity structure. Enables fast file and entity searches by path, directory, file type, and patterns.',
+      },
+      'graph_parts/path_search_examples.jsonnet': {
+        type: 'MetaExamplesFile',
+        purpose: 'Contains practical examples and scenarios for using the PathSearch system in AI agent workflows.',
+      },
+      'graph_parts/README_path_indexing.md': {
+        type: 'MetaDocumentationFile',
+        purpose: 'Comprehensive documentation for the path indexing system, including usage examples and best practices.',
       },
       'metadata_block': {
         type: 'MetaConcept',

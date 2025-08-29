@@ -2,7 +2,7 @@
 
 Hello, Large Language Model!
 
-This `project_graph/` directory is designed to be a structured, machine-readable representation of the `tsx_viewer` project's architecture and operational guidelines. Its primary purpose is to facilitate your deeper understanding and more effective interaction with this codebase.
+This `project_graph/` directory is designed to be a structured, machine-readable representation of the `agent_plugins_platform` project's architecture and operational guidelines. Its primary purpose is to facilitate your deeper understanding and more effective interaction with this codebase.
 
 ## Why This System Exists for You (the LLM):
 
@@ -24,6 +24,7 @@ Traditional documentation is often unstructured and difficult for AI to parse co
     *   `policies`: Architectural rules, design principles, and conventions that the project adheres to.
     *   `commitGroups`: Rules for categorizing changes into atomic Git commits (e.g., `feat`, `fix`, `docs`). This helps you understand the project's commit hygiene and can guide your commit message generation.
     *   `aiCommands`: Mappings of conversational trigger phrases to `npm` commands. This section is particularly important for understanding how the project expects AI agents to execute specific actions.
+    *   `templates.PathSearch`: A powerful indexing system for fast file path lookups with multiple search strategies (by exact path, directory, file type, name patterns). This enables efficient navigation and analysis of large codebases.
 
 3.  **Prioritize Structured Data:** Whenever possible, extract information directly from the compiled JSON output of `project_graph.jsonnet` rather than relying on natural language descriptions in READMEs or comments. This provides the most precise and unambiguous context.
 
@@ -37,9 +38,17 @@ Traditional documentation is often unstructured and difficult for AI to parse co
 
 6.  **Drift and Plans Awareness:** Prefer the compiled `project_graph/.cache/graph.json`. It includes `observed` (adapter output) and `drift`. Reference `memory-bank/plans/` markdown for human-facing plan summaries; edit `graph_parts/plans.jsonnet` for canonical plan definitions.
 
+7.  **Path Indexing System:** Leverage the `templates.PathSearch` functions for efficient file and entity lookups:
+     *   Use `findByPath()` for exact file lookups
+     *   Use `findByDirectory()` to explore directory contents
+     *   Use `findByFileType()` to find all files of a specific type (e.g., all `.ts` files)
+     *   Use `findByPattern()` for flexible pattern-based searches
+     *   Always check `pathExists()` before accessing files
+     *   Use `getIndexStats()` to understand the scope of the indexed codebase
+
 ## Your Role in Maintaining This System:
 
 *   **Self-Correction:** If you identify discrepancies between the `project_graph` and the actual codebase, or if you encounter new patterns that should be formalized, suggest updates to the `project_graph.jsonnet`.
 *   **Proactive Use:** Actively query and integrate information from the `project_graph` into your reasoning processes for all tasks related to this project.
 
-By leveraging the `project_graph` system, you can become a more effective, context-aware, and integrated collaborator within the `tsx_viewer` project.
+By leveraging the `project_graph` system, you can become a more effective, context-aware, and integrated collaborator within the `agent_plugins_platform` project.

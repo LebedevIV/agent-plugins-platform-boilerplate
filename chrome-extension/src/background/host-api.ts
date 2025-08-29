@@ -90,6 +90,48 @@ export const hostApi = {
     });
   },
 
+  async llm_call(modelAlias: string, options: any) {
+    try {
+      // Получаем информацию о плагине из контекста, если доступен
+      const currentPlugin = (window as any).currentPlugin || 'ozon-analyzer';
+
+      // Направляем через background script
+      return sendMessageToBackground({
+        command: "llm_call",
+        data: {
+          modelAlias,
+          options,
+          pluginId: currentPlugin
+        }
+      });
+    } catch (error) {
+      console.error('[HOST API] llm_call error:', error);
+      throw error;
+    }
+  },
+
+  async get_setting(settingName: string, defaultValue?: any, category?: string) {
+    try {
+      // Получаем информацию о плагине из контекста
+      const currentPlugin = (window as any).currentPlugin || 'ozon-analyzer';
+
+      // Направляем через background script
+      return sendMessageToBackground({
+        command: "get_setting",
+        data: {
+          settingName,
+          defaultValue,
+          category,
+          pluginId: currentPlugin
+        }
+      });
+    } catch (error) {
+      console.error('[HOST API] get_setting error:', error);
+      // Возвращаем значение по умолчанию в случае ошибки
+      return defaultValue;
+    }
+  },
+
   sendMessageToChat(message: { content: string }) {
     if ((window as any).activeWorkflowLogger) {
       (window as any).activeWorkflowLogger.addMessage('PYTHON', message.content);
@@ -97,4 +139,4 @@ export const hostApi = {
       console.warn("[Python Message] Логгер не активен:", message.content);
     }
   }
-}; 
+};

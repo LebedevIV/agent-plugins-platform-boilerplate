@@ -19,7 +19,7 @@ const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 
 // Paths
-const PARENT_PROJECT = '/home/igor/Документы/Проекты/tsx_viewer/ProjectGraphAgent';
+const PARENT_PROJECT = '/home/igor/Документы/Проекты/agent_plugins_platform/ProjectGraphAgent';
 const STANDALONE_PROJECT = '/home/igor/Документы/Проекты/ProjectGraphAgent';
 
 function log(message, type = 'info') {
