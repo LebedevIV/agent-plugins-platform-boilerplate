@@ -23,10 +23,13 @@ export interface WorkflowContext {
   [key: string]: any; // Allow string indexing
 }
 
-export async function runWorkflow(pluginId: string) {
+export async function runWorkflow(
+  pluginId: string,
+  initialInput: { page_html?: string; [key: string]: any } = {}
+) {
   const runId = `workflow-${pluginId}-${Date.now()}`;
   const title = `Воркфлоу плагина: ${pluginId}`;
-  
+
   // Create logger if available
   const logger = (window as any).activeWorkflowLogger || {
     addMessage: (type: string, message: string, status?: string) => {
@@ -38,7 +41,7 @@ export async function runWorkflow(pluginId: string) {
   };
 
   logger.addMessage('ENGINE', `▶️ Запуск воркфлоу...`);
-  
+
   // Switch to logs tab if available
   const logsTab = document.querySelector('.tab-button[data-tab="logs"]') as HTMLElement;
   logsTab?.click?.();
@@ -46,22 +49,27 @@ export async function runWorkflow(pluginId: string) {
   const workflow = await loadWorkflowDefinition(pluginId, logger);
   if (!workflow) return;
 
-  // Get page HTML for plugins
-  let pageHtml = '';
-  try {
-    if (hostApi && typeof hostApi.getActivePageContent === 'function') {
-      const pageContent = await hostApi.getActivePageContent();
-      pageHtml = pageContent.html || '';
-      logger.addMessage('ENGINE', `📄 Получен HTML страницы (${pageHtml.length} символов)`);
+  // Use provided initial input or try to get page HTML for plugins
+  let pageHtml = initialInput.page_html || '';
+  if (!pageHtml) {
+    try {
+      if (hostApi && typeof hostApi.getActivePageContent === 'function') {
+        const pageContent = await hostApi.getActivePageContent();
+        pageHtml = pageContent.html || '';
+        logger.addMessage('ENGINE', `📄 Получен HTML страницы (${pageHtml.length} символов)`);
+      }
+    } catch (error) {
+      logger.addMessage('WARNING', `⚠️ Не удалось получить HTML страницы: ${(error as Error).message}`);
     }
-  } catch (error) {
-    logger.addMessage('WARNING', `⚠️ Не удалось получить HTML страницы: ${(error as Error).message}`);
+  } else {
+    logger.addMessage('ENGINE', `📄 Используется предоставленный HTML (${pageHtml.length} символов)`);
   }
 
-  const context: WorkflowContext = { 
-    steps: {}, 
+  const context: WorkflowContext = {
+    steps: {},
     logger: logger,
-    page_html: pageHtml
+    page_html: pageHtml,
+    initialInput: initialInput
   };
 
   for (const step of workflow.steps) {

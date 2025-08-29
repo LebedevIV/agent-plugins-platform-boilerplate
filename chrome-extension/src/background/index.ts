@@ -1,9 +1,11 @@
 import 'webextension-polyfill';
 import { pluginChatApi } from './plugin-chat-api';
+import { hostApi } from './host-api';
 import { getAvailablePlugins } from './plugin-manager';
 import { getPageKey } from '../../../packages/shared/lib/utils/helpers';
 import { getApiKeyForModel, callAiModel } from './ai-api-client';
 import { exampleThemeStorage, pluginSettingsStorage, getPluginSettings } from '@extension/storage';
+import { runWorkflow } from './workflow-engine';
 import type { ChatMessage } from './plugin-chat-api';
 import type { Plugin } from './plugin-manager';
 
@@ -251,8 +253,70 @@ chrome.runtime.onMessage.addListener(
         console.log('[background] Processing RUN_WORKFLOW request for:', msg.pluginId);
         (async () => {
           try {
-            const result = await runPluginIfEnabled(msg.pluginId as string);
-            sendResponse(result);
+            // Найти активную вкладку пользователя
+            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            const activeTab = tabs[0];
+
+            if (!activeTab || !activeTab.id) {
+              console.log('[background] No active tab found for RUN_WORKFLOW');
+              sendResponse({ error: 'Не найдена активная вкладка' });
+              return;
+            }
+
+            console.log('[background] Found active tab for workflow:', activeTab.url, 'ID:', activeTab.id);
+
+            // Получить HTML страницы через chrome.scripting
+            let pageHtml = '';
+            try {
+              const results = await chrome.scripting.executeScript({
+                target: { tabId: activeTab.id },
+                func: () => document.documentElement.outerHTML
+              });
+
+              if (results && results[0] && results[0].result) {
+                pageHtml = results[0].result as string;
+                console.log('[background] Successfully extracted HTML, length:', pageHtml.length);
+              }
+            } catch (error) {
+              console.error('[background] Error extracting HTML:', error);
+              sendResponse({ error: `Не удалось получить HTML страницы: ${(error as Error).message}` });
+              return;
+            }
+
+            // Проверить настройки плагина
+            const settings = await getPluginSettings(msg.pluginId as string);
+            if (!settings.enabled) {
+              console.log(`[background] Plugin ${msg.pluginId} is disabled, not running workflow`);
+              sendResponse({ error: 'Плагин отключен' });
+              return;
+            }
+
+            // Создать заглушки для Service Worker среды
+            // Logger для background
+            function createBackgroundLogger(name: string) {
+              return {
+                addMessage: (type: string, msg: string) => {
+                  console.log(`[${type}] ${msg}`);
+                },
+                renderResult: (stepId: string, result: any) => {
+                  console.log(`Result for ${stepId}:`, result);
+                }
+              };
+            }
+
+            // Заглушки для Service Worker среды
+            (self as any).activeWorkflowLogger = createBackgroundLogger('background-run');
+            (self as any).hostApi = hostApi;
+            (self as any).currentPlugin = msg.pluginId;
+
+            // Запустить воркфлоу с initialInput
+            console.log('[background] Starting workflow execution with plugin:', msg.pluginId);
+
+            await runWorkflow(msg.pluginId as string, { page_html: pageHtml });
+
+            console.log('[background] Workflow completed successfully');
+            sendResponse({ success: true });
+
           } catch (error) {
             console.error('[background] Error in RUN_WORKFLOW:', error);
             sendResponse({ error: (error as Error).message });

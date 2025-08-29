@@ -1,3 +1,5 @@
+const globalCtx = typeof window !== 'undefined' ? window : self;
+
 const logContainer = document.getElementById('chat-log');
 if (logContainer) logContainer.innerHTML = ''; // Очищаем при старте
 

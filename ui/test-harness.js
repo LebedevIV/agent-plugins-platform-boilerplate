@@ -8,18 +8,21 @@ import { createPluginCard } from './PluginCard.js';
 import { hostApi } from '../core/host-api.js';
 import { runWorkflow } from '../core/workflow-engine.js';
 
+// --- Универсальный глобальный контекст ---
+const globalCtx = typeof window !== 'undefined' ? window : self;
+
 // --- Глобальная переменная для хранения "активного" логгера ---
 // Движок будет устанавливать ее, а hostApi.sendMessageToChat - использовать.
-window.activeWorkflowLogger = null;
+globalCtx.activeWorkflowLogger = null;
 
 // --- Инициализация глобального Host-API ---
-window.hostApi = hostApi;
+globalCtx.hostApi = hostApi;
 
 // Переопределяем sendMessageToChat, чтобы он использовал активный логгер
-window.hostApi.sendMessageToChat = (message) => {
-    if (window.activeWorkflowLogger) {
+globalCtx.hostApi.sendMessageToChat = (message) => {
+    if (globalCtx.activeWorkflowLogger) {
         // Добавляем сообщение от Python в текущий активный лог
-        window.activeWorkflowLogger.addMessage('PYTHON', message.content);
+        globalCtx.activeWorkflowLogger.addMessage('PYTHON', message.content);
     } else {
         // Фоллбэк, если по какой-то причине логгер не был установлен
         console.warn("[Python Message] Логгер не активен:", message.content);
@@ -48,15 +51,15 @@ async function handlePluginRun(plugin) {
         await runWorkflow(plugin.id);
     } catch (error) {
         console.error(`--- КРИТИЧЕСКАЯ ОШИБКА при выполнении плагина ${plugin.name}:`, error);
-        if (window.activeWorkflowLogger) {
-            window.activeWorkflowLogger.addMessage('ERROR', `Критическая ошибка: ${error.message}`);
+        if (globalCtx.activeWorkflowLogger) {
+            globalCtx.activeWorkflowLogger.addMessage('ERROR', `Критическая ошибка: ${error.message}`);
         }
     } finally {
         // Возвращаем UI в исходное состояние
         card.classList.remove('running');
         icon.src = originalIconSrc;
         // Сбрасываем активный логгер. Это ВАЖНО.
-        window.activeWorkflowLogger = null;
+        globalCtx.activeWorkflowLogger = null;
     }
 }
 

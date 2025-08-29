@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ozon Analyzer Integration Test Suite</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 3px;
+        }
+
+        .subtitle {
+            color: #7f8c8d;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .start-button {
+            display: block;
+            margin: 0 auto 30px;
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .start-button:hover {
+            background: #2980b9;
+        }
+
+        .start-button:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #ecf0f1;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #27ae60;
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .logs-container {
+            background: #2c3e50;
+            color: #ecf0f1;
+            border-radius: 5px;
+            padding: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
+        .results-summary {
+            background: #ecf0f1;
+            padding: 20px;
+            border-radius: 5px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .component-result {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 3px;
+            border-left: 4px solid;
+        }
+
+        .component-result.success {
+            background: #d5edda;
+            border-left-color: #27ae60;
+        }
+
+        .component-result.failure {
+            background: #f8d7da;
+            border-left-color: #e74c3c;
+        }
+
+        .component-result.warning {
+            background: #fff3cd;
+            border-left-color: #f39c12;
+        }
+
+        .metric-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+        }
+
+        .metric-label {
+            font-weight: bold;
+        }
+
+        .metric-value {
+            color: #2c3e50;
+        }
+
+        .error-details {
+            margin-top: 10px;
+            font-size: 12px;
+        }
+
+        .error-stack {
+            background: #34495e;
+            color: #ecf0f1;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 11px;
+            margin-top: 5px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Ozon Analyzer Integration Test Suite</h1>
+        <p class="subtitle">Комплексное тестирование интеграции плагина Ozon Analyzer в Agent Plugins Platform</p>
+
+        <button id="startTestsBtn" class="start-button">🚀 Запустить полное тестирование</button>
+        <button id="startBenchmarkBtn" class="start-button" style="background: #e67e22;">🧪 Бенчмаркинг производительности</button>
+
+        <div id="progressSection" style="display: none;">
+            <div class="progress-bar">
+                <div id="progressFill" class="progress-fill"></div>
+            </div>
+            <p id="progressText">Подготовка тестового окружения...</p>
+        </div>
+
+        <div id="logsSection" style="display: none;">
+            <h3>📋 Лог выполнения тестов</h3>
+            <div id="logsContainer" class="logs-container"></div>
+        </div>
+
+        <div id="resultsSection" class="results-summary" style="display: none;">
+            <h3 id="resultsTitle">📊 Результаты тестирования</h3>
+            <div id="resultsContent"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import OzonAnalyzerTestRunner from './test-runner.js';
+        import { PerformanceBenchmark } from './specs/performance-benchmark.js';
+
+        class TestUI {
+            constructor() {
+                this.testRunner = new OzonAnalyzerTestRunner();
+                this.setupEventListeners();
+                this.logs = [];
+                this.isRunning = false;
+            }
+
+            setupEventListeners() {
+                const startBtn = document.getElementById('startTestsBtn');
+                const benchmarkBtn = document.getElementById('startBenchmarkBtn');
+
+                startBtn.addEventListener('click', () => this.startTests());
+                benchmarkBtn.addEventListener('click', () => this.startBenchmark());
+            }
+
+            async startTests() {
+                if (this.isRunning) return;
+
+                this.isRunning = true;
+                const startBtn = document.getElementById('startTestsBtn');
+                startBtn.textContent = '⏳ Тестирование выполняется...';
+                startBtn.disabled = true;
+
+                // Показываем прогресс
+                document.getElementById('progressSection').style.display = 'block';
+                document.getElementById('logsSection').style.display = 'block';
+                document.getElementById('resultsSection').style.display = 'block';
+
+                this.logMessage('🔄 Инициализация тестового окружения...');
+
+                try {
+                    await this.testRunner.initialize();
+                    this.logMessage('✅ Тестовое окружение готово');
+                    this.updateProgress(10, 'Запуск тест сьюта...');
+
+                    this.logMessage('\n🚀 ЗАПУСК ИНТЕГРАЦИОННОГО ТЕСТИРОВАНИЯ OZON ANALYZER\n');
+
+                    const results = await this.testRunner.runAllTests();
+
+                    this.displayResults(results);
+
+                    this.logMessage(`\n✅ Тестирование завершено!`);
+                    if (results.passed === results.total) {
+                        this.logMessage(`🎉 ВСЕ ТЕСТЫ ПРОЙДЕНЫ! Интеграция работает корректно.`);
+                    } else {
+                        this.logMessage(`⚠️  ОБНАРУЖЕНЫ ПРОБЛЕМЫ! Требуется внимание.`);
+                    }
+
+                } catch (error) {
+                    this.logMessage(`❌ КРИТИЧЕСКАЯ ОШИБКА: ${error.message}`);
+                    console.error('Test execution error:', error);
+                } finally {
+                    this.isRunning = false;
+                    startBtn.textContent = '🚀 Повторить тестирование';
+                    startBtn.disabled = false;
+                    this.updateProgress(100, 'Тестирование завершено');
+                }
+            }
+
+            async startBenchmark() {
+                if (this.isRunning) return;
+
+                this.isRunning = true;
+                const benchmarkBtn = document.getElementById('startBenchmarkBtn');
+                benchmarkBtn.textContent = '⏳ Бенчмаркинг...';
+                benchmarkBtn.disabled = true;
+
+                // Показываем прогресс
+                document.getElementById('progressSection').style.display = 'block';
+                document.getElementById('logsSection').style.display = 'block';
+                document.getElementById('resultsSection').style.display = 'block';
+
+                this.logMessage('🔄 Запуск бенчмаркинга производительности...');
+
+                try {
+                    this.logMessage('\n🧪 ПРОФИЛИРОВАНИЕ ПРОИЗВОДИТЕЛЬНОСТИ OZON ANALYZER\n');
+
+                    const benchmark = new PerformanceBenchmark();
+                    const results = await benchmark.runAll();
+
+                    this.displayBenchmarkResults(results);
+
+                    this.logMessage(`\n✅ Бенчмаркинг завершён!`);
+                    this.logMessage(`📊 Анализ производительности готов к просмотру.`);
+
+                } catch (error) {
+                    this.logMessage(`❌ ОШИБКА БЕНЧМАРКИНГА: ${error.message}`);
+                    console.error('Benchmark execution error:', error);
+                } finally {
+                    this.isRunning = false;
+                    benchmarkBtn.textContent = '🧪 Повторить бенчмаркинг';
+                    benchmarkBtn.disabled = false;
+                    this.updateProgress(100, 'Бенчмаркинг завершён');
+                }
+            }
+
+            logMessage(message) {
+                this.logs.push(message);
+                const logsContainer = document.getElementById('logsContainer');
+                logsContainer.textContent = this.logs.join('\n');
+                logsContainer.scrollTop = logsContainer.scrollHeight;
+
+                // Также выводим в консоль для отладки
+                console.log(message);
+            }
+
+            updateProgress(percent, text) {
+                const progressFill = document.getElementById('progressFill');
+                const progressText = document.getElementById('progressText');
+
+                progressFill.style.width = `${percent}%`;
+                progressText.textContent = text;
+            }
+
+            displayResults(results) {
+                const resultsContent = document.getElementById('resultsContent');
+                const resultsTitle = document.getElementById('resultsTitle');
+
+                // Общая статистика
+                const totalScore = results.passed / results.total * 100;
+
+                resultsTitle.innerHTML = `
+                    📊 РЕЗУЛЬТАТЫ ТЕСТИРОВАНИЯ:
+                    <span style="color: ${totalScore === 100 ? '#27ae60' : totalScore >= 70 ? '#f39c12' : '#e74c3c'}">
+                        ${totalScore.toFixed(1)}% успеха
+                    </span>
+                `;
+
+                let html = `
+                    <div style="background: #ecf0f1; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+                        <div class="metric-item">
+                            <span class="metric-label">Всего тестов:</span>
+                            <span class="metric-value">${results.total}</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Пройдено:</span>
+                            <span class="metric-value" style="color: #27ae60;">${results.passed}</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Провалено:</span>
+                            <span class="metric-value" style="color: #e74c3c;">${results.failed}</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Время выполнения:</span>
+                            <span class="metric-value">${((results.endTime - results.startTime) / 1000).toFixed(2)}s</span>
+                        </div>
+                    </div>
+
+                    <h4>📋 Детализация по компонентам:</h4>
+                `;
+
+                // Результаты по компонентам
+                if (results.testSuiteResults && results.testSuiteResults.length > 0) {
+                    for (const componentResult of results.testSuiteResults) {
+                        const successRate = componentResult.passed / componentResult.total * 100;
+                        const status = successRate === 100 ? 'success' : successRate >= 50 ? 'warning' : 'failure';
+
+                        html += `
+                            <div class="component-result ${status}">
+                                <strong>${componentResult.component}:</strong> ${componentResult.passed}/${componentResult.total}
+                                <span style="float: right;">${successRate.toFixed(1)}%</span>
+                            </div>
+                        `;
+                    }
+                }
+
+                // Критические ошибки
+                if (results.errors && results.errors.length > 0) {
+                    html += `
+                        <h4 style="color: #e74c3c;">🚨 Критические ошибки:</h4>
+                    `;
+
+                    for (const error of results.errors) {
+                        html += `
+                            <div class="component-result failure error-details">
+                                <strong>${error.type}</strong>
+                                <div>${error.message}</div>
+                                ${error.stack ? `
+                                    <details>
+                                        <summary>Stack trace</summary>
+                                        <div class="error-stack">${error.stack}</div>
+                                    </details>
+                                ` : ''}
+                            </div>
+                        `;
+                    }
+                }
+
+                // Рекомендации
+                html += `
+                    <div style="background: #ecf0f1; padding: 15px; border-radius: 5px; margin-top: 20px;">
+                        <h4>💡 Рекомендации:</h4>
+                        <ul>
+                `;
+
+                if (totalScore === 100) {
+                    html += `<li>✅ Интеграция работает идеально! Можно переходить к продакшену.</li>`;
+                } else if (totalScore >= 80) {
+                    html += `<li>⚠️ Интеграция работает с незначительными проблемами. Рекомендуется исправить ошибки перед продакшеном.</li>`;
+                } else if (totalScore >= 60) {
+                    html += `<li>🔶 Обнаружены существенные проблемы. Требуется доработка интеграции.</li>`;
+                } else {
+                    html += `<li>❌ Критические проблемы интеграции. Необходимо полное перетестирование.</li>`;
+                }
+
+                if (results.failed > 0) {
+                    html += `<li>🔍 Рекомендуется детально изучить логи проваленных тестов для диагностики проблем.</li>`;
+                }
+
+                html += `
+                    </ul>
+                </div>
+                `;
+
+                resultsContent.innerHTML = html;
+
+                this.logMessage('\n📊 РЕЗУЛЬТАТЫ:');
+                this.logMessage(`   Пройдено: ${results.passed}/${results.total} (${totalScore.toFixed(1)}%)`);
+                this.logMessage(`   Время: ${((results.endTime - results.startTime) / 1000).toFixed(2)} сек`);
+            }
+
+            displayBenchmarkResults(results) {
+                const resultsContent = document.getElementById('resultsContent');
+                const resultsTitle = document.getElementById('resultsTitle');
+
+                resultsTitle.innerHTML = `
+                    🚀 РЕЗУЛЬТАТЫ ПРОФИЛИРОВАНИЯ ПРОИЗВОДИТЕЛЬНОСТИ OZON ANALYZER
+                `;
+
+                let html = '';
+
+                // Основные метрики производительности
+                if (results.analysis && results.analysis[4] && results.analysis[4].result) {
+                    const benchmarkData = results.analysis[4].result;
+                    const analysisResults = benchmarkData.analysisResults;
+
+                    // Таблица метрик
+                    html += `
+                        <div style="background: #e8f5e8; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 4px solid #4caf50;">
+                            <h4>📊 Performance Metrics (сек):</h4>
+                            <table style="width:100%; margin-top: 10px;">
+                                <tr>
+                                    <td>Pyodide Initialisierung:</td>
+                                    <td><strong>${(benchmarkData.benchmarkResults?.pyodideInitialization || 0).toFixed(2)}s</strong></td>
+                                    <td style="color: #e74c3c;">25-35s prod</td>
+                                </tr>
+                                <tr>
+                                    <td>DOM Parsing:</td>
+                                    <td><strong>${(benchmarkData.benchmarkResults?.htmlParsing || 0).toFixed(2)}s</strong></td>
+                                    <td style="color: #e74c3c;">3-6s prod</td>
+                                </tr>
+                                <tr>
+                                    <td>Sequential AI Calls:</td>
+                                    <td><strong>${(benchmarkData.benchmarkResults?.sequentialAiCalls || 0).toFixed(2)}s</strong></td>
+                                    <td style="color: #e74c3c;">8-26s prod</td>
+                                </tr>
+                                <tr style="border-top: 2px solid #bdc3c7;">
+                                    <td><strong>Total Execution:</strong></td>
+                                    <td><strong>${(benchmarkData.benchmarkResults?.totalExecutionTime || 0).toFixed(2)}s</strong></td>
+                                    <td style="color: #27ae60;">💡 Optimization Target</td>
+                                </tr>
+                                <tr>
+                                    <td>Peak Memory:</td>
+                                    <td><strong>${((benchmarkData.benchmarkResults?.memoryUsage?.pyodidePeak || 0) / 1024 / 1024).toFixed(1)}MB</strong></td>
+                                    <td style="color: #f39c12;">Memory usage</td>
+                                </tr>
+                            </table>
+                        </div>
+                    `;
+
+                    // Bottlenecks
+                    if (analysisResults.bottlenecks && analysisResults.bottlenecks.length > 0) {
+                        html += `
+                            <div style="background: #ffeaa7; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 4px solid #d63031;">
+                                <h4>🚧 Identified Bottlenecks:</h4>
+                                <ul>
+                                    ${analysisResults.bottlenecks.map(b => `<li>${b}</li>`).join('')}
+                                </ul>
+                            </div>
+                        `;
+                    }
+
+                    // Рекомендации
+                    if (analysisResults.recommendations && analysisResults.recommendations.length > 0) {
+                        html += `
+                            <div style="background: #74b9ff; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 4px solid #0984e3;">
+                                <h4>💡 Optimization Recommendations:</h4>
+                                <ol>
+                                    ${analysisResults.recommendations.map(r => `<li>${r}</li>`).join('')}
+                                </ol>
+                            </div>
+                        `;
+                    }
+
+                    // Ожидания улучшения
+                    if (analysisResults.estimatedImprovement && benchmarkData.benchmarkResults?.totalExecutionTime) {
+                        const totalTime = benchmarkData.benchmarkResults.totalExecutionTime;
+                        const targetTime = analysisResults.estimatedImprovement.totalPotential;
+                        const improvement = totalTime > 0 ? (100 * (totalTime - targetTime) / totalTime).toFixed(1) : 0;
+
+                        html += `
+                            <div style="background: #a29bfe; padding: 15px; border-radius: 5px; border-left: 4px solid #6c5ce7;">
+                                <h4>🎯 Projected Performance Improvement:</h4>
+                                <p>
+                                    Current: <strong>${totalTime.toFixed(2)}s</strong> →
+                                    Target: <strong>${targetTime.toFixed(2)}s</strong><br>
+                                    <span style="font-size: 18px; color: #27ae60;"><strong>${improvement}% improvement</strong></span>
+                                </p>
+                            </div>
+                        `;
+                    }
+                } else {
+                    html = `<pre>${JSON.stringify(results, null, 2)}</pre>`;
+                }
+
+                resultsContent.innerHTML = html;
+
+                // Логируем метрики
+                this.logMessage('\n📈 PERFORMANCE ANALYSIS COMPLETE:');
+                if (results.analysis && results.analysis[4] && results.analysis[4].result) {
+                    const br = results.analysis[4].result.benchmarkResults;
+                    this.logMessage(`   Pyodide: ${br?.pyodideInitialization?.toFixed(2)}s`);
+                    this.logMessage(`   DOM: ${br?.htmlParsing?.toFixed(2)}s`);
+                    this.logMessage(`   AI Sequential: ${br?.sequentialAiCalls?.toFixed(2)}s`);
+                    this.logMessage(`   Total: ${br?.totalExecutionTime?.toFixed(2)}s`);
+                }
+                this.logMessage(`   ✅ Analysis ready for optimization implementation!`);
+            }
+        }
+
+        // Запуск интерфейса
+        document.addEventListener('DOMContentLoaded', () => {
+            window.testUI = new TestUI();
+        });
+
+        // Также делаем доступным глобально для отладки
+        window.OzonAnalyzerTestRunner = OzonAnalyzerTestRunner;
+    </script>
+</body>
+</html>

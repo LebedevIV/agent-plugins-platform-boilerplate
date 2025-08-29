@@ -1,0 +1,237 @@
+{
+  "name": "Ozon Analyzer Production Configuration",
+  "version": "1.0.0",
+  "description": "Production-ready configuration for Ozon Analyzer with comprehensive monitoring",
+
+  "monitoring": {
+    "enabled": true,
+    "production": true,
+    "sampling": {
+      "error_events": 1.0,
+      "performance_metrics": 0.1,
+      "network_requests": 0.3,
+      "memory_snapshots": 0.5
+    },
+
+    "alerts": {
+      "pyodide_memory_threshold_mb": 256,
+      "workflow_timeout_seconds": 180,
+      "ai_api_timeout_seconds": 45,
+      "max_error_rate_percent": 10,
+      "max_consecutive_failures": 5,
+      "max_pyodide_restart_attempts": 3
+    },
+
+    "retention": {
+      "logs_days": 7,
+      "metrics_days": 30,
+      "alerts_days": 14,
+      "max_log_entries": 50000,
+      "max_metrics_entries": 100000
+    }
+  },
+
+  "ai_providers": {
+    "google": {
+      "fallback_chain": ["gemini-flash", "gemini-25", "gemini-pro"],
+      "rate_limits": {
+        "requests_per_minute": 60,
+        "requests_per_hour": 1000,
+        "burst_limit": 20
+      },
+      "retry_policy": {
+        "max_attempts": 3,
+        "backoff_multiplier": 2,
+        "initial_delay_ms": 1000,
+        "max_delay_ms": 30000
+      }
+    },
+
+    "openai": {
+      "fallback_chain": ["gpt-3.5-turbo", "gpt-4"],
+      "rate_limits": {
+        "requests_per_minute": 50,
+        "requests_per_hour": 200,
+        "burst_limit": 10
+      },
+      "retry_policy": {
+        "max_attempts": 3,
+        "backoff_multiplier": 2,
+        "initial_delay_ms": 1000,
+        "max_delay_ms": 30000
+      }
+    }
+  },
+
+  "workflow": {
+    "timeout_seconds": 300,
+    "max_concurrent_executions": 3,
+    "retry_failed_steps": true,
+    "max_step_retries": 2,
+    "skip_non_critical_failures": true,
+
+    "error_handling": {
+      "continue_on_step_failure": true,
+      "log_full_stack_traces": true,
+      "capture_context": true,
+      "generate_error_reports": true
+    }
+  },
+
+  "pyodide": {
+    "memory_limits": {
+      "max_heap_mb": 512,
+      "warning_threshold_mb": 384,
+      "emergency_threshold_mb": 450
+    },
+
+    "worker_management": {
+      "auto_restart": true,
+      "health_check_interval_ms": 30000,
+      "max_restart_attempts": 3,
+      "restart_delay_ms": 5000,
+      "shutdown_timeout_ms": 10000
+    },
+
+    "performance": {
+      "enable_memory_tracking": true,
+      "track_function_calls": false,
+      "monitor_packages": true,
+      "capture_cpu_usage": false
+    }
+  },
+
+  "html_extraction": {
+    "timeout_ms": 10000,
+    "max_retries": 2,
+    "selectors": {
+      "success_threshold": 0.7,
+      "retry_on_failure": true
+    },
+    "validation": {
+      "check_completeness": true,
+      "check_accuracy": true,
+      "min_confidence_score": 0.6
+    }
+  },
+
+  "network": {
+    "timeouts": {
+      "connection_ms": 10000,
+      "request_ms": 30000,
+      "response_ms": 30000
+    },
+    "retries": {
+      "max_attempts": 3,
+      "backoff_ms": 1000
+    },
+    "monitoring": {
+      "track_all_requests": true,
+      "log_request_bodies": false,
+      "log_response_sizes": true,
+      "capture_headers": false
+    }
+  },
+
+  "logging": {
+    "level": "INFO",
+    "structured": true,
+    "include_timestamps": true,
+    "include_user_agent": true,
+    "include_session_id": true,
+
+    "categories": {
+      "workflow_engine": "INFO",
+      "mcp_bridge": "INFO",
+      "ai_client": "WARN",
+      "pyodide_monitor": "INFO",
+      "html_extraction": "WARN",
+      "network_tracker": "WARN"
+    },
+
+    "outputs": {
+      "console": {
+        "enabled": true,
+        "include_stack_traces": false
+      },
+      "file": {
+        "enabled": false,
+        "max_file_size_mb": 10,
+        "max_files": 5
+      },
+      "remote": {
+        "enabled": false,
+        "endpoint": null
+      }
+    }
+  },
+
+  "metrics": {
+    "collection_interval_ms": 60000,
+    "buckets": [0.1, 0.5, 1, 2.5, 5, 10, 25, 60, 300],
+    "prefix": "ozon_analyzer",
+
+    "gauges": ["memory_usage", "active_connections", "worker_health"],
+    "counters": ["requests_total", "errors_total", "successes_total"],
+    "histograms": ["request_duration", "processing_time", "response_size"]
+  },
+
+  "alerts_system": {
+    "enabled": true,
+    "channels": {
+      "console": {
+        "enabled": true,
+        "severity_threshold": "MEDIUM"
+      },
+      "storage": {
+        "enabled": true,
+        "max_alerts": 1000
+      },
+      "notification": {
+        "enabled": false,
+        "title": "Ozon Analyzer Alert"
+      }
+    },
+
+    "templates": {
+      "memory_warning": {
+        "title": "High Memory Usage",
+        "message": "Memory usage exceeded {threshold}MB (current: {current}MB)",
+        "severity": "MEDIUM"
+      },
+      "api_failure": {
+        "title": "AI API Failure",
+        "message": "AI API failure rate: {rate}% for model {model}",
+        "severity": "HIGH"
+      },
+      "workflow_timeout": {
+        "title": "Workflow Timeout",
+        "message": "Workflow execution timed out after {duration}s",
+        "severity": "HIGH"
+      }
+    }
+  },
+
+  "health_checks": {
+    "system_health": {
+      "enabled": true,
+      "interval_ms": 300000, // 5 minutes
+      "checks": ["memory", "network", "api_connectivity"]
+    },
+    "component_health": {
+      "enabled": true,
+      "interval_ms": 60000, // 1 minute
+      "components": ["workflow_engine", "mcp_bridge", "ai_client", "pyodide"]
+    }
+  },
+
+  "feature_flags": {
+    "enable_deep_monitoring": true,
+    "enable_ai_fallback": true,
+    "enable_performance_tracking": true,
+    "enable_memory_optimization": true,
+    "enable_smart_retry": true,
+    "enable_health_dashboard": false,
+    "enable_remote_logging": false
+  }
+}

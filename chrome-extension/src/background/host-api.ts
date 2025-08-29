@@ -132,6 +132,42 @@ export const hostApi = {
     }
   },
 
+  async preWarmPyodide(context?: any) {
+    try {
+      console.log('[HOST API] 🚀 Запуск pre-warm Pyodide...');
+
+      // Импортируем функции pre-warm
+      const { preWarmPyodideWorker, getPreWarmStatus } = await import('../../../bridge/worker-manager.js') as any;
+
+      // Запускаем pre-warm
+      await preWarmPyodideWorker();
+
+      // Получаем статус для возврата информации
+      const status = getPreWarmStatus();
+
+      const preWarmDuration = (status as any).preWarmDuration || 0;
+      const isPreWarmed = (status as any).isPreWarmed || false;
+
+      console.log(`[HOST API] ✅ Pre-warm завершен! Время: ${preWarmDuration}ms`);
+
+      return {
+        success: true,
+        preWarmDuration,
+        isPreWarmed,
+        message: `Pyodide pre-warmed successfully in ${preWarmDuration}ms`
+      };
+
+    } catch (error) {
+      const errorMessage = (error as Error).message || String(error);
+      console.error('[HOST API] ❌ Ошибка pre-warm:', errorMessage);
+      return {
+        error: true,
+        message: `Pre-warm failed: ${errorMessage}`,
+        fallbackMessage: 'Will use cold start for next request'
+      };
+    }
+  },
+
   sendMessageToChat(message: { content: string }) {
     if ((window as any).activeWorkflowLogger) {
       (window as any).activeWorkflowLogger.addMessage('PYTHON', message.content);
