@@ -1,13 +1,20 @@
 {
   "name": "ozon_analyzer",
-  "description": "Анализатор товаров Ozon...",
+  "description": "Анализатор товаров Ozon с проверкой соответствия описания и состава",
   "steps": [
     {
-      "id": "analyze_page",
+      "id": "analyze",
+      "description": "Анализ продукта Ozon",
       "tool": "python.analyze_ozon_product",
-      "description": "Анализирует товар на текущей странице Ozon",
-      "input": {
-        "page_html": "{{page_html}}"
+      "inputs": { "page_html": "{{input.page_html}}" }
+    },
+    {
+      "id": "deep-analysis",
+      "tool": "python.perform_deep_analysis",
+      "run_if": "{{steps.analyze.output.deep_analysis_offer.available}} == true",
+      "inputs": {
+        "description": "{{steps.analyze.output.description}}",
+        "composition": "{{steps.analyze.output.composition}}"
       }
     }
   ]

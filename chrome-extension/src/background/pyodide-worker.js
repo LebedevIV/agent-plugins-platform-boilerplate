@@ -35,6 +35,35 @@ async function initializePyodide() {
         hostCallPromises.set(callId, { resolve, reject });
         self.postMessage({ type: 'host_call', func: 'host_fetch', callId, args: [url] });
       });
+    },
+    llm_call: (modelAlias, options) => {
+      const callId = `host_call_${Date.now()}_${Math.random()}`;
+      return new Promise((resolve, reject) => {
+        hostCallPromises.set(callId, { resolve, reject });
+        // Преобразуем options из PyProxy в обычный JS объект
+        const jsOptions = options.toJs ? options.toJs({ dict_converter: Object.fromEntries }) : options;
+        self.postMessage({
+          type: 'host_call',
+          func: 'llm_call',
+          callId,
+          args: [modelAlias, jsOptions]
+        });
+      });
+    },
+    get_setting: (settingName, defaultValue, category) => {
+      const callId = `host_call_${Date.now()}_${Math.random()}`;
+      return new Promise((resolve, reject) => {
+        hostCallPromises.set(callId, { resolve, reject });
+        // Преобразуем параметры из PyProxy в обычные JS значения
+        const jsDefaultValue = defaultValue?.toJs ? defaultValue.toJs({ dict_converter: Object.fromEntries }) : defaultValue;
+        const jsCategory = category?.toJs ? category.toJs() : category;
+        self.postMessage({
+          type: 'host_call',
+          func: 'get_setting',
+          callId,
+          args: [settingName, jsDefaultValue, jsCategory]
+        });
+      });
     }
   });
 }
