@@ -8,10 +8,10 @@
 
 ```
 /home/igor/Документы/Проекты/
-├── tsx_viewer/ProjectGraphAgent/          # Режим родительского проекта
-│   ├── project_graph.jsonnet              # Содержит данные TSX-viewer
-│   ├── graph_parts/entities.jsonnet       # Сущности, специфичные для TSX-viewer
-│   ├── settings.json                      # Настройки TSX-viewer
+├── agent_plugins_platform/ProjectGraphAgent/          # Режим родительского проекта
+│   ├── project_graph.jsonnet              # Содержит данные Agent Plugins Platform
+│   ├── graph_parts/entities.jsonnet       # Сущности, специфичные для Agent Plugins Platform
+│   ├── settings.json                      # Настройки Agent Plugins Platform
 │   └── ... (все остальные файлы)
 └── ProjectGraphAgent/                     # Автономный режим
     ├── project_graph.jsonnet              # Чистый шаблон
@@ -23,10 +23,10 @@
 
 ### 1. Этап разработки (Родительский проект)
 
-Работайте в `/home/igor/Документы/Проекты/tsx_viewer/ProjectGraphAgent/`:
+Работайте в `/home/igor/Документы/Проекты/agent_plugins_platform/ProjectGraphAgent/`:
 
 ```bash
-cd /home/igor/Документы/Проекты/tsx_viewer/ProjectGraphAgent/
+cd /home/igor/Документы/Проекты/agent_plugins_platform/ProjectGraphAgent/
 
 # Вносите изменения в:
 # - scripts/ (новые функции автоматизации)
@@ -44,7 +44,7 @@ npm run graph:validate
 Синхронизируйте изменения в автономную директорию:
 
 ```bash
-# Из директории tsx_viewer/ProjectGraphAgent/
+# Из директории agent_plugins_platform/ProjectGraphAgent/
 npm run sync
 ```
 
@@ -91,7 +91,7 @@ git push origin main
 Для удобства используйте автоматизированный воркфлоу публикации:
 
 ```bash
-# Из директории tsx_viewer/ProjectGraphAgent/
+# Из директории agent_plugins_platform/ProjectGraphAgent/
 npm run publish
 ```
 
@@ -128,19 +128,19 @@ npm run graph:commit     # Групповые коммиты (в планах)
 
 ## Управление файлами
 
-### Файлы родительского проекта (tsx_viewer/ProjectGraphAgent/)
+### Файлы родительского проекта (agent_plugins_platform/ProjectGraphAgent/)
 
 **Содержат данные, специфичные для проекта:**
-- `project_graph.jsonnet` - Конфигурация TSX-viewer
-- `graph_parts/entities.jsonnet` - Сущности TSX-viewer
-- `settings.json` - Настройки TSX-viewer
-- `.cache/` - Сгенерированные артефакты для TSX-viewer
-- `memory-bank/` - Memory bank для TSX-viewer
+- `project_graph.jsonnet` - Конфигурация Agent Plugins Platform
+- `graph_parts/entities.jsonnet` - Сущности Agent Plugins Platform
+- `settings.json` - Настройки Agent Plugins Platform
+- `.cache/` - Сгенерированные артефакты для Agent Plugins Platform
+- `memory-bank/` - Memory bank для Agent Plugins Platform
 
 **Используются для:**
 - Активной разработки
 - Тестирования новых функций
-- Управления проектом TSX-viewer
+- Управления проектом Agent Plugins Platform
 - Отладки и экспериментов
 
 ### Файлы автономной версии (/home/igor/Документы/Проекты/ProjectGraphAgent/)
@@ -176,12 +176,18 @@ npm run graph:commit     # Групповые коммиты (в планах)
 3. **Следите за статусом Git** - Проверяйте на наличие неожиданных изменений
 4. **Обновляйте документацию** - Поддерживайте README.md в актуальном состоянии
 
+### Индексация путей
+1. **Используйте поиск по путям для больших проектов** - Используйте функции `graph.templates.PathSearch` для эффективного поиска файлов
+2. **Проверяйте существование файлов перед доступом** - Всегда используйте `pathExists()` перед работой с файлами
+3. **Используйте различные стратегии поиска** - Комбинируйте поиск по директории, типу файла и паттернам для точного targeting
+4. **Следите за статистикой индекса** - Используйте `getIndexStats()` для понимания охвата кодовой базы и производительности
+
 ## Устранение неполадок
 
 ### Проблемы с синхронизацией
 ```bash
 # Проверьте, существует ли источник
-ls -la /home/igor/Документы/Проекты/tsx_viewer/ProjectGraphAgent/
+ls -la /home/igor/Документы/Проекты/agent_plugins_platform/ProjectGraphAgent/
 
 # Проверьте, существует ли назначение
 ls -la /home/igor/Документы/Проекты/ProjectGraphAgent/
@@ -215,9 +221,9 @@ git clean -fd
 
 | Команда | Расположение | Назначение |
 |---------|----------|---------|
-| `npm run sync` | tsx_viewer/ProjectGraphAgent/ | Синхронизировать с автономной версией |
+| `npm run sync` | agent_plugins_platform/ProjectGraphAgent/ | Синхронизировать с автономной версией |
 | `npm run clean` | ProjectGraphAgent/ | Очистить для публикации |
-| `npm run publish` | tsx_viewer/ProjectGraphAgent/ | Полный рабочий процесс |
+| `npm run publish` | agent_plugins_platform/ProjectGraphAgent/ | Полный рабочий процесс |
 | `npm run graph:audit` | Любое | Сгенерировать граф |
 | `npm run graph:validate` | Любое | Проверить граф |
 

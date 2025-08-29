@@ -19,8 +19,8 @@ local PathSearch = graph.templates.PathSearch;
         // 2. Поиск всех файлов в директории
         findFilesInDirectory: {
             description: 'Найти все файлы в указанной директории',
-            example: PathSearch.findByDirectory('packages'),
-            usage: 'graph.templates.PathSearch.findByDirectory("packages")',
+            example: PathSearch.findByDirectory('src'),
+            usage: 'graph.templates.PathSearch.findByDirectory("src")',
         },
 
         // 3. Поиск файлов по типу (расширению)

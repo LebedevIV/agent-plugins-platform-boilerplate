@@ -109,16 +109,22 @@
         findByFileName(fileName):: pathIndex.fileNameIndex[fileName],
 
         // Проверить существование файла в индексе
-        pathExists(path):: pathIndex.utils.pathExists(path),
+        pathExists(path):: std.objectHas(pathIndex.pathIndex, path),
 
         // Получить статистику индексов
-        getIndexStats():: pathIndex.utils.getStats(),
+        getIndexStats():: {
+            totalEntities: std.length(std.objectValues(pathIndex.pathIndex)),
+            indexedPaths: std.length(std.objectFields(pathIndex.pathIndex)),
+            directories: std.length(std.objectFields(pathIndex.directoryIndex)),
+            fileTypes: std.length(std.objectFields(pathIndex.fileTypeIndex)),
+            fileNames: std.length(std.objectFields(pathIndex.fileNameIndex)),
+        },
 
         // Получить все доступные директории
-        getAllDirectories():: pathIndex.utils.getAllDirectories(),
+        getAllDirectories():: std.objectFields(pathIndex.directoryIndex),
 
         // Получить все доступные типы файлов
-        getAllFileTypes():: pathIndex.utils.getAllFileTypes(),
+        getAllFileTypes():: std.objectFields(pathIndex.fileTypeIndex),
 
         // Поиск с использованием паттернов (простая реализация)
         findByPattern(pattern):: [
@@ -135,7 +141,7 @@
         ],
 
         // Получить родительскую директорию для пути
-        getParentDirectory(path):: std.join('/', std.slice(std.split(path, '/'), 0, std.length(std.split(path, '/')) - 1)),
+        getParentDirectory(path):: std.join('/', std.slice(std.split(path, '/'), 0, std.length(std.split(path, '/')) - 1, 1)),
 
         // Получить расширение файла
         getFileExtension(path):: (

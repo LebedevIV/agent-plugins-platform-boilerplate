@@ -40,6 +40,31 @@
                 'sync assistant commands',
             ],
         },
+        {
+            name: 'path-search',
+            npmCommand: 'node project_graph/scripts/graph_generator.mjs --path-search',
+            description: 'Search for files and entities using the path indexing system. Supports various search strategies.',
+            implemented: true,
+            triggerPhrases: [
+                'path-search',
+                'search files',
+                'find files',
+                'index search',
+                'path index',
+            ],
+        },
+        {
+            name: 'show-index-stats',
+            npmCommand: 'node project_graph/scripts/graph_generator.mjs --index-stats',
+            description: 'Display statistics about the path indexing system including number of indexed files and search performance.',
+            implemented: true,
+            triggerPhrases: [
+                'index-stats',
+                'show stats',
+                'index statistics',
+                'search stats',
+            ],
+        },
     ],
 
     // Define how these commands should be presented for different AI platforms

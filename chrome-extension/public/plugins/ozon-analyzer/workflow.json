@@ -1,12 +1,12 @@
 {
   "name": "ozon_analyzer",
-  "description": "Анализатор товаров Ozon с проверкой соответствия описания и состава",
+  "description": "Анализатор товаров Ozon...",
   "steps": [
     {
-      "name": "analyze_product",
-      "description": "Анализирует товар на странице Ozon",
-      "method": "analyze_product",
-      "params": {
+      "id": "analyze_page",
+      "tool": "python.analyze_ozon_product",
+      "description": "Анализирует товар на текущей странице Ozon",
+      "input": {
         "page_html": "{{page_html}}"
       }
     }

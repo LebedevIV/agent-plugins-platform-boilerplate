@@ -8,10 +8,10 @@ This guide explains the dual-directory workflow for ProjectGraphAgent developmen
 
 ```
 /home/igor/Документы/Проекты/
-├── tsx_viewer/ProjectGraphAgent/          # Parent project mode
-│   ├── project_graph.jsonnet              # Contains TSX-viewer data
-│   ├── graph_parts/entities.jsonnet       # TSX-viewer specific entities
-│   ├── settings.json                      # TSX-viewer settings
+├── agent_plugins_platform/ProjectGraphAgent/          # Parent project mode
+│   ├── project_graph.jsonnet              # Contains Agent Plugins Platform data
+│   ├── graph_parts/entities.jsonnet       # Agent Plugins Platform specific entities
+│   ├── settings.json                      # Agent Plugins Platform settings
 │   └── ... (all other files)
 └── ProjectGraphAgent/                     # Standalone mode
     ├── project_graph.jsonnet              # Clean template
@@ -23,10 +23,10 @@ This guide explains the dual-directory workflow for ProjectGraphAgent developmen
 
 ### 1. Development Phase (Parent Project)
 
-Work in `/home/igor/Документы/Проекты/tsx_viewer/ProjectGraphAgent/`:
+Work in `/home/igor/Документы/Проекты/agent_plugins_platform/ProjectGraphAgent/`:
 
 ```bash
-cd /home/igor/Документы/Проекты/tsx_viewer/ProjectGraphAgent/
+cd /home/igor/Документы/Проекты/agent_plugins_platform/ProjectGraphAgent/
 
 # Make changes to:
 # - scripts/ (new automation features)
@@ -44,7 +44,7 @@ npm run graph:validate
 Sync changes to the standalone directory:
 
 ```bash
-# From tsx_viewer/ProjectGraphAgent/
+# From agent_plugins_platform/ProjectGraphAgent/
 npm run sync
 ```
 
@@ -91,7 +91,7 @@ git push origin main
 For convenience, use the automated publish workflow:
 
 ```bash
-# From tsx_viewer/ProjectGraphAgent/
+# From agent_plugins_platform/ProjectGraphAgent/
 npm run publish
 ```
 
@@ -128,19 +128,19 @@ npm run graph:commit     # Grouped commits (planned)
 
 ## File Management
 
-### Parent Project Files (tsx_viewer/ProjectGraphAgent/)
+### Parent Project Files (agent_plugins_platform/ProjectGraphAgent/)
 
 **Contains project-specific data:**
-- `project_graph.jsonnet` - TSX-viewer configuration
-- `graph_parts/entities.jsonnet` - TSX-viewer entities
-- `settings.json` - TSX-viewer settings
-- `.cache/` - Generated artifacts for TSX-viewer
-- `memory-bank/` - TSX-viewer memory bank
+- `project_graph.jsonnet` - Agent Plugins Platform configuration
+- `graph_parts/entities.jsonnet` - Agent Plugins Platform entities
+- `settings.json` - Agent Plugins Platform settings
+- `.cache/` - Generated artifacts for Agent Plugins Platform
+- `memory-bank/` - Agent Plugins Platform memory bank
 
 **Used for:**
 - Active development
 - Testing new features
-- Managing TSX-viewer project
+- Managing Agent Plugins Platform project
 - Debugging and experimentation
 
 ### Standalone Files (/home/igor/Документы/Проекты/ProjectGraphAgent/)
@@ -176,12 +176,18 @@ npm run graph:commit     # Grouped commits (planned)
 3. **Monitor Git status** - Check for unexpected changes
 4. **Update documentation** - Keep README.md current
 
+### Path Indexing
+1. **Use path search for large projects** - Leverage `graph.templates.PathSearch` functions for efficient file lookups
+2. **Check file existence before access** - Always use `pathExists()` before working with files
+3. **Utilize different search strategies** - Combine directory, file type, and pattern searches for precise targeting
+4. **Monitor index statistics** - Use `getIndexStats()` to understand codebase scope and performance
+
 ## Troubleshooting
 
 ### Sync Issues
 ```bash
 # Check if source exists
-ls -la /home/igor/Документы/Проекты/tsx_viewer/ProjectGraphAgent/
+ls -la /home/igor/Документы/Проекты/agent_plugins_platform/ProjectGraphAgent/
 
 # Check if destination exists
 ls -la /home/igor/Документы/Проекты/ProjectGraphAgent/
@@ -215,9 +221,9 @@ git clean -fd
 
 | Command | Location | Purpose |
 |---------|----------|---------|
-| `npm run sync` | tsx_viewer/ProjectGraphAgent/ | Sync to standalone |
+| `npm run sync` | agent_plugins_platform/ProjectGraphAgent/ | Sync to standalone |
 | `npm run clean` | ProjectGraphAgent/ | Clean for publication |
-| `npm run publish` | tsx_viewer/ProjectGraphAgent/ | Full workflow |
+| `npm run publish` | agent_plugins_platform/ProjectGraphAgent/ | Full workflow |
 | `npm run graph:audit` | Any | Generate graph |
 | `npm run graph:validate` | Any | Validate graph |
 
