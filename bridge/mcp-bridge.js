@@ -6,8 +6,7 @@
  * Интегрирована система мониторинга для отслеживания производительности и здоровья.
  */
 
-// Универсальный глобальный контекст для работы в браузере и Service Worker
-const globalCtx = typeof window !== 'undefined' ? window : self;
+// Глобальный контекст будет передаваться через параметры функций
 
 import { getWorker, getWorkerStats } from './worker-manager.js';
 
@@ -38,7 +37,7 @@ try {
     console.warn('[MCP Bridge] Cannot initialize monitoring:', error.message);
 }
 
-async function initializeCommunication() {
+async function initializeCommunication(context = {}) {
     if (isWorkerInitialized) return;
 
     // Автоматический pre-warm Pyodide в фоне при первой инициализации
@@ -57,7 +56,7 @@ async function initializeCommunication() {
             setTimeout(() => {
                 console.log('[MCP Bridge] Начинаю обычную инициализацию воркера...');
                 const pyodideWorker = getWorker();
-                setupWorkerCommunication(pyodideWorker);
+                setupWorkerCommunication(pyodideWorker, context);
 
                 if (monitoringCore) {
                     monitoringCore.addLog('mcp_bridge', 'info', 'MCP Bridge communication initialized');
@@ -68,7 +67,7 @@ async function initializeCommunication() {
         console.warn('[MCP Bridge] Не удалось импортировать preWarmPyodideWorker:', error.message);
         // Fallback к обычной инициализации
         const pyodideWorker = getWorker();
-        setupWorkerCommunication(pyodideWorker);
+        setupWorkerCommunication(pyodideWorker, context);
 
         if (monitoringCore) {
             monitoringCore.addLog('mcp_bridge', 'info', 'MCP Bridge communication initialized (fallback)');
@@ -78,7 +77,13 @@ async function initializeCommunication() {
     isWorkerInitialized = true;
 }
 
-function setupWorkerCommunication(pyodideWorker) {
+let currentHostApi = null;
+
+export function setHostApi(hostApi) {
+  currentHostApi = hostApi;
+}
+
+function setupWorkerCommunication(pyodideWorker, context = {}) {
     pyodideWorker.onmessage = (event) => {
         const { type, callId, result, error, func, args } = event.data;
 
@@ -118,8 +123,9 @@ function handleHostCall(data) {
         });
     }
 
-    if (globalCtx.hostApi && typeof globalCtx.hostApi[func] === 'function') {
-        Promise.resolve(globalCtx.hostApi[func](...args))
+    const hostApi = currentHostApi || (context && context.hostApi);
+    if (hostApi && typeof hostApi[func] === 'function') {
+        Promise.resolve(hostApi[func](...args))
             .then(hostResult => {
                 const duration = performance.now() - startTime;
 
@@ -317,7 +323,10 @@ export async function runPythonTool(pluginId, toolName, toolInput, context = {})
     const callId = `py_tool_run_${Date.now()}_${Math.random()}`;
 
     try {
-        initializeCommunication();
+        if (context.hostApi) {
+          setHostApi(context.hostApi);
+        }
+        initializeCommunication(context);
         const pyodideWorker = getWorker();
 
         // Запись статистики выполнения

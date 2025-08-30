@@ -18,6 +18,18 @@ export class PerformanceBenchmark {
             }
         };
 
+        // Polyfill performance.now() for Node.js environment
+        if (typeof performance === 'undefined' || typeof performance.now === 'undefined') {
+            const hrtime = process.hrtime;
+            this.performanceNow = () => {
+                const time = hrtime.bigint();
+                return Number(time) / 1000000; // Convert to milliseconds
+            };
+        } else {
+            this.performanceNow = () => performance.now();
+        }
+    }
+
         // Тестовые данные
         this.testHtml = `
             <html>
@@ -92,13 +104,13 @@ export class PerformanceBenchmark {
      * Бенчмаркинг инициализации Pyodide
      */
     async benchmarkPyodideInit() {
-        const startTime = performance.now();
+        const startTime = this.performanceNow();
         console.log('📍 Измерение времени инициализации Pyodide...');
 
         // Имитируем загрузку Pyodide (в реальном сценарии это произойдет в background)
         await new Promise(resolve => setTimeout(resolve, 8000)); // ~8 сек на cold start
 
-        const endTime = performance.now();
+        const endTime = this.performanceNow();
         const initTime = endTime - startTime;
 
         this.benchmarkResults.pyodideInitialization = initTime;
@@ -117,7 +129,7 @@ export class PerformanceBenchmark {
      * Бенчмаркинг парсинга HTML
      */
     async benchmarkHtmlParsing() {
-        const startTime = performance.now();
+        const startTime = this.performanceNow();
         console.log('📍 Измерение производительности HTML парсинга...');
 
         // Имитируем работу SimpleHTMLParser
@@ -135,7 +147,7 @@ export class PerformanceBenchmark {
             }, 300); // 3-6 сек в реальности
         });
 
-        const endTime = performance.now();
+        const endTime = this.performanceNow();
         const parseTime = endTime - startTime;
 
         this.benchmarkResults.htmlParsing = parseTime;
@@ -158,7 +170,7 @@ export class PerformanceBenchmark {
      * Бенчмаркинг последовательных AI вызовов
      */
     async benchmarkSequentialAiCalls() {
-        const startTime = performance.now();
+        const startTime = this.performanceNow();
         console.log('📍 Измерение последовательных AI вызовов...');
 
         // Имитация трех последовательных AI вызовов из analyze_ozon_product
@@ -179,7 +191,7 @@ export class PerformanceBenchmark {
             console.log(`   ${call.alias}: ${call.delay}ms`);
         }
 
-        const endTime = performance.now();
+        const endTime = this.performanceNow();
         const totalAiTime = endTime - startTime;
 
         this.benchmarkResults.sequentialAiCalls = totalAiTime;
@@ -202,7 +214,7 @@ export class PerformanceBenchmark {
      * Бенчмаркинг полного цикла выполнения
      */
     async benchmarkTotalExecution() {
-        const startTime = performance.now();
+        const startTime = this.performanceNow();
         console.log('📍 Измерение полного цикла выполнения...');
 
         // Имитация полного цикла: Pyodide + HTML + AI + обработки
@@ -219,7 +231,7 @@ export class PerformanceBenchmark {
             console.log(`   ${phase.name}: ${phase.delay}ms`);
         }
 
-        const endTime = performance.now();
+        const endTime = this.performanceNow();
         const totalTime = endTime - startTime;
 
         this.benchmarkResults.totalExecutionTime = totalTime;
@@ -353,5 +365,10 @@ export class PerformanceBenchmark {
             recommendations,
             estimatedImprovement
         };
+    }
+
+    // Required method for test framework
+    async runAll() {
+        return await this.runBenchmark();
     }
 }

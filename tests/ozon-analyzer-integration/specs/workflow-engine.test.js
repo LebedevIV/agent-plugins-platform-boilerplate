@@ -50,12 +50,8 @@ export class WorkflowEngineTest {
             }
         };
 
-        // Устанавливаем глобальный контекст
-        if (typeof window !== 'undefined') {
-            window.globalCtx = this.globCtx;
-        } else {
-            global.globalCtx = this.globCtx;
-        }
+        // Глобальный контекст настраивается через MockEnvironment
+        // Workflow engine использует dependency injection вместо глобальных переменных
 
         console.log('✅ Тестовое окружение настроено');
     }
@@ -274,12 +270,8 @@ export class WorkflowEngineTest {
 
     async cleanup() {
         // Очистка test данных
-        if (global.globalCtx) {
-            delete global.globalCtx;
-        }
-        if (window?.globalCtx) {
-            delete window.globalCtx;
-        }
+        // Cleanup handled by MockEnvironment
+        console.log('[WorkflowEngineTest] Cleanup completed');
     }
 
     // Основной метод запуска всех тестов

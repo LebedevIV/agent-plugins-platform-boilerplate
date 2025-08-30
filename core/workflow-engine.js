@@ -6,10 +6,6 @@
  */
 
 import { runPythonTool } from '../bridge/mcp-bridge.js';
-import { createRunLogger } from '../ui/log-manager.js';
-
-// Универсальный глобальный объект для поддержки браузера и Service Worker
-const globalCtx = typeof window !== 'undefined' ? window : self;
 
 // Импорт системы мониторинга
 let monitoringCore = null;
@@ -32,6 +28,7 @@ try {
 export async function runWorkflow(pluginId, context) {
   const workflowStartTime = performance.now();
   const logger = context.logger;
+  const hostApi = context.hostApi;
 
   try {
     logger.addMessage('ENGINE', `▶️ Запуск воркфлоу...`);
@@ -45,9 +42,7 @@ export async function runWorkflow(pluginId, context) {
     }
 
     // Показать вкладку логов (если есть интерфейс)
-    if (typeof document !== 'undefined') {
-      document.querySelector('.tab-button[data-tab="logs"]')?.click();
-    }
+    // Note: логгер теперь управляется через context
 
     const workflow = await loadWorkflowDefinition(pluginId, logger);
     if (!workflow) {
@@ -238,7 +233,7 @@ async function executeStep(step, context) {
   const [toolType, toolName] = step.tool.split('.');
 
   if (toolType === 'host') {
-    const hostApi = context.hostApi || globalCtx.hostApi;
+    const hostApi = context.hostApi;
     if (hostApi && typeof hostApi[toolName] === 'function') {
       output = await hostApi[toolName](toolInput, context);
     } else {

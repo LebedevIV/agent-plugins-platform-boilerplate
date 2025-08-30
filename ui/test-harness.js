@@ -51,9 +51,7 @@ async function handlePluginRun(plugin) {
         // Создаём контекст для UI-driven воркфлоу
         const context = {
             logger: createRunLogger(`Воркфлоу плагина: ${plugin.id}`),
-            hostApi: hostApi,
-            pluginId: plugin.id,
-            // Дополнительные поля контекста могут быть добавлены по необходимости
+            hostApi: hostApi
         };
 
         // Вызываем движок с переданным контекстом

@@ -315,9 +315,7 @@ chrome.runtime.onMessage.addListener(
             // Создать контекст для зависимого от среды выполнения воркфлоу
             const context = {
               logger: createBackgroundLogger(`Воркфлоу плагина: ${msg.pluginId}`),
-              hostApi: hostApi,
-              pluginId: msg.pluginId,
-              // Дополнительные поля контекста могут быть добавлены по необходимости
+              hostApi: hostApi
             };
 
             // Запустить воркфлоу с переданным контекстом
