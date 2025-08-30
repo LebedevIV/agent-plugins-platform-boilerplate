@@ -215,12 +215,12 @@
   "health_checks": {
     "system_health": {
       "enabled": true,
-      "interval_ms": 300000, // 5 minutes
+      "interval_ms": 300000,
       "checks": ["memory", "network", "api_connectivity"]
     },
     "component_health": {
       "enabled": true,
-      "interval_ms": 60000, // 1 minute
+      "interval_ms": 60000,
       "components": ["workflow_engine", "mcp_bridge", "ai_client", "pyodide"]
     }
   },

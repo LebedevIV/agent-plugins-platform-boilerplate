@@ -13,8 +13,10 @@
 import json
 import asyncio
 import hashlib
+import re
 from datetime import datetime
 from typing import Any, Dict, List, Protocol, runtime_checkable, Optional
+from re import Match
 
 # ==============================================================================
 # Менеджер памяти для оптимизации Pyodide
@@ -415,7 +417,6 @@ class FastDOMParser:
     def _normalize_html(self):
         """Нормализация HTML для более эффективного парсинга."""
         # Удаляем лишние пробелы и переносы строк для уменьшения объема
-        import re
         self.html = re.sub(r'\s+', ' ', self.html.strip())
 
     def _get_cached_pattern(self, pattern_str: str, flags: int = 0) -> Any:
@@ -426,7 +427,6 @@ class FastDOMParser:
         if cached:
             return cached
 
-        import re
         compiled_pattern = re.compile(pattern_str, flags)
         memory_manager.cache_lru(cache_key, compiled_pattern, max_age_seconds=3600)  # 1 час
 
@@ -570,8 +570,6 @@ class FastDOMParser:
 
     def _extract_price(self) -> Dict[str, Any]:
         """Извлечение цены товара."""
-        import re
-
         # Поиск цены в различных форматах
         price_patterns = [
             r'<span[^>]*class="[^"]*price[^"]*"[^>]*>([^<]+)</span>',
@@ -600,8 +598,6 @@ class FastDOMParser:
 
     def _extract_rating(self) -> Dict[str, Any]:
         """Извлечение рейтинга товара."""
-        import re
-
         # Поиск рейтинга
         rating_patterns = [
             r'<span[^>]*class="[^"]*rating[^"]*"[^>]*>([^<]+)</span>',
@@ -1112,7 +1108,6 @@ def _extract_key_elements(description: str, composition: str) -> Dict[str, Any]:
         for pattern in desc_patterns:
             pattern_obj = memory_manager.get_cached_lru(f"pattern:desc:{pattern}")
             if not pattern_obj:
-                import re
                 pattern_obj = re.compile(pattern, re.IGNORECASE | re.MULTILINE)
                 memory_manager.cache_lru(f"pattern:desc:{pattern}", pattern_obj, max_age_seconds=3600)
 
@@ -1131,7 +1126,6 @@ def _extract_key_elements(description: str, composition: str) -> Dict[str, Any]:
         for pattern in comp_patterns:
             pattern_obj = memory_manager.get_cached_lru(f"pattern:comp:{pattern}")
             if not pattern_obj:
-                import re
                 pattern_obj = re.compile(pattern, re.IGNORECASE)
                 memory_manager.cache_lru(f"pattern:comp:{pattern}", pattern_obj, max_age_seconds=3600)
 
