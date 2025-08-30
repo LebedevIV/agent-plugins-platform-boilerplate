@@ -6,6 +6,7 @@
 import { getAvailablePlugins } from '../core/plugin-manager.js';
 import { createPluginCard } from './PluginCard.js';
 import { hostApi } from '../core/host-api.js';
+import { createRunLogger } from '../ui/log-manager.js';
 import { runWorkflow } from '../core/workflow-engine.js';
 
 // --- Универсальный глобальный контекст ---
@@ -47,8 +48,16 @@ async function handlePluginRun(plugin) {
     icon.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" class="plugin-loader" viewBox="0 0 24 24" fill="none" stroke="%23007bff" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>`;
     
     try {
-        // Вызываем наш движок. Он сам создаст логгер и установит window.activeWorkflowLogger.
-        await runWorkflow(plugin.id);
+        // Создаём контекст для UI-driven воркфлоу
+        const context = {
+            logger: createRunLogger(`Воркфлоу плагина: ${plugin.id}`),
+            hostApi: hostApi,
+            pluginId: plugin.id,
+            // Дополнительные поля контекста могут быть добавлены по необходимости
+        };
+
+        // Вызываем движок с переданным контекстом
+        await runWorkflow(plugin.id, context);
     } catch (error) {
         console.error(`--- КРИТИЧЕСКАЯ ОШИБКА при выполнении плагина ${plugin.name}:`, error);
         if (globalCtx.activeWorkflowLogger) {

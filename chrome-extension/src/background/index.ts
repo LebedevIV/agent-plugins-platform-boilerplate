@@ -29,6 +29,27 @@ interface ExtensionMessage {
   messageId?: string;
 }
 
+// Logger for background environment - headless version without DOM access
+function createBackgroundLogger(name: string) {
+  return {
+    addMessage: (stepId: string, message: string, type = 'info') => {
+      const timestamp = new Date().toISOString().slice(11, 19); // HH:MM:SS format
+      console.log(`[Background Logger][${timestamp}][${name}][${stepId}] ${message}`);
+      if (type === 'error' || type === 'critical') {
+        console.error(`[Background Logger][ERROR][${name}][${stepId}] ${message}`);
+      } else if (type === 'warning' || type === 'warn') {
+        console.warn(`[Background Logger][WARN][${name}][${stepId}] ${message}`);
+      }
+    },
+    renderResult: (stepId: string, result: any) => {
+      const truncatedResult = JSON.stringify(result, null, 2).length > 500
+        ? JSON.stringify(result, null, 2).substring(0, 500) + '...\n[result truncated]'
+        : JSON.stringify(result, null, 2);
+      console.log(`[Background Logger][Result][${name}][${stepId}]`, truncatedResult);
+    }
+  };
+}
+
 // Только стандартное поведение: панель открывается/закрывается глобально по клику на иконку
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
 
@@ -291,28 +312,20 @@ chrome.runtime.onMessage.addListener(
               return;
             }
 
-            // Создать заглушки для Service Worker среды
-            // Logger для background
-            function createBackgroundLogger(name: string) {
-              return {
-                addMessage: (type: string, msg: string) => {
-                  console.log(`[${type}] ${msg}`);
-                },
-                renderResult: (stepId: string, result: any) => {
-                  console.log(`Result for ${stepId}:`, result);
-                }
-              };
-            }
+            // Создать контекст для зависимого от среды выполнения воркфлоу
+            const context = {
+              logger: createBackgroundLogger(`Воркфлоу плагина: ${msg.pluginId}`),
+              hostApi: hostApi,
+              pluginId: msg.pluginId,
+              // Дополнительные поля контекста могут быть добавлены по необходимости
+            };
 
-            // Заглушки для Service Worker среды
-            (self as any).activeWorkflowLogger = createBackgroundLogger('background-run');
-            (self as any).hostApi = hostApi;
-            (self as any).currentPlugin = msg.pluginId;
-
-            // Запустить воркфлоу с initialInput
+            // Запустить воркфлоу с переданным контекстом
             console.log('[background] Starting workflow execution with plugin:', msg.pluginId);
+            await runWorkflow(msg.pluginId as string, context);
 
-            await runWorkflow(msg.pluginId as string, { page_html: pageHtml });
+            // Очистка переопределения после выполнения
+            delete (self as any).backgroundLoggerOverride;
 
             console.log('[background] Workflow completed successfully');
             sendResponse({ success: true });

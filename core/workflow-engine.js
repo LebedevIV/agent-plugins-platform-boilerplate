@@ -29,13 +29,11 @@ try {
   console.warn('[WorkflowEngine] Cannot load monitoring system:', error.message);
 }
 
-export async function runWorkflow(pluginId) {
+export async function runWorkflow(pluginId, context) {
   const workflowStartTime = performance.now();
-  let logger;
+  const logger = context.logger;
 
   try {
-    globalCtx.activeWorkflowLogger = createRunLogger(`Воркфлоу плагина: ${pluginId}`);
-    logger = globalCtx.activeWorkflowLogger;
     logger.addMessage('ENGINE', `▶️ Запуск воркфлоу...`);
 
     // Логирование запуска воркфлоу в систему мониторинга
@@ -47,7 +45,9 @@ export async function runWorkflow(pluginId) {
     }
 
     // Показать вкладку логов (если есть интерфейс)
-    document.querySelector('.tab-button[data-tab="logs"]')?.click();
+    if (typeof document !== 'undefined') {
+      document.querySelector('.tab-button[data-tab="logs"]')?.click();
+    }
 
     const workflow = await loadWorkflowDefinition(pluginId, logger);
     if (!workflow) {
@@ -58,10 +58,10 @@ export async function runWorkflow(pluginId) {
       throw error;
     }
 
-    const context = {
+    const workflowContext = {
+      ...context,
       steps: {},
       input: workflow.initialInput || {},
-      logger: logger,
       pluginId: pluginId,
       startTime: Date.now()
     };
@@ -72,7 +72,7 @@ export async function runWorkflow(pluginId) {
       const stepStartTime = performance.now();
 
       try {
-        const shouldRun = evaluateRunIf(step.run_if, context);
+        const shouldRun = evaluateRunIf(step.run_if, workflowContext);
         if (!shouldRun) {
           logger.addMessage('ENGINE', `Пропущен шаг: ${step.id} (условие run_if не выполнено)`);
 
@@ -90,11 +90,11 @@ export async function runWorkflow(pluginId) {
         // Измерение производительности шага
         const stepResult = await monitoringCore?.measurePerformance(
           `workflow_step_${step.id}`,
-          async () => await executeStep(step, context),
+          async () => await executeStep(step, workflowContext),
           { pluginId, stepId: step.id, tool: step.tool }
-        ) || await executeStep(step, context);
+        ) || await executeStep(step, workflowContext);
 
-        context.steps[step.id] = { output: stepResult };
+        workflowContext.steps[step.id] = { output: stepResult };
         logger.addMessage('ENGINE', `✅ Шаг ${step.id} выполнен.`);
 
         // Регистрация успешного выполнения
@@ -115,7 +115,7 @@ export async function runWorkflow(pluginId) {
           pluginId: pluginId,
           duration: stepDuration,
           inputSize: JSON.stringify(step.inputs).length,
-          contextSize: Object.keys(context.steps).length
+          contextSize: Object.keys(workflowContext.steps).length
         };
 
         // Подробное логирование ошибки
@@ -123,7 +123,7 @@ export async function runWorkflow(pluginId) {
         console.error(`[WorkflowEngine] Step error details:`, {
           step: step.id,
           error: error.message,
-          context: context,
+          workflowContext: workflowContext,
           ...errorDetails
         });
 
@@ -152,7 +152,7 @@ export async function runWorkflow(pluginId) {
           logger.addMessage('WARN', `Шаг ${step.id} пропущен из-за ошибки, продолжаем выполнение...`);
 
           // Запись информации о пропущенном шаге
-          context.steps[step.id] = {
+          workflowContext.steps[step.id] = {
             output: { status: 'skipped', error: error.message },
             skipped: true,
             reason: 'error'
@@ -163,10 +163,10 @@ export async function runWorkflow(pluginId) {
 
     // Обработка результатов воркфлоу
     const workflowDuration = performance.now() - workflowStartTime;
-    const lastExecutedStepId = Object.keys(context.steps).pop();
+    const lastExecutedStepId = Object.keys(workflowContext.steps).pop();
 
     if (lastExecutedStepId) {
-      const finalResult = context.steps[lastExecutedStepId].output;
+      const finalResult = workflowContext.steps[lastExecutedStepId].output;
 
       // Рендеринг результата (если есть интерфейс)
       if (logger.renderResult) {
@@ -198,7 +198,7 @@ export async function runWorkflow(pluginId) {
     const errorDetails = {
       pluginId,
       totalDuration: workflowDuration,
-      completedSteps: Object.keys(logger ? logger.context?.steps || {} : {}).length,
+      completedSteps: Object.keys(workflowContext.steps || {}).length,
       error: criticalError.message
     };
 
@@ -238,8 +238,9 @@ async function executeStep(step, context) {
   const [toolType, toolName] = step.tool.split('.');
 
   if (toolType === 'host') {
-    if (globalCtx.hostApi && typeof globalCtx.hostApi[toolName] === 'function') {
-      output = await globalCtx.hostApi[toolName](toolInput, context);
+    const hostApi = context.hostApi || globalCtx.hostApi;
+    if (hostApi && typeof hostApi[toolName] === 'function') {
+      output = await hostApi[toolName](toolInput, context);
     } else {
       throw new Error(`Host tool "${toolName}" не найден.`);
     }

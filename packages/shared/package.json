@@ -1,6 +1,6 @@
 {
   "name": "@extension/shared",
-  "version": "0.5.522",
+  "version": "0.5.526",
   "description": "chrome extension - shared code",
   "type": "module",
   "private": true,
