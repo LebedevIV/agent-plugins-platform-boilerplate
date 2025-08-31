@@ -397,8 +397,6 @@ chrome.runtime.onMessage.addListener(
             let workflowResult: any = null;
             try {
               workflowResult = await runWorkflow(msg.pluginId as string, context, { page_html: pageHtml });
-              console.log('[background][WORKFLOW INTEGRATION] ===== WORKFLOW COMPLETED SUCCESSFULLY =====');
-              console.log('[background][WORKFLOW INTEGRATION] Final result:', workflowResult);
             } catch (workflowError) {
               console.error('[background][WORKFLOW INTEGRATION][CRITICAL ERROR] Workflow execution failed:');
               console.error('[background][WORKFLOW INTEGRATION][CRITICAL ERROR] Error details:', {
@@ -432,6 +430,8 @@ chrome.runtime.onMessage.addListener(
               }
             }
 
+            console.log('[background][WORKFLOW INTEGRATION] ===== WORKFLOW COMPLETED SUCCESSFULLY =====');
+            console.log('[background][WORKFLOW INTEGRATION] Final result:', workflowResult);
             console.log('[background][WORKFLOW INTEGRATION] Context cleanup completed');
             console.log('[background][WORKFLOW INTEGRATION] ===== WORKFLOW INTEGRATION COMPLETE =====');
             sendResponse({ success: true });
