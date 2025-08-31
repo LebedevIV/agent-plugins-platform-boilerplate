@@ -37,6 +37,10 @@ export async function runWorkflow(pluginId, context) {
     // Показать вкладку логов (если есть интерфейс)
     // Note: логгер теперь управляется через context
 
+    console.log('[WORKFLOW-ENGINE] [DEBUG] Current path resolution:');
+    console.log('[WORKFLOW-ENGINE] [DEBUG] Expected path: plugins/' + pluginId + '/workflow.json');
+    console.log('[WORKFLOW-ENGINE] [DEBUG] Vite alias info: @platform-public → platform-core/public');
+    console.log('[WORKFLOW-ENGINE] [DEBUG] Actual plugins location: public/plugins (root)');
     console.log('[WORKFLOW-ENGINE] Loading workflow definition for plugin:', pluginId);
     console.log('[WORKFLOW-ENGINE] Loading from path: plugins/' + pluginId + '/workflow.json');
 
@@ -324,22 +328,24 @@ function evaluateRunIf(condition, context) {
     default: return false;
   }
 }
+    logger.addMessage('DEBUG', `[loadWorkflowDefinition] [PATH DEBUG] workflowUrl: ${workflowUrl}`);
+    logger.addMessage('DEBUG', `[loadWorkflowDefinition] [PATH DEBUG] Resolved from: plugins/${pluginId}/workflow.json`);
 
 async function loadWorkflowDefinition(pluginId, logger) {
-    try {
-        const workflowUrl = `/plugins/${pluginId}/workflow.json`;
-        logger.addMessage('DEBUG', `[loadWorkflowDefinition] Загрузка по прямому пути: ${workflowUrl}`);
-        const response = await fetch(workflowUrl);
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status} - ${response.statusText}`);
-        }
-        return await response.json();
-    } catch (error) {
-        const errorMessage = `Не удалось загрузить workflow.json: ${error.message}`;
-        logger.addMessage('ERROR', errorMessage);
-        // Пробрасываем ошибку, чтобы "тихого падения" не было
-        throw new Error(errorMessage);
-    }
+  try {
+      const workflowUrl = `/plugins/${pluginId}/workflow.json`;
+      logger.addMessage('DEBUG', `[loadWorkflowDefinition] Загрузка по прямому пути: ${workflowUrl}`);
+      const response = await fetch(workflowUrl);
+      if (!response.ok) {
+          throw new Error(`HTTP ${response.status} - ${response.statusText}`);
+      }
+      return await response.json();
+  } catch (error) {
+      const errorMessage = `Не удалось загрузить workflow.json: ${error.message}`;
+      logger.addMessage('ERROR', errorMessage);
+      // Пробрасываем ошибку, чтобы "тихого падения" не было
+      throw new Error(errorMessage);
+  }
 }
 
 function resolveInputs(inputs, context) { // <-- Принимает `inputs`
