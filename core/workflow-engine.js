@@ -5,53 +5,58 @@
  * Интегрирована система мониторинга и обработки ошибок.
  */
 
-import { runPythonTool } from '../bridge/mcp-bridge.js';
-
-// Импорт системы мониторинга
-let monitoringCore = null;
-try {
-  // Асинхронная загрузка системы мониторинга
-  import('./../chrome-extension/src/background/monitoring/index.js').then(module => {
-    monitoringCore = module.initializeMonitoring({
-      sampleRate: 0.5,
-      enableErrorCapture: true,
-      enablePerformanceTracking: true,
-      enableNetworkTracking: true
-    });
-  }).catch(err => {
-    console.warn('[WorkflowEngine] Monitoring system not available:', err.message);
-  });
-} catch (error) {
-  console.warn('[WorkflowEngine] Cannot load monitoring system:', error.message);
-}
+// Системный мониторинг теперь берется из context.monitoringCore
 
 export async function runWorkflow(pluginId, context) {
   const workflowStartTime = performance.now();
   const logger = context.logger;
   const hostApi = context.hostApi;
 
+  console.log('[WORKFLOW-ENGINE] ===== WORKFLOW EXECUTION STARTED =====');
+  console.log('[WORKFLOW-ENGINE] Integration point with background script');
+  console.log('[WORKFLOW-ENGINE] Plugin ID:', pluginId);
+  console.log('[WORKFLOW-ENGINE] Context logger available:', !!logger);
+  console.log('[WORKFLOW-ENGINE] Context hostApi available:', !!hostApi);
+  console.log('[WORKFLOW-ENGINE] Context monitoringCore available:', !!context.monitoringCore);
+  console.log('[WORKFLOW-ENGINE] Performance start time:', workflowStartTime);
+
   try {
     logger.addMessage('ENGINE', `▶️ Запуск воркфлоу...`);
 
-    // Логирование запуска воркфлоу в систему мониторинга
-    if (monitoringCore) {
-      monitoringCore.addLog('workflow_engine', 'info', `Starting workflow for plugin: ${pluginId}`, {
+    // Логирование запуска воркфлоу в систему мониторинга (теперь через context.monitoringCore)
+    if (context.monitoringCore) {
+      context.monitoringCore.addLog('workflow_engine', 'info', `Starting workflow for plugin: ${pluginId}`, {
         pluginId,
         timestamp: Date.now()
       });
     }
 
+    console.log('[WORKFLOW-ENGINE][SUCCESS] Logger message sent to background script');
+    console.log('[WORKFLOW-ENGINE][SUCCESS] Workflow initialization phase completed');
+
     // Показать вкладку логов (если есть интерфейс)
     // Note: логгер теперь управляется через context
 
+    console.log('[WORKFLOW-ENGINE] Loading workflow definition for plugin:', pluginId);
+    console.log('[WORKFLOW-ENGINE] Loading from path: plugins/' + pluginId + '/workflow.json');
+
     const workflow = await loadWorkflowDefinition(pluginId, logger);
+
     if (!workflow) {
+      console.log('[WORKFLOW-ENGINE][ERROR] Workflow definition loading FAILED');
+      console.log('[WORKFLOW-ENGINE][ERROR] Plugin ID:', pluginId);
+      console.log('[WORKFLOW-ENGINE][ERROR] File path attempted: plugins/' + pluginId + '/workflow.json');
+
       const error = new Error(`Не удалось загрузить воркфлоу для плагина: ${pluginId}`);
-      if (monitoringCore) {
-        monitoringCore.captureError('workflow_load_failed', error, { pluginId });
+      if (context.monitoringCore) {
+        context.monitoringCore.captureError('workflow_load_failed', error, { pluginId });
       }
       throw error;
     }
+
+    console.log('[WORKFLOW-ENGINE][SUCCESS] Workflow definition loaded successfully');
+    console.log('[WORKFLOW-ENGINE][SUCCESS] Steps count:', workflow.steps?.length || 'undefined');
+    console.log('[WORKFLOW-ENGINE][SUCCESS] Initial input:', JSON.stringify(workflow.initialInput, null, 2));
 
     const workflowContext = {
       ...context,
@@ -71,8 +76,8 @@ export async function runWorkflow(pluginId, context) {
         if (!shouldRun) {
           logger.addMessage('ENGINE', `Пропущен шаг: ${step.id} (условие run_if не выполнено)`);
 
-          if (monitoringCore) {
-            monitoringCore.addLog('workflow_engine', 'debug', `Step skipped: ${step.id}`, {
+          if (context.monitoringCore) {
+            context.monitoringCore.addLog('workflow_engine', 'debug', `Step skipped: ${step.id}`, {
               stepId: step.id,
               reason: 'run_if_condition_not_met'
             });
@@ -83,7 +88,7 @@ export async function runWorkflow(pluginId, context) {
         logger.addMessage('ENGINE', `➡️ Выполнение шага: ${step.id} (инструмент: ${step.tool})`);
 
         // Измерение производительности шага
-        const stepResult = await monitoringCore?.measurePerformance(
+        const stepResult = await context.monitoringCore?.measurePerformance(
           `workflow_step_${step.id}`,
           async () => await executeStep(step, workflowContext),
           { pluginId, stepId: step.id, tool: step.tool }
@@ -93,9 +98,9 @@ export async function runWorkflow(pluginId, context) {
         logger.addMessage('ENGINE', `✅ Шаг ${step.id} выполнен.`);
 
         // Регистрация успешного выполнения
-        if (monitoringCore) {
+        if (context.monitoringCore) {
           const stepDuration = performance.now() - stepStartTime;
-          monitoringCore.getMetricsCollector().recordHistogram(
+          context.monitoringCore.getMetricsCollector().recordHistogram(
             'workflow_step_duration_seconds',
             stepDuration / 1000,
             { step: step.id, plugin: pluginId, status: 'success' }
@@ -123,17 +128,17 @@ export async function runWorkflow(pluginId, context) {
         });
 
         // Регистрация ошибки в системе мониторинга
-        if (monitoringCore) {
-          monitoringCore.captureError(`workflow_step_${step.id}_failed`, error, errorDetails);
+        if (context.monitoringCore) {
+          context.monitoringCore.captureError(`workflow_step_${step.id}_failed`, error, errorDetails);
 
           // Регистрация метрики проваленных шагов
-          monitoringCore.getMetricsCollector().recordHistogram(
+          context.monitoringCore.getMetricsCollector().recordHistogram(
             'workflow_step_duration_seconds',
             stepDuration / 1000,
             { step: step.id, plugin: pluginId, status: 'failed' }
           );
 
-          monitoringCore.getMetricsCollector().incrementCounter(
+          context.monitoringCore.getMetricsCollector().incrementCounter(
             'workflow_step_failures_total',
             { step: step.id, tool: step.tool, plugin: pluginId }
           );
@@ -169,24 +174,34 @@ export async function runWorkflow(pluginId, context) {
       }
 
       // Логирование успешного завершения с метриками
-      if (monitoringCore) {
-        monitoringCore.getMetricsCollector().recordHistogram(
+      if (context.monitoringCore) {
+        context.monitoringCore.getMetricsCollector().recordHistogram(
           'workflow_duration_seconds',
           workflowDuration / 1000,
           { pluginId, status: 'success' }
         );
 
-        monitoringCore.addLog('workflow_engine', 'info', `Workflow completed successfully`, {
+        context.monitoringCore.addLog('workflow_engine', 'info', `Workflow completed successfully`, {
           pluginId,
           finalStep: lastExecutedStepId,
           totalSteps: workflow.steps.length,
-          executedSteps: Object.keys(context.steps).length,
+          executedSteps: Object.keys(workflowContext.steps).length,
           duration: workflowDuration
         });
       }
     }
 
     logger.addMessage('ENGINE', `🏁 Воркфлоу успешно завершен.`);
+
+    console.log('[WORKFLOW-ENGINE] ===== WORKFLOW COMPLETED SUCCESSFULLY =====');
+    console.log('[WORKFLOW-ENGINE][FINAL STATUS] Plugin ID:', pluginId);
+    console.log('[WORKFLOW-ENGINE][FINAL STATUS] Total duration:', performance.now() - workflowStartTime, 'ms');
+    console.log('[WORKFLOW-ENGINE][FINAL STATUS] Workflow context summary:', {
+      totalSteps: workflow.steps.length,
+      executedSteps: Object.keys(workflowContext.steps).length,
+      finalStepId: Object.keys(workflowContext.steps).pop(),
+      completionTime: new Date().toISOString()
+    });
 
   } catch (criticalError) {
     const workflowDuration = performance.now() - workflowStartTime;
@@ -198,26 +213,37 @@ export async function runWorkflow(pluginId, context) {
     };
 
     // Критическое логирование
+    console.log('[WORKFLOW-ENGINE][CRITICAL FAILURE] ===== WORKFLOW CRASHED =====');
+    console.log('[WORKFLOW-ENGINE][CRITICAL FAILURE] Plugin ID:', pluginId);
+    console.log('[WORKFLOW-ENGINE][CRITICAL FAILURE] Duration before crash:', workflowDuration, 'ms');
+    console.log('[WORKFLOW-ENGINE][CRITICAL FAILURE] Completed steps:', errorDetails.completedSteps);
+    console.log('[WORKFLOW-ENGINE][CRITICAL FAILURE] Error details:', {
+      message: criticalError.message,
+      stack: criticalError.stack,
+      name: criticalError.name
+    });
+
     if (logger) {
       logger.addMessage('CRITICAL', `🚨 Критическая ошибка воркфлоу: ${criticalError.message}`);
     }
     console.error('[WorkflowEngine] Critical workflow error:', criticalError);
 
     // Регистрация критической ошибки в системе мониторинга
-    if (monitoringCore) {
-      monitoringCore.captureError('workflow_critical_failure', criticalError, errorDetails);
+    if (context.monitoringCore) {
+      context.monitoringCore.captureError('workflow_critical_failure', criticalError, errorDetails);
 
-      monitoringCore.getMetricsCollector().recordHistogram(
+      context.monitoringCore.getMetricsCollector().recordHistogram(
         'workflow_duration_seconds',
         workflowDuration / 1000,
         { pluginId, status: 'failed' }
       );
 
-      monitoringCore.getMetricsCollector().incrementCounter('workflow_critical_failures_total', {
+      context.monitoringCore.getMetricsCollector().incrementCounter('workflow_critical_failures_total', {
         plugin: pluginId
       });
     }
 
+    console.log('[WORKFLOW-ENGINE][CRITICAL FAILURE] Error re-thrown to background script');
     // Ретранслируем ошибку для дальнейшей обработки
     throw criticalError;
   }
@@ -240,17 +266,7 @@ async function executeStep(step, context) {
       throw new Error(`Host tool "${toolName}" не найден.`);
     }
   } else if (toolType === 'python') {
-    // Добавление monitoring hooks для Python шагов
-    const pythonContext = {
-      ...context,
-      monitoringHooks: {
-        onStart: (operation) => monitoringCore?.addLog('python_step', 'debug', `Starting: ${operation}`),
-        onComplete: (operation) => monitoringCore?.addLog('python_step', 'debug', `Completed: ${operation}`),
-        onError: (operation, error) => monitoringCore?.captureError(operation, error, { context: 'python' })
-      }
-    };
-
-    output = await runPythonTool(step.pluginId || context.pluginId, toolName, toolInput, pythonContext);
+    output = await context.runPythonTool(step.pluginId || context.pluginId, toolName, toolInput, context);
   } else {
     throw new Error(`Неизвестный тип инструмента: ${step.tool}`);
   }

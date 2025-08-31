@@ -10,32 +10,19 @@
 
 import { getWorker, getWorkerStats } from './worker-manager.js';
 
-let isWorkerInitialized = false;
-const promises = new Map();
+// Global monitoring references from context (will be set per call)
 let monitoringCore = null;
 let pyodideMonitor = null;
+
+let isWorkerInitialized = false;
+const promises = new Map();
 
 // Статистика выполнения Python инструментов
 const pythonToolStats = new Map(); // callId -> stats
 
-// Инициализация системы мониторинга
-try {
-    import('./../chrome-extension/src/background/monitoring/index.js').then(module => {
-        monitoringCore = module.initializeMonitoring({
-            sampleRate: 0.7,
-            enablePerformanceTracking: true,
-            enableMemoryTracking: true
-        });
+// Системный мониторинг теперь берется из context.monitoringCore
 
-        if (module.PyodideMonitor) {
-            pyodideMonitor = new module.PyodideMonitor(monitoringCore);
-        }
-    }).catch(err => {
-        console.warn('[MCP Bridge] Cannot load monitoring system:', err.message);
-    });
-} catch (error) {
-    console.warn('[MCP Bridge] Cannot initialize monitoring:', error.message);
-}
+console.log('[MCP-BRIDGE] Module loaded - MCP Bridge ready for integration');
 
 async function initializeCommunication(context = {}) {
     if (isWorkerInitialized) return;
@@ -58,8 +45,8 @@ async function initializeCommunication(context = {}) {
                 const pyodideWorker = getWorker();
                 setupWorkerCommunication(pyodideWorker, context);
 
-                if (monitoringCore) {
-                    monitoringCore.addLog('mcp_bridge', 'info', 'MCP Bridge communication initialized');
+                if (context.monitoringCore) {
+                    context.monitoringCore.addLog('mcp_bridge', 'info', 'MCP Bridge communication initialized');
                 }
             }, 1000);
         });
@@ -69,35 +56,30 @@ async function initializeCommunication(context = {}) {
         const pyodideWorker = getWorker();
         setupWorkerCommunication(pyodideWorker, context);
 
-        if (monitoringCore) {
-            monitoringCore.addLog('mcp_bridge', 'info', 'MCP Bridge communication initialized (fallback)');
+        if (context.monitoringCore) {
+            context.monitoringCore.addLog('mcp_bridge', 'info', 'MCP Bridge communication initialized (fallback)');
         }
     }
 
     isWorkerInitialized = true;
 }
 
-let currentHostApi = null;
-
-export function setHostApi(hostApi) {
-  currentHostApi = hostApi;
-}
 
 function setupWorkerCommunication(pyodideWorker, context = {}) {
     pyodideWorker.onmessage = (event) => {
         const { type, callId, result, error, func, args } = event.data;
 
         if (type === 'host_call') {
-            handleHostCall(event.data);
+            handleHostCall(event.data, context);
 
         } else if (type === 'complete' || type === 'error') {
-            handleToolCompletion(event.data);
+            handleToolCompletion(event.data, context);
 
         } else if (type === 'python_log') {
-            handlePythonLog(event.data);
+            handlePythonLog(event.data, context);
 
         } else if (type === 'performance_metric') {
-            handlePerformanceMetric(event.data);
+            handlePerformanceMetric(event.data, context);
         }
 
         // Обработка heartbeat для pre-warm
@@ -110,11 +92,24 @@ function setupWorkerCommunication(pyodideWorker, context = {}) {
 /**
  * Обработка вызова хост-функции из Python
  */
-function handleHostCall(data) {
+function handleHostCall(data, context) {
     const { callId, func, args } = data;
     const pyodideWorker = getWorker();
 
     const startTime = performance.now();
+
+    console.log('[MCP-BRIDGE][HOST CALL] ===== HOST FUNCTION CALL FROM PYTHON =====');
+    console.log('[MCP-BRIDGE][HOST CALL] Call ID:', callId);
+    console.log('[MCP-BRIDGE][HOST CALL] Function:', func);
+    console.log('[MCP-BRIDGE][HOST CALL] Args count:', args?.length || 0);
+    console.log('[MCP-BRIDGE][HOST CALL] Context available:', {
+        hostApi: !!context.hostApi,
+        monitoringCore: !!context.monitoringCore
+    });
+
+    // Set monitoringCore from context for this call
+    monitoringCore = context.monitoringCore;
+    pyodideMonitor = context.pyodideMonitor;
 
     if (monitoringCore) {
         monitoringCore.addLog('mcp_bridge', 'debug', `Host call: ${func}`, {
@@ -123,8 +118,9 @@ function handleHostCall(data) {
         });
     }
 
-    const hostApi = currentHostApi || (context && context.hostApi);
+    const hostApi = context.hostApi;
     if (hostApi && typeof hostApi[func] === 'function') {
+        console.log('[MCP-BRIDGE][HOST CALL][SUCCESS] Host API function found:', func);
         Promise.resolve(hostApi[func](...args))
             .then(hostResult => {
                 const duration = performance.now() - startTime;
@@ -205,7 +201,7 @@ function handleHostCall(data) {
 /**
  * Обработка завершения инструмента Python
  */
-function handleToolCompletion(data) {
+function handleToolCompletion(data, context) {
     const { callId, result, error, type } = data;
 
     // Получение статистики выполнения
@@ -278,7 +274,7 @@ function handleToolCompletion(data) {
 /**
  * Обработка логов из Python
  */
-function handlePythonLog(data) {
+function handlePythonLog(data, context) {
     const { callId, level, message, data: logData } = data;
 
     if (monitoringCore) {
@@ -292,7 +288,7 @@ function handlePythonLog(data) {
 /**
  * Обработка метрик производительности из Python
  */
-function handlePerformanceMetric(data) {
+function handlePerformanceMetric(data, context) {
     const { callId, metricName, value, labels } = data;
 
     if (monitoringCore) {
@@ -322,12 +318,22 @@ export async function runPythonTool(pluginId, toolName, toolInput, context = {})
     const toolStartTime = performance.now();
     const callId = `py_tool_run_${Date.now()}_${Math.random()}`;
 
+    console.log('[MCP-BRIDGE] ===== PYTHON TOOL EXECUTION STARTED =====');
+    console.log('[MCP-BRIDGE][PYTHON INTEGRATION] Plugin ID:', pluginId);
+    console.log('[MCP-BRIDGE][PYTHON INTEGRATION] Tool name:', toolName);
+    console.log('[MCP-BRIDGE][PYTHON INTEGRATION] Call ID:', callId);
+    console.log('[MCP-BRIDGE][PYTHON INTEGRATION] Context available:', {
+        logger: !!context.logger,
+        hostApi: !!context.hostApi,
+        monitoringCore: !!context.monitoringCore
+    });
+    console.log('[MCP-BRIDGE][PYTHON INTEGRATION] Tool input:', toolInput);
+
     try {
-        if (context.hostApi) {
-          setHostApi(context.hostApi);
-        }
         initializeCommunication(context);
         const pyodideWorker = getWorker();
+
+        console.log('[MCP-BRIDGE][SUCCESS] Worker obtained, communication initialized');
 
         // Запись статистики выполнения
         pythonToolStats.set(callId, {
@@ -339,6 +345,7 @@ export async function runPythonTool(pluginId, toolName, toolInput, context = {})
         });
 
         const pyScriptUrl = `plugins/${pluginId}/mcp_server.py`;
+        console.log('[MCP-BRIDGE][PYTHON INTEGRATION] Python script URL:', pyScriptUrl);
 
         if (monitoringCore) {
             monitoringCore.addLog('mcp_bridge', 'info', `Loading Python script for plugin: ${pluginId}`, {

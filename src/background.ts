@@ -9,6 +9,35 @@
 
 console.log("APP Background Script Loaded (v0.9.0 - Resilient Fetch).");
 
+// @ts-ignore
+import { runWorkflow } from '../core/workflow-engine.js';
+// @ts-ignore
+import { hostApi } from './host-api';
+// @ts-ignore
+import { runPythonTool } from '../bridge/mcp-bridge.js';
+/**
+ * Создает "безголовый" логгер для работы без DOM
+ */
+function createBackgroundLogger(name: string) {
+  return {
+    addMessage: (stepId: string, message: string, type: string = 'info') => {
+      const timestamp = new Date().toISOString().slice(11, 19); // HH:MM:SS format
+      console.log(`[Logger][${timestamp}][${name}][${stepId}] ${message}`);
+      if (type === 'error' || type === 'critical') {
+        console.error(`[Logger][ERROR][${name}][${stepId}] ${message}`);
+      } else if (type === 'warning' || type === 'warn') {
+        console.warn(`[Logger][WARN][${name}][${stepId}] ${message}`);
+      }
+    },
+    renderResult: (stepId: string, result: any) => {
+      const truncatedResult = JSON.stringify(result, null, 2).length > 500
+        ? JSON.stringify(result, null, 2).substring(0, 500) + '...\n[result truncated]'
+        : JSON.stringify(result, null, 2);
+      console.log(`[Logger][Result][${name}][${stepId}]`, truncatedResult);
+    }
+  };
+}
+
 //================================================================//
 //  1. РЕАЛИЗАЦИЯ HOST API
 //================================================================//
@@ -388,6 +417,78 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return false;
       }
       hostApiImpl.analyzeConnectionStats(data).then(sendResponse);
+      return true;
+
+    case "RUN_WORKFLOW":
+      (async () => {
+        try {
+          // Обработка pluginId из message
+          const pluginId = data?.pluginId;
+          if (!pluginId) {
+            sendResponse({ error: "Plugin ID is required for RUN_WORKFLOW" });
+            return;
+          }
+
+          console.log(`[Background] Processing RUN_WORKFLOW for plugin: ${pluginId}`);
+
+          // Найти активную вкладку
+          const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+          const activeTab = tabs[0];
+
+          if (!activeTab || !activeTab.id) {
+            sendResponse({ error: "Не найдена активная вкладка" });
+            return;
+          }
+
+          console.log(`[Background] Found active tab: ${activeTab.url}`);
+
+          // Получить HTML через chrome.scripting.executeScript
+          let pageHtml = '';
+          try {
+            const results = await chrome.scripting.executeScript({
+              target: { tabId: activeTab.id },
+              func: () => document.documentElement.outerHTML
+            });
+
+            if (results && results[0] && results[0].result) {
+              pageHtml = results[0].result as string;
+              console.log(`[Background] Successfully extracted HTML: ${pageHtml.length} characters`);
+            }
+          } catch (error) {
+            console.error(`[Background] Error extracting HTML:`, error);
+            sendResponse({ error: `Не удалось получить HTML страницы: ${(error as Error).message}` });
+            return;
+          }
+
+          // Сформировать context объект
+          const context = {
+            logger: createBackgroundLogger(`Workflow:${pluginId}`),
+            hostApi: hostApi,
+            runPythonTool: runPythonTool,
+            // monitoringCore: можно добавить позже
+          };
+
+          // Сформировать initialInput с page_html
+          const initialInput = {
+            page_html: pageHtml
+          };
+
+          // Вызвать runWorkflow
+          console.log(`[Background] Starting workflow execution for plugin: ${pluginId}`);
+          const result = await runWorkflow(pluginId, context, initialInput);
+
+          // Вернуть результат выполнения
+          console.log(`[Background] Workflow completed successfully`);
+          sendResponse({ success: true, result });
+
+        } catch (error) {
+          console.error(`[Background] Error in RUN_WORKFLOW:`, error);
+          sendResponse({
+            error: true,
+            error_message: (error as Error).message
+          });
+        }
+      })();
       return true;
 
     default:

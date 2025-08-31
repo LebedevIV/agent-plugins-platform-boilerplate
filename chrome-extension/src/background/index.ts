@@ -1,13 +1,27 @@
 import 'webextension-polyfill';
+console.log('[background] Initializing background imports...');
+
 import { pluginChatApi } from './plugin-chat-api';
+console.log('[background] Plugin chat API loaded');
+
 import { hostApi } from './host-api';
+console.log('[background] Host API loaded');
+
 import { getAvailablePlugins } from './plugin-manager';
+console.log('[background] Plugin manager loaded');
+
 import { getPageKey } from '../../../packages/shared/lib/utils/helpers';
 import { getApiKeyForModel, callAiModel } from './ai-api-client';
 import { exampleThemeStorage, pluginSettingsStorage, getPluginSettings } from '@extension/storage';
+console.log('[background] Storage modules loaded');
+
 import { runWorkflow } from './workflow-engine';
+console.log('[background] Workflow engine imported successfully - KEY INTEGRATION POINT');
+
 import type { ChatMessage } from './plugin-chat-api';
 import type { Plugin } from './plugin-manager';
+
+console.log('[background] All critical modules loaded, background initialization complete');
 
 interface ExtensionMessage {
   type: string;
@@ -271,22 +285,33 @@ chrome.runtime.onMessage.addListener(
       }
 
       if (msg.type === 'RUN_WORKFLOW' && msg.pluginId) {
-        console.log('[background] Processing RUN_WORKFLOW request for:', msg.pluginId);
+        console.log('[background][WORKFLOW INTEGRATION] ===== RUN_WORKFLOW REQUEST RECEIVED =====');
+        console.log('[background][WORKFLOW INTEGRATION] Plugin ID:', msg.pluginId);
+        console.log('[background][WORKFLOW INTEGRATION] Request timestamp:', new Date().toISOString());
+
         (async () => {
           try {
             // Найти активную вкладку пользователя
+            console.log('[background][WORKFLOW INTEGRATION] Querying active tab...');
             const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
             const activeTab = tabs[0];
 
             if (!activeTab || !activeTab.id) {
-              console.log('[background] No active tab found for RUN_WORKFLOW');
+              console.log('[background][WORKFLOW INTEGRATION][ERROR] No active tab found for RUN_WORKFLOW');
+              console.log('[background][WORKFLOW INTEGRATION][ERROR] Available tabs:', tabs.length);
               sendResponse({ error: 'Не найдена активная вкладка' });
               return;
             }
 
-            console.log('[background] Found active tab for workflow:', activeTab.url, 'ID:', activeTab.id);
+            console.log('[background][WORKFLOW INTEGRATION] Found active tab for workflow:');
+            console.log('[background][WORKFLOW INTEGRATION] - URL:', activeTab.url);
+            console.log('[background][WORKFLOW INTEGRATION] - Tab ID:', activeTab.id);
+            console.log('[background][WORKFLOW INTEGRATION] - Tab title:', activeTab.title);
 
             // Получить HTML страницы через chrome.scripting
+            console.log('[background][WORKFLOW INTEGRATION] Attempting to extract page HTML...');
+            console.log('[background][WORKFLOW INTEGRATION] Executing script in tab:', activeTab.id);
+
             let pageHtml = '';
             try {
               const results = await chrome.scripting.executeScript({
@@ -294,38 +319,80 @@ chrome.runtime.onMessage.addListener(
                 func: () => document.documentElement.outerHTML
               });
 
+              console.log('[background][WORKFLOW INTEGRATION] Script execution results:', results ? 'received' : 'null');
+              console.log('[background][WORKFLOW INTEGRATION] Results array length:', results?.length);
+
               if (results && results[0] && results[0].result) {
                 pageHtml = results[0].result as string;
-                console.log('[background] Successfully extracted HTML, length:', pageHtml.length);
+                console.log('[background][WORKFLOW INTEGRATION] ✓ HTML extraction SUCCESSFUL');
+                console.log('[background][WORKFLOW INTEGRATION] ✓ HTML length:', pageHtml.length, 'characters');
+                console.log('[background][WORKFLOW INTEGRATION] ✓ First 200 chars:', pageHtml.substring(0, 200));
+              } else {
+                console.log('[background][WORKFLOW INTEGRATION][WARNING] HTML extraction returned empty result');
+                console.log('[background][WORKFLOW INTEGRATION] Results detail:', JSON.stringify(results, null, 2));
               }
             } catch (error) {
-              console.error('[background] Error extracting HTML:', error);
+              console.error('[background][WORKFLOW INTEGRATION][ERROR] HTML extraction FAILED');
+              console.error('[background][WORKFLOW INTEGRATION][ERROR] Chrome scripting error:', error);
+              console.error('[background][WORKFLOW INTEGRATION][ERROR] Error details:', {
+                name: (error as Error).name,
+                message: (error as Error).message,
+                stack: (error as Error).stack
+              });
               sendResponse({ error: `Не удалось получить HTML страницы: ${(error as Error).message}` });
               return;
             }
 
             // Проверить настройки плагина
+            console.log('[background][WORKFLOW INTEGRATION] Checking plugin settings for:', msg.pluginId);
             const settings = await getPluginSettings(msg.pluginId as string);
+
+            console.log('[background][WORKFLOW INTEGRATION] Plugin settings retrieved:', JSON.stringify(settings, null, 2));
+
             if (!settings.enabled) {
-              console.log(`[background] Plugin ${msg.pluginId} is disabled, not running workflow`);
+              console.log('[background][WORKFLOW INTEGRATION][INFO] Plugin is DISABLED, aborting workflow');
+              console.log('[background][WORKFLOW INTEGRATION][INFO] Plugin enabled status:', settings.enabled);
               sendResponse({ error: 'Плагин отключен' });
               return;
             }
 
+            console.log('[background][WORKFLOW INTEGRATION][SUCCESS] Plugin is ENABLED, proceeding with workflow');
+
             // Создать контекст для зависимого от среды выполнения воркфлоу
+            console.log('[background][WORKFLOW INTEGRATION] Creating workflow execution context...');
             const context = {
               logger: createBackgroundLogger(`Воркфлоу плагина: ${msg.pluginId}`),
               hostApi: hostApi
             };
 
+            console.log('[background][WORKFLOW INTEGRATION] Context created with:');
+            console.log('[background][WORKFLOW INTEGRATION] - Logger:', typeof context.logger);
+            console.log('[background][WORKFLOW INTEGRATION] - Host API:', typeof context.hostApi);
+            console.log('[background][WORKFLOW INTEGRATION] - Page HTML length:', pageHtml.length);
+
             // Запустить воркфлоу с переданным контекстом
-            console.log('[background] Starting workflow execution with plugin:', msg.pluginId);
-            await runWorkflow(msg.pluginId as string, context);
+            console.log('[background][WORKFLOW INTEGRATION] ===== EXECUTING WORKFLOW-ENGINE =====');
+            console.log('[background][WORKFLOW INTEGRATION] Plugin ID for workflow:', msg.pluginId);
+            console.log('[background][WORKFLOW INTEGRATION] Run timestamp:', new Date().toISOString());
+
+            try {
+              await runWorkflow(msg.pluginId as string, context);
+              console.log('[background][WORKFLOW INTEGRATION] ===== WORKFLOW COMPLETED SUCCESSFULLY =====');
+            } catch (workflowError) {
+              console.error('[background][WORKFLOW INTEGRATION][CRITICAL ERROR] Workflow execution failed:');
+              console.error('[background][WORKFLOW INTEGRATION][CRITICAL ERROR] Error details:', {
+                name: (workflowError as Error).name,
+                message: (workflowError as Error).message,
+                stack: (workflowError as Error).stack
+              });
+              throw workflowError; // Re-throw to trigger outer catch
+            }
 
             // Очистка переопределения после выполнения
             delete (self as any).backgroundLoggerOverride;
 
-            console.log('[background] Workflow completed successfully');
+            console.log('[background][WORKFLOW INTEGRATION] Context cleanup completed');
+            console.log('[background][WORKFLOW INTEGRATION] ===== WORKFLOW INTEGRATION COMPLETE =====');
             sendResponse({ success: true });
 
           } catch (error) {
