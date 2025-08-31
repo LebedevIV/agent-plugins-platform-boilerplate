@@ -43,26 +43,6 @@ interface ExtensionMessage {
   messageId?: string;
 }
 
-// Logger for background environment - headless version without DOM access
-function createBackgroundLogger(name: string) {
-  return {
-    addMessage: (stepId: string, message: string, type = 'info') => {
-      const timestamp = new Date().toISOString().slice(11, 19); // HH:MM:SS format
-      console.log(`[Background Logger][${timestamp}][${name}][${stepId}] ${message}`);
-      if (type === 'error' || type === 'critical') {
-        console.error(`[Background Logger][ERROR][${name}][${stepId}] ${message}`);
-      } else if (type === 'warning' || type === 'warn') {
-        console.warn(`[Background Logger][WARN][${name}][${stepId}] ${message}`);
-      }
-    },
-    renderResult: (stepId: string, result: any) => {
-      const truncatedResult = JSON.stringify(result, null, 2).length > 500
-        ? JSON.stringify(result, null, 2).substring(0, 500) + '...\n[result truncated]'
-        : JSON.stringify(result, null, 2);
-      console.log(`[Background Logger][Result][${name}][${stepId}]`, truncatedResult);
-    }
-  };
-}
 
 // Только стандартное поведение: панель открывается/закрывается глобально по клику на иконку
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
@@ -358,26 +338,61 @@ chrome.runtime.onMessage.addListener(
 
             console.log('[background][WORKFLOW INTEGRATION][SUCCESS] Plugin is ENABLED, proceeding with workflow');
 
+            // Извлечение pageKey из активной вкладки для чата
+            console.log('[background][WORKFLOW INTEGRATION] Extracting pageKey from active tab...');
+            const pageKey = getPageKey(activeTab.url || '');
+
+            console.log('[background][WORKFLOW INTEGRATION] Creating chatApi for workflow integration...');
+            const chatApi = {
+              addMessage: async (type: string, message: string, status?: string) => {
+                console.log('[background][WORKFLOW INTEGRATION] Adding message to chat:', type, message);
+                const chatMessage: ChatMessage = {
+                  role: 'plugin',
+                  content: `[${type}] ${message}`,
+                  timestamp: Date.now()
+                };
+                return await pluginChatApi.saveMessage(msg.pluginId as string, pageKey, chatMessage);
+              },
+              renderResult: async (stepId: string, result: any) => {
+                console.log('[background][WORKFLOW INTEGRATION] Rendering result to chat:', stepId, result);
+                const resultMessage: ChatMessage = {
+                  role: 'plugin',
+                  content: typeof result === 'string'
+                    ? `✅ Результат шага "${stepId}":\n${result}`
+                    : `✅ Результат шага "${stepId}":\n\`\`\`json\n${JSON.stringify(result, null, 2)}\n\`\`\``,
+                  timestamp: Date.now()
+                };
+                return await pluginChatApi.saveMessage(msg.pluginId as string, pageKey, resultMessage);
+              },
+              saveMessage: async (message: ChatMessage) => {
+                console.log('[background][WORKFLOW INTEGRATION] Saving workflow message to chat:', message);
+                return await pluginChatApi.saveMessage(msg.pluginId as string, pageKey, message);
+              }
+            };
+
             // Создать контекст для зависимого от среды выполнения воркфлоу
             console.log('[background][WORKFLOW INTEGRATION] Creating workflow execution context...');
             const context = {
-              logger: createBackgroundLogger(`Воркфлоу плагина: ${msg.pluginId}`),
+              logger: chatApi,
               hostApi: hostApi
             };
 
             console.log('[background][WORKFLOW INTEGRATION] Context created with:');
-            console.log('[background][WORKFLOW INTEGRATION] - Logger:', typeof context.logger);
+            console.log('[background][WORKFLOW INTEGRATION] - Logger (chatApi):', typeof context.logger);
             console.log('[background][WORKFLOW INTEGRATION] - Host API:', typeof context.hostApi);
             console.log('[background][WORKFLOW INTEGRATION] - Page HTML length:', pageHtml.length);
+            console.log('[background][WORKFLOW INTEGRATION] - PageKey:', pageKey);
 
             // Запустить воркфлоу с переданным контекстом
             console.log('[background][WORKFLOW INTEGRATION] ===== EXECUTING WORKFLOW-ENGINE =====');
             console.log('[background][WORKFLOW INTEGRATION] Plugin ID for workflow:', msg.pluginId);
             console.log('[background][WORKFLOW INTEGRATION] Run timestamp:', new Date().toISOString());
 
+            let workflowResult: any = null;
             try {
-              await runWorkflow(msg.pluginId as string, context);
+              workflowResult = await runWorkflow(msg.pluginId as string, context, { page_html: pageHtml });
               console.log('[background][WORKFLOW INTEGRATION] ===== WORKFLOW COMPLETED SUCCESSFULLY =====');
+              console.log('[background][WORKFLOW INTEGRATION] Final result:', workflowResult);
             } catch (workflowError) {
               console.error('[background][WORKFLOW INTEGRATION][CRITICAL ERROR] Workflow execution failed:');
               console.error('[background][WORKFLOW INTEGRATION][CRITICAL ERROR] Error details:', {
@@ -388,8 +403,28 @@ chrome.runtime.onMessage.addListener(
               throw workflowError; // Re-throw to trigger outer catch
             }
 
-            // Очистка переопределения после выполнения
-            delete (self as any).backgroundLoggerOverride;
+            // Отправка финального результата в чат плагина
+            if (workflowResult && workflowResult !== undefined) {
+              try {
+                console.log('[background][WORKFLOW INTEGRATION] Sending final result to plugin chat...');
+                const resultMessage: ChatMessage = {
+                  role: 'plugin',
+                  content: typeof workflowResult === 'string'
+                    ? `✅ Результат воркфлоу:\n${workflowResult}`
+                    : `✅ Результат воркфлоу:\n\`\`\`json\n${JSON.stringify(workflowResult, null, 2)}\n\`\`\``,
+                  timestamp: Date.now()
+                };
+
+                const saveResult = await chatApi.saveMessage(resultMessage);
+                console.log('[background][WORKFLOW INTEGRATION] Final result saved to chat:', saveResult);
+
+                // Оповещаем UI об обновлении чата
+                broadcastChatUpdate(msg.pluginId as string, pageKey);
+
+              } catch (saveError) {
+                console.error('[background][WORKFLOW INTEGRATION] Failed to save final result to chat:', saveError);
+              }
+            }
 
             console.log('[background][WORKFLOW INTEGRATION] Context cleanup completed');
             console.log('[background][WORKFLOW INTEGRATION] ===== WORKFLOW INTEGRATION COMPLETE =====');
