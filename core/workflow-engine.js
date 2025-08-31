@@ -42,12 +42,12 @@ export async function runWorkflow(pluginId, context) {
 
     const workflow = await loadWorkflowDefinition(pluginId, logger);
 
-    if (!workflow) {
+    if (workflow == null) {
       console.log('[WORKFLOW-ENGINE][ERROR] Workflow definition loading FAILED');
       console.log('[WORKFLOW-ENGINE][ERROR] Plugin ID:', pluginId);
       console.log('[WORKFLOW-ENGINE][ERROR] File path attempted: plugins/' + pluginId + '/workflow.json');
 
-      const error = new Error(`Не удалось загрузить воркфлоу для плагина: ${pluginId}`);
+      const error = new Error("Не удалось загрузить определение воркфлоу");
       if (context.monitoringCore) {
         context.monitoringCore.captureError('workflow_load_failed', error, { pluginId });
       }

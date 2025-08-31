@@ -124,11 +124,25 @@ export async function runWorkflow(
 
 async function loadWorkflowDefinition(pluginId: string, logger: any): Promise<Workflow | null> {
   try {
-    const response = await fetch(chrome.runtime.getURL(require(`@platform-public/plugins/${pluginId}/workflow.json`)));
+    logger.addMessage('DEBUG', `[loadWorkflowDefinition] Начинаем загрузку для pluginId: ${pluginId}`);
+    logger.addMessage('DEBUG', `[loadWorkflowDefinition] Проверка наличия require: ${typeof require}`);
+    logger.addMessage('DEBUG', `[loadWorkflowDefinition] Проверка наличия chrome.runtime: ${!!chrome?.runtime}`);
+    logger.addMessage('DEBUG', `[loadWorkflowDefinition] Проверка наличия chrome.runtime.getURL: ${typeof chrome?.runtime?.getURL}`);
+
+    const workflowPath = `@platform-public/plugins/${pluginId}/workflow.json`;
+
+    logger.addMessage('DEBUG', `[loadWorkflowDefinition] Путь к файлу: ${workflowPath}`);
+
+    // Попытка загрузки - напрямую через fetch с chrome.runtime.getURL
+    const fullUrl = chrome.runtime.getURL(workflowPath);
+    logger.addMessage('DEBUG', `[loadWorkflowDefinition] Полный URL: ${fullUrl}`);
+
+    const response = await fetch(fullUrl);
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     return await response.json();
   } catch (error) {
     logger.addMessage('ERROR', `Не удалось загрузить workflow.json: ${(error as Error).message}`);
+    logger.addMessage('DEBUG', `[loadWorkflowDefinition] Детали ошибки: ${error.stack}`);
     return null;
   }
 }
