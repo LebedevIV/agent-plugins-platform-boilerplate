@@ -327,12 +327,18 @@ function evaluateRunIf(condition, context) {
 
 async function loadWorkflowDefinition(pluginId, logger) {
     try {
-        const response = await fetch(`plugins/${pluginId}/workflow.json`);
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        // Этот путь будет работать из любого контекста, так как
+        // он начинается со слэша, что означает "от корня расширения".
+        const workflowUrl = `/plugins/${pluginId}/workflow.json`;
+        const response = await fetch(workflowUrl);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status} - ${response.statusText}`);
+        }
         return await response.json();
     } catch (error) {
         logger.addMessage('ERROR', `Не удалось загрузить workflow.json: ${error.message}`);
-        return null;
+        // Пробрасываем ошибку, чтобы "тихого падения" не было
+        throw new Error(`Не удалось загрузить workflow.json для плагина ${pluginId}`);
     }
 }
 
