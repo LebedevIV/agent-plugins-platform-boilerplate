@@ -327,18 +327,18 @@ function evaluateRunIf(condition, context) {
 
 async function loadWorkflowDefinition(pluginId, logger) {
     try {
-        // Этот путь будет работать из любого контекста, так как
-        // он начинается со слэша, что означает "от корня расширения".
         const workflowUrl = `/plugins/${pluginId}/workflow.json`;
+        logger.addMessage('DEBUG', `[loadWorkflowDefinition] Загрузка по прямому пути: ${workflowUrl}`);
         const response = await fetch(workflowUrl);
         if (!response.ok) {
             throw new Error(`HTTP ${response.status} - ${response.statusText}`);
         }
         return await response.json();
     } catch (error) {
-        logger.addMessage('ERROR', `Не удалось загрузить workflow.json: ${error.message}`);
+        const errorMessage = `Не удалось загрузить workflow.json: ${error.message}`;
+        logger.addMessage('ERROR', errorMessage);
         // Пробрасываем ошибку, чтобы "тихого падения" не было
-        throw new Error(`Не удалось загрузить workflow.json для плагина ${pluginId}`);
+        throw new Error(errorMessage);
     }
 }
 

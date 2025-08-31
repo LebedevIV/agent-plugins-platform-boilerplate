@@ -351,7 +351,9 @@ chrome.runtime.onMessage.addListener(
                   content: `[${type}] ${message}`,
                   timestamp: Date.now()
                 };
-                return await pluginChatApi.saveMessage(msg.pluginId as string, pageKey, chatMessage);
+                const result = await pluginChatApi.saveMessage(msg.pluginId as string, pageKey, chatMessage);
+                broadcastChatUpdate(msg.pluginId as string, pageKey);
+                return result;
               },
               renderResult: async (stepId: string, result: any) => {
                 console.log('[background][WORKFLOW INTEGRATION] Rendering result to chat:', stepId, result);
@@ -362,11 +364,15 @@ chrome.runtime.onMessage.addListener(
                     : `✅ Результат шага "${stepId}":\n\`\`\`json\n${JSON.stringify(result, null, 2)}\n\`\`\``,
                   timestamp: Date.now()
                 };
-                return await pluginChatApi.saveMessage(msg.pluginId as string, pageKey, resultMessage);
+                const saveResult = await pluginChatApi.saveMessage(msg.pluginId as string, pageKey, resultMessage);
+                broadcastChatUpdate(msg.pluginId as string, pageKey);
+                return saveResult;
               },
               saveMessage: async (message: ChatMessage) => {
                 console.log('[background][WORKFLOW INTEGRATION] Saving workflow message to chat:', message);
-                return await pluginChatApi.saveMessage(msg.pluginId as string, pageKey, message);
+                const result = await pluginChatApi.saveMessage(msg.pluginId as string, pageKey, message);
+                broadcastChatUpdate(msg.pluginId as string, pageKey);
+                return result;
               }
             };
 
