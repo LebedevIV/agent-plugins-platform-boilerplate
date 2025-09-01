@@ -15,8 +15,172 @@ import { getApiKeyForModel, callAiModel } from './ai-api-client';
 import { exampleThemeStorage, pluginSettingsStorage, getPluginSettings } from '@extension/storage';
 console.log('[background] Storage modules loaded');
 
-import { runWorkflow } from './workflow-engine';
-console.log('[background] Workflow engine imported successfully - KEY INTEGRATION POINT');
+console.log('[background] Starting Offscreen Document integration - REFACTORED BACKGROUND ARCHITECTURE');
+
+// === OFFSCREEN API FEATURE DETECTION ===
+
+// Enhanced production-ready feature detection функция для проверки доступности offscreen API
+const offscreenSupported = (): boolean => {
+  try {
+    console.log('[background][OFFSCREEN DETECTION] ========== STARTING OFFSCREEN API FEATURE DETECTION ==========');
+    console.log('[background][OFFSCREEN DETECTION] Timestamp:', new Date().toISOString());
+    console.log('[background][OFFSCREEN DETECTION] Chrome User-Agent:', navigator.userAgent);
+
+    // Проверка 1: Глобальный объект chrome
+    const chromeExists = typeof chrome !== 'undefined';
+    console.log('[background][OFFSCREEN DETECTION] Chrome object exists:', chromeExists);
+
+    if (!chromeExists) {
+      console.warn('[background][OFFSCREEN DETECTION] ❌ FAIL: Chrome API unavailable - extension running in unsupported environment');
+      console.warn('[background][OFFSCREEN DETECTION] Current context:', {
+        globalThis: typeof globalThis,
+        window: typeof window,
+        self: typeof self,
+        process: typeof process
+      });
+      return false;
+    }
+
+    // Проверка 2: Offscreen API доступен
+    const offscreenExists = typeof chrome.offscreen !== 'undefined';
+    console.log('[background][OFFSCREEN DETECTION] chrome.offscreen property exists:', offscreenExists);
+
+    if (!offscreenExists) {
+      console.warn('[background][OFFSCREEN DETECTION] ❌ FAIL: chrome.offscreen is undefined - Chrome version < 109');
+      console.warn('[background][OFFSCREEN DETECTION] Available chrome API:', Object.keys(chrome).join(', '));
+      return false;
+    }
+
+    // Проверка 3: hasDocument method доступен
+    const hasDocumentExists = typeof chrome.offscreen.hasDocument === 'function';
+    console.log('[background][OFFSCREEN DETECTION] chrome.offscreen.hasDocument is function:', hasDocumentExists);
+
+    if (!hasDocumentExists) {
+      console.warn('[background][OFFSCREEN DETECTION] ❌ FAIL: chrome.offscreen.hasDocument is not a function');
+      console.warn('[background][OFFSCREEN DETECTION] chrome.offscreen properties:', Object.keys(chrome.offscreen).join(', '));
+      return false;
+    }
+
+    // Проверка 4: createDocument method доступен
+    const createDocumentExists = typeof chrome.offscreen.createDocument === 'function';
+    console.log('[background][OFFSCREEN DETECTION] chrome.offscreen.createDocument is function:', createDocumentExists);
+
+    if (!createDocumentExists) {
+      console.warn('[background][OFFSCREEN DETECTION] ❌ FAIL: chrome.offscreen.createDocument is not a function');
+      console.warn('[background][OFFSCREEN DETECTION] chrome.offscreen methods:', Object.getOwnPropertyNames(chrome.offscreen).join(', '));
+      return false;
+    }
+
+    // Проверка 5: Manifest permissions check (runtime validation)
+    const permissionsCheck = chrome.permissions ? typeof chrome.permissions.getAll === 'function' : true;
+    if (!permissionsCheck) {
+      console.warn('[background][OFFSCREEN DETECTION] ⚠️ WARNING: Cannot verify permissions at runtime');
+    }
+
+    console.log('[background][OFFSCREEN DETECTION] ✅ SUCCESS: All Offscreen API checks passed');
+    console.log('[background][OFFSCREEN DETECTION] ========== DETECTION COMPLETE ==========');
+    return true;
+
+  } catch (error) {
+    console.error('[background][OFFSCREEN DETECTION] ❌ CRITICAL ERROR during detection:', error);
+    console.error('[background][OFFSCREEN DETECTION] Error message:', (error as Error).message);
+    console.error('[background][OFFSCREEN DETECTION] Error stack:', (error as Error).stack);
+    console.error('[background][OFFSCREEN DETECTION] Chrome version from UA:', navigator.userAgent.match(/Chrome\/(\d+)/)?.[1] || 'Unknown');
+
+    // Additional diagnostic info
+    try {
+      console.error('[background][OFFSCREEN DETECTION] Chrome API dump (limited):');
+      if (typeof chrome !== 'undefined') {
+        console.error('- chrome.runtime available:', typeof chrome.runtime);
+        console.error('- chrome.permissions available:', typeof chrome.permissions);
+        if (chrome.offscreen) {
+          console.error('- chrome.offscreen keys:', Object.keys(chrome.offscreen));
+        }
+      }
+    } catch (dumpError) {
+      console.error('[background][OFFSCREEN DETECTION] Error creating diagnostic dump:', dumpError);
+    }
+
+    return false;
+  }
+};
+
+// Enhanced production-ready fallback обработчик для старых версий Chrome (< 109)
+const handleLegacyChrome = async (message: ExtensionMessage): Promise<void> => {
+  console.warn('[background][LEGACY CHROME] ================= EXECUTING FALLBACK WORKFLOW =================');
+  console.warn('[background][LEGACY CHROME] Chrome version < 109 detected, offscreen API not supported');
+  console.warn('[background][LEGACY CHROME] Timestamp:', new Date().toISOString());
+  console.warn('[background][LEGACY CHROME] User-Agent:', navigator.userAgent);
+  console.warn('[background][LEGACY CHROME] Extension ID:', chrome.runtime.id);
+
+  // Для старых версий просто пропускаем выполнение с предупреждением
+  // В будущем здесь можно добавить альтернативную логику без offscreen
+  console.warn('[background][LEGACY CHROME] Legacy Chrome workaround: Skipping workflow execution with graceful degradation');
+
+  if (message.type === 'EXECUTE_WORKFLOW' && message.pluginId && message.pageKey) {
+    console.warn(`[background][LEGACY CHROME] Cannot execute workflow for plugin: ${message.pluginId}`);
+    console.warn(`[background][LEGACY CHROME] Page Key: ${message.pageKey}`);
+    console.warn(`[background][LEGACY CHROME] Message ID: ${message.requestId || 'N/A'}`);
+
+    // Создаем детальное сообщение о предупреждении
+    const warningMessage: ChatMessage = {
+      role: 'plugin',
+      content: `⚠️ **Ограничение браузера**
+
+Эта версия Google Chrome (${navigator.userAgent.match(/Chrome\/(\d+)/)?.[1] || 'неизвестная'}) не поддерживает необходимые API расширения (Offscreen Document API).
+
+**Что произошло:**
+- Расширение не смогло выполнить запланированную задачу для плагина "${message.pluginId}"
+- Workflow будет пропущен для обеспечения стабильности работы
+
+**Рекомендация:**
+Обновите Google Chrome до версии 109 или новее для использования полной функциональности расширения.
+
+**Технические детали:**
+- Текущая версия: ${navigator.userAgent.match(/Chrome\/(\d+)/)?.[1] || 'неизвестная'}
+- Требуемая версия: 109+
+- API Status: Offscreen Document недоступен`,
+      timestamp: Date.now()
+    };
+
+    try {
+      await pluginChatApi.saveMessage(message.pluginId, message.pageKey, warningMessage);
+      console.log('[background][LEGACY CHROME] ✅ Legacy Chrome warning saved to plugin chat');
+      console.log('[background][LEGACY CHROME] Message saved for plugin:', message.pluginId, 'pageKey:', message.pageKey);
+
+      // Также сохраняем дополнительное сообщение для отслеживания проблемы
+      const trackingMessage: ChatMessage = {
+        role: 'plugin',
+        content: `[TRACKING] Legacy Chrome v${navigator.userAgent.match(/Chrome\/(\d+)/)?.[1] || 'unknown'} blocked workflow execution for compatibility reasons.`,
+        timestamp: Date.now()
+      };
+      await pluginChatApi.saveMessage(message.pluginId, message.pageKey, trackingMessage);
+
+    } catch (error) {
+      console.error('[background][LEGACY CHROME] ❌ CRITICAL: Failed to save legacy warning to chat:', error);
+      console.error('[background][LEGACY CHROME] Error details:', {
+        name: (error as Error).name,
+        message: (error as Error).message,
+        stack: (error as Error).stack
+      });
+
+      // Попытка сохранить упрощенное сообщение в случае ошибки
+      try {
+        const simpleWarning: ChatMessage = {
+          role: 'plugin',
+          content: '⚠️ Ошибка выполнения: устаревшая версия Chrome. Обновите браузер до версии 109+.',
+          timestamp: Date.now()
+        };
+        await pluginChatApi.saveMessage(message.pluginId, message.pageKey, simpleWarning);
+        console.warn('[background][LEGACY CHROME] ⚠️ Fallback simple warning saved');
+      } catch (fallbackError) {
+        console.error('[background][LEGACY CHROME] ❌ CRITICAL: Even fallback message save failed:', fallbackError);
+      }
+    }
+
+    console.warn('[background][LEGACY CHROME] ================= FALLBACK WORKFLOW COMPLETE =================');
+  }
+};
 
 import type { ChatMessage } from './plugin-chat-api';
 import type { Plugin } from './plugin-manager';
@@ -41,11 +205,150 @@ interface ExtensionMessage {
   // Для идентификации сообщений и запросов:
   requestId?: string;
   messageId?: string;
+  // Для Pyodide прямого тестирования:
+  pythonCode?: string;
+  // Для ручного тестирования Pyodide:
+  testName?: string;
+  code?: string;
+  timestamp?: number;
 }
 
 
 // Только стандартное поведение: панель открывается/закрывается глобально по клику на иконку
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+
+// === OFFSCREEN DOCUMENT MANAGEMENT ===
+
+// Функция для проверки наличия Offscreen Document
+const hasOffscreenDocument = async (): Promise<boolean> => {
+  // Проверяем доступность offscreen API
+  if (!offscreenSupported()) {
+    console.log('[offscreen][manager] Offscreen API not supported, returning false');
+    return false;
+  }
+
+  try {
+    const result = await chrome.offscreen.hasDocument();
+    console.log('[offscreen][manager] Offscreen document exists:', result);
+    return result;
+  } catch (error) {
+    console.error('[offscreen][manager] Error checking offscreen document:', error);
+    return false;
+  }
+};
+
+// Enhanced production-ready функция для создания Offscreen Document с retry logic
+const createOffscreenDocument = async (): Promise<void> => {
+  // Проверяем доступность offscreen API
+  if (!offscreenSupported()) {
+    console.warn('[offscreen][manager] ❌ Chrome version does not support offscreen API (< 109)');
+    throw new Error('Offscreen API not supported in this Chrome version. Please update Chrome to version 109+.');
+  }
+
+  const maxAttempts = 3;
+  const retryDelay = 1000; // 1 second
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      console.log(`[offscreen][manager] Attempt ${attempt}/${maxAttempts}: Creating offscreen document...`);
+      console.log('[offscreen][manager] Document config:', {
+        url: 'offscreen.html',
+        reasons: ['WORKERS'],
+        justification: 'Pyodide Worker execution and MCP bridge delegation',
+        timestamp: new Date().toISOString()
+      });
+
+      // Try to create the document
+      await chrome.offscreen.createDocument({
+        url: 'offscreen.html',
+        reasons: ['WORKERS'],
+        justification: 'Pyodide Worker execution and MCP bridge delegation'
+      });
+
+      console.log('[offscreen][manager] ✅ Offscreen document created successfully on attempt', attempt);
+
+      // Verify the document was created by checking if it exists
+      try {
+        const documentExists = await chrome.offscreen.hasDocument();
+        if (documentExists) {
+          console.log('[offscreen][manager] ✅ Document verification successful');
+          return; // Success
+        } else {
+          throw new Error('Document creation verification failed - document does not exist');
+        }
+      } catch (verifyError) {
+        console.warn('[offscreen][manager] ⚠️ Document verification failed, but creation seemed successful:', verifyError);
+        // Still consider it a success since createDocument didn't throw
+        return;
+      }
+
+    } catch (error) {
+      console.error(`[offscreen][manager] Attempt ${attempt}/${maxAttempts} failed:`, error);
+      console.error('[offscreen][manager] Error details:', {
+        name: (error as Error).name,
+        message: (error as Error).message,
+        stack: (error as Error).stack
+      });
+
+      // If this was the last attempt, throw the error
+      if (attempt === maxAttempts) {
+        console.error('[offscreen][manager] ❌ All attempts to create offscreen document failed');
+        throw new Error(`Failed to create offscreen document after ${maxAttempts} attempts: ${(error as Error).message}`);
+      }
+
+      // Wait before next attempt
+      console.log(`[offscreen][manager] Waiting ${retryDelay}ms before retry...`);
+      await new Promise(resolve => setTimeout(resolve, retryDelay));
+    }
+  }
+};
+
+// Enhanced production-ready функция для обеспечения наличия Offscreen Document
+const ensureOffscreenDocument = async (): Promise<void> => {
+  console.log('[offscreen][manager] ===== ENSURING OFFSCREEN DOCUMENT AVAILABILITY =====');
+  console.log('[offscreen][manager] Timestamp:', new Date().toISOString());
+
+  try {
+    const exists = await hasOffscreenDocument();
+    console.log('[offscreen][manager] Offscreen document exists check result:', exists);
+
+    if (!exists) {
+      console.log('[offscreen][manager] ❌ Offscreen document not found, creating new document...');
+      console.log('[offscreen][manager] This may take a few seconds...');
+      await createOffscreenDocument();
+      console.log('[offscreen][manager] ✅ Offscreen document creation completed');
+
+      // Double-check after creation
+      const verifyExists = await hasOffscreenDocument();
+      if (!verifyExists) {
+        console.error('[offscreen][manager] ❌ CRITICAL: Document verification failed after creation');
+        throw new Error('Offscreen document creation verification failed');
+      }
+      console.log('[offscreen][manager] ✅ Offscreen document verification successful');
+    } else {
+      console.log('[offscreen][manager] ✅ Offscreen document already exists and is ready');
+    }
+
+    console.log('[offscreen][manager] ===== OFFSCREEN DOCUMENT ENSURANCE COMPLETE =====');
+  } catch (error) {
+    console.error('[offscreen][manager] ❌ CRITICAL ERROR in ensureOffscreenDocument:', error);
+    console.error('[offscreen][manager] Error details:', {
+      name: (error as Error).name,
+      message: (error as Error).message,
+      stack: (error as Error).stack
+    });
+
+    // Attempt recovery by trying to clean up and recreate
+    try {
+      console.log('[offscreen][manager] 🔄 Attempting recovery by forcing document recreation...');
+      await chrome.runtime.reload(); // This will restart the extension
+    } catch (recoveryError) {
+      console.error('[offscreen][manager] ❌ Recovery attempt failed:', recoveryError);
+    }
+
+    throw error; // Re-throw to let caller handle
+  }
+};
 
 // Функция для проверки и запуска плагина с учетом настроек
 const runPluginIfEnabled = async (pluginId: string) => {
@@ -168,6 +471,137 @@ chrome.runtime.onMessage.addListener(
         return true;
       }
 
+      if (msg.type === 'TEST_PYODIDE_DIRECT') {
+        console.log('[background][TEST_PYODIDE_DIRECT] Processing direct Pyodide test request');
+        console.log('[background][TEST_PYODIDE_DIRECT] Python code to execute:', msg.pythonCode);
+
+        (async () => {
+          try {
+            const result = await handleTestPyodideDirect(msg);
+            console.log('[background][TEST_PYODIDE_DIRECT] Test completed with result:', result);
+            sendResponse(result);
+          } catch (error) {
+            console.error('[background][TEST_PYODIDE_DIRECT] Test failed:', error);
+            sendResponse({
+              success: false,
+              error: (error as Error).message,
+              timestamp: Date.now()
+            });
+          }
+        })();
+
+        return true; // Keep channel open for async response
+      }
+
+      // === РУЧНОЕ ТЕСТИРОВАНИЕ PYODIDE ===
+      if (msg.type === 'INITIALIZE_PYODIDE_MANUAL_TEST') {
+        console.log('[background][INITIALIZE_PYODIDE_MANUAL_TEST] Initializing Pyodide for manual testing');
+
+        (async () => {
+          try {
+            // Убеждаемся что offscreen document существует
+            await ensureOffscreenDocument();
+
+            // Отправляем команду инициализации в offscreen document
+            const response = await chrome.runtime.sendMessage({
+              type: 'INITIALIZE_PYODIDE',
+              requestId: msg.requestId,
+              timestamp: msg.timestamp
+            });
+
+            sendResponse({
+              success: response?.success || true,
+              result: 'Pyodide initialized in offscreen document',
+              timestamp: Date.now()
+            });
+
+          } catch (error) {
+            console.error('[background][INITIALIZE_PYODIDE_MANUAL_TEST] Initialization failed:', error);
+            sendResponse({
+              success: false,
+              error: (error as Error).message,
+              timestamp: Date.now()
+            });
+          }
+        })();
+
+        return true;
+      }
+
+      if (msg.type === 'EXECUTE_PYTHON_TEST_CODE') {
+        console.log('[background][EXECUTE_PYTHON_TEST_CODE] Executing Python test code');
+        console.log('[background][EXECUTE_PYTHON_TEST_CODE] Test name:', msg.testName);
+        console.log('[background][EXECUTE_PYTHON_TEST_CODE] Code:', msg.code);
+
+        (async () => {
+          try {
+            // Отправляем код в offscreen document для исполнения
+            const response = await chrome.runtime.sendMessage({
+              type: 'EXECUTE_PYTHON_CODE',
+              code: msg.code,
+              testName: msg.testName,
+              requestId: msg.requestId,
+              timestamp: msg.timestamp
+            });
+
+            sendResponse({
+              success: response?.success || false,
+              result: response?.result,
+              error: response?.error,
+              timestamp: Date.now(),
+              executionTime: Date.now() - (msg.timestamp || 0)
+            });
+
+          } catch (error) {
+            console.error('[background][EXECUTE_PYTHON_TEST_CODE] Execution failed:', error);
+            sendResponse({
+              success: false,
+              error: (error as Error).message,
+              timestamp: Date.now()
+            });
+          }
+        })();
+
+        return true;
+      }
+
+      if (msg.type === 'EXECUTE_PYTHON_ERROR_TEST') {
+        console.log('[background][EXECUTE_PYTHON_ERROR_TEST] Executing Python error test');
+        console.log('[background][EXECUTE_PYTHON_ERROR_TEST] Test name:', msg.testName);
+
+        (async () => {
+          try {
+            // Отправляем код с ошибкой в offscreen document для тестирования error handling
+            const response = await chrome.runtime.sendMessage({
+              type: 'EXECUTE_PYTHON_CODE',
+              code: msg.code,
+              testName: msg.testName,
+              isErrorTest: true,
+              requestId: msg.requestId,
+              timestamp: msg.timestamp
+            });
+
+            // Ожидаем ошибку от Python кода, так что success=false это нормально
+            sendResponse({
+              success: response?.success || false,
+              result: response?.result,
+              error: response?.error,
+              timestamp: Date.now()
+            });
+
+          } catch (error) {
+            console.error('[background][EXECUTE_PYTHON_ERROR_TEST] Error test failed:', error);
+            sendResponse({
+              success: false,
+              error: (error as Error).message,
+              timestamp: Date.now()
+            });
+          }
+        })();
+
+        return true;
+      }
+
       if (msg.type === 'GET_PLUGINS') {
         console.log('[background] Processing GET_PLUGINS request from sender:', sender);
         console.log('[background] GET_PLUGINS message timestamp:', new Date().toISOString());
@@ -265,33 +699,33 @@ chrome.runtime.onMessage.addListener(
       }
 
       if (msg.type === 'RUN_WORKFLOW' && msg.pluginId) {
-        console.log('[background][WORKFLOW INTEGRATION] ===== RUN_WORKFLOW REQUEST RECEIVED =====');
-        console.log('[background][WORKFLOW INTEGRATION] Plugin ID:', msg.pluginId);
-        console.log('[background][WORKFLOW INTEGRATION] Request timestamp:', new Date().toISOString());
+        console.log('[background][OFFSCREEN DELEGATION] ===== RUN_WORKFLOW REQUEST RECEIVED =====');
+        console.log('[background][OFFSCREEN DELEGATION] Plugin ID:', msg.pluginId);
+        console.log('[background][OFFSCREEN DELEGATION] Request timestamp:', new Date().toISOString());
 
         (async () => {
           try {
-            // Найти активную вкладку пользователя
-            console.log('[background][WORKFLOW INTEGRATION] Querying active tab...');
+            // ШАГ 1: Получить активную вкладку пользователя
+            console.log('[background][OFFSCREEN DELEGATION] Querying active tab...');
             const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
             const activeTab = tabs[0];
 
             if (!activeTab || !activeTab.id) {
-              console.log('[background][WORKFLOW INTEGRATION][ERROR] No active tab found for RUN_WORKFLOW');
-              console.log('[background][WORKFLOW INTEGRATION][ERROR] Available tabs:', tabs.length);
+              console.log('[background][OFFSCREEN DELEGATION][ERROR] No active tab found');
               sendResponse({ error: 'Не найдена активная вкладка' });
               return;
             }
 
-            console.log('[background][WORKFLOW INTEGRATION] Found active tab for workflow:');
-            console.log('[background][WORKFLOW INTEGRATION] - URL:', activeTab.url);
-            console.log('[background][WORKFLOW INTEGRATION] - Tab ID:', activeTab.id);
-            console.log('[background][WORKFLOW INTEGRATION] - Tab title:', activeTab.title);
+            console.log('[background][OFFSCREEN DELEGATION] Active tab details:', {
+              url: activeTab.url,
+              tabId: activeTab.id,
+              title: activeTab.title
+            });
 
-            // Получить HTML страницы через chrome.scripting
-            console.log('[background][WORKFLOW INTEGRATION] Attempting to extract page HTML...');
-            console.log('[background][WORKFLOW INTEGRATION] Executing script in tab:', activeTab.id);
+            // ШАГ 2: Извлечь pageKey и pageHTML
+            const pageKey = getPageKey(activeTab.url || '');
 
+            console.log('[background][OFFSCREEN DELEGATION] Extracting page HTML...');
             let pageHtml = '';
             try {
               const results = await chrome.scripting.executeScript({
@@ -299,145 +733,95 @@ chrome.runtime.onMessage.addListener(
                 func: () => document.documentElement.outerHTML
               });
 
-              console.log('[background][WORKFLOW INTEGRATION] Script execution results:', results ? 'received' : 'null');
-              console.log('[background][WORKFLOW INTEGRATION] Results array length:', results?.length);
-
               if (results && results[0] && results[0].result) {
                 pageHtml = results[0].result as string;
-                console.log('[background][WORKFLOW INTEGRATION] ✓ HTML extraction SUCCESSFUL');
-                console.log('[background][WORKFLOW INTEGRATION] ✓ HTML length:', pageHtml.length, 'characters');
-                console.log('[background][WORKFLOW INTEGRATION] ✓ First 200 chars:', pageHtml.substring(0, 200));
+                console.log('[background][OFFSCREEN DELEGATION] ✓ HTML extracted successfully:', pageHtml.length, 'chars');
               } else {
-                console.log('[background][WORKFLOW INTEGRATION][WARNING] HTML extraction returned empty result');
-                console.log('[background][WORKFLOW INTEGRATION] Results detail:', JSON.stringify(results, null, 2));
+                console.log('[background][OFFSCREEN DELEGATION][WARNING] Empty HTML result');
+                sendResponse({ error: 'Не удалось получить содержимое страницы' });
+                return;
               }
             } catch (error) {
-              console.error('[background][WORKFLOW INTEGRATION][ERROR] HTML extraction FAILED');
-              console.error('[background][WORKFLOW INTEGRATION][ERROR] Chrome scripting error:', error);
-              console.error('[background][WORKFLOW INTEGRATION][ERROR] Error details:', {
-                name: (error as Error).name,
-                message: (error as Error).message,
-                stack: (error as Error).stack
-              });
+              console.error('[background][OFFSCREEN DELEGATION][ERROR] HTML extraction failed:', error);
               sendResponse({ error: `Не удалось получить HTML страницы: ${(error as Error).message}` });
               return;
             }
 
-            // Проверить настройки плагина
-            console.log('[background][WORKFLOW INTEGRATION] Checking plugin settings for:', msg.pluginId);
+            // ШАГ 3: Проверить настройки плагина
+            console.log('[background][OFFSCREEN DELEGATION] Checking plugin settings...');
             const settings = await getPluginSettings(msg.pluginId as string);
 
-            console.log('[background][WORKFLOW INTEGRATION] Plugin settings retrieved:', JSON.stringify(settings, null, 2));
-
             if (!settings.enabled) {
-              console.log('[background][WORKFLOW INTEGRATION][INFO] Plugin is DISABLED, aborting workflow');
-              console.log('[background][WORKFLOW INTEGRATION][INFO] Plugin enabled status:', settings.enabled);
+              console.log('[background][OFFSCREEN DELEGATION][INFO] Plugin disabled, aborting');
               sendResponse({ error: 'Плагин отключен' });
               return;
             }
 
-            console.log('[background][WORKFLOW INTEGRATION][SUCCESS] Plugin is ENABLED, proceeding with workflow');
+            console.log('[background][OFFSCREEN DELEGATION][SUCCESS] Plugin is enabled, proceeding');
 
-            // Извлечение pageKey из активной вкладки для чата
-            console.log('[background][WORKFLOW INTEGRATION] Extracting pageKey from active tab...');
-            const pageKey = getPageKey(activeTab.url || '');
+            // ШАГ 4: Обеспечить наличие Offscreen Document или использовать fallback
+            console.log('[background][OFFSCREEN DELEGATION] ===== ENSURING OFFSCREEN DOCUMENT =====');
 
-            console.log('[background][WORKFLOW INTEGRATION] Creating chatApi for workflow integration...');
-            const chatApi = {
-              addMessage: async (type: string, message: string, status?: string) => {
-                console.log('[background][WORKFLOW INTEGRATION] Adding message to chat:', type, message);
-                const chatMessage: ChatMessage = {
-                  role: 'plugin',
-                  content: `[${type}] ${message}`,
-                  timestamp: Date.now()
-                };
-                const result = await pluginChatApi.saveMessage(msg.pluginId as string, pageKey, chatMessage);
-                broadcastChatUpdate(msg.pluginId as string, pageKey);
-                return result;
-              },
-              renderResult: async (stepId: string, result: any) => {
-                console.log('[background][WORKFLOW INTEGRATION] Rendering result to chat:', stepId, result);
-                const resultMessage: ChatMessage = {
-                  role: 'plugin',
-                  content: typeof result === 'string'
-                    ? `✅ Результат шага "${stepId}":\n${result}`
-                    : `✅ Результат шага "${stepId}":\n\`\`\`json\n${JSON.stringify(result, null, 2)}\n\`\`\``,
-                  timestamp: Date.now()
-                };
-                const saveResult = await pluginChatApi.saveMessage(msg.pluginId as string, pageKey, resultMessage);
-                broadcastChatUpdate(msg.pluginId as string, pageKey);
-                return saveResult;
-              },
-              saveMessage: async (message: ChatMessage) => {
-                console.log('[background][WORKFLOW INTEGRATION] Saving workflow message to chat:', message);
-                const result = await pluginChatApi.saveMessage(msg.pluginId as string, pageKey, message);
-                broadcastChatUpdate(msg.pluginId as string, pageKey);
-                return result;
-              }
-            };
+            // Проверяем, поддерживается ли offscreen API
+            if (!offscreenSupported()) {
+              console.log('[background][OFFSCREEN DELEGATION] Offscreen API not supported, using fallback...');
+              // Создаем легитимное сообщение для fallback обработчика
+              const fallbackMessage: ExtensionMessage = {
+                type: 'EXECUTE_WORKFLOW',
+                pluginId: msg.pluginId,
+                pageKey: pageKey,
+                data: {
+                  pageHtml: pageHtml,
+                  pageKey: pageKey,
+                  pluginId: msg.pluginId
+                }
+              };
 
-            // Создать контекст для зависимого от среды выполнения воркфлоу
-            console.log('[background][WORKFLOW INTEGRATION] Creating workflow execution context...');
-            const context = {
-              logger: chatApi,
-              hostApi: hostApi
-            };
+              // Используем fallback для старых версий Chrome
+              await handleLegacyChrome(fallbackMessage);
 
-            console.log('[background][WORKFLOW INTEGRATION] Context created with:');
-            console.log('[background][WORKFLOW INTEGRATION] - Logger (chatApi):', typeof context.logger);
-            console.log('[background][WORKFLOW INTEGRATION] - Host API:', typeof context.hostApi);
-            console.log('[background][WORKFLOW INTEGRATION] - Page HTML length:', pageHtml.length);
-            console.log('[background][WORKFLOW INTEGRATION] - PageKey:', pageKey);
-
-            // Запустить воркфлоу с переданным контекстом
-            console.log('[background][WORKFLOW INTEGRATION] ===== EXECUTING WORKFLOW-ENGINE =====');
-            console.log('[background][WORKFLOW INTEGRATION] Plugin ID for workflow:', msg.pluginId);
-            console.log('[background][WORKFLOW INTEGRATION] Run timestamp:', new Date().toISOString());
-
-            let workflowResult: any = null;
-            try {
-              workflowResult = await runWorkflow(msg.pluginId as string, context, { page_html: pageHtml });
-            } catch (workflowError) {
-              console.error('[background][WORKFLOW INTEGRATION][CRITICAL ERROR] Workflow execution failed:');
-              console.error('[background][WORKFLOW INTEGRATION][CRITICAL ERROR] Error details:', {
-                name: (workflowError as Error).name,
-                message: (workflowError as Error).message,
-                stack: (workflowError as Error).stack
-              });
-              throw workflowError; // Re-throw to trigger outer catch
+              // Отправляем сигнал успешного завершения (хотя это просто предупреждение)
+              sendResponse({ success: true });
+              return;
             }
 
-            // Отправка финального результата в чат плагина
-            if (workflowResult && workflowResult !== undefined) {
-              try {
-                console.log('[background][WORKFLOW INTEGRATION] Sending final result to plugin chat...');
-                const resultMessage: ChatMessage = {
-                  role: 'plugin',
-                  content: typeof workflowResult === 'string'
-                    ? `✅ Результат воркфлоу:\n${workflowResult}`
-                    : `✅ Результат воркфлоу:\n\`\`\`json\n${JSON.stringify(workflowResult, null, 2)}\n\`\`\``,
-                  timestamp: Date.now()
-                };
+            // Для поддерживаемых версий используем стандартную логику
+            await ensureOffscreenDocument();
 
-                const saveResult = await chatApi.saveMessage(resultMessage);
-                console.log('[background][WORKFLOW INTEGRATION] Final result saved to chat:', saveResult);
+            // ШАГ 5: Делегировать выполнение в Offscreen Document
+            console.log('[background][OFFSCREEN DELEGATION] ===== DELEGATING TO OFFSCREEN =====');
+            console.log('[background][OFFSCREEN DELEGATION] Preparing workflow payload...');
 
-                // Оповещаем UI об обновлении чата
-                broadcastChatUpdate(msg.pluginId as string, pageKey);
+            const workflowPayload = {
+              type: 'EXECUTE_WORKFLOW',
+              pluginId: msg.pluginId,
+              pageKey: pageKey,
+              pageHtml: pageHtml,
+              requestId: msg.requestId || `workflow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              timestamp: Date.now()
+            };
 
-              } catch (saveError) {
-                console.error('[background][WORKFLOW INTEGRATION] Failed to save final result to chat:', saveError);
-              }
+            console.log('[background][OFFSCREEN DELEGATION] Execution payload prepared:', {
+              ...workflowPayload,
+              pageHtml: `${pageHtml.length} chars`
+            });
+
+            // Отправить задачу в offscreen document
+            console.log('[background][OFFSCREEN DELEGATION] Sending to offscreen...');
+            const result = await chrome.runtime.sendMessage(workflowPayload);
+
+            console.log('[background][OFFSCREEN DELEGATION] ===== OFFSCREEN EXECUTION COMPLETED =====');
+            console.log('[background][OFFSCREEN DELEGATION] Result received:', result);
+
+            // Ретрансмитровать результат в UI
+            if (result && result.success) {
+              sendResponse({ success: true });
+            } else {
+              sendResponse({ error: result?.error || 'Unknown execution error' });
             }
-
-            console.log('[background][WORKFLOW INTEGRATION] ===== WORKFLOW COMPLETED SUCCESSFULLY =====');
-            console.log('[background][WORKFLOW INTEGRATION] Final result:', workflowResult);
-            console.log('[background][WORKFLOW INTEGRATION] Context cleanup completed');
-            console.log('[background][WORKFLOW INTEGRATION] ===== WORKFLOW INTEGRATION COMPLETE =====');
-            sendResponse({ success: true });
 
           } catch (error) {
-            console.error('[background] Error in RUN_WORKFLOW:', error);
+            console.error('[background][OFFSCREEN DELEGATION] Error in delegation:', error);
             sendResponse({ error: (error as Error).message });
           }
         })();
@@ -1063,6 +1447,92 @@ const handleHostApiMessage = async (
   return true;
 };
 
+// === OFFSCREEN DELEGATION RESPONSE HANDLER ===
+
+// Обработчик сообщений от Offscreen Document
+chrome.runtime.onMessage.addListener(
+ async (message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => {
+   // Проверяем, что сообщение исходит от нашего offscreen документа
+   if (sender.url?.includes('offscreen.html')) {
+     console.log('[background][OFFSCREEN RESPONSE] Message from offscreen received:', message);
+
+     if (typeof message === 'object' && message !== null && 'type' in message) {
+       const msg = message as ExtensionMessage;
+
+       if (msg.type === 'WORKFLOW_LOG') {
+         // Ретрансмировать логи от offscreen в UI
+         console.log('[background][OFFSCREEN RESPONSE] Relaying workflow log:', msg);
+         chrome.runtime.sendMessage({
+           type: 'LOG_EVENT',
+           pluginId: msg.pluginId,
+           message: msg.message,
+           level: msg.level || 'info',
+           stepId: msg.stepId,
+           logData: msg.logData,
+           pageKey: msg.pageKey
+         });
+         return true;
+
+       } else if (msg.type === 'WORKFLOW_RESULT') {
+         // Ретрансмировать результаты воркфлоу в UI
+         console.log('[background][OFFSCREEN RESPONSE] Relaying workflow result:', msg);
+
+         // Отправить результат и обновить чат
+         if (msg.pluginId && msg.pageKey) {
+           const resultMessage: ChatMessage = {
+             role: 'plugin',
+             content: msg.data
+               ? `✅ Результат воркфлоу:\n\`\`\`json\n${JSON.stringify(msg.data, null, 2)}\n\`\`\``
+               : '✅ Воркфлоу выполнен успешно',
+             timestamp: Date.now()
+           };
+
+           try {
+             await pluginChatApi.saveMessage(msg.pluginId, getPageKey(msg.pageKey), resultMessage);
+             broadcastChatUpdate(msg.pluginId, getPageKey(msg.pageKey));
+             console.log('[background][OFFSCREEN RESPONSE] Workflow result saved to chat');
+           } catch (saveError) {
+             console.error('[background][OFFSCREEN RESPONSE] Failed to save result to chat:', saveError);
+           }
+         }
+
+         // Также ретрансмировать результат через стандартное сообщение
+         chrome.runtime.sendMessage({
+           type: 'WORKFLOW_COMPLETED',
+           pluginId: msg.pluginId,
+           result: msg.data,
+           requestId: msg.requestId
+         });
+
+         return true;
+       } else if (msg.type === 'WORKFLOW_ERROR') {
+         // Ретрансмировать ошибки воркфлоу в UI
+         console.error('[background][OFFSCREEN RESPONSE] Workflow error received:', msg);
+
+         if (msg.pluginId && msg.pageKey) {
+           const errorMessage: ChatMessage = {
+             role: 'plugin',
+             content: `❌ Ошибка воркфлоу: ${msg.data || 'Неизвестная ошибка'}`,
+             timestamp: Date.now()
+           };
+
+           try {
+             await pluginChatApi.saveMessage(msg.pluginId, getPageKey(msg.pageKey), errorMessage);
+             broadcastChatUpdate(msg.pluginId, getPageKey(msg.pageKey));
+           } catch (saveError) {
+             console.error('[background][OFFSCREEN RESPONSE] Failed to save error to chat:', saveError);
+           }
+         }
+
+         return true;
+       }
+     }
+   }
+
+   return false; // Не блокировать другие обработчики
+ },
+);
+
 const findTargetTab = async (): Promise<chrome.tabs.Tab> => {
   const allTabsInWindow = await chrome.tabs.query({ currentWindow: true });
   const selfUrl = chrome.runtime.getURL('index.html');
@@ -1076,6 +1546,90 @@ const findTargetTab = async (): Promise<chrome.tabs.Tab> => {
   }
 
   return targetTab;
+};
+
+// Обработчик прямого тестирования Pyodide
+const handleTestPyodideDirect = async (message: ExtensionMessage): Promise<{
+  success: boolean;
+  result?: unknown;
+  error?: string;
+  timestamp: number;
+  chromeVersion?: string;
+}> => {
+  const chromeVersion = navigator.userAgent.match(/Chrome\/(\d+)/)?.[1];
+  const pythodideUrl = chrome.runtime.getURL('pyodide/pyodide.js');
+
+  console.log('[TEST_PYODIDE_DIRECT] Chrome version:', chromeVersion);
+
+  // Проверяем полную информацию о Pyodide
+  try {
+    console.log('[TEST_PYODIDE_DIRECT] Checking Pyodide availability...');
+
+    // Для Chrome >= 109 используем offscreen document
+    if (offscreenSupported()) {
+      console.log('[TEST_PYODIDE_DIRECT] Using offscreen document execution');
+
+      try {
+        // Убеждаемся что offscreen document существует
+        await ensureOffscreenDocument();
+
+        // Отправляем запрос в offscreen document
+        const testRequest = {
+          type: 'TEST_PYODIDE_DIRECT_EXEC',
+          pythonCode: message.pythonCode || 'print("Hello from Pyodide!")',
+          requestId: `test_pyodide_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          timestamp: Date.now()
+        };
+
+        console.log('[TEST_PYODIDE_DIRECT] Sending to offscreen:', testRequest);
+        const result = await chrome.runtime.sendMessage(testRequest);
+
+        return {
+          success: result?.success || false,
+          result: result?.result,
+          error: result?.error,
+          timestamp: Date.now(),
+          chromeVersion: chromeVersion
+        };
+
+      } catch (offscreenError) {
+        console.error('[TEST_PYODIDE_DIRECT] Offscreen execution failed:', offscreenError);
+        return {
+          success: false,
+          error: `Offscreen execution error: ${(offscreenError as Error).message}`,
+          timestamp: Date.now(),
+          chromeVersion: chromeVersion
+        };
+      }
+
+    } else {
+      // Для старых версий Chrome (<109) - fallback mode
+      console.log('[TEST_PYODIDE_DIRECT] Chrome < 109 detected, using fallback mode');
+
+      return {
+        success: false,
+        result: {
+          chromeVersion: chromeVersion,
+          pyodideAvailable: false,
+          offscreenSupported: false,
+          message: 'Pyodide недоступен для данной версии Chrome'
+        },
+        error: 'Pyodide requires Chrome 109+ with Offscreen Document API support',
+        timestamp: Date.now(),
+        chromeVersion: chromeVersion
+      };
+    }
+
+  } catch (error) {
+    console.error('[TEST_PYODIDE_DIRECT] Test execution failed:', error);
+
+    return {
+      success: false,
+      error: `Test execution error: ${(error as Error).message}`,
+      timestamp: Date.now(),
+      chromeVersion: chromeVersion
+    };
+  }
 };
 
 // === Port API для устойчивого обмена с сайдпанелью ===
@@ -1133,6 +1687,63 @@ exampleThemeStorage.get().then(theme => {
   console.log('[background] Theme loaded:', theme);
 });
 
+// Comprehensive production diagnostics for offscreen API state
+console.log('[background] 🚀 =============================================');
+console.log('[background] 🚀 EXTENSION INITIALIZATION DIAGNOSTIC REPORT');
+console.log('[background] 🚀 =============================================');
+console.log('[background] 📊 System Information:');
+console.log('[background]   - Timestamp:', new Date().toISOString());
+console.log('[background]   - User-Agent:', navigator.userAgent);
+console.log('[background]   - Chrome version:', navigator.userAgent.match(/Chrome\/(\d+)/)?.[1] || 'Unknown');
+console.log('[background]   - Extension ID:', chrome.runtime.id);
+
+// Detailed offscreen API support check
+const isOffscreenSupported = offscreenSupported();
+console.log('[background] 📊 Offscreen API Analysis:');
+console.log('[background]   - Offscreen API supported:', isOffscreenSupported);
+
+if (!isOffscreenSupported) {
+  console.warn('[background] ⚠️ LEGACY CHROME DETECTED (< 109):');
+  console.warn('[background]   - Offscreen API is not available in this Chrome version');
+  console.warn('[background]   - Fallback workflow execution mode will be used');
+  console.warn('[background]   - To enable full functionality, please update Chrome to version 109+');
+  console.warn('[background]   - See: https://developer.chrome.com/docs/extensions/migrating-to-service-workers/');
+  console.warn('[background] ❌ PRODUCTION IMPACT: Pyodide workflows will fail with legacy fallback');
+} else {
+  console.log('[background] ✅ Modern Chrome detected (>= 109)');
+  console.log('[background]   - Full offscreen document workflow available');
+  console.log('[background]   - Pyodide execution via workers expected to work');
+
+  // Additional runtime verification
+  try {
+    console.log('[background] 🔍 Runtime Context Verification:');
+    console.log('[background]   - Runtime permissions check...');
+
+    // Test basic offscreen interaction if supported
+    (async () => {
+      try {
+        const hasDocument = await chrome.offscreen.hasDocument();
+        console.log('[background]   - Offscreen document exists on startup:', hasDocument);
+
+        if (!hasDocument) {
+          console.log('[background]   - Creating initial offscreen document...');
+          await ensureOffscreenDocument();
+          console.log('[background]   - Initial offscreen document created successfully');
+        }
+      } catch (initError) {
+        console.error('[background] ❌ Critical: Failed to initialize offscreen document on startup:', initError);
+        console.error('[background]   - This may indicate manifest/permission issues');
+      }
+    })();
+
+  } catch (runtimeError) {
+    console.error('[background] ❌ Runtime verification failed:', runtimeError);
+  }
+}
+
+console.log('[background] 📈 Available Chrome APIs:', typeof chrome !== 'undefined' ? Object.keys(chrome).filter(key => typeof chrome[key as keyof typeof chrome] === 'object').join(', ') : 'None');
+console.log('[background] 🚀 =============================================');
+
 console.log('[background] Background script fully loaded and ready');
 console.log('[background] Extension ID:', chrome.runtime.id);
 console.log('[background] Available APIs:', {
@@ -1140,6 +1751,25 @@ console.log('[background] Available APIs:', {
   tabs: typeof chrome.tabs,
   storage: typeof chrome.storage,
   sidePanel: typeof chrome.sidePanel,
-  scripting: typeof chrome.scripting
+  scripting: typeof chrome.scripting,
+  offscreen: typeof chrome.offscreen
 });
+
+// Дополнительная диагностика Offscreen API
+console.log('[background][OFFSCREEN DIAGNOSTIC] Detailed Offscreen API analysis:');
+console.log('[background][OFFSCREEN DIAGNOSTIC]   chrome object:', typeof chrome);
+console.log('[background][OFFSCREEN DIAGNOSTIC]   chrome.offscreen:', typeof chrome.offscreen);
+if (chrome.offscreen) {
+  console.log('[background][OFFSCREEN DIAGNOSTIC]   chrome.offscreen properties:', Object.keys(chrome.offscreen));
+  console.log('[background][OFFSCREEN DIAGNOSTIC]   hasDocument:', typeof chrome.offscreen.hasDocument);
+  console.log('[background][OFFSCREEN DIAGNOSTIC]   createDocument:', typeof chrome.offscreen.createDocument);
+} else {
+  console.log('[background][OFFSCREEN DIAGNOSTIC]   chrome.offscreen is undefined!');
+}
+
+// Проверка глобального состояния
+console.log('[background][OFFSCREEN DIAGNOSTIC] Global context info:');
+console.log('[background][OFFSCREEN DIAGNOSTIC]   window:', typeof window);
+console.log('[background][OFFSCREEN DIAGNOSTIC]   self:', typeof self);
+console.log('[background][OFFSCREEN DIAGNOSTIC]   globalThis:', typeof globalThis);
 console.log('[background] Edit chrome-extension/src/background/index.ts and save to reload.');

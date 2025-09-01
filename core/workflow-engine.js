@@ -39,7 +39,7 @@ export async function runWorkflow(pluginId, context) {
 
     console.log('[WORKFLOW-ENGINE] [DEBUG] Current path resolution:');
     console.log('[WORKFLOW-ENGINE] [DEBUG] Expected path: plugins/' + pluginId + '/workflow.json');
-    console.log('[WORKFLOW-ENGINE] [DEBUG] Vite alias info: @platform-public → platform-core/public');
+    console.log('[WORKFLOW-ENGINE] [DEBUG] Plugins location: public/plugins (root) - using direct paths');
     console.log('[WORKFLOW-ENGINE] [DEBUG] Actual plugins location: public/plugins (root)');
     console.log('[WORKFLOW-ENGINE] Loading workflow definition for plugin:', pluginId);
     console.log('[WORKFLOW-ENGINE] Loading from path: plugins/' + pluginId + '/workflow.json');
@@ -335,6 +335,10 @@ async function loadWorkflowDefinition(pluginId, logger) {
   try {
       const workflowUrl = `/plugins/${pluginId}/workflow.json`;
       logger.addMessage('DEBUG', `[loadWorkflowDefinition] Загрузка по прямому пути: ${workflowUrl}`);
+      // Добавление отладки полного URL для диагностики @platform-public
+      const fullUrl = chrome?.runtime?.getURL ? chrome.runtime.getURL(workflowUrl.slice(1)) : `chrome-extension://<extension-id>${workflowUrl}`;
+      logger.addMessage('DEBUG', `[loadWorkflowDefinition] Полный URL: ${fullUrl}`);
+
       const response = await fetch(workflowUrl);
       if (!response.ok) {
           throw new Error(`HTTP ${response.status} - ${response.statusText}`);

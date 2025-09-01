@@ -129,7 +129,7 @@ async function loadWorkflowDefinition(pluginId: string, logger: any): Promise<Wo
     logger.addMessage('DEBUG', `[loadWorkflowDefinition] Проверка наличия chrome.runtime: ${!!chrome?.runtime}`);
     logger.addMessage('DEBUG', `[loadWorkflowDefinition] Проверка наличия chrome.runtime.getURL: ${typeof chrome?.runtime?.getURL}`);
 
-    const workflowPath = `@platform-public/plugins/${pluginId}/workflow.json`;
+    const workflowPath = `/plugins/${pluginId}/workflow.json`;
 
     logger.addMessage('DEBUG', `[loadWorkflowDefinition] Путь к файлу: ${workflowPath}`);
 
