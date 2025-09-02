@@ -919,70 +919,89 @@ class OffscreenDocument {
     try {
       const pyodideManager = await this.workflowEngine.getPyodideManager();
       await pyodideManager.awaitReady();
-
-      // Отправка сигнала готовности в background
       await this._sendToBackground({
-        type: 'ready',
+        type: 'OFFSCREEN_READY',
         timestamp: Date.now(),
-        message: 'Offscreen document is ready'
       });
-
       this.isInitialized = true;
       console.log('[OffscreenDocument] ✅ Initialization complete');
-
     } catch (error) {
       console.error('[OffscreenDocument] ❌ Initialization failed:', error);
       await this._sendToBackground({
-        type: 'initialization_error',
+        type: 'OFFSCREEN_INIT_ERROR',
         error: String(error),
-        timestamp: Date.now()
       });
     }
   }
 
   private _setupMessageHandling(): void {
-    // Обработчик сообщений от background script
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-      this._handleMessage(message, sender, sendResponse);
-      return true; // Важно: асинхронная обработка
+      // Мы больше не используем sendResponse для возврата результата воркфлоу.
+      // Мы просто запускаем задачу. Ответ придет отдельным сообщением.
+      this._routeMessage(message);
+      // Возвращаем true, чтобы указать, что обработка может быть асинхронной
+      // (хотя мы и не используем sendResponse для основного потока).
+      return true; 
     });
-
     console.log('[OffscreenDocument] Message handler established');
   }
 
-  private async _handleMessage(message: any, sender: any, sendResponse: Function): Promise<void> {
+  private _handleMessage(message: any, sender: any, sendResponse: (response?: any) => void): void {
     const logger = this.workflowEngine.getLogger();
+    logger.addMessage('DEBUG', `Получено сообщение типа: ${message.type}`, message);
+
+    // Мы используем .then().catch() вместо async/await на верхнем уровне,
+    // чтобы гарантировать вызов sendResponse в любом случае и вернуть результат.
+    this._routeMessage(message)
+      .then(result => {
+        logger.addMessage('DEBUG', `Успешный ответ для ${message.type}`, result);
+        // Отправляем успешный результат обратно
+        sendResponse({ success: true, result });
+      })
+      .catch(error => {
+        logger.addMessage('ERROR', `Ошибка обработки сообщения ${message.type}: ${error.message}`);
+        // Отправляем ошибку обратно
+        sendResponse({ success: false, error: error.message });
+      });
+  }
+
+  // Новая функция-маршрутизатор, которая ВОЗВРАЩАЕТ Promise
+  private async _routeMessage(message: any): Promise<void> {
+    const logger = this.workflowEngine.getLogger();
+    logger.addMessage('DEBUG', `Получено сообщение типа: ${message.type}`, message);
+
+    if (message.type !== 'EXECUTE_WORKFLOW') {
+      logger.addMessage('WARN', `Неизвестный тип сообщения: ${message.type}`);
+      return;
+    }
 
     try {
-      console.log('[OffscreenDocument] Received message:', message);
+      const { pluginId, pageHtml, input, requestId } = message.data;
+      
+      const result = await this.workflowEngine.runWorkflow(pluginId, {
+        input: { ...input, page_html: pageHtml },
+        hostApi: {}
+      });
 
-      switch (message.type) {
-        case 'execute_workflow':
-          await this._handleWorkflowExecution(message, sendResponse);
-          break;
-
-        case 'call_python_tool':
-          await this._handlePythonToolCall(message, sendResponse);
-          break;
-
-        case 'get_status':
-          await this._handleStatusRequest(sendResponse);
-          break;
-
-        case 'health_check':
-          await this._handleHealthCheck(sendResponse);
-          break;
-
-        default:
-          console.warn('[OffscreenDocument] Unknown message type:', message.type);
-          sendResponse({ error: `Unknown message type: ${message.type}` });
-      }
+      // ▼▼▼ КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Отправляем результат отдельным сообщением ▼▼▼
+      await this._sendToBackground({
+        type: 'WORKFLOW_COMPLETED',
+        requestId: requestId, // Используем ID запроса для связки
+        result: result,
+        success: true
+      });
 
     } catch (error) {
-      logger.addMessage('ERROR', `Error handling message ${message.type}: ${error}`);
-      sendResponse({ error: String(error) });
+      // И в случае ошибки тоже отправляем отдельное сообщение
+      await this._sendToBackground({
+        type: 'WORKFLOW_COMPLETED',
+        requestId: message.data.requestId,
+        error: error instanceof Error ? error.message : String(error),
+        success: false
+      });
     }
   }
+  // ▲▲▲ КОНЕЦ НОВЫХ МЕТОДОВ ▲▲▲
 
   private async _handleWorkflowExecution(message: any, sendResponse: Function): Promise<void> {
     const { pluginId, input, hostApi } = message.data;
@@ -1060,7 +1079,11 @@ class OffscreenDocument {
     try {
       await chrome.runtime.sendMessage(message);
     } catch (error) {
-      console.warn('[OffscreenDocument] Failed to send message to background:', error);
+      if (error instanceof Error && error.message.includes('Receiving end does not exist')) {
+        console.warn('[OffscreenDocument] Background script not ready yet.');
+      } else {
+        console.error('[OffscreenDocument] Failed to send message to background:', error);
+      }
     }
   }
 
