@@ -80,13 +80,20 @@ function setupPyodideBridge() {
 
         // Send to background script
         self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+          console.log('[ServiceWorker] sendMessageToChat: Found clients:', clients.length);
           if (clients.length > 0) {
+            console.log('[ServiceWorker] sendMessageToChat: Sending to client[0]');
             clients[0].postMessage({
               type: 'PYODIDE_MESSAGE_SERVICE_WORKER',
               message: jsMessage,
               timestamp: Date.now()
             });
+            console.log('[ServiceWorker] sendMessageToChat: Post message sent successfully');
+          } else {
+            console.error('[ServiceWorker] sendMessageToChat: No clients found to send message');
           }
+        }).catch(error => {
+          console.error('[ServiceWorker] sendMessageToChat: Error finding clients:', error);
         });
 
         return true;

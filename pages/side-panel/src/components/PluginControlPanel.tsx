@@ -260,14 +260,33 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       // Обработка результатов удаления чата
       if (event?.type === 'DELETE_PLUGIN_CHAT_RESPONSE') {
         console.log('[PluginControlPanel] handleChatUpdate - результат удаления чата:', event);
-
+    
         setLoading(false); // Останавливаем загрузку
-
+    
         if (event.success) {
           console.log('[PluginControlPanel] handleChatUpdate: чат успешно удален');
         } else {
           console.error('[PluginControlPanel] handleChatUpdate: ошибка удаления чата', event.error);
           setError(`Ошибка удаления чата: ${event.error}`);
+        }
+      }
+    
+      // === PYODIDE MESSAGE HANDLER ===
+      if (event?.type === 'PYODIDE_MESSAGE_UPDATE') {
+        console.log('[PluginControlPanel] PYODIDE_MESSAGE_UPDATE received:', event.message);
+    
+        if (event.message?.content) {
+          const pyodideMessage: ChatMessage = {
+            id: event.message.id || `pyodide_${event.timestamp || Date.now()}_${Math.random()}`,
+            text: event.message.content,
+            isUser: false, // Python сообщения отображаем как от бота
+            timestamp: event.timestamp || Date.now(),
+          };
+    
+          console.log('[PluginControlPanel] Adding Pyodide message to chat:', pyodideMessage);
+    
+          setMessages(prev => [...prev, pyodideMessage]);
+          console.log('[PluginControlPanel] Pyodide message added to chat');
         }
       }
     };
@@ -315,6 +334,42 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       isPaused,
     });
   });
+
+  // Слушатель для Pyodide сообщений через custom events
+  useEffect(() => {
+    console.log('[PluginControlPanel] Настройка слушателя для pyodide messages');
+
+    const handlePyodideCustomEvent = (event: any) => {
+      const data = event.detail;
+      console.log('[PluginControlPanel] Получен Pyodide custom event:', data);
+
+      if (data?.type === 'PYODIDE_MESSAGE_UPDATE') {
+        console.log('[PluginControlPanel] PYODIDE_MESSAGE_UPDATE received:', data.message);
+
+        if (data.message?.content) {
+          const pyodideMessage: ChatMessage = {
+            id: data.message.id || `pyodide_${data.timestamp || Date.now()}_${Math.random()}`,
+            text: data.message.content,
+            isUser: false, // Python сообщения отображаем как от бота
+            timestamp: data.timestamp || Date.now(),
+          };
+
+          console.log('[PluginControlPanel] Adding Pyodide message to chat:', pyodideMessage);
+
+          setMessages(prev => [...prev, pyodideMessage]);
+          console.log('[PluginControlPanel] Pyodide message added to chat');
+        }
+      }
+    };
+
+    window.addEventListener('PYODIDE_MESSAGE_UPDATE', handlePyodideCustomEvent);
+    console.log('[PluginControlPanel] Слушатель для Pyodide custom events зарегистрирован');
+
+    return () => {
+      window.removeEventListener('PYODIDE_MESSAGE_UPDATE', handlePyodideCustomEvent);
+      console.log('[PluginControlPanel] Слушатель для Pyodide custom events удален');
+    };
+  }, []);
 
   // --- Синхронизация message с draftText после загрузки черновика ---
   useEffect(() => {

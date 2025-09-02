@@ -142,6 +142,27 @@ class MemoryManager:
             'total_pooled_objects': sum(len(pool) for pool in self.object_pool.values())
         }
 
+# ==============================================================================
+# Безопасные wrapper функции для offscreen compatibility
+# ==============================================================================
+async def safe_js_get_setting(setting_name: str, default: Any = False) -> Any:
+    try:
+        result_proxy = await js.get_setting(setting_name)
+        if result_proxy is None:
+            return default
+        return result_proxy.to_py()
+    except (AttributeError, TypeError):
+        return default
+
+def safe_dict_get(data: Any, key: str, default: Any = None) -> Any:
+    try:
+        if isinstance(data, dict):
+            return data.get(key, default)
+        return default
+    except AttributeError:
+        return default
+
+# ==============================================================================
 # Batch Processor для группировки AI запросов
 class BatchProcessor:
     """
@@ -415,9 +436,38 @@ class FastDOMParser:
         self.parsing_time = 0  # будет измерено при первом доступе
 
     def _normalize_html(self):
-        """Нормализация HTML для более эффективного парсинга."""
-        # Удаляем лишние пробелы и переносы строк для уменьшения объема
-        self.html = re.sub(r'\s+', ' ', self.html.strip())
+        """Мягкая нормализация HTML для сохранения структуры данных."""
+        original_size = len(self.html)
+
+        try:
+            # Логируем перед нормализацией
+            js.sendMessageToChat({"content": f"Python: 📊 До нормализации: {original_size} символов"})
+
+            # Смягченная нормализация - удаляем только лишние пробелы и переносы
+            # Сохраняем пробелы между словами, но убираем множественные переносы строк
+            self.html = re.sub(r'[ \t]+', ' ', self.html)  # Сжимаем множественные пробелы и табы
+            self.html = re.sub(r'\n\s*\n', '\n', self.html)  # Убираем пустые строки
+            self.html = re.sub(r'\r\n?', '\n', self.html)  # Стандартизируем переносы строк
+            self.html = self.html.strip()  # Убираем пробелы по краям
+
+            new_size = len(self.html)
+            data_loss = original_size - new_size
+
+            # Логируем результаты нормализации
+            js.sendMessageToChat({"content": f"Python: ✅ После нормализации: {new_size} символов (потеряно: {data_loss}, {data_loss/original_size*100:.1f}%)"})
+
+            # Добавляем статистику в объект
+            self.normalization_stats = {
+                'original_size': original_size,
+                'normalized_size': new_size,
+                'data_loss_bytes': data_loss,
+                'data_loss_percent': round(data_loss / original_size * 100, 1) if original_size > 0 else 0
+            }
+
+        except Exception as e:
+            js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка нормализации: {e}"})
+            # В случае ошибки возвращаем оригинал
+            self.normalization_stats = {'error': str(e)}
 
     def _get_cached_pattern(self, pattern_str: str, flags: int = 0) -> Any:
         """Получить скомпилированный регулярный паттерн из кеша."""
@@ -458,26 +508,77 @@ class FastDOMParser:
 
     def extract_product_info(self) -> Dict[str, Any]:
         """
-        Извлечение основной информации о товаре с использованием оптимизированных селекторов.
-        Возвращает структурированные данные вместо объектов типа SimpleHTMLElement.
+        Извлечение основной информации о товаре с улучшенной обработкой ошибок.
+        Возвращает структурированные данные с fallback логикой.
         """
-        if not hasattr(self, '_parsing_time_calculated'):
-            parsing_start = datetime.now()
+        parsing_start = datetime.now()
+        info = {}
 
-        info = {
-            'title': self._extract_title(),
-            'description': self._extract_description(),
-            'composition': self._extract_composition(),
-            'categories': self._extract_categories(),
-            'price': self._extract_price(),
-            'rating': self._extract_rating()
+        # Поля с приоритетами и fallback обработкой
+        extraction_steps = [
+            ('title', self._extract_title, 'Название товара не найдено'),
+            ('description', self._extract_description, 'Описание товара не найдено'),
+            ('composition', self._extract_composition, 'Состав не указан'),
+            ('categories', self._extract_categories, ['Категория не определена']),
+            ('price', self._extract_price_safe, {'text': 'Цена не найдена', 'amount': 0, 'currency': 'unknown'}),
+            ('rating', self._extract_rating_safe, {'text': 'Рейтинг не найден', 'value': 0, 'max_value': 5.0})
+        ]
+
+        # Извлекаем каждый элемент с обработкой исключений
+        for field_name, extractor_func, fallback_value in extraction_steps:
+            try:
+                extracted_value = extractor_func()
+                if extracted_value is not None:
+                    info[field_name] = extracted_value
+                else:
+                    js.sendMessageToChat({"content": f"Python: ⚠️ {field_name} вернул None, использую fallback"})
+                    info[field_name] = fallback_value
+            except Exception as e:
+                js.sendMessageToChat({"content": f"Python: ❌ Ошибка извлечения {field_name}: {e}"})
+                info[field_name] = fallback_value
+
+        # Вычисляем время парсинга
+        self.parsing_time = (datetime.now() - parsing_start).total_seconds() * 1000
+
+        # Добавляем статистику успешного извлечения
+        success_count = sum(1 for k, v in info.items()
+                           if (isinstance(v, str) and v != info[k] if k in ['title', 'description', 'composition'] else True) and
+                           (isinstance(v, list) and len(v) > 0 and v[0] != 'Категория не определена' if k == 'categories' else True) and
+                           (isinstance(v, dict) and v.get('amount', 0) > 0 if k in ['price', 'rating'] else True))
+
+        js.sendMessageToChat({"content": f"Python: 📊 Извлечено полей: {success_count}/6 (успех: {success_count*100//6}%)"})
+
+        # Возвращаем стандартизированный ответ
+        return {
+            'title': info.get('title', 'Название товара не найдено'),
+            'description': info.get('description', 'Описание товара не найдено'),
+            'composition': info.get('composition', 'Состав не указан'),
+            'categories': info.get('categories', ['Категория не определена']),
+            'price': info.get('price', {'text': 'Цена не найдена', 'amount': 0, 'currency': 'unknown'}),
+            'rating': info.get('rating', {'text': 'Рейтинг не найден', 'value': 0, 'max_value': 5.0}),
+            'extraction_stats': {
+                'total_fields': 6,
+                'successful_fields': success_count,
+                'success_rate_percent': success_count * 100 // 6,
+                'parsing_time_ms': round(self.parsing_time, 2)
+            }
         }
 
-        if not hasattr(self, '_parsing_time_calculated'):
-            self.parsing_time = (datetime.now() - parsing_start).total_seconds() * 1000
-            self._parsing_time_calculated = True
+    def _extract_price_safe(self) -> Dict[str, Any]:
+        """Безопасная обертка для извлечения цены."""
+        try:
+            return self._extract_price()
+        except Exception as e:
+            js.sendMessageToChat({"content": f"Python: ❌ Ошибка извлечения цены: {e}"})
+            return {'text': 'Цена не найдена', 'amount': 0, 'currency': 'unknown'}
 
-        return info
+    def _extract_rating_safe(self) -> Dict[str, Any]:
+        """Безопасная обертка для извлечения рейтинга."""
+        try:
+            return self._extract_rating()
+        except Exception as e:
+            js.sendMessageToChat({"content": f"Python: ❌ Ошибка извлечения рейтинга: {e}"})
+            return {'text': 'Рейтинг не найден', 'value': 0, 'max_value': 5.0}
 
     def _extract_title(self) -> str:
         """Извлечение заголовка товара с использованием кешированных паттернов."""
@@ -493,12 +594,32 @@ class FastDOMParser:
         if match:
             title = match.group(1).strip()
             if len(title) > 10:  # Фильтр слишком коротких заголовков
+                js.sendMessageToChat({"content": f"Python: ✅ Найден заголовок: {title[:50]}..."})
                 return title
-
-        return "Название товара не найдено"
+    
+            # Fallback: Пробуем более простые паттерны
+            fallback_patterns = [
+                r'<title[^>]*>([^<]+)</title>',
+                r'<h1[^>]*>([^<]+)</h1>',
+                r'>([^<]{15,100})</'  # Любой текст 15-100 символов в угловых скобках
+            ]
+    
+            fallback_match = self._search_with_pattern(fallback_patterns, re.IGNORECASE)
+            if fallback_match:
+                title = fallback_match.group(1).strip()
+                if len(title) > 10:
+                    js.sendMessageToChat({"content": f"Python: ✅ Найден заголовок (fallback): {title[:50]}..."})
+                    return title
+    
+            js.sendMessageToChat({"content": "Python: ⚠️ Заголовок товара не найден"})
+            return "Название товара не найдено"
 
     def _extract_description(self) -> str:
         """Извлечение описания товара с кешированными паттернами."""
+        js.sendMessageToChat({"content": "Python: 🔍 Извлекаю описание товара..."})
+
+        original_html_len = len(self.html)
+
         # Оптимизированные паттерны для описания товара
         desc_patterns = [
             r'<div[^>]*class="[^"]*description[^"]*"[^>]*>([^<]*(?:<[^/][^>]*>[^<]*</[^>]+>[^<]*)*)</div>',
@@ -510,14 +631,25 @@ class FastDOMParser:
         if match:
             # Кешируем regex для очистки HTML тегов
             clean_pattern = self._get_cached_pattern(r'<[^>]+>', re.I)
-            description = clean_pattern.sub('', match.group(1)).strip()
-            if len(description) > 20:
-                return description
+            cleaned_content = clean_pattern.sub('', match.group(1)).strip()
 
+            # Логируем потери данных при извлечении
+            raw_content_len = len(match.group(1))
+            cleaned_len = len(cleaned_content)
+            data_loss = raw_content_len - cleaned_len
+
+            js.sendMessageToChat({"content": f"Python: 📊 Извлечено описание: {cleaned_len} символов (потеряно {data_loss} при очистке HTML)"})
+
+            if len(cleaned_content) > 20:
+                return cleaned_content
+
+        js.sendMessageToChat({"content": "Python: ⚠️ Описание товара не найдено"})
         return "Описание товара не найдено"
 
     def _extract_composition(self) -> str:
         """Извлечение состава товара с кешированными паттернами."""
+        js.sendMessageToChat({"content": "Python: 🔍 Извлекаю состав товара..."})
+
         # Оптимизированные паттерны для состава товара
         comp_patterns = [
             r'<div[^>]*class="[^"]*composition[^"]*">([^<]*(?:<[^/][^>]*>[^<]*</[^>]+>[^<]*)*)</div>',
@@ -529,44 +661,123 @@ class FastDOMParser:
         if match:
             # Кешируем regex для очистки HTML тегов
             clean_pattern = self._get_cached_pattern(r'<[^>]+>', re.I)
-            composition = clean_pattern.sub('', match.group(1)).strip()
-            if len(composition) > 10:
-                return composition
+            cleaned_content = clean_pattern.sub('', match.group(1)).strip()
 
+            # Логируем потери данных при извлечении
+            raw_content_len = len(match.group(1))
+            cleaned_len = len(cleaned_content)
+            data_loss = raw_content_len - cleaned_len
+
+            js.sendMessageToChat({"content": f"Python: 📊 Извлечён состав: {cleaned_len} символов (потеряно {data_loss} при очистке HTML)"})
+
+            if len(cleaned_content) > 10:
+                return cleaned_content
+
+        js.sendMessageToChat({"content": "Python: ⚠️ Состав товара не найден"})
         return "Состав не указан"
 
     def _extract_categories(self) -> List[str]:
-        """Извлечение категорий товара с оптимизированными паттернами."""
+        """Извлечение категорий товара с улучшенной fallback логикой."""
         categories = []
 
-        # Поиск хлебных крошек (breadcrumbs) с кешированным паттерном
+        try:
+            # Пробуем извлечь из хлебных крошек с fallback обработкой
+            categories = self._extract_categories_from_breadcrumbs()
+        except Exception as e:
+            js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка извлечения breadcrumb категорий: {e}"})
+
+        # Fallback 1: Поиск по альтернативным селекторам
+        if not categories:
+            try:
+                categories = self._extract_categories_from_selectors()
+            except Exception as e:
+                js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка извлечения селекторных категорий: {e}"})
+
+        # Fallback 2: Прямой поиск текстовой информации
+        if not categories:
+            try:
+                categories = self._extract_categories_from_text()
+            except Exception as e:
+                js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка извлечения текстовых категорий: {e}"})
+
+        # Логируем результат
+        if categories:
+            js.sendMessageToChat({"content": f"Python: ✅ Найдено {len(categories)} категорий: {', '.join(categories[:3])}"})
+        else:
+            js.sendMessageToChat({"content": "Python: ⚠️ Категории не найдены, использую fallback"})
+
+        return categories[:5] if categories else ["Категория не определена"]
+
+    def _extract_categories_from_breadcrumbs(self) -> List[str]:
+        """Извлечение категорий из хлебных крошек с улучшенной обработкой."""
         breadcrumb_pattern = r'<[^>]*class="[^"]*breadcrumb[^"]*"[^>]*>(.*?)</[^>]+>'
         breadcrumb = self._get_cached_pattern(breadcrumb_pattern, re.IGNORECASE | re.DOTALL)
         breadcrumb_match = breadcrumb.search(self.html)
 
         if breadcrumb_match:
-            # Извлечение текста из хлебных крошек
+            # Извлечение текста из хлебных крошек с обработкой вложенности
             breadcrumb_html = breadcrumb_match.group(1)
-            # Кешируем паттерн для ссылок
-            link_pattern = self._get_cached_pattern(r'<a[^>]*>([^<]+)</a>', re.IGNORECASE)
-            link_texts = link_pattern.findall(breadcrumb_html)
 
-            # Фильтрация и очистка категорий
-            categories = [text.strip() for text in link_texts if len(text.strip()) > 1]
-
-        # Если хлебные крошки не найдены, поиск по другим селекторам с оптимизацией
-        if not categories:
-            category_patterns = [
-                r'<span[^>]*class="[^"]*category[^"]*"[^>]*>([^<]+)</span>',
-                r'<div[^>]*class="[^"]*category[^"]*"[^>]*>([^<]+)</div>'
+            # Более гибкие паттерны для извлечения ссылок
+            link_patterns = [
+                r'<a[^>]*>([^<]+)</a>',
+                r'<span[^>]*>([^<]+)</span>',
+                r'([^>]+?)'  # Fallback: просто текст без HTML
             ]
 
-            # Кешируем findall результаты
-            for pattern_str in category_patterns:
+            categories = []
+            for pattern_str in link_patterns:
+                try:
+                    link_pattern = self._get_cached_pattern(pattern_str, re.IGNORECASE)
+                    matches = link_pattern.findall(breadcrumb_html)
+
+                    for match in matches[:8]:  # Ограничение для предотвращения спама
+                        text = match.strip()
+                        if len(text) > 1 and not any(word in text.lower() for word in ['home', 'главная', 'каталог']):
+                            categories.append(text)
+                except Exception:
+                    continue  # Пропускаем проблемный паттерн, пробуем следующий
+
+            return categories[:5]  # Ограничение количества категорий
+
+        return []
+
+    def _extract_categories_from_selectors(self) -> List[str]:
+        """Извлечение категорий из стандартных HTML селекторов."""
+        category_patterns = [
+            r'<span[^>]*class="[^"]*category[^"]*"[^>]*>([^<]+)</span>',
+            r'<div[^>]*class="[^"]*category[^"]*"[^>]*>([^<]+)</div>',
+            r'<h\d+[^>]*class="[^"]*(?:category|nav)[^"]*"[^>]*>([^<]+)</\w+>',
+            r'<nav[^>]*>(?:.*?)<[^>]*class="[^"]*category[^"]*"[^>]*>([^<]+)</span>'
+        ]
+
+        categories = []
+        for pattern_str in category_patterns:
+            try:
                 category_matches = self._findall_with_pattern(pattern_str, re.IGNORECASE)
                 categories.extend([match.strip() for match in category_matches if len(match.strip()) > 1])
+            except Exception:
+                continue  # Пропускаем проблемный паттерн
 
-        return categories[:5] if categories else ["Категория не определена"]
+        return categories[:5]
+
+    def _extract_categories_from_text(self) -> List[str]:
+        """Extraction of categories from plain text content."""
+        # Находим контент содержащий возможные категории
+        text_patterns = [
+            r'(?:раздел[:\s]*|категория[:\s]*)([^,\n]+)',
+            r'(?:товары?|продукты?)[:\s]*([^\n]+)',
+        ]
+
+        categories = []
+        for pattern_str in text_patterns:
+            try:
+                matches = self._findall_with_pattern(pattern_str, re.IGNORECASE)
+                categories.extend([match.strip() for match in matches if len(match.strip()) > 1])
+            except Exception:
+                continue
+
+        return categories[:5] if categories else []
 
     def _extract_price(self) -> Dict[str, Any]:
         """Извлечение цены товара."""
@@ -737,10 +948,56 @@ async def analyze_ozon_product(input_data: Dict[str, Any]) -> Dict[str, Any]:
         шагов в `workflow.json` (например, для `perform_deep_analysis`).
     """
     try:
-        page_html = input_data.get('page_html', '')
-        if not page_html:
-            raise ValueError("HTML страницы не предоставлен для анализа.")
-        
+        # Шаг 0: Валидация входных данных с offscreen compatibility support
+        if input_data is None:
+            raise ValueError("Входные данные не предоставлены (None).")
+
+        if not isinstance(input_data, dict):
+            try:
+                # Попытка преобразования из других типов в offscreen контексте
+                input_data = dict(input_data) if hasattr(input_data, '__iter__') else {"page_html": str(input_data)}
+            except (TypeError, AttributeError):
+                raise ValueError("Входные данные должны быть словарем или конвертируемым в словарь.")
+
+        # Безопасное извлечение HTML с фоллбеком
+        page_html = None
+        try:
+            # Попытка различных способов доступа к данным
+            if 'page_html' in input_data:
+                page_html = input_data['page_html']
+            elif 'html' in input_data:
+                page_html = input_data['html']
+            elif 'content' in input_data:
+                page_html = input_data['content']
+            else:
+                # Сбор всех возможных HTML-подобных данных
+                for key, value in input_data.items():
+                    if isinstance(value, str) and len(value) > 100 and '<' in value and '>' in value:
+                        page_html = value
+                        break
+        except (KeyError, TypeError, AttributeError):
+            pass
+
+        # Финальная проверка извлеченных данных
+        if page_html is None:
+            raise ValueError("HTML страницы не найден во входных данных.")
+
+        if not isinstance(page_html, str):
+            # Попытка преобразования в строку для offscreen контекста
+            try:
+                page_html = str(page_html)
+            except Exception:
+                raise ValueError("HTML страницы должен быть строкой или конвертируемым в строку.")
+
+        if len(page_html.strip()) < 50:  # Минимальная длина для валидного HTML
+            raise ValueError(f"HTML страницы слишком короткий ({len(page_html)} символов). Минимум 50 символов.")
+
+        # Дополнительные проверки для offscreen контекста
+        if '<html' not in page_html.lower() and '<body' not in page_html.lower() and '<div' not in page_html.lower():
+            js.sendMessageToChat({"content": "Python: ⚠️ HTML не содержит типичных тегов. Возможно, это не полноценная страница."})
+
+        # First status message - confirm function execution started
+
         # Временная заглушка для парсера. В будущем здесь будет использоваться
         # библиотека `beautifulsoup4`, которая будет установлена как зависимость
         # плагина через `micropip`.
@@ -803,7 +1060,7 @@ async def analyze_ozon_product(input_data: Dict[str, Any]) -> Dict[str, Any]:
         js.sendMessageToChat({"content": f"Python: ✅ Параллельный анализ завершен!"})
         
         # Шаг 4: Проверяем настройки плагина, заданные пользователем в UI
-        enable_deep_analysis = await js.get_setting("enable_deep_analysis").to_py()
+        enable_deep_analysis = await safe_js_get_setting("enable_deep_analysis", False)
         
         # Шаг 5: Формируем условное предложение для глубокого анализа
         # Это поле будет использоваться в `workflow.json` в условии `run_if`.
@@ -875,9 +1132,10 @@ async def pre_warm_pyodide_engine() -> Dict[str, Any]:
         # Вызываем функцию pre-warm из хоста
         warmResult = await js.preWarmPyodide()
 
-        if warmResult.get('success', False):
-            duration = warmResult.get('preWarmDuration', 0)
-            message = warmResult.get('message', 'Pre-warm completed')
+        success = safe_dict_get(warmResult, 'success', False)
+        if success:
+            duration = safe_dict_get(warmResult, 'preWarmDuration', 0)
+            message = safe_dict_get(warmResult, 'message', 'Pre-warm completed')
             js.sendMessageToChat({"content": f"Python: ✅ Разогрев завершен! Время: {duration}ms"})
 
             return {
@@ -974,8 +1232,8 @@ async def _analyze_composition_vs_description(description: str, composition: str
     Совпадения: {len(key_elements['matches'])}/{len(key_elements['total_comp'])} найдено
 
     Полный анализ:
-    Описание: {description[:500]}...
-    Состав: {composition[:500]}...
+    Описание: {description[:2000]}...
+    Состав: {composition[:2000]}...
 
     Оцени соответствие по шкале 1-10 и верни JSON: {{"score": число, "reasoning": "объяснение", "confidence": значение_0_1}}
     """
@@ -1071,13 +1329,15 @@ async def _call_ai_model_immediate(model_alias: str, prompt: str, context: Optio
 
     try:
         response_proxy = await js.llm_call(model_alias, {"prompt": prompt})
+        if response_proxy is None:
+            raise Exception("js.llm_call return None response proxy")
         result = response_proxy.to_py()
 
-        if result is None or result.get("error"):
-            error_msg = result.get("error_message", "Неизвестная ошибка") if result else "Пустой ответ от хоста"
+        if result is None or safe_dict_get(result, "error"):
+            error_msg = safe_dict_get(result, "error_message", "Неизвестная ошибка") if result else "Пустой ответ от хоста"
             raise Exception(f"Ошибка вызова API: {error_msg}")
 
-        response_text = result.get("response", "Нет ответа от модели.")
+        response_text = safe_dict_get(result, "response", "Нет ответа от модели.")
         response_time = int((datetime.now() - start_time).total_seconds() * 1000)
 
         if response_text and not response_text.startswith("Ошибка"):
@@ -1174,7 +1434,7 @@ async def _find_similar_products(categories: List[str], composition: str) -> Lis
     Найди 3-5 аналогичных товаров на основе:
     Категории: {', '.join(categories)}
     Тип продукта: {product_type}
-    Состав: {composition[:300]}...
+    Состав: {composition[:1000]}...
 
     Проанализируй характеристики аналогичных товаров и верни результаты в формате JSON:
     {{"analogs": [

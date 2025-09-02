@@ -486,6 +486,45 @@ const SidePanel = () => {
     }
   };
 
+  // HANDLER для сообщений от Pyodide через background - перенос messages в PluginControlPanel
+  useEffect(() => {
+    console.log('[SidePanel] Добавлен handler для PYODIDE_MESSAGE');
+
+    const handlePyodideMessage = (message: any, sender: any, sendResponse: any) => {
+      console.log('[SidePanel] Принято сообщение от Pyodide:', message);
+
+      if (message.type === 'PYODIDE_MESSAGE' && selectedPlugin) {
+        console.log('[SidePanel] PYODIDE_MESSAGE получено:', message.message);
+
+        // Отправляем событие в PluginControlPanel через custom event
+        if (message.message && message.message.content) {
+          console.log('[SidePanel] Отправляем PYODIDE_MESSAGE_UPDATE в PluginControlPanel');
+
+          const customEvent = new CustomEvent('PYODIDE_MESSAGE_UPDATE', {
+            detail: {
+              type: 'PYODIDE_MESSAGE_UPDATE',
+              message: message.message,
+              timestamp: message.timestamp
+            }
+          });
+
+          window.dispatchEvent(customEvent);
+          console.log('[SidePanel] Событие PYODIDE_MESSAGE_UPDATE отправлено');
+        }
+
+        return true;
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(handlePyodideMessage);
+    console.log('[SidePanel] Handler для PYODIDE_MESSAGE зарегистрирован');
+
+    return () => {
+      chrome.runtime.onMessage.removeListener(handlePyodideMessage);
+      console.log('[SidePanel] Handler для PYODIDE_MESSAGE удален');
+    };
+  }, [selectedPlugin]);
+
   return (
     <LocalErrorBoundary>
       {/* AI-First: Основной layout сайдпанели, все визуальные компоненты локальные */}

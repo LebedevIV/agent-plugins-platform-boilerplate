@@ -1525,6 +1525,41 @@ chrome.runtime.onMessage.addListener(
          }
 
          return true;
+       } else if (msg.type === 'PYODIDE_MESSAGE_SERVICE_WORKER') {
+         // Ретрансмировать PYODIDE_MESSAGE в UI (в Side Panel)
+         console.log('[background][PYODIDE_SERVICE_WORKER] PYODIDE_MESSAGE received from offscreen:', msg);
+
+         if (msg.pluginId && msg.pageKey && msg.data) {
+           try {
+             // Сохраняем сообщение как плагиновый чат
+             const pyodideMessage: ChatMessage = {
+               role: 'plugin',
+               content: String(msg.data),
+               timestamp: msg.timestamp || Date.now()
+             };
+
+             await pluginChatApi.saveMessage(msg.pluginId, getPageKey(msg.pageKey), pyodideMessage);
+             broadcastChatUpdate(msg.pluginId, getPageKey(msg.pageKey));
+
+             console.log('[background][PYODIDE_SERVICE_WORKER] PYODIDE_MESSAGE relayed to side panel:', {
+               pluginId: msg.pluginId,
+               pageKey: msg.pageKey,
+               messageLength: pyodideMessage.content?.length
+             });
+
+             return true;
+           } catch (saveError) {
+             console.error('[background][PYODIDE_SERVICE_WORKER] Failed to save PYODIDE_MESSAGE to chat:', saveError);
+             return true;
+           }
+         } else {
+           console.warn('[background][PYODIDE_SERVICE_WORKER] Missing required fields in PYODIDE_MESSAGE:', {
+             pluginId: !!msg.pluginId,
+             pageKey: !!msg.pageKey,
+             data: !!msg.data
+           });
+           return true;
+         }
        }
      }
    }

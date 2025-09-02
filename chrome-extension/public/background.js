@@ -254,10 +254,17 @@ class LLMRequestHandler {
     console.log('[Coordinator] Pyodide message from Service Worker:', data.message);
 
     // Send message to UI components
+    console.log('[Coordinator] handlePyodideMessage: Forwarding to chrome.runtime.sendMessage');
     chrome.runtime.sendMessage({
       type: 'PYODIDE_MESSAGE',
       message: data.message,
       timestamp: data.timestamp
+    }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error('[Coordinator] Error sending PYODIDE_MESSAGE:', chrome.runtime.lastError);
+      } else {
+        console.log('[Coordinator] PYODIDE_MESSAGE sent successfully, response:', response);
+      }
     });
   }
 }

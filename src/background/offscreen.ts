@@ -20,7 +20,32 @@
  */
 
 /// <reference types="chrome"/>
-/// <reference types="pyodide"/>
+
+// Pyodide type declarations
+interface PyodideInterface {
+  runPythonAsync(code: string): Promise<any>;
+  runPython(code: string): any;
+  loadPackage(packages: string | string[]): Promise<void>;
+  globals: Map<string, any>;
+  [key: string]: any;
+}
+
+interface LoadPyodideOptions {
+  indexURL?: string;
+  stdin?: string[];
+  stdout?: (text: string) => void;
+  stderr?: (text: string) => void;
+}
+
+interface LoadPyodide {
+  (options?: LoadPyodideOptions): Promise<PyodideInterface>;
+}
+
+declare global {
+  const loadPyodide: LoadPyodide;
+  function importScripts(...urls: string[]): void;
+}
+
 
 // ==============================================================================
 // ГЛОБАЛЬНЫЕ ИНТЕРФЕЙСЫ И ТИПЫ
@@ -49,6 +74,7 @@ interface WorkflowContext {
   startTime: number;
   logger: Logger;
   hostApi: Record<string, any>;
+  [key: string]: any; // Index signature for dynamic property access
 }
 
 interface Logger {
@@ -166,7 +192,9 @@ class MemoryManager {
     // Ротация если слишком много элементов
     if (this.lruCache.size > this.maxPoolSize) {
       const firstKey = this.lruCache.keys().next().value;
-      this.lruCache.delete(firstKey);
+      if (firstKey !== undefined) {
+        this.lruCache.delete(firstKey);
+      }
     }
   }
 
@@ -201,10 +229,10 @@ class MemoryManager {
 
   getStats(): Record<string, any> {
     return {
-      poolSize: Array.from(this.objectPool.entries()).reduce((acc, [key, arr]) => {
+      poolSize: Array.from(this.objectPool.entries()).reduce((acc: Record<string, number>, [key, arr]) => {
         acc[key] = arr.length;
         return acc;
-      }, {}),
+      }, {} as Record<string, number>),
       cacheSize: this.lruCache.size,
       activeObjects: Object.fromEntries(this.activeObjects)
     };
@@ -292,7 +320,7 @@ class BatchProcessor {
 
       // Для множественных - объединение в один промпт
       if (requests.every(r => !r.context)) {
-        const combinedPrompt = requests.map(r => `REQUEST_${requests.indexOf(r) + 1}: ${r.prompt}`).join('\n\n---SEPARATOR---\n\n');
+        let combinedPrompt = requests.map(r => `REQUEST_${requests.indexOf(r) + 1}: ${r.prompt}`).join('\n\n---SEPARATOR---\n\n');
         combinedPrompt += '\n\nОтветьте на каждый запрос отдельно, разделяя ---SEPARATOR---.';
 
         const combinedResponse = await this._callAiModel(model, combinedPrompt);
@@ -389,10 +417,11 @@ class AiClient {
 // ==============================================================================
 
 class PyodideManager {
-  private pyodide: any = null;
+  private pyodide: PyodideInterface | null = null;
   private isReady: boolean = false;
   private initializationPromise: Promise<void> | null = null;
   private logger: OffscreenLogger;
+
   private promises: Map<string, {resolve: Function, reject: Function, timeout: number}> = new Map();
 
   constructor(logger: OffscreenLogger) {
@@ -400,7 +429,7 @@ class PyodideManager {
     this._initializePyodide();
   }
 
-  private async _initializePyodide(): void {
+  private async _initializePyodide(): Promise<void> {
     if (this.initializationPromise) {
       await this.initializationPromise;
       return;
@@ -422,28 +451,106 @@ class PyodideManager {
       // Инициализация Pyodide
       this.logger.addMessage('DEBUG', 'Loading Pyodide loader...');
 
-      // Импорт Pyodide
-      const { loadPyodide } = await import('https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js');
+      // Статический импорт Pyodide через importScripts для совместимости с CSP
+      if (!(window as any).loadPyodide) {
+        importScripts('/pyodide/pyodide.js');
+        this.logger.addMessage('DEBUG', 'Pyodide script loaded and executed');
+      }
 
-      this.pyodide = await loadPyodide({
-        indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/',
+      // Теперь loadPyodide доступен глобально
+      const loadPyodideFn = (window as any).loadPyodide as LoadPyodide;
+
+      this.pyodide = await loadPyodideFn({
+        indexURL: '/pyodide/',
         stdin: [],
         stdout: (text: string) => console.log('[PYODIDE]', text),
         stderr: (text: string) => console.error('[PYODIDE ERROR]', text)
       });
 
+      // ==============================================================================
+      // JS-BRIDGE устанавливается СРАЗУ ПОСЛЕ ИНИЦИАЛИЗАЦИИ PYODIDE
+      // ==============================================================================
+
+      // Создаем двунаправленный мост для общения Python -> background
+      const hostCallPromises = new Map();
+
+
+
+      if (this.pyodide) {
+
+
+        this.pyodide.globals.set('js', {
+          sendMessageToChat: (message: any) => {
+            const jsMessage = message.toJs({ dict_converter: Object.fromEntries });
+            // Отправляем сообщение в background для логирования в чате
+            chrome.runtime.sendMessage({
+              type: 'PYODIDE_LOG_MESSAGE', // Используем новый тип для ясности
+              payload: {
+                role: 'plugin',
+                content: `[PYTHON] ${jsMessage.content}`,
+                timestamp: Date.now()
+              }
+            });
+          },
+
+          // Реализуем асинхронные вызовы, которые Python будет ждать через `await`
+          llm_call: (modelAlias: any, params: any) => {
+            const callId = `host_call_${Date.now()}_${Math.random()}`;
+            return new Promise((resolve, reject) => {
+              hostCallPromises.set(callId, { resolve, reject });
+              chrome.runtime.sendMessage({
+                type: 'HOST_CALL',
+                payload: { func: 'llm_call', callId, args: [modelAlias.toJs(), params.toJs()] }
+              });
+            });
+          },
+
+          get_setting: (settingName: any) => {
+            const callId = `host_call_${Date.now()}_${Math.random()}`;
+            return new Promise((resolve, reject) => {
+              hostCallPromises.set(callId, { resolve, reject });
+              chrome.runtime.sendMessage({
+                type: 'HOST_CALL',
+                payload: { func: 'get_setting', callId, args: [settingName.toJs()] }
+              });
+            });
+          }
+        });
+
+        this.logger.addMessage('DEBUG', 'JS-bridge установлен для Pyodide');
+      }
+
+      // Добавляем слушатель для обработки ответов от background.js
+      chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        if (message.type === 'HOST_CALL_RESPONSE') {
+          const { callId, result, error } = message.payload;
+          const promiseCallbacks = hostCallPromises.get(callId);
+
+          if (promiseCallbacks) {
+            hostCallPromises.delete(callId);
+            if (error) {
+              promiseCallbacks.reject(new Error(error));
+            } else {
+              promiseCallbacks.resolve(result);
+            }
+          }
+        }
+      });
+
       // Установка дополнительных пакетов
-      await this.pyodide.loadPackage('numpy');
-      await this.pyodide.loadPackage('pandas');
+      if (this.pyodide) {
+        await this.pyodide.loadPackage('numpy');
+        await this.pyodide.loadPackage('pandas');
 
-      // Глобальная инициализация
-      await this.pyodide.runPythonAsync(`
-        import sys
-        print("Pyodide ready with packages:", sys.packages.keys())
-      `);
+        // Глобальная инициализация
+        await this.pyodide.runPythonAsync(`
+          import sys
+          print("Pyodide ready with packages:", sys.packages.keys())
+        `);
 
-      this.isReady = true;
-      this.logger.addMessage('INFO', 'Pyodide core packages loaded');
+        this.isReady = true;
+        this.logger.addMessage('INFO', 'Pyodide core packages loaded');
+      }
 
     } catch (error) {
       this.logger.addMessage('ERROR', `Failed to initialize Pyodide: ${error}`);
@@ -460,6 +567,10 @@ class PyodideManager {
 
   async runPython(code: string, context?: any): Promise<any> {
     await this.awaitReady();
+
+    if (!this.pyodide) {
+      throw new Error('Pyodide is not initialized');
+    }
 
     try {
       // Добавление контекста в глобальное пространство Python
@@ -478,28 +589,52 @@ class PyodideManager {
     }
   }
 
-  async loadAndRunFunction(pluginId: string, functionName: string, params: any[]): Promise<any> {
+  async loadAndRunFunction(pluginId: string, functionName: string, params: any): Promise<any> {
+    await this.awaitReady();
+    if (!this.pyodide) {
+      throw new Error('Pyodide is not initialized');
+    }
+
     try {
-      // Загрузка Python файла плагина
+      // Шаг 1: Загружаем код плагина в память Pyodide
       const scriptUrl = `plugins/${pluginId}/mcp_server.py`;
+      this.logger.addMessage('DEBUG', `Загрузка Python-скрипта: ${scriptUrl}`);
       const response = await fetch(scriptUrl);
 
       if (!response.ok) {
-        throw new Error(`Failed to load Python script for plugin ${pluginId}`);
+        throw new Error(`Не удалось загрузить Python-скрипт для плагина ${pluginId}`);
       }
 
       const pythonCode = await response.text();
+      // Выполняем весь скрипт, чтобы все функции определились
+      await this.pyodide.runPythonAsync(pythonCode);
+      this.logger.addMessage('DEBUG', `Скрипт ${pluginId} выполнен, функции определены.`);
 
-      // Выполнение скрипта
-      await this.runPython(pythonCode);
+      // Шаг 2: Получаем прямую ссылку (прокси) на нужную нам функцию
+      const toolFunc = this.pyodide.globals.get(functionName);
+      if (typeof toolFunc !== 'function') {
+        throw new Error(`Функция "${functionName}" не найдена в Python-скрипте плагина ${pluginId}.`);
+      }
+      this.logger.addMessage('DEBUG', `Получена ссылка на Python-функцию: ${functionName}`);
 
-      // Вызов функции
-      const result = await this.runPython(`${functionName}(*${JSON.stringify(JSON.stringify(params))})`);
+      // Шаг 3: Вызываем Python-функцию напрямую, как если бы это была JS-функция
+      // Pyodide сам позаботится о корректном преобразовании `params` из JS-объекта
+      // в Python-словарь (PyProxy).
+      this.logger.addMessage('DEBUG', `Вызов ${functionName} с параметрами:`, params);
+      const resultProxy = await toolFunc(params);
+      
+      this.logger.addMessage('DEBUG', `Python-функция ${functionName} вернула результат (PyProxy).`);
+
+      // Шаг 4: Конвертируем результат (PyProxy) обратно в нативный JS-объект
+      const result = resultProxy.toJs({ dict_converter: Object.fromEntries });
+      resultProxy.destroy(); // Освобождаем память
+      
+      this.logger.addMessage('DEBUG', `Результат конвертирован в JS-объект.`, result);
 
       return result;
 
     } catch (error) {
-      console.error(`[PyodideManager] Error loading/running ${functionName} from ${pluginId}:`, error);
+      this.logger.addMessage('ERROR', `Ошибка при вызове Python-инструмента ${pluginId}/${functionName}: ${error}`);
       throw error;
     }
   }
@@ -523,6 +658,7 @@ class WorkflowEngine {
     this.batchProcessor = new BatchProcessor();
     this.pyodideManager = new PyodideManager(this.logger);
   }
+
 
   async runWorkflow(pluginId: string, context: Partial<WorkflowContext>): Promise<any> {
     const workflowStartTime = performance.now();
@@ -631,13 +767,17 @@ class WorkflowEngine {
   }
 
   private async _executeStep(step: WorkflowStep, context: WorkflowContext): Promise<any> {
-    const toolInput = this._resolveInputs(step.inputs || {}, context);
+    // ▼▼▼ ИЗМЕНЕНИЕ №1: `toolInput` теперь будет ОБЪЕКТОМ, а не массивом ▼▼▼
+    const toolInput = this._resolveInputs(step.inputs ?? {}, context);
     const [toolType, toolName] = step.tool.split('.');
 
     switch (toolType) {
       case 'host':
-        return await this._callHostApi(toolName, toolInput, context);
+        // Для Host API мы по-прежнему передаем аргументы как массив,
+        // так как JS-функции используют spread-оператор (...params)
+        return await this._callHostApi(toolName, Object.values(toolInput), context);
       case 'python':
+        // Для Python мы передаем ЕДИНСТВЕННЫЙ ОБЪЕКТ
         return await this._callPythonTool(context.pluginId, toolName, toolInput, context);
       default:
         throw new Error(`Неизвестный тип инструмента: ${step.tool}`);
@@ -646,16 +786,16 @@ class WorkflowEngine {
 
   private async _callHostApi(functionName: string, params: any[], context: WorkflowContext): Promise<any> {
     const api = context.hostApi;
-    if (api && typeof api[functionName] === 'function') {
+    if (api && functionName in api && typeof api[functionName] === 'function') {
       return await api[functionName](...params);
     }
     throw new Error(`Host API функция "${functionName}" не найдена`);
   }
 
-  private async _callPythonTool(pluginId: string, toolName: string, input: any, context: WorkflowContext): Promise<any> {
+  private async _callPythonTool(pluginId: string, toolName: string, input: Record<string, any>, context: WorkflowContext): Promise<any> {
     try {
-      // Делегация выполнения Python кода в Pyodide
-      const result = await this.pyodideManager.loadAndRunFunction(pluginId, toolName, [input]);
+      // ▼▼▼ ИЗМЕНЕНИЕ №2: Передаем `input` как есть, без оборачивания в массив ▼▼▼
+      const result = await this.pyodideManager.loadAndRunFunction(pluginId, toolName, input);
       return result;
     } catch (error) {
       this.logger.addMessage('ERROR', `Ошибка вызова Python инструмента ${toolName}: ${error}`);
@@ -716,18 +856,18 @@ class WorkflowEngine {
     return current;
   }
 
-  private _resolveInputs(inputs: Record<string, any>, context: WorkflowContext): any[] {
-    const resolved: any[] = [];
+  private _resolveInputs(inputs: Record<string, any>, context: WorkflowContext): Record<string, any> {
+    const resolved: Record<string, any> = {};
 
     for (const [key, value] of Object.entries(inputs)) {
       if (typeof value === 'string' && value.startsWith('{{') && value.endsWith('}}')) {
         const path = value.slice(2, -2).trim();
-        resolved.push(this._getContextValue(path, context));
+        resolved[key] = this._getContextValue(path, context);
       } else {
-        resolved.push(value);
+        resolved[key] = value;
       }
     }
-
+    
     return resolved;
   }
 
@@ -810,7 +950,7 @@ class OffscreenDocument {
     console.log('[OffscreenDocument] Message handler established');
   }
 
-  private async _handleMessage(message: any, sender: any, sendResponse: Function): void {
+  private async _handleMessage(message: any, sender: any, sendResponse: Function): Promise<void> {
     const logger = this.workflowEngine.getLogger();
 
     try {
@@ -939,7 +1079,7 @@ class OffscreenDocument {
 // ==============================================================================
 
 // Инициализация глобальных переменных
-let offscreenDocument: OffscreenDocument;
+let offscreenDocument: OffscreenDocument | undefined;
 
 // Основная точка входа
 document.addEventListener('DOMContentLoaded', () => {
@@ -952,6 +1092,7 @@ document.addEventListener('DOMContentLoaded', () => {
   (window as any).offscreenDebug = offscreenDocument;
 });
 
+// Type-safe export - will be undefined until initialized
 export default offscreenDocument;
 
 // ==============================================================================
