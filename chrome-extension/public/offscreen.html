@@ -5,34 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body>
-    <script>
-        // Load Pyodide from local copy with error handling
-        try {
-            const script = document.createElement('script');
-            script.src = './pyodide/pyodide.js';
-            script.onload = function() {
-                console.log('Pyodide loaded successfully');
-                loadOffscreenScript();
-            };
-            script.onerror = function() {
-                console.error('Failed to load Pyodide from local copy');
-            };
-            document.head.appendChild(script);
-        } catch (error) {
-            console.error('Error loading Pyodide:', error);
-        }
-
-        function loadOffscreenScript() {
-            const offscreenScript = document.createElement('script');
-            offscreenScript.src = './offscreen.js';
-            offscreenScript.onload = function() {
-                console.log('Offscreen script loaded successfully');
-            };
-            offscreenScript.onerror = function() {
-                console.error('Failed to load offscreen.js');
-            };
-            document.head.appendChild(offscreenScript);
-        }
-    </script>
+    <script src="./offscreen-init.js"></script>
 </body>
 </html>

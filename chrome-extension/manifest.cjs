@@ -30,7 +30,7 @@ const manifest = {
     version: packageJson.version,
     description: 'Browser extension for Python plugin execution using Pyodide and MCP protocol',
     host_permissions: ['<all_urls>'],
-    permissions: ['storage', 'scripting', 'tabs', 'notifications', 'sidePanel'],
+    permissions: ['storage', 'scripting', 'tabs', 'notifications', 'sidePanel', 'offscreen'],
     options_page: 'options/index.html',
     options_ui: {
         page: 'options/index.html',
@@ -92,7 +92,7 @@ const manifest = {
         default_path: 'side-panel/index.html',
     },
     content_security_policy: {
-        extension_pages: "script-src 'self'; object-src 'self'",
+        extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'",
     },
 };
 exports.default = manifest;
