@@ -1403,21 +1403,26 @@ class WorkflowEngine {
 // ==============================================================================
 
 class OffscreenDocument {
-  private logger: OffscreenLogger;
+  // Теперь у нас есть прямые ссылки на все ключевые компоненты
+   private logger: OffscreenLogger;
+  private pyodideManager: PyodideManager;
+  private aiClient: AiClient;
   private memoryManager: MemoryManager;
   private batchProcessor: BatchProcessor;
-  private aiClient: AiClient;
-  private pyodideManager: PyodideManager;
   private workflowEngine: WorkflowEngine;
   private isInitialized = false;
 
   constructor() {
-    // Инициализация всех компонентов
+    console.log('[OffscreenDocument] Initializing components...');
+    
+    // --- Шаг 1: Создаем все зависимости в одном месте ---
     this.logger = new OffscreenLogger();
-    this.memoryManager = new MemoryManager();
-    this.aiClient = new AiClient();
-    this.batchProcessor = new BatchProcessor(this.aiClient);
     this.pyodideManager = new PyodideManager(this.logger);
+    this.aiClient = new AiClient();
+    this.memoryManager = new MemoryManager();
+    this.batchProcessor = new BatchProcessor(this.aiClient);
+    
+    // --- Шаг 2: Внедряем зависимости в WorkflowEngine ---
     this.workflowEngine = new WorkflowEngine(
       this.logger,
       this.pyodideManager,
@@ -1425,18 +1430,29 @@ class OffscreenDocument {
       this.memoryManager,
       this.batchProcessor
     );
-
-    console.log('[OffscreenDocument] Initializing...');
+    
+    // --- Шаг 3: Запускаем асинхронную инициализацию ---
     this._waitForPyodide();
     this._setupMessageHandling();
   }
+ 
+
+/*   private workflowEngine: WorkflowEngine;
+  private isInitialized = false;
+
+  constructor() {
+    this.workflowEngine = new WorkflowEngine();
+    console.log('[OffscreenDocument] Initializing...');
+    this._waitForPyodide();
+    this._setupMessageHandling();
+  } */
 
 
   private async _waitForPyodide(): Promise<void> {
     try {
-      await this.pyodideManager.awaitReady();
-      this.isInitialized = true;
+      await this.pyodideManager.awaitReady(); // Используем наш экземпляр
       await this._sendToBackground({ type: 'OFFSCREEN_READY' });
+      this.isInitialized = true;
       console.log('[OffscreenDocument] ✅ Initialization complete');
     } catch (error: any) {
       console.error('[OffscreenDocument] ❌ Initialization failed:', error);
@@ -1445,25 +1461,39 @@ class OffscreenDocument {
   }
 
 
+   private _setupMessageHandling(): void {
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message.type === 'EXECUTE_WORKFLOW') {
+        // Мы не ждем Promise от _routeMessage, так как ответ придет отдельным сообщением
+        this._routeMessage(message);
+      } else if (message.type === 'HOST_CALL_RESPONSE') {
+        // Обработка ответов на запросы от Python
+        // @ts-ignore
+        const promise = this.workflowEngine.getPyodideManager().hostCallPromises.get(message.callId);
+        if (promise) {
+          if (message.error) promise.reject(new Error(message.error));
+          else promise.resolve(message.result);
+          // @ts-ignore
+          this.workflowEngine.getPyodideManager().hostCallPromises.delete(message.callId);
+        }
+      }
+    });
+    console.log('[OffscreenDocument] Message handler established');
+  }
+ /*
   private _setupMessageHandling(): void {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // Этот слушатель теперь простой. Он просто запускает задачу.
       // Ответ будет отправлен отдельным, новым сообщением.
-      switch (message.type) {
-        case 'EXECUTE_WORKFLOW':
+      if (message.type === 'EXECUTE_WORKFLOW') {
           this._routeMessage(message);
-          break;
-        case 'HOST_CALL_RESPONSE':
-          this._handleHostCallResponse(message);
-          break;
-        default:
-          console.warn('[OffscreenDocument] Unknown message type:', message.type);
       }
+      // Этот слушатель может обрабатывать и другие типы сообщений, если нужно.
       return true; // Возвращаем true, чтобы канал оставался открытым.
     });
     console.log('[OffscreenDocument] Message handler established');
   }
-
+*/
   private _handleHostCallResponse(message: any): void {
     const { callId, result, error } = message;
     console.log(`[Offscreen] Обработка ответа для callId: ${callId}`, { result: result?.toString(), hasError: !!error });
@@ -1495,7 +1525,38 @@ class OffscreenDocument {
 
   // Эта функция теперь не использует sendResponse.
   // Она запускает процесс и отправляет результат/ошибку отдельным сообщением.
-  private async _routeMessage(message: any): Promise<void> {
+   private async _routeMessage(message: any): Promise<void> {
+    const logger = this.workflowEngine.getLogger();
+    logger.addMessage('DEBUG', `Получено сообщение типа: ${message.type}`, message);
+    
+    const { pluginId, pageHtml, input, requestId } = message.data;
+
+    try {
+      const result = await this.workflowEngine.runWorkflow(pluginId, {
+        input: { ...input, page_html: pageHtml },
+        hostApi: {}
+      });
+
+      // ▼▼▼ ОТПРАВЛЯЕМ УСПЕШНЫЙ РЕЗУЛЬТАТ ОТДЕЛЬНЫМ СООБЩЕНИЕМ ▼▼▼
+      await this._sendToBackground({
+        type: 'WORKFLOW_COMPLETED',
+        requestId: requestId,
+        result: result,
+        success: true
+      });
+
+    } catch (error: any) {
+      // ▼▼▼ ОТПРАВЛЯЕМ ОШИБКУ ОТДЕЛЬНЫМ СООБЩЕНИЕМ ▼▼▼
+      await this._sendToBackground({
+        type: 'WORKFLOW_COMPLETED',
+        requestId: requestId,
+        error: error.message,
+        success: false
+      });
+    }
+  } 
+
+/*  private async _routeMessage(message: any): Promise<void> {
     const logger = this.workflowEngine.getLogger();
     logger.addMessage('DEBUG', `Получено сообщение типа: ${message.type}`, message);
     
@@ -1526,17 +1587,18 @@ class OffscreenDocument {
       });
     }
   }
+*/
 
   private async _sendToBackground(message: any): Promise<void> {
-      try {
-        await chrome.runtime.sendMessage(message);
-      } catch (error: any) {
-        if (error.message.includes('Receiving end does not exist')) {
-          console.warn('[OffscreenDocument] Background script not ready yet.');
-        } else {
-          console.error('[OffscreenDocument] Failed to send message to background:', error);
-        }
+    try {
+      await chrome.runtime.sendMessage(message);
+    } catch (error: any) {
+      if (error.message.includes('Receiving end does not exist')) {
+        console.warn('[OffscreenDocument] Background script not ready yet.');
+      } else {
+        console.error('[OffscreenDocument] Failed to send message to background:', error);
       }
+    }
   }
   
 

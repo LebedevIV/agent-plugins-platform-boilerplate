@@ -805,6 +805,14 @@ chrome.runtime.onMessage.addListener(
               ...workflowPayload,
               pageHtml: `${pageHtml.length} chars`
             });
+            
+            // DEBUG: Проверяем размер данных перед отправкой
+            console.log('[background][OFFSCREEN DELEGATION][DEBUG] Payload details:');
+            console.log('[background][OFFSCREEN DELEGATION][DEBUG] - pageHtml length:', pageHtml.length);
+            console.log('[background][OFFSCREEN DELEGATION][DEBUG] - pageHtml preview:', pageHtml.substring(0, 100) + '...');
+            console.log('[background][OFFSCREEN DELEGATION][DEBUG] - payload keys:', Object.keys(workflowPayload));
+            console.log('[background][OFFSCREEN DELEGATION][DEBUG] - payload.pageHtml type:', typeof workflowPayload.pageHtml);
+            console.log('[background][OFFSCREEN DELEGATION][DEBUG] - payload.pageHtml length:', workflowPayload.pageHtml.length);
 
             // Отправить задачу в offscreen document
             console.log('[background][OFFSCREEN DELEGATION] Sending to offscreen...');

@@ -11,160 +11,115 @@
 // Псевдокод для вашего background.ts
 
 // Где-то вверху файла
-const workflowPromises = new Map();
 
 import { ensureOffscreenDocument } from './offscreen-manager';
 
-console.log("APP Background Script Loaded (v1.0 - Clean Architecture).");
+console.log("APP Background Script Loaded (v2.0 - Final Architecture).");
 
-const offscreenRequestPromises = new Map<string, { resolve: Function, reject: Function }>();
+// Хранилище для Promise'ов, которые ждут "обратного звонка" от offscreen.ts
+const workflowPromises = new Map<string, { resolve: Function, reject: Function }>();
+
 
 // --- Главный Слушатель Сообщений ---
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // Мы должны возвращать true ИЗ ОСНОВНОГО ПОТОКА слушателя,
-  // чтобы указать, что ответ будет асинхронным.
   switch (message.type) {
+    // === Сообщение от UI (SidePanel) на запуск воркфлоу ===
     case 'RUN_WORKFLOW':
       handleRunWorkflow(message.pluginId)
         .then(result => sendResponse({ success: true, result }))
         .catch(error => sendResponse({ success: false, error: error.message }));
       return true;
 
-    case 'HOST_CALL':
-      // Этот вызов тоже асинхронный
-      handleHostCall(message.payload, sender); // Передаем sender для ответа
-      return true;
-
-    case 'HOST_CALL_RESPONSE':
-      // Обработка ответов на хост-коллы от offscreen
-      handleHostCallResponse(message);
-      return true;
-
-    case 'ai_call':
-      // Обработка AI запросов из AiClient
-      handleAiCall(message.data, sender)
-        .then(result => sendResponse({ result }))
-        .catch(error => sendResponse({ error: error.message }));
-      return true;
-
     case 'WORKFLOW_COMPLETED':
-      const promise = workflowPromises.get(message.requestId);
+      const promise = workflowPromises.get(message.requestId); // <-- Используем правильное имя
       if (promise) {
         if (message.success) {
           promise.resolve(message.result);
         } else {
           promise.reject(new Error(message.error));
         }
-        workflowPromises.delete(message.requestId);
+        workflowPromises.delete(message.requestId); // <-- Используем правильное имя
       }
       break;
-
-
+    
+    // === Промежуточные сообщения от Offscreen ===
     case 'LOG_MESSAGE':
     case 'WORKFLOW_RESULT':
       console.log(`[FROM_OFFSCREEN - ${message.type}]`, message.data);
       // TODO: Переслать эти сообщения в SidePanel
       break;
 
-
+    // === Запросы от Python (через offscreen) на вызов Host API ===
+    case 'HOST_CALL':
+      handleHostCall(message.payload, sendResponse);
+      return true;
+      
     default:
       console.warn(`[Background] Получено неизвестное сообщение:`, message);
   }
   return true;
 });
 
+
 // --- Логика Обработчиков ---
 
- async function handleRunWorkflow(pluginId: string) {
+async function handleRunWorkflow(pluginId: string): Promise<any> {
   console.log(`[Background] Получена команда RUN_WORKFLOW для плагина: ${pluginId}`);
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tabs[0]?.id) throw new Error("Не найдена активная вкладка.");
-
-    const [{ result: pageHtml }] = await chrome.scripting.executeScript({
-      target: { tabId: tabs[0].id },
-      func: () => document.documentElement.outerHTML,
-    });
-
-    if (!pageHtml) throw new Error("Не удалось получить HTML страницы.");
-    console.log(`[Background] HTML извлечен (${pageHtml.length} символов)`);
-
-    await ensureOffscreenDocument();
-    
-    const requestId = `workflow_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    
-    // Отправляем задачу в offscreen. Важно: chrome.runtime.sendMessage доступен всем частям расширения.
-  // ▼▼▼ КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Создаем Promise и ждем ответа ▼▼▼
-  const resultPromise = new Promise((resolve, reject) => {
-    workflowPromises.set(requestId, { resolve, reject });
-  });
-
-  // Отправляем сообщение "выстрелил и забыл"
-  await chrome.runtime.sendMessage({
-    type: 'EXECUTE_WORKFLOW',
-    data: {
-      pluginId: pluginId,
-      pageHtml: pageHtml,
-      // ... другие данные
-      requestId: requestId // Передаем ID для обратной связи
-    }
-  });
-
-
-    console.log(`[Background] Задача ${requestId} отправлена в offscreen. Ожидаем ответа...`);
-
-  // Ждем, пока наш Promise не будет разрешен
-  const result = await resultPromise;
-  console.log(`[background] Получен финальный результат для ${requestId}:`, result);
   
-  // Здесь вы можете обработать результат
-  return result;
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tabs[0]?.id) throw new Error("Не найдена активная вкладка.");
 
+  const [{ result: pageHtml }] = await chrome.scripting.executeScript({
+    target: { tabId: tabs[0].id },
+    func: () => document.documentElement.outerHTML,
+  });
 
+  if (!pageHtml) throw new Error("Не удалось получить HTML страницы.");
+  console.log(`[Background] HTML извлечен (${pageHtml.length} символов)`);
+
+  await ensureOffscreenDocument();
+  
+  const requestId = `workflow_${Date.now()}`;
+  
+  // Отправляем задачу в offscreen "выстрелил и забыл"
+  chrome.runtime.sendMessage({
+    type: 'EXECUTE_WORKFLOW',
+    data: { pluginId, pageHtml, requestId, input: {} }
+  });
+
+  console.log(`[Background] Задача ${requestId} отправлена в offscreen. Ожидаем ответа...`);
+
+  // Возвращаем Promise, который будет ждать, пока не придет 'WORKFLOW_COMPLETED'
+  return new Promise((resolve, reject) => {
+    workflowPromises.set(requestId, { resolve, reject });
+    setTimeout(() => {
+      if (workflowPromises.has(requestId)) {
+        workflowPromises.delete(requestId);
+        reject(new Error(`Ответ от offscreen-документа не получен за 60 секунд.`));
+      }
+    }, 60000);
+  });
 }
 
-async function handleHostCall(payload: any, sender: chrome.runtime.MessageSender) {
+async function handleHostCall(payload: any, sendResponse: (response?: any) => void) {
   const { func, args, callId } = payload;
   console.log(`[Background] Получен HOST_CALL для функции '${func}'`);
 
   try {
     let result;
-    switch (func) {
-      case 'llm_call':
-        // Делегируем AI вызов в отдельную функцию для обработки
-        result = await performLlmCall(args);
-        break;
-
-      case 'get_setting':
-        result = await getPluginSetting(args[0]);
-        break;
-
-      case 'save_setting':
-        result = await savePluginSetting(args[0], args[1]);
-        break;
-
-      case 'get_plugin_data':
-        result = await getPluginData(args[0]);
-        break;
-
-      default:
-        throw new Error(`Неизвестная функция Host API: ${func}`);
+    if (func === 'llm_call') {
+      result = `Моковый ответ от AI для модели ${args[0]}`;
+    } else if (func === 'get_setting') {
+      const settings = await chrome.storage.sync.get(args[0]);
+      result = settings[args[0]];
+    } else {
+      throw new Error(`Неизвестная функция Host API: ${func}`);
     }
-
-    // Отправляем ответное сообщение напрямую в offscreen документ, который его прислал.
-    // Это надежнее, чем использовать `sendResponse`.
-    chrome.runtime.sendMessage({
-      type: 'HOST_CALL_RESPONSE',
-      callId,
-      result
-    });
-
+    // Ответ на HOST_CALL отправляется через sendResponse,
+    // так как offscreen.ts ждет его через `await chrome.runtime.sendMessage`
+    sendResponse({ callId, result });
   } catch (error: any) {
-    console.error(`[Background] Ошибка в handleHostCall:`, error);
-    chrome.runtime.sendMessage({
-      type: 'HOST_CALL_RESPONSE',
-      callId,
-      error: error.message
-    });
+    sendResponse({ callId, error: error.message });
   }
 }
 
@@ -175,14 +130,14 @@ async function handleHostCallResponse(message: any) {
   try {
     // Это ответ от AI сервиса или другого асинхронного хост-колла
     // Здесь мы можем обработать результат и передать его обратно отправителю
-    const promise = offscreenRequestPromises.get(callId);
+    const promise = workflowPromises.get(callId);
     if (promise) {
       if (error) {
         promise.reject(new Error(error));
       } else {
         promise.resolve(result);
       }
-      offscreenRequestPromises.delete(callId);
+      workflowPromises.delete(callId);
     } else {
       console.warn(`[Background] Не найден promise для callId: ${callId}`);
     }

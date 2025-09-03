@@ -277,6 +277,14 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
      const pageHtml = message.pageHtml || '';
      const requestId = message.requestId || `workflow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+     // DEBUG: Проверяем размер полученных данных
+     console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] Полученные данные:');
+     console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - pageHtml length:', pageHtml.length);
+     console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - pageHtml preview:', pageHtml.substring(0, 100) + '...');
+     console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - message keys:', Object.keys(message));
+     console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - message.pageHtml type:', typeof message.pageHtml);
+     console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - message.pageHtml length:', message.pageHtml ? message.pageHtml.length : 'undefined');
+
      console.log('[offscreen][EXECUTE_WORKFLOW] Запускаю workflow-engine с pluginId:', pluginId);
 
      // Send progress message to chat
@@ -293,6 +301,13 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
 
      // Load and execute workflow
      const workflowPayload = { page_html: pageHtml };
+     
+     // DEBUG: Проверяем workflowPayload
+     console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] WorkflowPayload:');
+     console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - workflowPayload keys:', Object.keys(workflowPayload));
+     console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - workflowPayload.page_html type:', typeof workflowPayload.page_html);
+     console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - workflowPayload.page_html length:', workflowPayload.page_html.length);
+     console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - workflowPayload.page_html preview:', workflowPayload.page_html.substring(0, 100) + '...');
 
      // Load the Python script URL
      const pyScriptUrl = chrome.runtime.getURL(`/plugins/${pluginId}/mcp_server.py`);

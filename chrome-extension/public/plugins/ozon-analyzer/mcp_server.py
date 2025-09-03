@@ -961,19 +961,32 @@ async def analyze_ozon_product(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
         # Безопасное извлечение HTML с фоллбеком
         page_html = None
+        
+        # DEBUG: Логируем все входные данные
+        js.sendMessageToChat({"content": f"Python: DEBUG - Входные данные: keys={list(input_data.keys())}"})
+        for key, value in input_data.items():
+            if isinstance(value, str):
+                js.sendMessageToChat({"content": f"Python: DEBUG - {key}: {len(value)} символов"})
+            else:
+                js.sendMessageToChat({"content": f"Python: DEBUG - {key}: {type(value)}"})
+        
         try:
             # Попытка различных способов доступа к данным
             if 'page_html' in input_data:
                 page_html = input_data['page_html']
+                js.sendMessageToChat({"content": f"Python: DEBUG - Извлечен page_html: {len(page_html)} символов"})
             elif 'html' in input_data:
                 page_html = input_data['html']
+                js.sendMessageToChat({"content": f"Python: DEBUG - Извлечен html: {len(page_html)} символов"})
             elif 'content' in input_data:
                 page_html = input_data['content']
+                js.sendMessageToChat({"content": f"Python: DEBUG - Извлечен content: {len(page_html)} символов"})
             else:
                 # Сбор всех возможных HTML-подобных данных
                 for key, value in input_data.items():
                     if isinstance(value, str) and len(value) > 100 and '<' in value and '>' in value:
                         page_html = value
+                        js.sendMessageToChat({"content": f"Python: DEBUG - Извлечен из {key}: {len(page_html)} символов"})
                         break
         except (KeyError, TypeError, AttributeError):
             pass

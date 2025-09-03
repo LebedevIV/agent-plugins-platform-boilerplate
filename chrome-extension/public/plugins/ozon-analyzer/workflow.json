@@ -6,7 +6,7 @@
       "id": "analyze",
       "description": "Анализ продукта Ozon",
       "tool": "python.analyze_ozon_product",
-      "inputs": { "page_html": "{{input.page_html}}" }
+      "inputs": { "page_html": "{{input.pageHtml}}" }
     },
     {
       "id": "deep-analysis",
