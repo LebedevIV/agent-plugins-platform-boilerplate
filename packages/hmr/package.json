@@ -1,6 +1,6 @@
 {
   "name": "@extension/hmr",
-  "version": "0.5.591",
+  "version": "0.5.597",
   "description": "chrome extension - hot module reload/refresh",
   "type": "module",
   "private": true,
