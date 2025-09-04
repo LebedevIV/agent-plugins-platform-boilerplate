@@ -394,7 +394,16 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
 
 // Handle messages from background script
 chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
+  console.log('[offscreen] ===== OFFSCREEN MESSAGE RECEIVED =====');
   console.log('[offscreen] Received message:', message);
+  console.log('[offscreen] Sender info:', sender);
+  console.log('[offscreen] Message type:', message.type);
+  console.log('[offscreen] Message timestamp:', new Date().toISOString());
+
+  // Handle chunked messages first
+  if (message.type === 'HTML_CHUNK' || message.type === 'HTML_CHUNK_COMPLETE' || message.type === 'START_WORKFLOW_AFTER_CHUNKS') {
+    return handleChunkedMessage(message, sendResponse);
+  }
 
   // Handle chunked messages first
   if (message.type === 'HTML_CHUNK' || message.type === 'HTML_CHUNK_COMPLETE' || message.type === 'START_WORKFLOW_AFTER_CHUNKS') {
@@ -531,7 +540,13 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
 
  // === EXECUTE_WORKFLOW HANDLER FOR DIRECT WORKFLOW EXECUTION ===
  if (message.type === 'EXECUTE_WORKFLOW') {
+   console.log('[offscreen][EXECUTE_WORKFLOW] ===== EXECUTE_WORKFLOW MESSAGE RECEIVED =====');
    console.log('[offscreen][EXECUTE_WORKFLOW] Получено сообщение от background:', message);
+   console.log('[offscreen][EXECUTE_WORKFLOW] Sender info:', sender);
+   console.log('[offscreen][EXECUTE_WORKFLOW] Message timestamp:', new Date().toISOString());
+   console.log('[offscreen][EXECUTE_WORKFLOW] Message type:', message.type);
+   console.log('[offscreen][EXECUTE_WORKFLOW] Message pluginId:', message.pluginId);
+   console.log('[offscreen][EXECUTE_WORKFLOW] Message pageKey:', message.pageKey);
 
    try {
      // Initialize Pyodide if needed

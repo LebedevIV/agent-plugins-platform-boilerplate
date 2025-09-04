@@ -1,6 +1,6 @@
 {
   "name": "@extension/zipper",
-  "version": "0.5.617",
+  "version": "0.5.623",
   "description": "chrome extension - zipper",
   "type": "module",
   "private": true,

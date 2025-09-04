@@ -204,16 +204,26 @@ async function sendHtmlInChunks(
 async function sendChunksSequentially(transferId: string): Promise<void> {
   const transfer = activeTransfers.get(transferId);
   if (!transfer) {
+    console.error('[background][CHUNKING] Transfer not found:', transferId);
     throw new Error('Transfer not found');
   }
 
+  console.log(`[background][CHUNKING] Starting to send ${transfer.chunks.length} chunks (0-${transfer.chunks.length - 1})`);
+
   for (let i = 0; i < transfer.chunks.length; i++) {
     if (!activeTransfers.has(transferId)) {
+      console.log('[background][CHUNKING] Transfer cancelled or completed');
       // Transfer was cancelled or completed
       return;
     }
 
     try {
+      // Дополнительная проверка на существование чанка
+      if (!transfer.chunks[i]) {
+        console.error(`[background][CHUNKING] Chunk ${i} does not exist. Total chunks: ${transfer.chunks.length}`);
+        throw new Error(`Chunk ${i} not found in transfer ${transferId}`);
+      }
+
       const chunkMessage: HtmlChunkMessage = {
         type: 'HTML_CHUNK',
         transferId,
@@ -223,7 +233,7 @@ async function sendChunksSequentially(transferId: string): Promise<void> {
         metadata: transfer.metadata
       };
 
-      console.log(`[background][CHUNKING] Sending chunk ${i + 1}/${transfer.totalChunks} (${transfer.chunks[i].length} chars)`);
+      console.log(`[background][CHUNKING] Sending chunk ${i}/${transfer.totalChunks - 1} (${transfer.chunks[i].length} chars)`);
 
       await chrome.runtime.sendMessage(chunkMessage);
 
@@ -318,22 +328,30 @@ const handleLegacyChrome = async (message: ExtensionMessage): Promise<void> => {
     console.warn(`[background][LEGACY CHROME] Page Key: ${message.pageKey}`);
     console.warn(`[background][LEGACY CHROME] Message ID: ${message.requestId || 'N/A'}`);
 
+    // Проверяем наличие chat API
+    if (!pluginChatApi) {
+      console.error('[background][LEGACY CHROME] pluginChatApi is not available');
+      return;
+    }
+
+    const chromeVersion = navigator.userAgent.match(/Chrome\/(\d+)/)?.[1] || 'unknown';
+
     // Создаем детальное сообщение о предупреждении
     const warningMessage: ChatMessage = {
       role: 'plugin',
       content: `⚠️ **Ограничение браузера**
 
-Эта версия Google Chrome (${navigator.userAgent.match(/Chrome\/(\d+)/)?.[1] || 'неизвестная'}) не поддерживает необходимые API расширения (Offscreen Document API).
+Эта версия Google Chrome (${chromeVersion}) не поддерживает необходимые API расширения (Offscreen Document API).
 
 **Что произошло:**
-- Расширение не смогло выполнить запланированную задачу для плагина "${message.pluginId}"
+- Расширение не смогло выполнить запланированную задачу для плагина "${message.pluginId || 'N/A'}"
 - Workflow будет пропущен для обеспечения стабильности работы
 
 **Рекомендация:**
 Обновите Google Chrome до версии 109 или новее для использования полной функциональности расширения.
 
 **Технические детали:**
-- Текущая версия: ${navigator.userAgent.match(/Chrome\/(\d+)/)?.[1] || 'неизвестная'}
+- Текущая версия: ${chromeVersion}
 - Требуемая версия: 109+
 - API Status: Offscreen Document недоступен`,
       timestamp: Date.now()
@@ -647,7 +665,12 @@ chrome.runtime.onMessage.addListener(
 
     if (typeof message === 'object' && message !== null && 'type' in message) {
       const msg = message as ExtensionMessage;
+      console.log('[background] ===== MAIN MESSAGE HANDLER =====');
       console.log('[background] Processing message type:', msg.type);
+      console.log('[background] Sender origin:', sender?.origin || 'none');
+      console.log('[background] Sender ID:', sender?.id || 'none');
+      console.log('[background] Message content preview:', JSON.stringify(message).substring(0, 200) + '...');
+      console.log('[background] Timestamp:', new Date().toISOString());
 
       if (msg.type === 'TEST_SYNC') {
         console.log('[background] Processing TEST_SYNC request');
@@ -657,6 +680,19 @@ chrome.runtime.onMessage.addListener(
         sendResponse(response);
         console.log('[background] TEST_SYNC response sent');
         return true;
+      }
+
+      if (msg.type === 'RUN_WORKFLOW') {
+        console.log('[background][DEBUG] ===== MESSAGE TYPE IS RUN_WORKFLOW =====');
+        console.log('[background][DEBUG] RUN_WORKFLOW message detected:', {
+          type: msg.type,
+          pluginId: msg.pluginId,
+          pageKey: msg.pageKey,
+          hasPluginId: !!msg.pluginId,
+          hasPageKey: !!msg.pageKey,
+          fullMessage: JSON.stringify(msg, null, 2)
+        });
+        // Продолжаем выполнение в условие ниже
       }
 
       if (msg.type === 'PING') {
@@ -950,55 +986,96 @@ chrome.runtime.onMessage.addListener(
         return true;
       }
 
-      if (msg.type === 'RUN_WORKFLOW' && msg.pluginId) {
+      // DEBUG: Проверяем все входящие сообщения
+      console.log('[background][DEBUG] ===== MESSAGE RECEIVED =====');
+      console.log('[background][DEBUG] Message type:', msg.type);
+      console.log('[background][DEBUG] Message pluginId:', msg.pluginId);
+      console.log('[background][DEBUG] Message pageKey:', msg.pageKey);
+      console.log('[background][DEBUG] Full message object:', JSON.stringify(msg, null, 2));
+      console.log('[background][DEBUG] Timestamp:', new Date().toISOString());
+
+      if (msg.type === 'RUN_WORKFLOW') {
         console.log('[background][OFFSCREEN DELEGATION] ===== RUN_WORKFLOW REQUEST RECEIVED =====');
         console.log('[background][OFFSCREEN DELEGATION] Plugin ID:', msg.pluginId);
+        console.log('[background][OFFSCREEN DELEGATION] Page Key:', msg.pageKey);
         console.log('[background][OFFSCREEN DELEGATION] Request timestamp:', new Date().toISOString());
 
+        // DEBUG: Дополнительные проверки выполнения условия
+        console.log('[background][DEBUG] Condition checks:');
+        console.log('[background][DEBUG] - msg.type === RUN_WORKFLOW:', msg.type === 'RUN_WORKFLOW');
+        console.log('[background][DEBUG] - msg.pluginId exists:', !!msg.pluginId);
+        console.log('[background][DEBUG] - msg.pageKey exists:', !!msg.pageKey);
+
         try {
+          console.log('[background][DEBUG] Starting async handler for RUN_WORKFLOW');
+
           (async () => {
+            console.log('[background][DEBUG] Inside async block, checking required fields...');
+            console.log('[background][DEBUG] msg.pluginId:', msg.pluginId, 'msg.pageKey:', msg.pageKey);
+
             try {
-            // ШАГ 1: Получить активную вкладку пользователя
-            console.log('[background][OFFSCREEN DELEGATION] Querying active tab...');
-            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-            const activeTab = tabs[0];
-
-            if (!activeTab || !activeTab.id) {
-              console.log('[background][OFFSCREEN DELEGATION][ERROR] No active tab found');
-              sendResponse({ error: 'Не найдена активная вкладка' });
-              return;
-            }
-
-            console.log('[background][OFFSCREEN DELEGATION] Active tab details:', {
-              url: activeTab.url,
-              tabId: activeTab.id,
-              title: activeTab.title
-            });
-
-            // ШАГ 2: Извлечь pageKey и pageHTML
-            const pageKey = getPageKey(activeTab.url || '');
-
-            console.log('[background][OFFSCREEN DELEGATION] Extracting page HTML...');
-            let pageHtml = '';
-            try {
-              const results = await chrome.scripting.executeScript({
-                target: { tabId: activeTab.id },
-                func: () => document.documentElement.outerHTML
-              });
-
-              if (results && results[0] && results[0].result) {
-                pageHtml = results[0].result as string;
-                console.log('[background][OFFSCREEN DELEGATION] ✓ HTML extracted successfully:', pageHtml.length, 'chars');
-              } else {
-                console.log('[background][OFFSCREEN DELEGATION][WARNING] Empty HTML result');
-                sendResponse({ error: 'Не удалось получить содержимое страницы' });
+              // Проверка обязательных полей (только pluginId, pageKey определяем сами)
+              if (!msg.pluginId) {
+                console.error('[background][OFFSCREEN DELEGATION] Missing required field: pluginId');
+                sendResponse({ error: 'Отсутствует обязательное поле: pluginId' });
                 return;
               }
-            } catch (error) {
-              console.error('[background][OFFSCREEN DELEGATION][ERROR] HTML extraction failed:', error);
-              sendResponse({ error: `Не удалось получить HTML страницы: ${(error as Error).message}` });
-              return;
-            }
+
+              // ШАГ 1: Получить активную вкладку пользователя
+              console.log('[background][OFFSCREEN DELEGATION] Querying active tab...');
+              const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+              const activeTab = tabs[0];
+
+              if (!activeTab || !activeTab.id) {
+                console.log('[background][OFFSCREEN DELEGATION][ERROR] No active tab found');
+                sendResponse({ error: 'Не найдена активная вкладка' });
+                return;
+              }
+
+              console.log('[background][OFFSCREEN DELEGATION] Active tab details:', {
+                url: activeTab.url,
+                tabId: activeTab.id,
+                title: activeTab.title
+              });
+
+              // ШАГ 2: Определить pageKey из URL активной вкладки
+              const pageKey = getPageKey(activeTab.url || '');
+              console.log('[background][OFFSCREEN DELEGATION] Generated pageKey from tab URL:', pageKey);
+              console.log('[background][OFFSCREEN DELEGATION] Active tab URL:', activeTab.url);
+
+              // ШАГ 3: Извлечь pageHTML
+              console.log('[background][OFFSCREEN DELEGATION] Extracting page HTML...');
+              let pageHtml = '';
+              try {
+                const results = await chrome.scripting.executeScript({
+                  target: { tabId: activeTab.id },
+                  func: () => document.documentElement.outerHTML
+                });
+
+                if (results && results[0] && results[0].result && typeof results[0].result === 'string') {
+                  pageHtml = results[0].result as string;
+                  console.log('[background][OFFSCREEN DELEGATION] ✓ HTML extracted successfully:', pageHtml.length, 'chars');
+
+                  // Проверка на разумный размер HTML (минимум 100 символов)
+                  if (pageHtml.length < 100) {
+                    console.warn('[background][OFFSCREEN DELEGATION][WARNING] HTML too short:', pageHtml.length, 'chars');
+                  }
+                } else {
+                  console.error('[background][OFFSCREEN DELEGATION][ERROR] Invalid or empty HTML result:', {
+                    hasResults: !!results,
+                    hasFirstResult: !!(results && results[0]),
+                    hasResultProp: !!(results && results[0] && 'result' in results[0]),
+                    resultType: results && results[0] ? typeof results[0].result : 'no result'
+                  });
+                  sendResponse({ error: 'Не удалось получить содержимое страницы или получен пустой результат' });
+                  return;
+                }
+              } catch (error) {
+                console.error('[background][OFFSCREEN DELEGATION][ERROR] HTML extraction failed:', error);
+                sendResponse({ error: `Не удалось получить HTML страницы: ${(error as Error).message}` });
+                return;
+              }
+
 
             // ШАГ 3: Проверить настройки плагина
             console.log('[background][OFFSCREEN DELEGATION] Checking plugin settings...');
@@ -1048,27 +1125,38 @@ chrome.runtime.onMessage.addListener(
             const requestId = msg.requestId || `workflow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
             // Проверяем размер HTML и выбираем метод передачи
+            console.log('[background][OFFSCREEN DELEGATION] HTML size check:', pageHtml.length, 'chars');
+            console.log('[background][OFFSCREEN DELEGATION] Chunking threshold: 64000 chars');
+
             if (pageHtml.length > 64000) { // Используем chunking для больших данных (>64KB)
               console.log('[background][OFFSCREEN DELEGATION] Large HTML detected, using chunking approach');
-              console.log('[background][OFFSCREEN DELEGATION][DEBUG] HTML size:', pageHtml.length, 'chars');
+              console.log('[background][OFFSCREEN DELEGATION][DEBUG] HTML size:', pageHtml.length, 'chars (>${64000})');
 
               try {
+                // Проверяем, что HTML валидная строка перед chunking
+                if (typeof pageHtml !== 'string' || pageHtml.length === 0) {
+                  throw new Error('Invalid HTML data for chunking');
+                }
+
                 // Отправляем HTML кусками
                 await sendHtmlInChunks(msg.pluginId!, pageKey, pageHtml, requestId);
 
                 // После успешной передачи чанков, отправляем команду запуска workflow
                 const workflowCommand = {
-                  type: 'START_WORKFLOW_AFTER_CHUNKS',
+                  type: 'EXECUTE_WORKFLOW',
                   pluginId: msg.pluginId,
                   pageKey: pageKey,
                   requestId: requestId,
+                  pageHtmlChunks: 'USE_TRANSFERRED_CHUNKS', // Указываем использовать переданные чанки
                   timestamp: Date.now()
                 };
 
-                console.log('[background][OFFSCREEN DELEGATION] Sending workflow start command...');
+                console.log('[background][OFFSCREEN DELEGATION] Sending workflow start command after chunks...');
+                console.log('[background][DEBUG] Workflow command payload:', JSON.stringify(workflowCommand, null, 2));
                 const result = await chrome.runtime.sendMessage(workflowCommand);
-
+    
                 console.log('[background][OFFSCREEN DELEGATION] Workflow command sent, result:', result);
+                console.log('[background][DEBUG] About to check sendResponse function...');
 
               } catch (chunkingError) {
                 console.error('[background][OFFSCREEN DELEGATION] Chunking failed:', chunkingError);
@@ -1077,6 +1165,7 @@ chrome.runtime.onMessage.addListener(
               }
 
             } else {
+              console.log('[background][OFFSCREEN DELEGATION] Small HTML, using direct transmission');
               // Для маленьких данных используем обычную отправку
               console.log('[background][OFFSCREEN DELEGATION] Small HTML, using direct transmission');
 
@@ -1093,20 +1182,43 @@ chrome.runtime.onMessage.addListener(
                 ...workflowPayload,
                 pageHtml: `${pageHtml.length} chars`
               });
+              console.log('[background][DEBUG] Full workflow payload:', JSON.stringify({
+                ...workflowPayload,
+                pageHtml: pageHtml.substring(0, 100) + '...'
+              }, null, 2));
 
               // Отправить задачу в offscreen document
               console.log('[background][OFFSCREEN DELEGATION] Sending to offscreen...');
+              console.log('[background][DEBUG] Sending chrome.runtime.sendMessage with payload above...');
               const result = await chrome.runtime.sendMessage(workflowPayload);
+              console.log('[background][DEBUG] chrome.runtime.sendMessage completed, result:', result);
             }
 
             console.log('[background][OFFSCREEN DELEGATION] ===== OFFSCREEN EXECUTION COMPLETED =====');
             console.log('[background][OFFSCREEN DELEGATION] Result received:', result);
 
+            // Проверяем перед вызовом sendResponse
+            if (typeof sendResponse !== 'function') {
+              console.warn('[background][OFFSCREEN DELEGATION] sendResponse is not a function - response channel may be closed');
+              return;
+            }
+
             // Ретрансмитровать результат в UI
             if (result && result.success) {
-              sendResponse({ success: true });
+              console.log('[background][OFFSCREEN DELEGATION] Sending success response');
+              console.log('[background][DEBUG] sendResponse function before call:', typeof sendResponse);
+              const successResponseObj = { success: true };
+              console.log('[background][DEBUG] Success response object:', successResponseObj);
+              sendResponse(successResponseObj);
+              console.log('[background][DEBUG] Success sendResponse called - no more execution expected after this');
             } else {
-              sendResponse({ error: result?.error || 'Unknown execution error' });
+              const errorMsg = result?.error || 'Unknown execution error';
+              console.log('[background][OFFSCREEN DELEGATION] Sending error response:', errorMsg);
+              console.log('[background][DEBUG] sendResponse function before call:', typeof sendResponse);
+              const errorResponseObj = { error: errorMsg };
+              console.log('[background][DEBUG] Error response object:', errorResponseObj);
+              sendResponse(errorResponseObj);
+              console.log('[background][DEBUG] Error sendResponse called - no more execution expected after this');
             }
 
             } catch (error) {
@@ -1543,6 +1655,8 @@ chrome.runtime.onMessage.addListener(
         return true;
       }
     }
+
+    console.log('[background][DEBUG] Main handler finished processing, checking final return...');
     // ГАРАНТИРОВАННО возвращаем true, чтобы канал не закрывался преждевременно
     console.log('[background] Returning true to keep channel open, timestamp:', new Date().toISOString());
     return true;

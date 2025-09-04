@@ -643,6 +643,34 @@ class PyodideManager {
       const processedParams = this._processLargeStrings(params);
       this.logger.addMessage('DEBUG', `Обработка параметров завершена`);
 
+      // === ФИНАЛЬНАЯ ПРОВЕРКА ПЕРЕД ПЕРЕДАЧЕЙ В PYTHON ===
+      const paramsSize = JSON.stringify(processedParams).length;
+      console.log(`[PYODIDE_MANAGER] 🐍 PRE-PYTHON CHECK ===================`);
+      console.log(`[PYODIDE_MANAGER] 🐍 Function: ${functionName}`);
+      console.log(`[PYODIDE_MANAGER] 🐍 Plugin: ${pluginId}`);
+      console.log(`[PYODIDE_MANAGER] 🐍 Total parameters size: ${paramsSize} chars`);
+      console.log(`[PYODIDE_MANAGER] 🐍 Parameter keys:`, Object.keys(processedParams || {}));
+      console.log(`[PYODIDE_MANAGER] 🐍 Raw parameters preview:`, processedParams);
+
+      // Специальная проверка HTML данных
+      if (processedParams && processedParams.page_html) {
+        const htmlSize = processedParams.page_html.length;
+        console.log(`[PYODIDE_MANAGER] 🐍 HTML CONTENT SIZE: ${htmlSize} символов`);
+        console.log(`[PYODIDE_MANAGER] 🐍 HTML CONTENT SAMPLE:`, processedParams.page_html.substring(0, 200) + (htmlSize > 200 ? '...' : ''));
+
+        if (htmlSize < 10000) {
+          console.warn(`[PYODIDE_MANAGER] ⚠️ HTML size (${htmlSize}) is suspiciously small! Expected ~1,049,229 symbols`);
+          console.warn(`[PYODIDE_MANAGER] ⚠️ Full HTML:`, processedParams.page_html);
+        } else if (htmlSize > 100000) {
+          console.log(`[PYODIDE_MANAGER] ✅ HTML size (${htmlSize}) looks reasonable`);
+        }
+      } else {
+        console.warn(`[PYODIDE_MANAGER] ⚠️ No page_html property found in parameters!`);
+        console.log(`[PYODIDE_MANAGER] Parameters content:`, JSON.stringify(processedParams).substring(0, 500) + '...');
+      }
+
+      console.log(`[PYODIDE_MANAGER] 🐍 PRE-PYTHON CHECK END =================`);
+
       // Шаг 5: Вызываем Python-функцию напрямую, как если бы это была JS-функция.
       // Pyodide сам позаботится о корректном преобразовании `processedParams` из JS-объекта
       // в Python-словарь (точнее, в `JsProxy`).
@@ -1624,16 +1652,68 @@ class OffscreenDocument {
       console.log(`[OFFSCREEN] 🔍 Размеры чанков: ${pageHtmlChunks.map(c => c.length).slice(0, 5).join(', ')}${pageHtmlChunks.length > 5 ? '...' : ''}`);
     }
 
-    // Обрабатываем чанки HTML если они переданы
+    // Обрабатываем чанки HTML если они переданы + проверка данных
     let finalPageHtml = pageHtml;
-    if (pageHtmlChunks && Array.isArray(pageHtmlChunks)) {
+    if (pageHtmlChunks && pageHtmlChunks === 'USE_TRANSFERRED_CHUNKS') {
+      // Используем чанки из transferMap (если они были переданы отдельно)
+      const transferId = `${requestId}_${pluginId}_${Date.now() - 10000}`; // Примерный transfer ID
+      const transferData = {}; // TODO: получить из глобального storage
+
+      console.log('[OFFSCREEN] 🔧 Attempting to reconstruct HTML from transferred chunks...');
+      console.log('[OFFSCREEN] 🔧 Transfer ID search pattern:', transferId);
+
+      // Временно создаем fallback
+      console.warn('[OFFSCREEN] ⚠️ Transfer chunk reconstruction not implemented yet, using empty HTML');
+      finalPageHtml = '<html><body>Chunked HTML not available yet</body></html>';
+
+    } else if (pageHtmlChunks && Array.isArray(pageHtmlChunks) && pageHtmlChunks.length > 0) {
       console.log(`[OFFSCREEN] 🔧 Начинаем сборку ${pageHtmlChunks.length} чанков...`);
-      finalPageHtml = pageHtmlChunks.join('');
+
+      // Дополнительная проверка: все чанки должны быть строками
+      const validChunks = pageHtmlChunks.filter(chunk => typeof chunk === 'string');
+      if (validChunks.length !== pageHtmlChunks.length) {
+        console.warn(`[OFFSCREEN] ⚠️ Найдены невалидные чанки. Валидных: ${validChunks.length}/${pageHtmlChunks.length}`);
+      }
+
+      if (validChunks.length === 0) {
+        console.error('[OFFSCREEN] ❌ Нет валидных чанков HTML!');
+        finalPageHtml = pageHtml || '';
+      } else {
+        finalPageHtml = validChunks.join('');
+        if (finalPageHtml.length < 100) {
+          console.warn(`[OFFSCREEN] ⚠️ Собранный HTML слишком короткий: ${finalPageHtml.length} символов`);
+        }
+      }
+
       console.log(`[OFFSCREEN] ✅ Собран HTML: ${finalPageHtml.length} символов`);
       console.log(`[OFFSCREEN] 📄 Начало HTML: ${finalPageHtml.substring(0, 200)}...`);
+      console.log(`[OFFSCREEN] 📄 Конец HTML: ${finalPageHtml.substring(Math.max(0, finalPageHtml.length - 200))}...`);
 
-      this.logger.addMessage('DEBUG', `Собран HTML из ${pageHtmlChunks.length} чанков: ${finalPageHtml.length} символов`);
+      this.logger.addMessage('DEBUG', `Собран HTML из ${validChunks.length} чанков: ${finalPageHtml.length} символов`);
+    } else if (!pageHtml) {
+      console.warn('[OFFSCREEN] ⚠️ Не получен ни HTML ни чанки!');
+      finalPageHtml = '<html><body>No HTML content received</body></html>';
     }
+
+    // === ФИНАЛЬНЫЕ ПРОВЕРКИ ПЕРЕД ЗАПУСКОМ WORKFLOW ===
+    console.log(`[OFFSCREEN] 📊 WORKFLOW PREPARATION =================`);
+    console.log(`[OFFSCREEN] 📊 Plugin: ${pluginId || 'UNKNOWN'}`);
+    console.log(`[OFFSCREEN] 📊 Request: ${requestId || 'UNKNOWN'}`);
+    console.log(`[OFFSCREEN] 📊 Html size: ${finalPageHtml ? finalPageHtml.length : 'NULL'} символов`);
+    console.log(`[OFFSCREEN] 📊 Html valid: ${finalPageHtml && typeof finalPageHtml === 'string'}`);
+    console.log(`[OFFSCREEN] 📊 Html sample: ${finalPageHtml ? finalPageHtml.substring(0, 100) + '...' : 'NULL'}`);
+
+    if (!finalPageHtml || finalPageHtml.length < 1000) {
+      console.warn(`[OFFSCREEN] ⚠️ CRITICAL: HTML content is too small or missing!`);
+      console.warn(`[OFFSCREEN] ⚠️ Size: ${finalPageHtml ? finalPageHtml.length : 'NULL'}`);
+      console.warn(`[OFFSCREEN] ⚠️ Content: ${finalPageHtml || 'NULL'}`);
+    }
+
+    if (!pluginId) {
+      console.error(`[OFFSCREEN] ❌ CRITICAL: No pluginId provided! Argument:`, message.data);
+    }
+
+    console.log(`[OFFSCREEN] 📊 WORKFLOW PREPARATION END =================`);
 
     // DEBUG: Логируем финальные данные перед передачей в workflow
     console.log(`[OFFSCREEN] 📤 Передаем в workflow: page_html=${finalPageHtml ? finalPageHtml.length : 'NULL'} символов`);
