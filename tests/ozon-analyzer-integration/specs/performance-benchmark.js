@@ -28,8 +28,15 @@ export class PerformanceBenchmark {
         } else {
             this.performanceNow = () => performance.now();
         }
+
+        // Initialize test data
+        this.setupTestData();
     }
 
+    /**
+     * Setup test data
+     */
+    setupTestData() {
         // Тестовые данные
         this.testHtml = `
             <html>

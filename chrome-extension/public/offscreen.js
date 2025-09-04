@@ -3,6 +3,17 @@
  * Handles direct Python code execution in offscreen context
  */
 
+/**
+ * Offscreen Document Handler for Direct Pyodide Testing
+ * Handles direct Python code execution in offscreen context
+ * Supports chunked HTML data transfer for large documents
+ */
+
+// === CHUNKING HTML DATA RECEIVER ===
+
+// Global state for chunked HTML transfers
+const htmlTransfers = new Map();
+
 let pyodide = null;
 
 // Initialize Pyodide when the offscreen document loads
@@ -128,9 +139,267 @@ async function executePythonCode(pythonCode) {
   }
 }
 
+// Function to handle chunked HTML messages
+function handleChunkedMessage(message, sendResponse) {
+  console.log('[offscreen][CHUNKING] Received chunk message:', {
+    type: message.type,
+    transferId: message.transferId,
+    chunkIndex: message.chunkIndex,
+    totalChunks: message.totalChunks,
+    chunkSize: message.chunkData ? message.chunkData.length : 'N/A'
+  });
+
+  switch (message.type) {
+    case 'HTML_CHUNK':
+      handleHtmlChunk(message);
+      break;
+
+    case 'HTML_CHUNK_COMPLETE':
+      handleHtmlChunkComplete(message);
+      break;
+
+    case 'START_WORKFLOW_AFTER_CHUNKS':
+      handleStartWorkflowAfterChunks(message, sendResponse);
+      return true; // Keep channel open for async response
+
+    default:
+      console.warn('[offscreen][CHUNKING] Unknown chunk message type:', message.type);
+  }
+
+  return false;
+}
+
+// Function to handle individual HTML chunks
+function handleHtmlChunk(chunkMessage) {
+  const { transferId, chunkIndex, totalChunks, chunkData, metadata } = chunkMessage;
+
+  if (!htmlTransfers.has(transferId)) {
+    // Initialize new transfer
+    htmlTransfers.set(transferId, {
+      chunks: new Array(totalChunks),
+      receivedChunks: 0,
+      metadata,
+      completed: false
+    });
+    console.log(`[offscreen][CHUNKING] Initialized new transfer: ${transferId} (${totalChunks} chunks)`);
+  }
+
+  const transfer = htmlTransfers.get(transferId);
+  if (!transfer) return;
+
+  // Store the chunk
+  transfer.chunks[chunkIndex] = chunkData;
+  transfer.receivedChunks++;
+  console.log(`[offscreen][CHUNKING] Stored chunk ${chunkIndex + 1}/${totalChunks} for transfer ${transferId}`);
+
+  // Send acknowledgment
+  chrome.runtime.sendMessage({
+    type: 'HTML_CHUNK_ACK',
+    transferId,
+    chunkIndex,
+    received: true
+  });
+
+  // Check if transfer is complete
+  if (transfer.receivedChunks === totalChunks) {
+    console.log(`[offscreen][CHUNKING] All chunks received for transfer ${transferId}`);
+    // Automatically mark transfer as completed when all chunks are received
+    transfer.completed = true;
+    console.log(`[offscreen][CHUNKING] Transfer ${transferId} automatically marked as completed (all chunks received)`);
+  }
+}
+
+// Function to handle chunk completion
+function handleHtmlChunkComplete(message) {
+  const { transferId } = message;
+  const transfer = htmlTransfers.get(transferId);
+
+  if (!transfer) {
+    console.error(`[offscreen][CHUNKING] Completion message for unknown transfer: ${transferId}`);
+    return;
+  }
+
+  // Mark transfer as completed
+  transfer.completed = true;
+  console.log(`[offscreen][CHUNKING] Transfer ${transferId} marked as completed`);
+}
+
+// Function to start workflow after chunks are received
+async function handleStartWorkflowAfterChunks(message, sendResponse) {
+  const { pluginId, pageKey, requestId } = message;
+
+  // Find the most recent completed transfer
+  let selectedTransfer = null;
+  let lastReceivedTimestamp = 0;
+
+  console.log(`[offscreen][CHUNKING] Searching for completed transfers among ${htmlTransfers.size} total transfers:`);
+  for (const [transferId, transfer] of htmlTransfers.entries()) {
+    console.log(`[offscreen][CHUNKING] Transfer ${transferId}: completed=${transfer.completed}, received=${transfer.receivedChunks}/${transfer.chunks.length}, timestamp=${transfer.metadata?.timestamp || 'N/A'}`);
+  }
+
+  for (const [transferId, transfer] of htmlTransfers.entries()) {
+    if (transfer.completed && transfer.receivedChunks === transfer.chunks.length) {
+      // Check if this transfer is newer than the previous candidate
+      const transferTimestamp = transfer.metadata?.timestamp || 0;
+      if (transferTimestamp > lastReceivedTimestamp) {
+        selectedTransfer = transfer;
+        lastReceivedTimestamp = transferTimestamp;
+        console.log(`[offscreen][CHUNKING] Found completed transfer: ${transferId} with timestamp: ${transferTimestamp}`);
+      }
+    }
+  }
+
+  if (!selectedTransfer) {
+    console.error('[offscreen][CHUNKING] No completed HTML transfers found for workflow');
+    sendResponse({ error: 'No completed HTML transfers found' });
+    return;
+  }
+
+  console.log('[offscreen][CHUNKING] Starting workflow with chunk metadata for Python assembly');
+
+  try {
+    // Prepare chunk metadata for Python reconstruction instead of assembling here
+    const chunkMetadata = {
+      __isChunkedString: true,
+      originalKey: 'page_html',
+      chunkCount: selectedTransfer.chunks.length,
+      totalLength: selectedTransfer.chunks.reduce((sum, chunk) => sum + (chunk ? chunk.length : 0), 0)
+    };
+
+    // Create input data with chunk metadata + all chunks
+    const workflowPayload = { page_html: chunkMetadata };
+
+    // Add all chunks to payload
+    for (let i = 0; i < selectedTransfer.chunks.length; i++) {
+      workflowPayload[`page_html_chunk_${i}`] = selectedTransfer.chunks[i] || '';
+    }
+
+    // Log chunk details for debugging
+    console.log(`[offscreen][CHUNKING] Preparing ${selectedTransfer.chunks.length} chunks for Python:`);
+    selectedTransfer.chunks.forEach((chunk, idx) => {
+      console.log(`[offscreen][CHUNKING] Chunk ${idx}: ${chunk ? chunk.length : 0} characters`);
+    });
+    console.log(`[offscreen][CHUNKING] Total expected length: ${workflowPayload.page_html.totalLength}`);
+
+    // Execute workflow and let Python handle chunk reconstruction
+    const result = await executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, requestId, sendResponse);
+
+    console.log('[offscreen][CHUNKING] Workflow execution completed');
+
+  } catch (error) {
+    console.error('[offscreen][CHUNKING] Workflow execution failed:', error);
+    sendResponse({
+      error: error.message,
+      pluginId,
+      requestId
+    });
+  }
+}
+
+// Function to execute workflow with chunk metadata or assembled HTML
+async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, requestId, sendResponse) {
+  console.log('[offscreen] Executing workflow with assembled HTML');
+
+  try {
+    // Initialize Pyodide if needed
+    if (!pyodide) {
+      console.log('[offscreen] Initializing Pyodide...');
+      await initializePyodide();
+    }
+
+    // Send progress message to chat
+    chrome.runtime.sendMessage({
+      type: 'PYODIDE_MESSAGE',
+      pluginId: pluginId,
+      pageKey: pageKey,
+      message: {
+        role: 'plugin',
+        content: '🔄 Запуск выполнения workflow с собранными данными...',
+        timestamp: Date.now()
+      }
+    });
+
+    // Load the Python script URL
+    const pyScriptUrl = chrome.runtime.getURL(`/plugins/${pluginId}/mcp_server.py`);
+
+    const response = await fetch(pyScriptUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to load Python script: ${response.status}`);
+    }
+
+    const pythonCode = await response.text();
+
+    // Execute the Python code
+    await pyodide.runPythonAsync(pythonCode);
+
+    // Get the main workflow function
+    const workflowFunction = pyodide.globals.get('analyze_ozon_product');
+    if (!workflowFunction) {
+      throw new Error('Main workflow function analyze_ozon_product not found in Python script');
+    }
+
+    // Python will handle chunk reconstruction if needed, or use ready HTML
+    const resultProxy = await workflowFunction(workflowPayload);
+    const result = resultProxy.toJs({ dict_converter: Object.fromEntries });
+    resultProxy.destroy();
+
+    console.log('[offscreen] Workflow-engine executed successfully:', result);
+
+    // Send success message to chat
+    chrome.runtime.sendMessage({
+      type: 'PYODIDE_MESSAGE',
+      pluginId: pluginId,
+      pageKey: pageKey,
+      message: {
+        role: 'plugin',
+        content: `✅ Workflow выполнена успешно с собранными данными. Результат: ${JSON.stringify(result, null, 2)}`,
+        timestamp: Date.now()
+      }
+    });
+
+    // Send response back
+    sendResponse({
+      success: true,
+      result: result,
+      pluginId: pluginId,
+      requestId: requestId,
+      timestamp: Date.now()
+    });
+
+  } catch (error) {
+    console.error('[offscreen] Workflow execution failed:', error);
+
+    // Send error message to chat
+    chrome.runtime.sendMessage({
+      type: 'PYODIDE_MESSAGE',
+      pluginId: pluginId,
+      pageKey: pageKey,
+      message: {
+        role: 'plugin',
+        content: `❌ Ошибка выполнения workflow: ${error.message}`,
+        timestamp: Date.now()
+      }
+    });
+
+    // Send error response back
+    sendResponse({
+      success: false,
+      error: error.message,
+      pluginId: pluginId,
+      requestId: requestId,
+      timestamp: Date.now()
+    });
+  }
+}
+
 // Handle messages from background script
 chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
   console.log('[offscreen] Received message:', message);
+
+  // Handle chunked messages first
+  if (message.type === 'HTML_CHUNK' || message.type === 'HTML_CHUNK_COMPLETE' || message.type === 'START_WORKFLOW_AFTER_CHUNKS') {
+    return handleChunkedMessage(message, sendResponse);
+  }
 
   if (message.type === 'TEST_PYODIDE_DIRECT_EXEC') {
     try {
@@ -306,8 +575,12 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
      console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] WorkflowPayload:');
      console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - workflowPayload keys:', Object.keys(workflowPayload));
      console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - workflowPayload.page_html type:', typeof workflowPayload.page_html);
-     console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - workflowPayload.page_html length:', workflowPayload.page_html.length);
-     console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - workflowPayload.page_html preview:', workflowPayload.page_html.substring(0, 100) + '...');
+     if (typeof workflowPayload.page_html === 'string') {
+       console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - workflowPayload.page_html length:', workflowPayload.page_html.length);
+       console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - workflowPayload.page_html preview:', workflowPayload.page_html.substring(0, 100) + '...');
+     } else if (workflowPayload.page_html && typeof workflowPayload.page_html === 'object') {
+       console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - chunk metadata:', workflowPayload.page_html);
+     }
 
      // Load the Python script URL
      const pyScriptUrl = chrome.runtime.getURL(`/plugins/${pluginId}/mcp_server.py`);

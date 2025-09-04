@@ -65,39 +65,46 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 async function handleRunWorkflow(pluginId: string): Promise<any> {
   console.log(`[Background] Получена команда RUN_WORKFLOW для плагина: ${pluginId}`);
-  
+
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tabs[0]?.id) throw new Error("Не найдена активная вкладка.");
 
-  const [{ result: pageHtml }] = await chrome.scripting.executeScript({
-    target: { tabId: tabs[0].id },
-    func: () => document.documentElement.outerHTML,
-  });
-
-  if (!pageHtml) throw new Error("Не удалось получить HTML страницы.");
-  console.log(`[Background] HTML извлечен (${pageHtml.length} символов)`);
+  // Извлекаем HTML с chunking для больших страниц
+  const packedHtml = await extractPageHtmlWithChunking(tabs[0].id);
+  if (!packedHtml?.length) throw new Error("Не удалось получить HTML страницы.");
+  console.log(`[Background] HTML извлечен: ${packedHtml.length} пакетов, ~${packedHtml.reduce((sum, chunk) => sum + chunk.length, 0)} символов`);
 
   await ensureOffscreenDocument();
-  
+
   const requestId = `workflow_${Date.now()}`;
-  
-  // Отправляем задачу в offscreen "выстрелил и забыл"
+
+  // Отправляем задачу в offscreen с чанкинговыми данными
   chrome.runtime.sendMessage({
     type: 'EXECUTE_WORKFLOW',
-    data: { pluginId, pageHtml, requestId, input: {} }
+    data: { pluginId, pageHtmlChunks: packedHtml, requestId, input: {} }
   });
 
   console.log(`[Background] Задача ${requestId} отправлена в offscreen. Ожидаем ответа...`);
 
   // Возвращаем Promise, который будет ждать, пока не придет 'WORKFLOW_COMPLETED'
   return new Promise((resolve, reject) => {
-    workflowPromises.set(requestId, { resolve, reject });
-    setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       if (workflowPromises.has(requestId)) {
         workflowPromises.delete(requestId);
         reject(new Error(`Ответ от offscreen-документа не получен за 60 секунд.`));
       }
     }, 60000);
+
+    workflowPromises.set(requestId, {
+      resolve: (result: any) => {
+        clearTimeout(timeoutId);
+        resolve(result);
+      },
+      reject: (error: any) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      }
+    });
   });
 }
 
@@ -121,6 +128,44 @@ async function handleHostCall(payload: any, sendResponse: (response?: any) => vo
   } catch (error: any) {
     sendResponse({ callId, error: error.message });
   }
+}
+
+// Вспомогательная функция для извлечения HTML с chunking
+function extractPageHtmlWithChunking(tabId: number): Promise<string[]> {
+  const MAX_CHUNK_SIZE = 25000; // 25KB на чанк
+
+  return new Promise(async (resolve, reject) => {
+    try {
+      // Сначала пытаемся вытащить HTML через безопасный диапазон
+      const [{ result: fullHtml }] = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => document.documentElement.outerHTML,
+      });
+
+      if (!fullHtml) {
+        resolve([]);
+        return;
+      }
+
+      // Если HTML меньше MAX_CHUNK_SIZE, возвращаем как есть
+      if (fullHtml.length <= MAX_CHUNK_SIZE) {
+        resolve([fullHtml]);
+        return;
+      }
+
+      // Разбиваем на чанки
+      const chunks: string[] = [];
+      for (let i = 0; i < fullHtml.length; i += MAX_CHUNK_SIZE) {
+        chunks.push(fullHtml.slice(i, i + MAX_CHUNK_SIZE));
+      }
+
+      console.log(`[Background] HTML разбит на ${chunks.length} чанков по ~${Math.round(fullHtml.length / chunks.length)} символов каждый`);
+      resolve(chunks);
+    } catch (error) {
+      console.error('[Background] Ошибка при извлечении HTML страницы:', error);
+      reject(error);
+    }
+  });
 }
 
 async function handleHostCallResponse(message: any) {

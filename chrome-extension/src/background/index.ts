@@ -106,6 +106,202 @@ const offscreenSupported = (): boolean => {
 };
 
 // Enhanced production-ready fallback обработчик для старых версий Chrome (< 109)
+// === CHUNKING/STREAMING MECHANISM FOR LARGE HTML DATA ===
+
+// Constants for chunking configuration
+const CHUNK_SIZE = 32 * 1024; // 32KB safe chunk size for Chrome messaging
+const CHUNK_DELAY = 50; // Delay between chunks in milliseconds
+
+// Interface for chunked HTML streaming
+interface HtmlChunkMessage {
+  type: 'HTML_CHUNK';
+  transferId: string;
+  chunkIndex: number;
+  totalChunks: number;
+  chunkData: string;
+  metadata: {
+    pluginId: string;
+    pageKey: string;
+    totalSize: number;
+    requestId: string;
+  };
+}
+
+interface HtmlChunkAckMessage {
+  type: 'HTML_CHUNK_ACK';
+  transferId: string;
+  chunkIndex: number;
+  received: boolean;
+}
+
+// Global state for managing chunk transfers
+const activeTransfers = new Map<string, {
+  chunks: string[];
+  received: Set<number>;
+  totalChunks: number;
+  metadata: any;
+  resolve: (value: string) => void;
+  reject: (reason: any) => void;
+  timeout: number;
+}>();
+
+// Function to split HTML into chunks
+function splitHtmlIntoChunks(html: string, chunkSize: number = CHUNK_SIZE): string[] {
+  const chunks: string[] = [];
+  for (let i = 0; i < html.length; i += chunkSize) {
+    chunks.push(html.slice(i, i + chunkSize));
+  }
+  return chunks;
+}
+
+// Function to send HTML in chunks
+async function sendHtmlInChunks(
+  pluginId: string,
+  pageKey: string,
+  html: string,
+  requestId: string
+): Promise<void> {
+  const transferId = `${requestId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const chunks = splitHtmlIntoChunks(html);
+
+  console.log('[background][CHUNKING] Starting chunked HTML transfer:');
+  console.log('[background][CHUNKING] - Transfer ID:', transferId);
+  console.log('[background][CHUNKING] - Total chunks:', chunks.length);
+  console.log('[background][CHUNKING] - Original HTML size:', html.length, 'chars');
+
+  return new Promise<void>((resolve, reject) => {
+    // Set timeout for entire transfer (30 seconds)
+    const timeout = setTimeout(() => {
+      activeTransfers.delete(transferId);
+      reject(new Error('HTML chunk transfer timeout'));
+    }, 30000);
+
+    // Store transfer state
+    activeTransfers.set(transferId, {
+      chunks,
+      received: new Set(),
+      totalChunks: chunks.length,
+      metadata: { pluginId, pageKey, requestId, totalSize: html.length, timestamp: Date.now() },
+      resolve: () => {
+        clearTimeout(timeout);
+        activeTransfers.delete(transferId);
+        resolve();
+      },
+      reject: (error) => {
+        clearTimeout(timeout);
+        activeTransfers.delete(transferId);
+        reject(error);
+      },
+      timeout
+    });
+
+    // Send chunks sequentially with confirmation
+    sendChunksSequentially(transferId);
+  });
+}
+
+// Function to send chunks sequentially
+async function sendChunksSequentially(transferId: string): Promise<void> {
+  const transfer = activeTransfers.get(transferId);
+  if (!transfer) {
+    throw new Error('Transfer not found');
+  }
+
+  for (let i = 0; i < transfer.chunks.length; i++) {
+    if (!activeTransfers.has(transferId)) {
+      // Transfer was cancelled or completed
+      return;
+    }
+
+    try {
+      const chunkMessage: HtmlChunkMessage = {
+        type: 'HTML_CHUNK',
+        transferId,
+        chunkIndex: i,
+        totalChunks: transfer.totalChunks,
+        chunkData: transfer.chunks[i],
+        metadata: transfer.metadata
+      };
+
+      console.log(`[background][CHUNKING] Sending chunk ${i + 1}/${transfer.totalChunks} (${transfer.chunks[i].length} chars)`);
+
+      await chrome.runtime.sendMessage(chunkMessage);
+
+      // Wait for chunk acknowledgment with timeout
+      await waitForChunkAck(transferId, i);
+
+      // Small delay between chunks
+      if (i < transfer.chunks.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, CHUNK_DELAY));
+      }
+
+    } catch (error) {
+      console.error(`[background][CHUNKING] Failed to send chunk ${i}:`, error);
+      transfer.reject(error);
+      return;
+    }
+  }
+
+  // Send completion message
+  try {
+    await chrome.runtime.sendMessage({
+      type: 'HTML_CHUNK_COMPLETE',
+      transferId,
+      totalChunks: transfer.totalChunks
+    });
+
+    console.log('[background][CHUNKING] All chunks sent successfully');
+    transfer.resolve();
+
+  } catch (error) {
+    console.error('[background][CHUNKING] Failed to send completion message:', error);
+    transfer.reject(error);
+  }
+}
+
+// Function to wait for chunk acknowledgment
+async function waitForChunkAck(transferId: string, chunkIndex: number): Promise<void> {
+  const transfer = activeTransfers.get(transferId);
+  if (!transfer) {
+    throw new Error('Transfer not found');
+  }
+
+  // Wait up to 5 seconds for acknowledgment
+  const ackTimeout = 5000;
+  const startTime = Date.now();
+
+  while (!transfer.received.has(chunkIndex)) {
+    if (Date.now() - startTime > ackTimeout) {
+      throw new Error(`Timeout waiting for chunk ${chunkIndex} acknowledgment`);
+    }
+
+    // Wait 100ms and check again
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+
+  console.log(`[background][CHUNKING] Chunk ${chunkIndex} acknowledged`);
+}
+
+// Handle chunk acknowledgments
+function handleChunkAcknowledgment(ackMessage: HtmlChunkAckMessage): void {
+  const transfer = activeTransfers.get(ackMessage.transferId);
+  if (transfer) {
+    if (ackMessage.received) {
+      transfer.received.add(ackMessage.chunkIndex);
+
+      // Check if all chunks received
+      if (transfer.received.size === transfer.totalChunks) {
+        console.log('[background][CHUNKING] All chunks acknowledged, transfer complete');
+        transfer.resolve();
+      }
+    } else {
+      console.error(`[background][CHUNKING] Chunk ${ackMessage.chunkIndex} acknowledgment failed`);
+    }
+  } else {
+    console.warn('[background][CHUNKING] Acknowledgment for unknown transfer:', ackMessage.transferId);
+  }
+}
+
 const handleLegacyChrome = async (message: ExtensionMessage): Promise<void> => {
   console.warn('[background][LEGACY CHROME] ================= EXECUTING FALLBACK WORKFLOW =================');
   console.warn('[background][LEGACY CHROME] Chrome version < 109 detected, offscreen API not supported');
@@ -475,20 +671,37 @@ chrome.runtime.onMessage.addListener(
         console.log('[background][TEST_PYODIDE_DIRECT] Processing direct Pyodide test request');
         console.log('[background][TEST_PYODIDE_DIRECT] Python code to execute:', msg.pythonCode);
 
-        (async () => {
-          try {
-            const result = await handleTestPyodideDirect(msg);
-            console.log('[background][TEST_PYODIDE_DIRECT] Test completed with result:', result);
-            sendResponse(result);
-          } catch (error) {
-            console.error('[background][TEST_PYODIDE_DIRECT] Test failed:', error);
-            sendResponse({
-              success: false,
-              error: (error as Error).message,
-              timestamp: Date.now()
-            });
-          }
-        })();
+        try {
+          (async () => {
+            try {
+              const result = await handleTestPyodideDirect(msg);
+              console.log('[background][TEST_PYODIDE_DIRECT] Test completed with result:', result);
+              if (!result) {
+                sendResponse({
+                  success: false,
+                  error: 'No response received from test execution',
+                  timestamp: Date.now()
+                });
+              } else {
+                sendResponse(result);
+              }
+            } catch (error) {
+              console.error('[background][TEST_PYODIDE_DIRECT] Test failed:', error);
+              sendResponse({
+                success: false,
+                error: (error as Error).message,
+                timestamp: Date.now()
+              });
+            }
+          })();
+        } catch (error) {
+          console.error('[background][TEST_PYODIDE_DIRECT] Critical error in async handler setup:', error);
+          sendResponse({
+            success: false,
+            error: (error as Error).message,
+            timestamp: Date.now()
+          });
+        }
 
         return true; // Keep channel open for async response
       }
@@ -497,33 +710,42 @@ chrome.runtime.onMessage.addListener(
       if (msg.type === 'INITIALIZE_PYODIDE_MANUAL_TEST') {
         console.log('[background][INITIALIZE_PYODIDE_MANUAL_TEST] Initializing Pyodide for manual testing');
 
-        (async () => {
-          try {
-            // Убеждаемся что offscreen document существует
-            await ensureOffscreenDocument();
+        try {
+          (async () => {
+            try {
+              // Убеждаемся что offscreen document существует
+              await ensureOffscreenDocument();
 
-            // Отправляем команду инициализации в offscreen document
-            const response = await chrome.runtime.sendMessage({
-              type: 'INITIALIZE_PYODIDE',
-              requestId: msg.requestId,
-              timestamp: msg.timestamp
-            });
+              // Отправляем команду инициализации в offscreen document
+              const response = await chrome.runtime.sendMessage({
+                type: 'INITIALIZE_PYODIDE',
+                requestId: msg.requestId,
+                timestamp: msg.timestamp
+              });
 
-            sendResponse({
-              success: response?.success || true,
-              result: 'Pyodide initialized in offscreen document',
-              timestamp: Date.now()
-            });
+              sendResponse({
+                success: response?.success || true,
+                result: 'Pyodide initialized in offscreen document',
+                timestamp: Date.now()
+              });
 
-          } catch (error) {
-            console.error('[background][INITIALIZE_PYODIDE_MANUAL_TEST] Initialization failed:', error);
-            sendResponse({
-              success: false,
-              error: (error as Error).message,
-              timestamp: Date.now()
-            });
-          }
-        })();
+            } catch (error) {
+              console.error('[background][INITIALIZE_PYODIDE_MANUAL_TEST] Initialization failed:', error);
+              sendResponse({
+                success: false,
+                error: (error as Error).message,
+                timestamp: Date.now()
+              });
+            }
+          })();
+        } catch (error) {
+          console.error('[background][INITIALIZE_PYODIDE_MANUAL_TEST] Critical error in async handler setup:', error);
+          sendResponse({
+            success: false,
+            error: (error as Error).message,
+            timestamp: Date.now()
+          });
+        }
 
         return true;
       }
@@ -533,34 +755,43 @@ chrome.runtime.onMessage.addListener(
         console.log('[background][EXECUTE_PYTHON_TEST_CODE] Test name:', msg.testName);
         console.log('[background][EXECUTE_PYTHON_TEST_CODE] Code:', msg.code);
 
-        (async () => {
-          try {
-            // Отправляем код в offscreen document для исполнения
-            const response = await chrome.runtime.sendMessage({
-              type: 'EXECUTE_PYTHON_CODE',
-              code: msg.code,
-              testName: msg.testName,
-              requestId: msg.requestId,
-              timestamp: msg.timestamp
-            });
+        try {
+          (async () => {
+            try {
+              // Отправляем код в offscreen document для исполнения
+              const response = await chrome.runtime.sendMessage({
+                type: 'EXECUTE_PYTHON_CODE',
+                code: msg.code,
+                testName: msg.testName,
+                requestId: msg.requestId,
+                timestamp: msg.timestamp
+              });
 
-            sendResponse({
-              success: response?.success || false,
-              result: response?.result,
-              error: response?.error,
-              timestamp: Date.now(),
-              executionTime: Date.now() - (msg.timestamp || 0)
-            });
+              sendResponse({
+                success: response?.success || false,
+                result: response?.result,
+                error: response?.error,
+                timestamp: Date.now(),
+                executionTime: Date.now() - (msg.timestamp || 0)
+              });
 
-          } catch (error) {
-            console.error('[background][EXECUTE_PYTHON_TEST_CODE] Execution failed:', error);
-            sendResponse({
-              success: false,
-              error: (error as Error).message,
-              timestamp: Date.now()
-            });
-          }
-        })();
+            } catch (error) {
+              console.error('[background][EXECUTE_PYTHON_TEST_CODE] Execution failed:', error);
+              sendResponse({
+                success: false,
+                error: (error as Error).message,
+                timestamp: Date.now()
+              });
+            }
+          })();
+        } catch (error) {
+          console.error('[background][EXECUTE_PYTHON_TEST_CODE] Critical error in async handler setup:', error);
+          sendResponse({
+            success: false,
+            error: (error as Error).message,
+            timestamp: Date.now()
+          });
+        }
 
         return true;
       }
@@ -569,35 +800,44 @@ chrome.runtime.onMessage.addListener(
         console.log('[background][EXECUTE_PYTHON_ERROR_TEST] Executing Python error test');
         console.log('[background][EXECUTE_PYTHON_ERROR_TEST] Test name:', msg.testName);
 
-        (async () => {
-          try {
-            // Отправляем код с ошибкой в offscreen document для тестирования error handling
-            const response = await chrome.runtime.sendMessage({
-              type: 'EXECUTE_PYTHON_CODE',
-              code: msg.code,
-              testName: msg.testName,
-              isErrorTest: true,
-              requestId: msg.requestId,
-              timestamp: msg.timestamp
-            });
+        try {
+          (async () => {
+            try {
+              // Отправляем код с ошибкой в offscreen document для тестирования error handling
+              const response = await chrome.runtime.sendMessage({
+                type: 'EXECUTE_PYTHON_CODE',
+                code: msg.code,
+                testName: msg.testName,
+                isErrorTest: true,
+                requestId: msg.requestId,
+                timestamp: msg.timestamp
+              });
 
-            // Ожидаем ошибку от Python кода, так что success=false это нормально
-            sendResponse({
-              success: response?.success || false,
-              result: response?.result,
-              error: response?.error,
-              timestamp: Date.now()
-            });
+              // Ожидаем ошибку от Python кода, так что success=false это нормально
+              sendResponse({
+                success: response?.success || false,
+                result: response?.result,
+                error: response?.error,
+                timestamp: Date.now()
+              });
 
-          } catch (error) {
-            console.error('[background][EXECUTE_PYTHON_ERROR_TEST] Error test failed:', error);
-            sendResponse({
-              success: false,
-              error: (error as Error).message,
-              timestamp: Date.now()
-            });
-          }
-        })();
+            } catch (error) {
+              console.error('[background][EXECUTE_PYTHON_ERROR_TEST] Error test failed:', error);
+              sendResponse({
+                success: false,
+                error: (error as Error).message,
+                timestamp: Date.now()
+              });
+            }
+          })();
+        } catch (error) {
+          console.error('[background][EXECUTE_PYTHON_ERROR_TEST] Critical error in async handler setup:', error);
+          sendResponse({
+            success: false,
+            error: (error as Error).message,
+            timestamp: Date.now()
+          });
+        }
 
         return true;
       }
@@ -606,93 +846,105 @@ chrome.runtime.onMessage.addListener(
         console.log('[background] Processing GET_PLUGINS request from sender:', sender);
         console.log('[background] GET_PLUGINS message timestamp:', new Date().toISOString());
 
-        // АСИНХРОННАЯ ОБРАБОТКА: Возвращаем true и обрабатываем асинхронно
-        (async () => {
-          console.log('[background] processGetPlugins started, timestamp:', new Date().toISOString());
-          console.log('[background] Sender details:', {
-            id: sender?.id,
-            origin: sender?.origin,
-            url: sender?.url,
-            tab: sender?.tab?.id,
-            frameId: sender?.frameId
-          });
-
-          try {
-            console.log('[background] Getting available plugins...');
-            const startTime = Date.now();
-
-            // Параллельное выполнение для ускорения
-            const [plugins, allSettings] = await Promise.all([
-              getAvailablePlugins(),
-              pluginSettingsStorage.get()
-            ]);
-
-            const fetchTime = Date.now() - startTime;
-            console.log(`[background] Data fetched in ${fetchTime}ms`);
-            console.log('[background] getAvailablePlugins result:', plugins);
-            console.log('[background] Plugins count:', plugins?.length || 'undefined');
-            console.log('[background] Plugin settings:', allSettings);
-            console.log('[background] Settings type:', typeof allSettings);
-
-            if (!plugins || !Array.isArray(plugins)) {
-              console.error('[background] getAvailablePlugins returned invalid data:', plugins);
-              // Используем chrome.runtime.sendMessage для отправки ответа обратно
-              chrome.runtime.sendMessage({
-                type: 'GET_PLUGINS_RESPONSE',
-                error: 'Invalid plugins data from getAvailablePlugins',
-                requestId: msg.requestId // Добавляем requestId для сопоставления
-              });
-              return;
-            }
-
-            const pluginsWithSettings = plugins.map((plugin: Plugin) => {
-              console.log('[background] Processing plugin:', plugin.id, plugin.name);
-              const settings = allSettings[plugin.id] || {
-                enabled: true,
-                autorun: false,
-              };
-              console.log('[background] Plugin settings for', plugin.id, ':', settings);
-
-              return {
-                ...plugin,
-                settings,
-              };
-            });
-
-            console.log('[background] Final plugins data:', pluginsWithSettings.length, 'plugins');
-            console.log('[background] Final plugins data details:', pluginsWithSettings.map(p => ({ id: p.id, name: p.name, settings: p.settings })));
-
-            // Отправляем успешный ответ через sendMessage
-            const responseData = {
-              type: 'GET_PLUGINS_RESPONSE',
-              plugins: pluginsWithSettings,
-              requestId: msg.requestId // Добавляем requestId для сопоставления
-            };
-            console.log('[background] Sending response data:', responseData);
-            console.log('[background] About to send response via sendMessage, timestamp:', new Date().toISOString());
-
-            chrome.runtime.sendMessage(responseData);
-            console.log('[background] Successfully sent plugins response, timestamp:', new Date().toISOString());
-
-          } catch (error) {
-            console.error('[background] Error processing GET_PLUGINS:', error);
-            console.error('[background] Error details:', {
-              message: (error as Error).message,
-              stack: (error as Error).stack,
-              name: (error as Error).name
-            });
+        try {
+          // АСИНХРОННАЯ ОБРАБОТКА: Возвращаем true и обрабатываем асинхронно
+          (async () => {
             try {
+              console.log('[background] processGetPlugins started, timestamp:', new Date().toISOString());
+              console.log('[background] Sender details:', {
+                id: sender?.id,
+                origin: sender?.origin,
+                url: sender?.url,
+                tab: sender?.tab?.id,
+                frameId: sender?.frameId
+              });
+
+              console.log('[background] Getting available plugins...');
+              const startTime = Date.now();
+
+              // Параллельное выполнение для ускорения
+              const [plugins, allSettings] = await Promise.all([
+                getAvailablePlugins(),
+                pluginSettingsStorage.get()
+              ]);
+
+              const fetchTime = Date.now() - startTime;
+              console.log(`[background] Data fetched in ${fetchTime}ms`);
+              console.log('[background] getAvailablePlugins result:', plugins);
+              console.log('[background] Plugins count:', plugins?.length || 'undefined');
+              console.log('[background] Plugin settings:', allSettings);
+              console.log('[background] Settings type:', typeof allSettings);
+
+              if (!plugins || !Array.isArray(plugins)) {
+                console.error('[background] getAvailablePlugins returned invalid data:', plugins);
+                // Отправляем ошибку через broadcast
+                chrome.runtime.sendMessage({
+                  type: 'GET_PLUGINS_RESPONSE',
+                  error: 'Invalid plugins data from getAvailablePlugins',
+                  requestId: msg.requestId
+                });
+                sendResponse({ success: false, timestamp: Date.now() });
+                return;
+              }
+
+              const pluginsWithSettings = plugins.map((plugin: Plugin) => {
+                console.log('[background] Processing plugin:', plugin.id, plugin.name);
+                const settings = allSettings[plugin.id] || {
+                  enabled: true,
+                  autorun: false,
+                };
+                console.log('[background] Plugin settings for', plugin.id, ':', settings);
+
+                return {
+                  ...plugin,
+                  settings,
+                };
+              });
+
+              console.log('[background] Final plugins data:', pluginsWithSettings.length, 'plugins');
+              console.log('[background] Final plugins data details:', pluginsWithSettings.map(p => ({ id: p.id, name: p.name, settings: p.settings })));
+
+              // Отправляем успешный ответ через broadcast сообщение вместо sendResponse
+              const responseData = {
+                type: 'GET_PLUGINS_RESPONSE',
+                plugins: pluginsWithSettings,
+                requestId: msg.requestId // Добавляем requestId для сопоставления
+              };
+              console.log('[background] Broadcasting GET_PLUGINS_RESPONSE:', responseData);
+              console.log('[background] About to broadcast, timestamp:', new Date().toISOString());
+
+              // Отправляем broadcast сообщение всем слушателям (side panels, popups, etc.)
+              chrome.runtime.sendMessage(responseData);
+
+              console.log('[background] Successfully sent plugins response, timestamp:', new Date().toISOString());
+              // Отправляем подтверждение обработки для самого запроса
+              sendResponse({ success: true, timestamp: Date.now() });
+
+            } catch (error) {
+              console.error('[background] Error processing GET_PLUGINS:', error);
+              console.error('[background] Error details:', {
+                message: (error as Error).message,
+                stack: (error as Error).stack,
+                name: (error as Error).name
+              });
+
+              // Отправляем ошибку через broadcast сообщение
               chrome.runtime.sendMessage({
                 type: 'GET_PLUGINS_RESPONSE',
                 error: (error as Error).message,
                 requestId: msg.requestId
               });
-              console.log('[background] Sent error response');
-            } catch (sendError) {
-              console.error('[background] Failed to send error response:', sendError);
+              console.log('[background] Sent error response broadcast');
+              sendResponse({ success: false, timestamp: Date.now() });
             }
-          }
-        })();
+          })();
+        } catch (error) {
+          console.error('[background][GET_PLUGINS] Critical error in async handler setup:', error);
+          sendResponse({
+            error: (error as Error).message,
+            requestId: msg.requestId
+          });
+        }
 
         // ВОЗВРАЩАЕМ TRUE для поддержания канала открытым
         return true;
@@ -703,8 +955,9 @@ chrome.runtime.onMessage.addListener(
         console.log('[background][OFFSCREEN DELEGATION] Plugin ID:', msg.pluginId);
         console.log('[background][OFFSCREEN DELEGATION] Request timestamp:', new Date().toISOString());
 
-        (async () => {
-          try {
+        try {
+          (async () => {
+            try {
             // ШАГ 1: Получить активную вкладку пользователя
             console.log('[background][OFFSCREEN DELEGATION] Querying active tab...');
             const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -792,31 +1045,59 @@ chrome.runtime.onMessage.addListener(
             console.log('[background][OFFSCREEN DELEGATION] ===== DELEGATING TO OFFSCREEN =====');
             console.log('[background][OFFSCREEN DELEGATION] Preparing workflow payload...');
 
-            const workflowPayload = {
-              type: 'EXECUTE_WORKFLOW',
-              pluginId: msg.pluginId,
-              pageKey: pageKey,
-              pageHtml: pageHtml,
-              requestId: msg.requestId || `workflow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-              timestamp: Date.now()
-            };
+            const requestId = msg.requestId || `workflow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-            console.log('[background][OFFSCREEN DELEGATION] Execution payload prepared:', {
-              ...workflowPayload,
-              pageHtml: `${pageHtml.length} chars`
-            });
-            
-            // DEBUG: Проверяем размер данных перед отправкой
-            console.log('[background][OFFSCREEN DELEGATION][DEBUG] Payload details:');
-            console.log('[background][OFFSCREEN DELEGATION][DEBUG] - pageHtml length:', pageHtml.length);
-            console.log('[background][OFFSCREEN DELEGATION][DEBUG] - pageHtml preview:', pageHtml.substring(0, 100) + '...');
-            console.log('[background][OFFSCREEN DELEGATION][DEBUG] - payload keys:', Object.keys(workflowPayload));
-            console.log('[background][OFFSCREEN DELEGATION][DEBUG] - payload.pageHtml type:', typeof workflowPayload.pageHtml);
-            console.log('[background][OFFSCREEN DELEGATION][DEBUG] - payload.pageHtml length:', workflowPayload.pageHtml.length);
+            // Проверяем размер HTML и выбираем метод передачи
+            if (pageHtml.length > 64000) { // Используем chunking для больших данных (>64KB)
+              console.log('[background][OFFSCREEN DELEGATION] Large HTML detected, using chunking approach');
+              console.log('[background][OFFSCREEN DELEGATION][DEBUG] HTML size:', pageHtml.length, 'chars');
 
-            // Отправить задачу в offscreen document
-            console.log('[background][OFFSCREEN DELEGATION] Sending to offscreen...');
-            const result = await chrome.runtime.sendMessage(workflowPayload);
+              try {
+                // Отправляем HTML кусками
+                await sendHtmlInChunks(msg.pluginId!, pageKey, pageHtml, requestId);
+
+                // После успешной передачи чанков, отправляем команду запуска workflow
+                const workflowCommand = {
+                  type: 'START_WORKFLOW_AFTER_CHUNKS',
+                  pluginId: msg.pluginId,
+                  pageKey: pageKey,
+                  requestId: requestId,
+                  timestamp: Date.now()
+                };
+
+                console.log('[background][OFFSCREEN DELEGATION] Sending workflow start command...');
+                const result = await chrome.runtime.sendMessage(workflowCommand);
+
+                console.log('[background][OFFSCREEN DELEGATION] Workflow command sent, result:', result);
+
+              } catch (chunkingError) {
+                console.error('[background][OFFSCREEN DELEGATION] Chunking failed:', chunkingError);
+                sendResponse({ error: `Failed to send large HTML data: ${(chunkingError as Error).message}` });
+                return;
+              }
+
+            } else {
+              // Для маленьких данных используем обычную отправку
+              console.log('[background][OFFSCREEN DELEGATION] Small HTML, using direct transmission');
+
+              const workflowPayload = {
+                type: 'EXECUTE_WORKFLOW',
+                pluginId: msg.pluginId,
+                pageKey: pageKey,
+                pageHtml: pageHtml,
+                requestId: requestId,
+                timestamp: Date.now()
+              };
+
+              console.log('[background][OFFSCREEN DELEGATION] Execution payload prepared:', {
+                ...workflowPayload,
+                pageHtml: `${pageHtml.length} chars`
+              });
+
+              // Отправить задачу в offscreen document
+              console.log('[background][OFFSCREEN DELEGATION] Sending to offscreen...');
+              const result = await chrome.runtime.sendMessage(workflowPayload);
+            }
 
             console.log('[background][OFFSCREEN DELEGATION] ===== OFFSCREEN EXECUTION COMPLETED =====');
             console.log('[background][OFFSCREEN DELEGATION] Result received:', result);
@@ -828,11 +1109,15 @@ chrome.runtime.onMessage.addListener(
               sendResponse({ error: result?.error || 'Unknown execution error' });
             }
 
-          } catch (error) {
-            console.error('[background][OFFSCREEN DELEGATION] Error in delegation:', error);
-            sendResponse({ error: (error as Error).message });
-          }
-        })();
+            } catch (error) {
+              console.error('[background][OFFSCREEN DELEGATION] Error in delegation:', error);
+              sendResponse({ error: (error as Error).message });
+            }
+          })();
+        } catch (error) {
+          console.error('[background][OFFSCREEN DELEGATION] Critical error in async handler setup:', error);
+          sendResponse({ error: (error as Error).message });
+        }
         return true;
       }
 
@@ -1533,6 +1818,12 @@ chrome.runtime.onMessage.addListener(
          }
 
          return true;
+       } else if (msg.type === 'HTML_CHUNK_ACK') {
+         // Обработка подтверждения получения чанка от offscreen
+         console.log('[background][CHUNKING] Chunk acknowledgment received:', msg);
+         handleChunkAcknowledgment(msg as HtmlChunkAckMessage);
+         return true;
+
        } else if (msg.type === 'PYODIDE_MESSAGE_SERVICE_WORKER') {
          // Ретрансмировать PYODIDE_MESSAGE в UI (в Side Panel)
          console.log('[background][PYODIDE_SERVICE_WORKER] PYODIDE_MESSAGE received from offscreen:', msg);
@@ -1629,8 +1920,8 @@ const handleTestPyodideDirect = async (message: ExtensionMessage): Promise<{
 
         return {
           success: result?.success || false,
-          result: result?.result,
-          error: result?.error,
+          result: result?.result || null,
+          error: result?.error || null,
           timestamp: Date.now(),
           chromeVersion: chromeVersion
         };

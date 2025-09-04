@@ -524,6 +524,85 @@ class PyodideManager {
   async awaitReady(): Promise<void> {
     await this.initializationPromise;
   }
+
+  /**
+   * Обрабатывает параметры, разбивая слишком большие строки на chunks.
+   * Возвращает объект с исходными данными + метаданные о чанках.
+   */
+  private _processLargeStrings(params: any): any {
+    const MAX_STRING_SIZE = 100000; // 100KB лимит для одной строки
+    const CHUNK_SIZE = 25000; // Размер каждого чанка в символах
+
+    console.log('[PYODIDE_MANAGER] 🔥 _processLargeStrings АКТИВИРОВАН!');
+    console.log(`[PYODIDE_MANAGER] 🔥 Входные параметры: keys=${Object.keys(params)}, sizes=${Object.entries(params).map(([k,v]) => `${k}:${typeof v === 'string' ? v.length : typeof v}`).join(', ')}`);
+
+    let processedParams = { ...params };
+    let hasLargeString = false;
+
+    // Рекурсивно проходим по объекту и найти большие строки
+    function processObject(obj: any, path: string[] = []): any {
+      if (typeof obj === 'string' && obj.length > MAX_STRING_SIZE) {
+        console.log(`[PYODIDE_MANAGER] 🔥 Найдена большая строка: путь=${path.join('.')}, размер=${obj.length}, лимит=${MAX_STRING_SIZE}`);
+
+        hasLargeString = true;
+        const stringKey = path.join('.');
+
+        // Разбиваем строку на чанки
+        const chunks = [];
+        for (let i = 0; i < obj.length; i += CHUNK_SIZE) {
+          chunks.push(obj.slice(i, i + CHUNK_SIZE));
+        }
+
+        console.log(`[PYODIDE_MANAGER] 🔥 Строка разбита на ${chunks.length} чанков по ~${CHUNK_SIZE} символов`);
+
+        // Заменяем оригинальную строку на метаданные
+        processedParams[stringKey] = {
+          __isChunkedString: true,
+          totalLength: obj.length,
+          chunkCount: chunks.length,
+          originalKey: stringKey
+        };
+
+        // Добавляем все чанки
+        for (let i = 0; i < chunks.length; i++) {
+          processedParams[`${stringKey}_chunk_${i}`] = chunks[i];
+          if (i < 3 || i > chunks.length - 3) { // Логируем только первые и последние чанки
+            console.log(`[PYODIDE_MANAGER] 🔥 Добавлен чанк ${i}: ${chunks[i].length} символов`);
+          }
+        }
+
+        return processedParams[stringKey];
+      } else if (typeof obj === 'string') {
+        console.log(`[PYODIDE_MANAGER] ✅ Маленькая строка: путь=${path.join('.')}, размер=${obj.length}`);
+
+        return obj;
+      } else if (typeof obj === 'object' && obj !== null) {
+        const processed = Array.isArray(obj) ? [] : {};
+        const keys = Object.keys(obj);
+
+        for (const key of keys) {
+          const currentPath = [...path, key];
+          (processed as any)[key] = processObject(obj[key], currentPath);
+        }
+
+        return processed;
+      }
+
+      return obj;
+    }
+
+    processObject(processedParams);
+
+    if (hasLargeString) {
+      console.log(`[PYODIDE_MANAGER] 🎯 Обработка завершена. Передано чанков в Python: ${Object.keys(processedParams).filter(k => k.includes('_chunk_')).length}`);
+      this.logger.addMessage('DEBUG', `Обнаружены большие строки, проведено разбиение на чанки`);
+    } else {
+      console.log('[PYODIDE_MANAGER] ❌ Большие строки НЕ найдены!');
+    }
+
+    console.log(`[PYODIDE_MANAGER] 📤 Финальные параметры для Python: keys=${Object.keys(processedParams)}`);
+    return processedParams;
+  }
   
   /**
    * Главный метод для выполнения Python-кода.
@@ -547,7 +626,7 @@ class PyodideManager {
         throw new Error(`Не удалось загрузить Python-скрипт для плагина ${pluginId}`);
       }
       const pythonCode = await response.text();
-      
+
       // Шаг 2: Выполняем весь скрипт. Это загружает определения всех функций
       // в глобальную область видимости Pyodide.
       await this.pyodide.runPythonAsync(pythonCode);
@@ -560,18 +639,22 @@ class PyodideManager {
       }
       this.logger.addMessage('DEBUG', `Получена ссылка на Python-функцию: ${functionName}`);
 
-      // Шаг 4: Вызываем Python-функцию напрямую, как если бы это была JS-функция.
-      // Pyodide сам позаботится о корректном преобразовании `params` из JS-объекта
+      // Шаг 4: Проверяем параметры и обрабатываем большие строки
+      const processedParams = this._processLargeStrings(params);
+      this.logger.addMessage('DEBUG', `Обработка параметров завершена`);
+
+      // Шаг 5: Вызываем Python-функцию напрямую, как если бы это была JS-функция.
+      // Pyodide сам позаботится о корректном преобразовании `processedParams` из JS-объекта
       // в Python-словарь (точнее, в `JsProxy`).
-      this.logger.addMessage('DEBUG', `Вызов ${functionName} с параметрами:`, params);
-      const resultProxy = await toolFunc(params);
-      
+      this.logger.addMessage('DEBUG', `Вызов ${functionName} с обработанными параметрами...`);
+      const resultProxy = await toolFunc(processedParams);
+
       this.logger.addMessage('DEBUG', `Python-функция ${functionName} вернула результат (PyProxy).`);
 
-      // Шаг 5: Конвертируем результат (PyProxy) обратно в нативный JS-объект
+      // Шаг 6: Конвертируем результат (PyProxy) обратно в нативный JS-объект
       const result = resultProxy.toJs({ dict_converter: Object.fromEntries });
       resultProxy.destroy(); // Освобождаем память, занятую PyProxy
-      
+
       return result;
 
     } catch (error: any) {
@@ -1528,12 +1611,37 @@ class OffscreenDocument {
    private async _routeMessage(message: any): Promise<void> {
     const logger = this.workflowEngine.getLogger();
     logger.addMessage('DEBUG', `Получено сообщение типа: ${message.type}`, message);
-    
-    const { pluginId, pageHtml, input, requestId } = message.data;
+
+    const { pluginId, pageHtml, pageHtmlChunks, input, requestId } = message.data;
+
+    // DEBUG: Логируем получение данных от background
+    console.log('[OFFSCREEN] 🔍 Получены данные от background:');
+    console.log(`[OFFSCREEN] 🔍 pageHtml: ${pageHtml ? pageHtml.length : 'NULL'} символов`);
+    console.log(`[OFFSCREEN] 🔍 pageHtmlChunks: ${pageHtmlChunks ? (Array.isArray(pageHtmlChunks) ? pageHtmlChunks.length : 'NOT_ARRAY') : 'NULL'}`);
+
+    if (pageHtmlChunks && Array.isArray(pageHtmlChunks)) {
+      console.log(`[OFFSCREEN] 🔍 Первый чанк: ${pageHtmlChunks[0] ? pageHtmlChunks[0].substring(0, 100) : 'EMPTY'}`);
+      console.log(`[OFFSCREEN] 🔍 Размеры чанков: ${pageHtmlChunks.map(c => c.length).slice(0, 5).join(', ')}${pageHtmlChunks.length > 5 ? '...' : ''}`);
+    }
+
+    // Обрабатываем чанки HTML если они переданы
+    let finalPageHtml = pageHtml;
+    if (pageHtmlChunks && Array.isArray(pageHtmlChunks)) {
+      console.log(`[OFFSCREEN] 🔧 Начинаем сборку ${pageHtmlChunks.length} чанков...`);
+      finalPageHtml = pageHtmlChunks.join('');
+      console.log(`[OFFSCREEN] ✅ Собран HTML: ${finalPageHtml.length} символов`);
+      console.log(`[OFFSCREEN] 📄 Начало HTML: ${finalPageHtml.substring(0, 200)}...`);
+
+      this.logger.addMessage('DEBUG', `Собран HTML из ${pageHtmlChunks.length} чанков: ${finalPageHtml.length} символов`);
+    }
+
+    // DEBUG: Логируем финальные данные перед передачей в workflow
+    console.log(`[OFFSCREEN] 📤 Передаем в workflow: page_html=${finalPageHtml ? finalPageHtml.length : 'NULL'} символов`);
+    console.log(`[OFFSCREEN] 📤 Plugin: ${pluginId}, Request: ${requestId}`);
 
     try {
       const result = await this.workflowEngine.runWorkflow(pluginId, {
-        input: { ...input, page_html: pageHtml },
+        input: { ...input, page_html: finalPageHtml },
         hostApi: {}
       });
 
@@ -1565,7 +1673,7 @@ class OffscreenDocument {
 
     try {
       const result = await this.workflowEngine.runWorkflow(pluginId, {
-        input: { ...input, page_html: pageHtml },
+        input: { ...input, page_html: finalPageHtml },
         hostApi: {} // Host API будет реализован через HOST_CALL сообщения
       });
 

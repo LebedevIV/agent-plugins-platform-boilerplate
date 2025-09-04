@@ -959,31 +959,34 @@ async def analyze_ozon_product(input_data: Dict[str, Any]) -> Dict[str, Any]:
             except (TypeError, AttributeError):
                 raise ValueError("Входные данные должны быть словарем или конвертируемым в словарь.")
 
+        # Шаг X: Сборка больших строк из чанков (если разделены из-за Pyodide ограничений)
+        reconstructed_data = _reconstruct_chunked_strings(input_data)
+
         # Безопасное извлечение HTML с фоллбеком
         page_html = None
-        
+
         # DEBUG: Логируем все входные данные
-        js.sendMessageToChat({"content": f"Python: DEBUG - Входные данные: keys={list(input_data.keys())}"})
-        for key, value in input_data.items():
+        js.sendMessageToChat({"content": f"Python: DEBUG - Входные данные: keys={list(reconstructed_data.keys())}"})
+        for key, value in reconstructed_data.items():
             if isinstance(value, str):
                 js.sendMessageToChat({"content": f"Python: DEBUG - {key}: {len(value)} символов"})
             else:
                 js.sendMessageToChat({"content": f"Python: DEBUG - {key}: {type(value)}"})
-        
+
         try:
             # Попытка различных способов доступа к данным
-            if 'page_html' in input_data:
-                page_html = input_data['page_html']
+            if 'page_html' in reconstructed_data:
+                page_html = reconstructed_data['page_html']
                 js.sendMessageToChat({"content": f"Python: DEBUG - Извлечен page_html: {len(page_html)} символов"})
-            elif 'html' in input_data:
-                page_html = input_data['html']
+            elif 'html' in reconstructed_data:
+                page_html = reconstructed_data['html']
                 js.sendMessageToChat({"content": f"Python: DEBUG - Извлечен html: {len(page_html)} символов"})
-            elif 'content' in input_data:
-                page_html = input_data['content']
+            elif 'content' in reconstructed_data:
+                page_html = reconstructed_data['content']
                 js.sendMessageToChat({"content": f"Python: DEBUG - Извлечен content: {len(page_html)} символов"})
             else:
                 # Сбор всех возможных HTML-подобных данных
-                for key, value in input_data.items():
+                for key, value in reconstructed_data.items():
                     if isinstance(value, str) and len(value) > 100 and '<' in value and '>' in value:
                         page_html = value
                         js.sendMessageToChat({"content": f"Python: DEBUG - Извлечен из {key}: {len(page_html)} символов"})
@@ -1215,6 +1218,68 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
 # Эти функции не предназначены для прямого вызова из `workflow.json`.
 # Они инкапсулируют внутреннюю логику плагина.
 # ==============================================================================
+
+def _reconstruct_chunked_strings(input_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Восстанавливает большие строки, которые были разделены на чанки в PyodideManager.
+    Возвращает копию данных с восстановленными строками.
+    """
+    try:
+        reconstructed = input_data.copy()
+        processed_keys = set()  # Ключи, которые уже обработали
+
+        for key, value in input_data.items():
+            # Проверяем, является ли значение метаданными большого чанка
+            if isinstance(value, dict) and value.get('__isChunkedString', False):
+                chunk_count = value.get('chunkCount', 0)
+                original_key = value.get('originalKey', key)
+                total_length = value.get('totalLength', 0)
+
+                # Собираем все чанки
+                chunks = []
+                for i in range(chunk_count):
+                    chunk_key = f"{original_key}_chunk_{i}"
+                    if chunk_key in input_data:
+                        chunks.append(input_data[chunk_key])
+
+                # Собираем строку из чанков
+                if len(chunks) == chunk_count:
+                    reconstructed[original_key] = ''.join(chunks)
+
+                    # Проверяем целостность
+                    if len(reconstructed[original_key]) == total_length:
+                        js.sendMessageToChat({
+                            "content": f"Python: ✅ Восстановлена строка {original_key} из {chunk_count} чанков ({total_length} символов)"
+                        })
+
+                        # Удаляем метаданные и чанки
+                        if key in reconstructed:
+                            del reconstructed[key]
+                        for i in range(chunk_count):
+                            chunk_key = f"{original_key}_chunk_{i}"
+                            if chunk_key in reconstructed:
+                                del reconstructed[chunk_key]
+                    else:
+                        js.sendMessageToChat({
+                            "content": f"Python: ❌ Ошибка сборки строки {original_key}: ожидалось {total_length}, получено {len(reconstructed[original_key])}"
+                        })
+                        return input_data  # Возвращаем исходные данные при ошибке
+
+                processed_keys.add(key)
+
+        # Удаляем обработанные метаданные
+        for key in processed_keys:
+            if key in reconstructed and isinstance(reconstructed[key], dict) and reconstructed[key].get('__isChunkedString'):
+                del reconstructed[key]
+
+        if processed_keys:
+            js.sendMessageToChat({"content": f"Python: 🔧 Восстановлено {len(processed_keys)} больших строк из чанков"})
+
+        return reconstructed
+
+    except Exception as e:
+        js.sendMessageToChat({"content": f"Python: ❌ Ошибка при сборке чанков: {e}"})
+        return input_data  # Возвращаем исходные данные при ошибке
 
 async def _analyze_composition_vs_description(description: str, composition: str) -> Dict[str, Any]:
     """
