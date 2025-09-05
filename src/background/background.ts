@@ -1,352 +1,570 @@
-/**
- * src/background.ts
- * 
- * Фоновый скрипт (Service Worker) нашего расширения.
- * Он является "мозгом" Host-API, обрабатывая запросы от UI,
- * выполняя привилегированные действия (например, доступ к вкладкам)
- * и управляя поведением иконки расширения.
- */
-
-// src/background.ts
-// Псевдокод для вашего background.ts
-
-// Где-то вверху файла
+// src/background/background.ts
+// Enhanced with strict typing, better error handling, and cleaner architecture
 
 import { ensureOffscreenDocument } from './offscreen-manager';
 
-console.log("APP Background Script Loaded (v2.0 - Final Architecture).");
+// ===============================================================================
+// STRICT TYPE DEFINITIONS - Foundation for type safety
+// ===============================================================================
 
-// Хранилище для Promise'ов, которые ждут "обратного звонка" от offscreen.ts
-const workflowPromises = new Map<string, { resolve: Function, reject: Function }>();
+interface WorkflowMessage {
+  type: 'RUN_WORKFLOW';
+  pluginId: string;
+  requestId?: string;
+}
 
+interface WorkflowCompletedMessage {
+  type: 'WORKFLOW_COMPLETED';
+  requestId: string;
+  success: boolean;
+  result?: any;
+  error?: string;
+}
 
-// --- Главный Слушатель Сообщений ---
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  switch (message.type) {
-    // === Сообщение от UI (SidePanel) на запуск воркфлоу ===
-    case 'RUN_WORKFLOW':
-      handleRunWorkflow(message.pluginId)
-        .then(result => sendResponse({ success: true, result }))
-        .catch(error => sendResponse({ success: false, error: error.message }));
-      return true;
+interface HostCallMessage {
+  type: 'HOST_CALL';
+  payload: {
+    func: string;
+    args: any[];
+    callId: string;
+  };
+}
 
-    case 'WORKFLOW_COMPLETED':
-      const promise = workflowPromises.get(message.requestId); // <-- Используем правильное имя
-      if (promise) {
-        if (message.success) {
-          promise.resolve(message.result);
-        } else {
-          promise.reject(new Error(message.error));
-        }
-        workflowPromises.delete(message.requestId); // <-- Используем правильное имя
-      }
-      break;
+interface ChunkMessage {
+  type: 'HTML_CHUNK';
+  transferId: string;
+  chunkIndex: number;
+  totalChunks: number;
+  chunkData: string;
+}
+
+type BackgroundMessage = 
+  | WorkflowMessage 
+  | WorkflowCompletedMessage 
+  | HostCallMessage 
+  | ChunkMessage
+  | { type: 'HTML_CHUNK_COMPLETE'; transferId: string; totalChunks: number }
+  | { type: 'HTML_CHUNK_ACK'; transferId: string; chunkIndex: number }
+  | { type: 'LOG_MESSAGE' | 'WORKFLOW_RESULT'; [key: string]: any };
+
+interface PendingWorkflow {
+  resolve: (value: any) => void;
+  reject: (reason?: any) => void;
+  startTime: number;
+  pluginId: string;
+}
+
+interface ChunkTransfer {
+  chunks: string[];
+  acked: boolean[];
+  totalSize: number;
+  startTime: number;
+}
+
+// ===============================================================================
+// ENHANCED CHUNK MANAGER - Better performance and error handling
+// ===============================================================================
+
+class EnhancedChunkManager {
+  private transfers = new Map<string, ChunkTransfer>();
+  private readonly MAX_CHUNK_SIZE = 32768; // 32KB optimal for Chrome messaging
+  private readonly TRANSFER_TIMEOUT = 30000; // 30s timeout
+  
+  async sendInChunks(data: string, transferId: string): Promise<void> {
+    const startTime = Date.now();
+    const chunks = this.createChunks(data);
     
-    // === Промежуточные сообщения от Offscreen ===
-    case 'LOG_MESSAGE':
-    case 'WORKFLOW_RESULT':
-      console.log(`[FROM_OFFSCREEN - ${message.type}]`, message.data);
-      // TODO: Переслать эти сообщения в SidePanel
-      break;
-
-    // === Запросы от Python (через offscreen) на вызов Host API ===
-    case 'HOST_CALL':
-      handleHostCall(message.payload, sendResponse);
-      return true;
+    const transfer: ChunkTransfer = {
+      chunks,
+      acked: new Array(chunks.length).fill(false),
+      totalSize: data.length,
+      startTime
+    };
+    
+    this.transfers.set(transferId, transfer);
+    
+    try {
+      console.log(`[ChunkManager] Starting transfer ${transferId}: ${chunks.length} chunks, ${data.length} bytes`);
       
-    default:
-      console.warn(`[Background] Получено неизвестное сообщение:`, message);
+      // Send all chunks in parallel for maximum speed
+      const chunkPromises = chunks.map((chunk, i) => 
+        this.sendChunkWithRetry(transferId, i, chunks.length, chunk)
+      );
+      
+      await Promise.all(chunkPromises);
+      
+      // Signal completion
+      await chrome.runtime.sendMessage({
+        type: 'HTML_CHUNK_COMPLETE',
+        transferId,
+        totalChunks: chunks.length
+      });
+      
+      const duration = Date.now() - startTime;
+      console.log(`[ChunkManager] Transfer ${transferId} completed in ${duration}ms`);
+      
+    } catch (error) {
+      console.error(`[ChunkManager] Transfer ${transferId} failed:`, error);
+      this.transfers.delete(transferId);
+      throw error;
+    }
   }
-  return true;
-});
-
-
-// --- Логика Обработчиков ---
-
-async function handleRunWorkflow(pluginId: string): Promise<any> {
-  console.log(`[Background] Получена команда RUN_WORKFLOW для плагина: ${pluginId}`);
-
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tabs[0]?.id) throw new Error("Не найдена активная вкладка.");
-
-  // Извлекаем HTML с chunking для больших страниц
-  const packedHtml = await extractPageHtmlWithChunking(tabs[0].id);
-  if (!packedHtml?.length) throw new Error("Не удалось получить HTML страницы.");
-  console.log(`[Background] HTML извлечен: ${packedHtml.length} пакетов, ~${packedHtml.reduce((sum, chunk) => sum + chunk.length, 0)} символов`);
-
-  await ensureOffscreenDocument();
-
-  const requestId = `workflow_${Date.now()}`;
-
-  // Отправляем задачу в offscreen с чанкинговыми данными
-  chrome.runtime.sendMessage({
-    type: 'EXECUTE_WORKFLOW',
-    data: { pluginId, pageHtmlChunks: packedHtml, requestId, input: {} }
-  });
-
-  console.log(`[Background] Задача ${requestId} отправлена в offscreen. Ожидаем ответа...`);
-
-  // Возвращаем Promise, который будет ждать, пока не придет 'WORKFLOW_COMPLETED'
-  return new Promise((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      if (workflowPromises.has(requestId)) {
-        workflowPromises.delete(requestId);
-        reject(new Error(`Ответ от offscreen-документа не получен за 60 секунд.`));
+  
+  private createChunks(data: string): string[] {
+    const chunks: string[] = [];
+    for (let i = 0; i < data.length; i += this.MAX_CHUNK_SIZE) {
+      chunks.push(data.slice(i, i + this.MAX_CHUNK_SIZE));
+    }
+    return chunks;
+  }
+  
+  private async sendChunkWithRetry(
+    transferId: string, 
+    chunkIndex: number, 
+    totalChunks: number, 
+    chunkData: string, 
+    maxRetries = 3
+  ): Promise<void> {
+    let lastError: Error | null = null;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        await chrome.runtime.sendMessage({
+          type: 'HTML_CHUNK',
+          transferId,
+          chunkIndex,
+          totalChunks,
+          chunkData,
+        });
+        return; // Success
+      } catch (error) {
+        lastError = error as Error;
+        if (attempt < maxRetries) {
+          const delay = Math.min(100 * Math.pow(2, attempt), 1000); // Exponential backoff
+          await this.delay(delay);
+        }
       }
-    }, 60000);
+    }
+    
+    throw lastError || new Error(`Failed to send chunk ${chunkIndex} after ${maxRetries + 1} attempts`);
+  }
+  
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+  
+  acknowledgeChunk(transferId: string, chunkIndex: number): void {
+    const transfer = this.transfers.get(transferId);
+    if (transfer && chunkIndex < transfer.acked.length) {
+      transfer.acked[chunkIndex] = true;
+    }
+  }
+  
+  wasChunked(transferId: string): boolean {
+    return this.transfers.has(transferId);
+  }
+  
+  getTransferStats(transferId: string): { completed: number; total: number; duration: number } | null {
+    const transfer = this.transfers.get(transferId);
+    if (!transfer) return null;
 
-    workflowPromises.set(requestId, {
-      resolve: (result: any) => {
-        clearTimeout(timeoutId);
-        resolve(result);
-      },
-      reject: (error: any) => {
-        clearTimeout(timeoutId);
-        reject(error);
+    return {
+      completed: transfer.acked.filter(ack => ack === true).length,
+      total: transfer.chunks.length,
+      duration: Date.now() - transfer.startTime
+    };
+  }
+  
+  // Cleanup expired transfers
+  cleanup(): void {
+    const now = Date.now();
+    const expiredTransfers: string[] = [];
+    
+    this.transfers.forEach((transfer, transferId) => {
+      if (now - transfer.startTime > this.TRANSFER_TIMEOUT) {
+        expiredTransfers.push(transferId);
       }
     });
-  });
-}
-
-async function handleHostCall(payload: any, sendResponse: (response?: any) => void) {
-  const { func, args, callId } = payload;
-  console.log(`[Background] Получен HOST_CALL для функции '${func}'`);
-
-  try {
-    let result;
-    if (func === 'llm_call') {
-      result = `Моковый ответ от AI для модели ${args[0]}`;
-    } else if (func === 'get_setting') {
-      const settings = await chrome.storage.sync.get(args[0]);
-      result = settings[args[0]];
-    } else {
-      throw new Error(`Неизвестная функция Host API: ${func}`);
-    }
-    // Ответ на HOST_CALL отправляется через sendResponse,
-    // так как offscreen.ts ждет его через `await chrome.runtime.sendMessage`
-    sendResponse({ callId, result });
-  } catch (error: any) {
-    sendResponse({ callId, error: error.message });
+    
+    expiredTransfers.forEach(id => {
+      console.warn(`[ChunkManager] Cleaning up expired transfer: ${id}`);
+      this.transfers.delete(id);
+    });
   }
 }
 
-// Вспомогательная функция для извлечения HTML с chunking
-function extractPageHtmlWithChunking(tabId: number): Promise<string[]> {
-  const MAX_CHUNK_SIZE = 25000; // 25KB на чанк
+// ===============================================================================
+// WORKFLOW PROMISE MANAGER - Better lifecycle management
+// ===============================================================================
 
-  return new Promise(async (resolve, reject) => {
-    try {
-      // Сначала пытаемся вытащить HTML через безопасный диапазон
-      const [{ result: fullHtml }] = await chrome.scripting.executeScript({
-        target: { tabId },
-        func: () => document.documentElement.outerHTML,
-      });
-
-      if (!fullHtml) {
-        resolve([]);
-        return;
-      }
-
-      // Если HTML меньше MAX_CHUNK_SIZE, возвращаем как есть
-      if (fullHtml.length <= MAX_CHUNK_SIZE) {
-        resolve([fullHtml]);
-        return;
-      }
-
-      // Разбиваем на чанки
-      const chunks: string[] = [];
-      for (let i = 0; i < fullHtml.length; i += MAX_CHUNK_SIZE) {
-        chunks.push(fullHtml.slice(i, i + MAX_CHUNK_SIZE));
-      }
-
-      console.log(`[Background] HTML разбит на ${chunks.length} чанков по ~${Math.round(fullHtml.length / chunks.length)} символов каждый`);
-      resolve(chunks);
-    } catch (error) {
-      console.error('[Background] Ошибка при извлечении HTML страницы:', error);
-      reject(error);
-    }
-  });
-}
-
-async function handleHostCallResponse(message: any) {
-  const { callId, result, error } = message;
-  console.log(`[Background] Получен HOST_CALL_RESPONSE для callId: ${callId}`);
-
-  try {
-    // Это ответ от AI сервиса или другого асинхронного хост-колла
-    // Здесь мы можем обработать результат и передать его обратно отправителю
-    const promise = workflowPromises.get(callId);
-    if (promise) {
-      if (error) {
-        promise.reject(new Error(error));
-      } else {
-        promise.resolve(result);
-      }
-      workflowPromises.delete(callId);
-    } else {
-      console.warn(`[Background] Не найден promise для callId: ${callId}`);
-    }
-  } catch (error: any) {
-    console.error(`[Background] Ошибка в обработке HOST_CALL_RESPONSE:`, error);
+class WorkflowPromiseManager {
+  private promises = new Map<string, PendingWorkflow>();
+  private readonly DEFAULT_TIMEOUT = 60000; // 60s
+  
+  create(requestId: string, pluginId: string, timeoutMs = this.DEFAULT_TIMEOUT): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const pending: PendingWorkflow = {
+        resolve,
+        reject,
+        startTime: Date.now(),
+        pluginId
+      };
+      
+      this.promises.set(requestId, pending);
+      
+      // Auto-cleanup on timeout
+      setTimeout(() => {
+        if (this.promises.has(requestId)) {
+          this.promises.delete(requestId);
+          reject(new Error(`Workflow ${requestId} timed out after ${timeoutMs}ms`));
+        }
+      }, timeoutMs);
+    });
   }
-}
-
-async function handleAiCall(data: any, sender: chrome.runtime.MessageSender) {
-  const { modelAlias, prompt, context } = data;
-  console.log(`[Background] Получен ai_call для модели: ${modelAlias}`);
-
-  try {
-    // Интеграция с AI API (здесь можно добавить реальный AI провайдер)
-    const result = await callAiProvider(modelAlias, prompt, context);
-    return result;
-  } catch (error: any) {
-    console.error(`[Background] Ошибка в AI вызове:`, error);
-    throw new Error(`AI call failed: ${error.message}`);
-  }
-}
-
-async function performLlmCall(args: any[]) {
-  const [modelAlias, params, context] = args;
-  console.log(`[Background] Выполнение LLM вызова для модели: ${modelAlias}`);
-
-  try {
-    // Реальная интеграция с AI провайдером
-    // Можно использовать различные провайдеры: OpenAI, Anthropic, etc.
-    return await callAiProvider(modelAlias, params.prompt || params, context);
-  } catch (error: any) {
-    console.error(`[Background] Ошибка в LLM вызове:`, error);
-    throw error;
-  }
-}
-
-async function getPluginSetting(settingKey: string): Promise<any> {
-  console.log(`[Background] Получение настройки плагина: ${settingKey}`);
-
-  try {
-    // Пытаемся получить из chrome.storage.sync
-    const storageResult = await chrome.storage.sync.get(settingKey);
-    if (storageResult[settingKey] !== undefined) {
-      console.log(`[Background] Найдена настройка в sync storage:`, storageResult[settingKey]);
-      return storageResult[settingKey];
+  
+  resolve(requestId: string, result: any): boolean {
+    const pending = this.promises.get(requestId);
+    if (pending) {
+      pending.resolve(result);
+      this.promises.delete(requestId);
+      
+      const duration = Date.now() - pending.startTime;
+      console.log(`[WorkflowPromises] Resolved ${requestId} in ${duration}ms`);
+      return true;
     }
-
-    // Если не найдено, пытаемся получить из chrome.storage.local
-    const localResult = await chrome.storage.local.get(settingKey);
-    if (localResult[settingKey] !== undefined) {
-      console.log(`[Background] Найдена настройка в local storage:`, localResult[settingKey]);
-      return localResult[settingKey];
-    }
-
-    // Если настройка не найдена, возвращаем undefined или дефолтные значения
-    console.warn(`[Background] Настройка ${settingKey} не найдена в хранилище`);
-    return undefined;
-  } catch (error: any) {
-    console.error(`[Background] Ошибка при получении настройки ${settingKey}:`, error);
-    throw new Error(`Failed to get setting ${settingKey}: ${error.message}`);
+    return false;
   }
-}
-
-async function savePluginSetting(key: string, value: any): Promise<boolean> {
-  console.log(`[Background] Сохранение настройки плагина: ${key} =`, value);
-
-  try {
-    // Сохраняем в chrome.storage.sync для синхронизации между устройствами
-    await chrome.storage.sync.set({ [key]: value });
-    console.log(`[Background] Настройка ${key} успешно сохранена`);
-    return true;
-  } catch (error: any) {
-    console.error(`[Background] Ошибка при сохранении настройки ${key}:`, error);
-    throw new Error(`Failed to save setting ${key}: ${error.message}`);
-  }
-}
-
-async function getPluginData(pluginId: string): Promise<any> {
-  console.log(`[Background] Получение данных плагина: ${pluginId}`);
-
-  try {
-    // Получаем данные плагина из хранилища
-    const pluginKey = `plugin_${pluginId}_data`;
-    const storageResult = await chrome.storage.local.get(pluginKey);
-
-    if (storageResult[pluginKey] !== undefined) {
-      console.log(`[Background] Найдены данные плагина ${pluginId}:`, storageResult[pluginKey]);
-      return storageResult[pluginKey];
+  
+  reject(requestId: string, error: Error): boolean {
+    const pending = this.promises.get(requestId);
+    if (pending) {
+      pending.reject(error);
+      this.promises.delete(requestId);
+      
+      const duration = Date.now() - pending.startTime;
+      console.log(`[WorkflowPromises] Rejected ${requestId} after ${duration}ms:`, error.message);
+      return true;
     }
-
-    // Если данные не найдены, возвращаем дефолтную структуру
-    console.warn(`[Background] Данные плагина ${pluginId} не найдены, возвращаем дефолтные`);
+    return false;
+  }
+  
+  getStats(): { active: number; oldestAge: number } {
+    const now = Date.now();
+    let oldestAge = 0;
+    
+    this.promises.forEach(pending => {
+      const age = now - pending.startTime;
+      oldestAge = Math.max(oldestAge, age);
+    });
+    
     return {
+      active: this.promises.size,
+      oldestAge
+    };
+  }
+}
+
+// ===============================================================================
+// HOST API PROVIDER - Centralized API management
+// ===============================================================================
+
+class HostApiProvider {
+  private aiProviders = new Map<string, (prompt: string, context?: any) => Promise<string>>();
+  
+  constructor() {
+    this.initializeProviders();
+  }
+  
+  private initializeProviders(): void {
+    // Mock providers - replace with real implementations
+    this.aiProviders.set('gpt-4', this.createMockProvider('GPT-4'));
+    this.aiProviders.set('claude', this.createMockProvider('Claude'));
+    this.aiProviders.set('gemini', this.createMockProvider('Gemini'));
+  }
+  
+  private createMockProvider(name: string) {
+    return async (prompt: string, context?: any): Promise<string> => {
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 500));
+      return `Mock response from ${name} for: "${prompt.substring(0, 50)}..."`;
+    };
+  }
+  
+  async handleHostCall(func: string, args: any[]): Promise<any> {
+    switch (func) {
+      case 'llm_call':
+        return await this.handleLlmCall(args);
+      case 'get_setting':
+        return await this.handleGetSetting(args);
+      case 'save_setting':
+        return await this.handleSaveSetting(args);
+      case 'get_plugin_data':
+        return await this.handleGetPluginData(args);
+      default:
+        throw new Error(`Unknown Host API function: ${func}`);
+    }
+  }
+  
+  private async handleLlmCall(args: any[]): Promise<string> {
+    const [modelAlias, prompt, context] = args;
+    
+    if (typeof prompt !== 'string' || !prompt.trim()) {
+      throw new Error('Invalid prompt provided to LLM call');
+    }
+    
+    const provider = this.aiProviders.get(modelAlias?.toLowerCase());
+    if (!provider) {
+      throw new Error(`Unknown AI model: ${modelAlias}`);
+    }
+    
+    return await provider(prompt, context);
+  }
+  
+  private async handleGetSetting(args: any[]): Promise<any> {
+    const [settingKey] = args;
+    if (typeof settingKey !== 'string') {
+      throw new Error('Setting key must be a string');
+    }
+    
+    try {
+      const syncResult = await chrome.storage.sync.get(settingKey);
+      if (syncResult[settingKey] !== undefined) {
+        return syncResult[settingKey];
+      }
+      
+      const localResult = await chrome.storage.local.get(settingKey);
+      return localResult[settingKey];
+    } catch (error) {
+      console.error(`Failed to get setting ${settingKey}:`, error);
+      return undefined;
+    }
+  }
+  
+  private async handleSaveSetting(args: any[]): Promise<boolean> {
+    const [key, value] = args;
+    if (typeof key !== 'string') {
+      throw new Error('Setting key must be a string');
+    }
+    
+    try {
+      await chrome.storage.sync.set({ [key]: value });
+      return true;
+    } catch (error) {
+      console.error(`Failed to save setting ${key}:`, error);
+      throw error;
+    }
+  }
+  
+  private async handleGetPluginData(args: any[]): Promise<any> {
+    const [pluginId] = args;
+    if (typeof pluginId !== 'string') {
+      throw new Error('Plugin ID must be a string');
+    }
+    
+    const pluginKey = `plugin_${pluginId}_data`;
+    const result = await chrome.storage.local.get(pluginKey);
+    
+    return result[pluginKey] || {
       id: pluginId,
       name: pluginId,
       enabled: true,
       settings: {},
       cachedData: {}
     };
-  } catch (error: any) {
-    console.error(`[Background] Ошибка при получении данных плагина ${pluginId}:`, error);
-    throw new Error(`Failed to get plugin data ${pluginId}: ${error.message}`);
   }
 }
 
-async function callAiProvider(modelAlias: string, prompt: string, context?: any): Promise<string> {
-  console.log(`[Background] Вызов AI провайдера для модели: ${modelAlias}`);
+// ===============================================================================
+// MAIN BACKGROUND CONTROLLER - Clean orchestration
+// ===============================================================================
 
-  // Моковая реализация - здесь можно интегрировать реальные AI провайдеры
-  // Например:
-  try {
-    switch (modelAlias?.toLowerCase()) {
-      case 'gpt-4':
-      case 'gpt-3.5-turbo':
-        // Интеграция с OpenAI API
-        return await callOpenAi(modelAlias, prompt, context);
-
-      case 'claude':
-      case 'claude-2':
-        // Интеграция с Anthropic
-        return await callAnthropic(modelAlias, prompt, context);
-
-      case 'gemini':
-        // Интеграция с Google Gemini
-        return await callGemini(modelAlias, prompt, context);
-
-      default:
-        // Моковый ответ для неизвестных моделей
-        return `Моковый ответ от AI модели ${modelAlias} для промпта: ${prompt.substring(0, 100)}...`;
+class BackgroundController {
+  private chunkManager = new EnhancedChunkManager();
+  private promiseManager = new WorkflowPromiseManager();
+  private hostApi = new HostApiProvider();
+  
+  constructor() {
+    this.setupMessageHandling();
+    this.setupPeriodicCleanup();
+    console.log('Background Controller initialized (Enhanced v3.0)');
+  }
+  
+  private setupMessageHandling(): void {
+    chrome.runtime.onMessage.addListener(
+      (message: BackgroundMessage, sender, sendResponse) => {
+        this.routeMessage(message, sender, sendResponse);
+        return true; // Keep channel open for async responses
+      }
+    );
+  }
+  
+  private setupPeriodicCleanup(): void {
+    setInterval(() => {
+      this.chunkManager.cleanup();
+      
+      const stats = this.promiseManager.getStats();
+      if (stats.active > 0) {
+        console.log(`[Background] Active workflows: ${stats.active}, oldest: ${stats.oldestAge}ms`);
+      }
+    }, 30000); // Every 30 seconds
+  }
+  
+  private async routeMessage(
+    message: BackgroundMessage, 
+    sender: chrome.runtime.MessageSender, 
+    sendResponse: (response?: any) => void
+  ): Promise<void> {
+    try {
+      switch (message.type) {
+        case 'RUN_WORKFLOW':
+          await this.handleRunWorkflow(message, sendResponse);
+          break;
+          
+        case 'WORKFLOW_COMPLETED':
+          this.handleWorkflowCompleted(message);
+          break;
+          
+        case 'HTML_CHUNK_ACK':
+          this.chunkManager.acknowledgeChunk(message.transferId, message.chunkIndex);
+          break;
+          
+        case 'HOST_CALL':
+          await this.handleHostCall(message, sendResponse);
+          break;
+          
+        case 'LOG_MESSAGE':
+        case 'WORKFLOW_RESULT':
+          // Forward to UI
+          chrome.runtime.sendMessage(message);
+          break;
+          
+        default:
+          console.warn('[Background] Unknown message type:', (message as any).type);
+      }
+    } catch (error) {
+      console.error('[Background] Error handling message:', error);
+      sendResponse({ success: false, error: (error as Error).message });
     }
-  } catch (error: any) {
-    console.error(`[Background] Ошибка в AI провайдере для ${modelAlias}:`, error);
-    throw error;
+  }
+  
+  private async handleRunWorkflow(
+    message: WorkflowMessage, 
+    sendResponse: (response?: any) => void
+  ): Promise<void> {
+    try {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tabs[0]?.id) {
+        throw new Error('No active tab found');
+      }
+      
+      const pageHtml = await this.extractPageHtml(tabs[0].id);
+      await ensureOffscreenDocument();
+      
+      const requestId = message.requestId || `workflow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const transferId = `${requestId}_html`;
+      
+      // Create workflow promise before sending data
+      const resultPromise = this.promiseManager.create(requestId, message.pluginId);
+      
+      // Send HTML data
+      await this.chunkManager.sendInChunks(pageHtml, transferId);
+      
+      // Send execution command
+      await chrome.runtime.sendMessage({
+        type: 'EXECUTE_WORKFLOW',
+        data: {
+          pluginId: message.pluginId,
+          requestId,
+          transferId,
+          useChunks: this.chunkManager.wasChunked(transferId),
+          pageHtml: this.chunkManager.wasChunked(transferId) ? '' : pageHtml
+        }
+      });
+      
+      // Wait for result
+      const result = await resultPromise;
+      sendResponse({ success: true, result, requestId });
+      
+    } catch (error) {
+      console.error('[Background] Workflow execution failed:', error);
+      sendResponse({ success: false, error: (error as Error).message });
+    }
+  }
+  
+  private async extractPageHtml(tabId: number): Promise<string> {
+    const [{ result: html }] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => document.documentElement.outerHTML,
+    });
+    
+    if (!html) {
+      throw new Error('Failed to extract page HTML');
+    }
+    
+    return html;
+  }
+  
+  private handleWorkflowCompleted(message: WorkflowCompletedMessage): void {
+    if (message.success) {
+      this.promiseManager.resolve(message.requestId, message.result);
+    } else {
+      this.promiseManager.reject(message.requestId, new Error(message.error || 'Unknown workflow error'));
+    }
+  }
+  
+  private async handleHostCall(
+    message: HostCallMessage,
+    sendResponse: (response?: any) => void
+  ): Promise<void> {
+    try {
+      const result = await this.hostApi.handleHostCall(
+        message.payload.func,
+        message.payload.args
+      );
+      
+      sendResponse({
+        type: 'HOST_CALL_RESPONSE',
+        callId: message.payload.callId,
+        result
+      });
+    } catch (error) {
+      sendResponse({
+        type: 'HOST_CALL_RESPONSE',
+        callId: message.payload.callId,
+        error: (error as Error).message
+      });
+    }
   }
 }
 
-// Stub функции для AI провайдеров (нужно заменить на реальную интеграцию)
-async function callOpenAi(model: string, prompt: string, context?: any): Promise<string> {
-  // Реальная реализация с OpenAI API
-  throw new Error('OpenAI integration not implemented yet');
-}
+// ===============================================================================
+// INITIALIZATION & ACTION HANDLER
+// ===============================================================================
 
-async function callAnthropic(model: string, prompt: string, context?: any): Promise<string> {
-  // Реальная реализация с Anthropic API
-  throw new Error('Anthropic integration not implemented yet');
-}
+// Global controller instance
+const controller = new BackgroundController();
 
-async function callGemini(model: string, prompt: string, context?: any): Promise<string> {
-  // Реальная реализация с Google Gemini API
-  throw new Error('Gemini integration not implemented yet');
-}
-//================================================================//
-//  3. ОБРАБОТЧИК КЛИКА ПО ИКОНКЕ РАСШИРЕНИЯ
-//================================================================//
-
+// Handle extension icon click
 chrome.action.onClicked.addListener(async (tab) => {
-  // Открываем Side Panel на текущей вкладке
-  // @ts-ignore
-  if (chrome.sidePanel) {
-    // @ts-ignore
-    await chrome.sidePanel.open({ windowId: tab.windowId });
-  } else {
-    // Fallback для браузеров без Side Panel API
-    const platformPageUrl = chrome.runtime.getURL('side-panel/index.html');
-    chrome.tabs.create({ url: platformPageUrl });
+  try {
+    // @ts-ignore - Chrome Side Panel API
+    if (chrome.sidePanel && tab.windowId) {
+      // @ts-ignore
+      await chrome.sidePanel.open({ windowId: tab.windowId });
+    } else {
+      // Fallback to tab-based UI
+      const sidePanelUrl = chrome.runtime.getURL('side-panel/index.html');
+      const existingTabs = await chrome.tabs.query({ url: sidePanelUrl });
+      
+      if (existingTabs.length === 0) {
+        await chrome.tabs.create({ url: sidePanelUrl });
+      } else {
+        await chrome.tabs.update(existingTabs[0].id!, { active: true });
+      }
+    }
+  } catch (error) {
+    console.error('[Background] Failed to open side panel:', error);
   }
 });
+
+console.log('Enhanced Background Script loaded successfully');

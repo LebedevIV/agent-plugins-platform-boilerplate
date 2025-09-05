@@ -1,30 +1,34 @@
-
-
-// Pyodide type declarations
 /**
  * Offscreen Document for Agent Plugins Platform
- *
- * Консолидированный файл, который является "рабочей лошадкой" расширения.
- * Здесь выполняются все тяжелые операции в стабильном DOM-контексте.
+ * 
+ * This is the "workhorse" of the extension where all heavy operations
+ * are executed in a stable DOM context.
  */
 
 /// <reference types="chrome"/>
 
 // ==============================================================================
-// ГЛОБАЛЬНЫЕ ИНТЕРФЕЙСЫ И ТИПЫ (без изменений)
+// GLOBAL INTERFACES AND TYPES
 // ==============================================================================
+
 declare global {
   const loadPyodide: LoadPyodide;
   function importScripts(...urls: string[]): void;
 }
+
+// Export to make it an external module
+declare const importScripts: typeof globalThis.importScripts;
+
 interface PyodideInterface {
   runPythonAsync(code: string): Promise<any>;
   globals: Map<string, any>;
-  [key: string]: any;
+  toPy(obj: any): any;
 }
+
 interface LoadPyodideOptions {
   indexURL?: string;
 }
+
 interface LoadPyodide {
   (options?: LoadPyodideOptions): Promise<PyodideInterface>;
 }
@@ -76,6 +80,7 @@ interface WorkflowError {
   retryAttempt?: number;
   recoverable: boolean;
 }
+
 interface WorkflowContext {
   steps: Record<string, any>;
   input: Record<string, any>;
@@ -85,15 +90,22 @@ interface WorkflowContext {
   hostApi: Record<string, any>;
   [key: string]: any;
 }
+
 interface Logger {
   addMessage(level: string, message: string, data?: any): void;
   renderResult?(stepId: string, result: any): void;
 }
 
+interface OfflineLogger extends Logger {
+  isEnabled: boolean;
+  enable(): void;
+  disable(): void;
+}
 
 // ==============================================================================
-// СИСТЕМА МОНИТОРИНГА И ЛОГИРОВАНИЯ (без изменений)
+// LOGGING AND MONITORING SYSTEM
 // ==============================================================================
+
 class OffscreenLogger implements Logger {
   private logs: Array<{ timestamp: number; level: string; message: string; data?: any }> = [];
 
@@ -101,22 +113,37 @@ class OffscreenLogger implements Logger {
     const logEntry = { timestamp: Date.now(), level: level.toUpperCase(), message, data };
     this.logs.push(logEntry);
 
-    // Ограничение размера логов (максимум 1000 записей)
+    // Limit log size (max 1000 entries)
     if (this.logs.length > 1000) {
       this.logs = this.logs.slice(-1000);
     }
 
     console.log(`[${level.toUpperCase()}] ${message}`, data || '');
-    chrome.runtime.sendMessage({ type: 'LOG_MESSAGE', data: logEntry }).catch(err => {});
+    
+    // Safe message sending with error handling
+    this.sendMessageSafely({ type: 'LOG_MESSAGE', data: logEntry });
   }
 
   renderResult(stepId: string, result: any): void {
-    this.addMessage('RESULT', `Результат шага ${stepId}`, result);
-    chrome.runtime.sendMessage({ type: 'WORKFLOW_RESULT', data: { stepId, result: JSON.stringify(result), timestamp: Date.now() }}).catch(err => {});
+    this.addMessage('RESULT', `Step ${stepId} result`, result);
+    this.sendMessageSafely({ 
+      type: 'WORKFLOW_RESULT', 
+      data: { stepId, result: JSON.stringify(result), timestamp: Date.now() }
+    });
+  }
+
+  private sendMessageSafely(message: any): void {
+    try {
+      chrome.runtime.sendMessage(message).catch(() => {
+        // Silently handle disconnection errors
+      });
+    } catch (error) {
+      // Extension context may not be available
+    }
   }
 
   getLogs(): any[] {
-    return [...this.logs]; // Возвращаем копию массива для безопасности
+    return [...this.logs];
   }
 
   clearLogs(): void {
@@ -129,7 +156,7 @@ class OffscreenLogger implements Logger {
 }
 
 // ==============================================================================
-// УПРАВЛЕНИЕ ПАМЯТЬЮ И КЕШИРОВАНИЕМ
+// MEMORY MANAGEMENT AND CACHING
 // ==============================================================================
 
 class MemoryManager {
@@ -140,7 +167,6 @@ class MemoryManager {
   private cleanupInterval = 30000;
 
   constructor() {
-    // Периодическая очистка
     setInterval(() => this._cleanup(), this.cleanupInterval);
   }
 
@@ -167,11 +193,10 @@ class MemoryManager {
     }
   }
 
-  cache(key: string, value: any, ttlMs: number = 300000): void { // 5 минут по умолчанию
+  cache(key: string, value: any, ttlMs: number = 300000): void {
     const expiry = Date.now() + ttlMs;
     this.lruCache.set(key, { value, expiry });
 
-    // Ротация если слишком много элементов
     if (this.lruCache.size > this.maxPoolSize) {
       const firstKey = this.lruCache.keys().next().value;
       if (firstKey !== undefined) {
@@ -222,7 +247,7 @@ class MemoryManager {
 }
 
 // ==============================================================================
-// BATCH PROCESSOR ДЛЯ AI ЗАПРОСОВ
+// BATCH PROCESSOR FOR AI REQUESTS
 // ==============================================================================
 
 class BatchProcessor {
@@ -255,11 +280,9 @@ class BatchProcessor {
         timestamp: Date.now()
       });
 
-      // Если достигнут размер батча, обработать сразу
       if (this.pendingRequests.length >= this.batchSize) {
         setTimeout(() => this._processBatch(), 100);
       } else {
-        // Таймаут для обработки если батч не наполняется
         setTimeout(() => {
           if (this.pendingRequests.length > 0 && !this.isProcessing) {
             this._processBatch();
@@ -277,7 +300,6 @@ class BatchProcessor {
     this.pendingRequests = [];
 
     try {
-      // Группировка по модели
       const byModel = new Map<string, typeof batch>();
 
       batch.forEach(request => {
@@ -286,7 +308,6 @@ class BatchProcessor {
         byModel.set(request.modelAlias, modelRequests);
       });
 
-      // Обработка каждой модели параллельно
       const tasks = Array.from(byModel.entries()).map(([model, requests]) =>
         this._processModelBatch(model, requests)
       );
@@ -299,26 +320,23 @@ class BatchProcessor {
 
   private async _processModelBatch(model: string, requests: typeof this.pendingRequests): Promise<void> {
     try {
-      // Для одиночных запросов - прямой вызов
       if (requests.length === 1) {
         await this._processSingleRequest(requests[0]);
         return;
       }
 
-      // Для множественных - объединение в один промпт
       if (requests.every(r => !r.context)) {
         let combinedPrompt = requests.map(r => `REQUEST_${requests.indexOf(r) + 1}: ${r.prompt}`).join('\n\n---SEPARATOR---\n\n');
-        combinedPrompt += '\n\nОтветьте на каждый запрос отдельно, разделяя ---SEPARATOR---.';
+        combinedPrompt += '\n\nPlease respond to each request separately, dividing with ---SEPARATOR---.';
 
         const combinedResponse = await this._callAiModel(model, combinedPrompt);
         const parts = combinedResponse.split('---SEPARATOR---');
 
         requests.forEach((request, index) => {
-          const response = index < parts.length ? parts[index].trim() : 'Ошибка групповой обработки';
+          const response = index < parts.length ? parts[index].trim() : 'Batch processing error';
           request.resolve(response);
         });
       } else {
-        // Параллельная обработка для запросов с контекстом
         await Promise.all(requests.map(r => this._processSingleRequest(r)));
       }
     } catch (error) {
@@ -341,14 +359,13 @@ class BatchProcessor {
 }
 
 // ==============================================================================
-// AI API КЛИЕНТ
+// AI API CLIENT
 // ==============================================================================
 
 class AiClient {
   private cache: Map<string, {value: string, expiry: number}> = new Map();
 
   async call(modelAlias: string, prompt: string, context?: string): Promise<string> {
-    // Проверка кеша
     const cacheKey = `${modelAlias}:${prompt.slice(0, 100)}:${context ? context.slice(0, 50) : ''}`;
     const cached = this.cache.get(cacheKey);
 
@@ -360,7 +377,6 @@ class AiClient {
     console.log(`[AI Client] Calling AI model ${modelAlias} via background...`);
 
     try {
-      // Делегируем вызов в background script через message passing
       const response = await chrome.runtime.sendMessage({
         type: 'ai_call',
         data: {
@@ -378,10 +394,9 @@ class AiClient {
         throw new Error('No result received from AI provider');
       }
 
-      // Кешируем результат
       this.cache.set(cacheKey, {
         value: response.result,
-        expiry: Date.now() + 7200000 // 2 часа
+        expiry: Date.now() + 7200000 // 2 hours
       });
 
       console.log(`[AI Client] Successfully received response from ${modelAlias}:`, response.result.substring(0, 100) + '...');
@@ -403,26 +418,14 @@ class AiClient {
 }
 
 // ==============================================================================
-// PYODIDE RUNTIME УПРАВЛЕНИЕ
-// ==============================================================================
-
-// ==============================================================================
-// PYODIDE RUNTIME УПРАВЛЕНИЕ
-// ==============================================================================
-// Этот класс - сердце нашего Python-окружения. Он отвечает за:
-// - Единократную, "ленивую" загрузку и инициализацию Pyodide.
-// - Создание JS-моста, который Python-код может вызывать через `import js`.
-// - Загрузку и выполнение Python-кода плагинов.
-// - Прямой вызов конкретных Python-функций из JavaScript.
+// PYODIDE RUNTIME MANAGEMENT
 // ==============================================================================
 
 class PyodideManager {
-  private pyodide: PyodideInterface | null = null;
+  public pyodide: PyodideInterface | null = null;
   private isReady: boolean = false;
   private initializationPromise: Promise<void> | null = null;
   private logger: OffscreenLogger;
-  
-  // Карта для ожидания ответов от `background.ts` на вызовы из Python
   public hostCallPromises = new Map<string, { resolve: Function, reject: Function }>();
 
   constructor(logger: OffscreenLogger) {
@@ -432,130 +435,77 @@ class PyodideManager {
 
   private async _doInitialize(): Promise<void> {
     try {
-      this.logger.addMessage('DEBUG', 'Загрузка скрипта-загрузчика Pyodide...');
-      // @ts-ignore
-      if (!(self as any).loadPyodide) {
-        // @ts-ignore
-        importScripts('/pyodide/pyodide.js');
+      this.logger.addMessage('DEBUG', 'Loading Pyodide loader script...');
+      
+      if (!(self as any).loadPyodide) { 
+        importScripts('/pyodide/pyodide.js'); 
       }
       const loadPyodideFn = (self as any).loadPyodide as LoadPyodide;
 
-      this.logger.addMessage('INFO', 'Инициализация рантайма Pyodide...');
+      this.logger.addMessage('INFO', 'Initializing Pyodide runtime...');
       this.pyodide = await loadPyodideFn({ indexURL: '/pyodide/' });
 
-      // --- Создание JS-моста (Python -> JavaScript) ---
-      // `this` здесь корректно указывает на экземпляр PyodideManager
       this.pyodide.globals.set('js', {
         sendMessageToChat: (message: any) => {
           const jsMessage = message.toJs({ dict_converter: Object.fromEntries });
           chrome.runtime.sendMessage({
             type: 'LOG_MESSAGE',
             data: { level: 'PYTHON', message: jsMessage.content, timestamp: Date.now() }
-          });
+          }).catch(() => {});
         },
-        llm_call: (modelAlias: any, params: any) => {
-          console.log('[JS Bridge] llm_call invoked:', modelAlias?.toString(), params?.toString());
-          const modelAliasJs = modelAlias?.toJs ? modelAlias.toJs() : modelAlias?.toString();
-          const paramsJs = params?.toJs ? params.toJs({ dict_converter: Object.fromEntries }) : params;
-          return this._createHostCallPromise('llm_call', [modelAliasJs, paramsJs]);
-        },
-        get_setting: (settingName: any) => {
-          console.log('[JS Bridge] get_setting invoked:', settingName?.toString());
-          const settingNameJs = settingName?.toJs ? settingName.toJs() : settingName?.toString();
-          return this._createHostCallPromise('get_setting', [settingNameJs]);
-        },
-        // Дополнительные функции Host API
-        save_setting: (key: any, value: any) => {
-          console.log('[JS Bridge] save_setting invoked:', key?.toString(), value?.toString());
-          const keyJs = key?.toJs ? key.toJs() : key?.toString();
-          const valueJs = value?.toJs ? value.toJs({ dict_converter: Object.fromEntries }) : value;
-          return this._createHostCallPromise('save_setting', [keyJs, valueJs]);
-        },
-        get_plugin_data: (pluginId: any) => {
-          console.log('[JS Bridge] get_plugin_data invoked:', pluginId?.toString());
-          const pluginIdJs = pluginId?.toJs ? pluginId.toJs() : pluginId?.toString();
-          return this._createHostCallPromise('get_plugin_data', [pluginIdJs]);
-        }
+        llm_call: (modelAlias: any, params: any) => this._createHostCallPromise('llm_call', [modelAlias.toJs(), params.toJs({ dict_converter: Object.fromEntries })]),
+        get_setting: (settingName: any) => this._createHostCallPromise('get_setting', [settingName.toJs()])
       });
-      
-      this.logger.addMessage('DEBUG', 'JS-мост для Pyodide установлен.');
-      this.isReady = true;
-      this.logger.addMessage('INFO', 'Pyodide runtime успешно инициализирован.');
 
+      this.logger.addMessage('DEBUG', 'JS bridge for Pyodide established.');
+      this.isReady = true;
+      this.logger.addMessage('INFO', 'Pyodide runtime successfully initialized.');
     } catch (error: any) {
-      this.logger.addMessage('CRITICAL', `Критическая ошибка инициализации Pyodide: ${error.message}`);
+      this.logger.addMessage('CRITICAL', `Critical error initializing Pyodide: ${error.message}`);
       throw error;
     }
   }
 
-  // Вспомогательный метод для создания Promise'ов, ожидающих ответа от хоста
   private _createHostCallPromise(func: string, args: any[]): Promise<any> {
-      const callId = `host_call_${Date.now()}_${Math.random()}`;
-      const timeoutMs = 30000; // 30 секунд timeout
-
-      const promise = new Promise((resolve, reject) => {
-        this.hostCallPromises.set(callId, { resolve, reject });
-
-        // Автоматический cleanup по timeout'у
-        setTimeout(() => {
-          if (this.hostCallPromises.has(callId)) {
-            console.warn(`[PyodideManager] Host call ${callId} (${func}) timed out`);
-            this.hostCallPromises.delete(callId);
-            reject(new Error(`Host call ${func} timed out after ${timeoutMs}ms`));
-          }
-        }, timeoutMs);
-      });
-
-      chrome.runtime.sendMessage({
-        type: 'HOST_CALL',
-        payload: { func, callId, args }
-      }).catch(error => {
-        console.error(`[PyodideManager] Failed to send HOST_CALL message:`, error);
-        // Удаляем promise если сообщение не удалось отправить
-        if (this.hostCallPromises.has(callId)) {
-          this.hostCallPromises.delete(callId);
-        }
-        throw new Error(`Failed to send host call: ${error.message}`);
-      });
-
-      return promise;
+    const callId = `host_call_${Date.now()}_${Math.random()}`;
+    const promise = new Promise((resolve, reject) => {
+      this.hostCallPromises.set(callId, { resolve, reject });
+    });
+    
+    chrome.runtime.sendMessage({ type: 'HOST_CALL', payload: { func, callId, args } })
+      .catch(() => {}); // Handle disconnection silently
+    
+    return promise;
   }
 
   async awaitReady(): Promise<void> {
     await this.initializationPromise;
   }
 
-  /**
-   * Обрабатывает параметры, разбивая слишком большие строки на chunks.
-   * Возвращает объект с исходными данными + метаданные о чанках.
-   */
   private _processLargeStrings(params: any): any {
-    const MAX_STRING_SIZE = 100000; // 100KB лимит для одной строки
-    const CHUNK_SIZE = 25000; // Размер каждого чанка в символах
+    const MAX_STRING_SIZE = 100000;
+    const CHUNK_SIZE = 25000;
 
-    console.log('[PYODIDE_MANAGER] 🔥 _processLargeStrings АКТИВИРОВАН!');
-    console.log(`[PYODIDE_MANAGER] 🔥 Входные параметры: keys=${Object.keys(params)}, sizes=${Object.entries(params).map(([k,v]) => `${k}:${typeof v === 'string' ? v.length : typeof v}`).join(', ')}`);
+    console.log('[PYODIDE_MANAGER] Processing large strings check...');
+    console.log(`[PYODIDE_MANAGER] Input parameters: keys=${Object.keys(params)}, sizes=${Object.entries(params).map(([k,v]) => `${k}:${typeof v === 'string' ? v.length : typeof v}`).join(', ')}`);
 
     let processedParams = { ...params };
     let hasLargeString = false;
 
-    // Рекурсивно проходим по объекту и найти большие строки
     function processObject(obj: any, path: string[] = []): any {
       if (typeof obj === 'string' && obj.length > MAX_STRING_SIZE) {
-        console.log(`[PYODIDE_MANAGER] 🔥 Найдена большая строка: путь=${path.join('.')}, размер=${obj.length}, лимит=${MAX_STRING_SIZE}`);
+        console.log(`[PYODIDE_MANAGER] Found large string: path=${path.join('.')}, size=${obj.length}, limit=${MAX_STRING_SIZE}`);
 
         hasLargeString = true;
         const stringKey = path.join('.');
 
-        // Разбиваем строку на чанки
-        const chunks = [];
+        const chunks: string[] = [];
         for (let i = 0; i < obj.length; i += CHUNK_SIZE) {
           chunks.push(obj.slice(i, i + CHUNK_SIZE));
         }
 
-        console.log(`[PYODIDE_MANAGER] 🔥 Строка разбита на ${chunks.length} чанков по ~${CHUNK_SIZE} символов`);
+        console.log(`[PYODIDE_MANAGER] String split into ${chunks.length} chunks of ~${CHUNK_SIZE} characters`);
 
-        // Заменяем оригинальную строку на метаданные
         processedParams[stringKey] = {
           __isChunkedString: true,
           totalLength: obj.length,
@@ -563,26 +513,24 @@ class PyodideManager {
           originalKey: stringKey
         };
 
-        // Добавляем все чанки
         for (let i = 0; i < chunks.length; i++) {
           processedParams[`${stringKey}_chunk_${i}`] = chunks[i];
-          if (i < 3 || i > chunks.length - 3) { // Логируем только первые и последние чанки
-            console.log(`[PYODIDE_MANAGER] 🔥 Добавлен чанк ${i}: ${chunks[i].length} символов`);
+          if (i < 3 || i > chunks.length - 3) {
+            console.log(`[PYODIDE_MANAGER] Added chunk ${i}: ${chunks[i].length} characters`);
           }
         }
 
         return processedParams[stringKey];
       } else if (typeof obj === 'string') {
-        console.log(`[PYODIDE_MANAGER] ✅ Маленькая строка: путь=${path.join('.')}, размер=${obj.length}`);
-
+        console.log(`[PYODIDE_MANAGER] Small string: path=${path.join('.')}, size=${obj.length}`);
         return obj;
       } else if (typeof obj === 'object' && obj !== null) {
-        const processed = Array.isArray(obj) ? [] : {};
+        const processed: any = Array.isArray(obj) ? [] : {};
         const keys = Object.keys(obj);
 
         for (const key of keys) {
           const currentPath = [...path, key];
-          (processed as any)[key] = processObject(obj[key], currentPath);
+          processed[key] = processObject(obj[key], currentPath);
         }
 
         return processed;
@@ -594,118 +542,223 @@ class PyodideManager {
     processObject(processedParams);
 
     if (hasLargeString) {
-      console.log(`[PYODIDE_MANAGER] 🎯 Обработка завершена. Передано чанков в Python: ${Object.keys(processedParams).filter(k => k.includes('_chunk_')).length}`);
-      this.logger.addMessage('DEBUG', `Обнаружены большие строки, проведено разбиение на чанки`);
+      console.log(`[PYODIDE_MANAGER] Processing complete. Chunks passed to Python: ${Object.keys(processedParams).filter(k => k.includes('_chunk_')).length}`);
+      this.logger.addMessage('DEBUG', `Large strings detected, chunking performed`);
     } else {
-      console.log('[PYODIDE_MANAGER] ❌ Большие строки НЕ найдены!');
+      console.log('[PYODIDE_MANAGER] No large strings found!');
     }
 
-    console.log(`[PYODIDE_MANAGER] 📤 Финальные параметры для Python: keys=${Object.keys(processedParams)}`);
+    console.log(`[PYODIDE_MANAGER] Final parameters for Python: keys=${Object.keys(processedParams)}`);
     return processedParams;
   }
-  
-  /**
-   * Главный метод для выполнения Python-кода.
-   * Реализует паттерн "прямого вызова", который является самым надежным.
-   * @param pluginId Идентификатор плагина для загрузки нужного скрипта.
-   * @param functionName Имя функции, которую нужно вызвать внутри скрипта.
-   * @param params Объект с параметрами для передачи в Python-функцию.
-   */
+
   async loadAndRunFunction(pluginId: string, functionName: string, params: any): Promise<any> {
     await this.awaitReady();
-    if (!this.pyodide) {
-      throw new Error('Pyodide is not initialized');
-    }
+    if (!this.pyodide) throw new Error('Pyodide is not initialized');
 
     try {
-      // Шаг 1: Загружаем Python-код плагина
       const scriptUrl = `plugins/${pluginId}/mcp_server.py`;
-      this.logger.addMessage('DEBUG', `Загрузка Python-скрипта: ${scriptUrl}`);
+      this.logger.addMessage('DEBUG', `Loading Python script: ${scriptUrl}`);
+      
       const response = await fetch(scriptUrl);
       if (!response.ok) {
-        throw new Error(`Не удалось загрузить Python-скрипт для плагина ${pluginId}`);
+        throw new Error(`Failed to load Python script for plugin ${pluginId}`);
       }
       const pythonCode = await response.text();
 
-      // Шаг 2: Выполняем весь скрипт. Это загружает определения всех функций
-      // в глобальную область видимости Pyodide.
       await this.pyodide.runPythonAsync(pythonCode);
-      this.logger.addMessage('DEBUG', `Скрипт плагина ${pluginId} выполнен, функции определены.`);
+      this.logger.addMessage('DEBUG', `Plugin script ${pluginId} executed, functions defined.`);
 
-      // Шаг 3: Получаем прямую ссылку (PyProxy) на нужную нам функцию
       const toolFunc = this.pyodide.globals.get(functionName);
       if (typeof toolFunc !== 'function') {
-        throw new Error(`Функция "${functionName}" не найдена в Python-скрипте плагина ${pluginId}.`);
+        throw new Error(`Function "${functionName}" not found in Python script for plugin ${pluginId}.`);
       }
-      this.logger.addMessage('DEBUG', `Получена ссылка на Python-функцию: ${functionName}`);
+      this.logger.addMessage('DEBUG', `Got reference to Python function: ${functionName}`);
 
-      // Шаг 4: Проверяем параметры и обрабатываем большие строки
       const processedParams = this._processLargeStrings(params);
-      this.logger.addMessage('DEBUG', `Обработка параметров завершена`);
+      this.logger.addMessage('DEBUG', `Parameter processing completed`);
 
-      // === ФИНАЛЬНАЯ ПРОВЕРКА ПЕРЕД ПЕРЕДАЧЕЙ В PYTHON ===
       const paramsSize = JSON.stringify(processedParams).length;
-      console.log(`[PYODIDE_MANAGER] 🐍 PRE-PYTHON CHECK ===================`);
-      console.log(`[PYODIDE_MANAGER] 🐍 Function: ${functionName}`);
-      console.log(`[PYODIDE_MANAGER] 🐍 Plugin: ${pluginId}`);
-      console.log(`[PYODIDE_MANAGER] 🐍 Total parameters size: ${paramsSize} chars`);
-      console.log(`[PYODIDE_MANAGER] 🐍 Parameter keys:`, Object.keys(processedParams || {}));
-      console.log(`[PYODIDE_MANAGER] 🐍 Raw parameters preview:`, processedParams);
+      console.log(`[PYODIDE_MANAGER] PRE-PYTHON CHECK ===================`);
+      console.log(`[PYODIDE_MANAGER] Function: ${functionName}`);
+      console.log(`[PYODIDE_MANAGER] Plugin: ${pluginId}`);
+      console.log(`[PYODIDE_MANAGER] Total parameters size: ${paramsSize} chars`);
+      console.log(`[PYODIDE_MANAGER] Parameter keys:`, Object.keys(processedParams || {}));
 
-      // Специальная проверка HTML данных
       if (processedParams && processedParams.page_html) {
         const htmlSize = processedParams.page_html.length;
-        console.log(`[PYODIDE_MANAGER] 🐍 HTML CONTENT SIZE: ${htmlSize} символов`);
-        console.log(`[PYODIDE_MANAGER] 🐍 HTML CONTENT SAMPLE:`, processedParams.page_html.substring(0, 200) + (htmlSize > 200 ? '...' : ''));
+        console.log(`[PYODIDE_MANAGER] HTML CONTENT SIZE: ${htmlSize} characters`);
+        console.log(`[PYODIDE_MANAGER] HTML CONTENT SAMPLE:`, processedParams.page_html.substring(0, 200) + (htmlSize > 200 ? '...' : ''));
 
         if (htmlSize < 10000) {
-          console.warn(`[PYODIDE_MANAGER] ⚠️ HTML size (${htmlSize}) is suspiciously small! Expected ~1,049,229 symbols`);
-          console.warn(`[PYODIDE_MANAGER] ⚠️ Full HTML:`, processedParams.page_html);
+          console.warn(`[PYODIDE_MANAGER] HTML size (${htmlSize}) is suspiciously small! Expected ~1,049,229 symbols`);
         } else if (htmlSize > 100000) {
-          console.log(`[PYODIDE_MANAGER] ✅ HTML size (${htmlSize}) looks reasonable`);
+          console.log(`[PYODIDE_MANAGER] HTML size (${htmlSize}) looks reasonable`);
         }
       } else {
-        console.warn(`[PYODIDE_MANAGER] ⚠️ No page_html property found in parameters!`);
-        console.log(`[PYODIDE_MANAGER] Parameters content:`, JSON.stringify(processedParams).substring(0, 500) + '...');
+        console.warn(`[PYODIDE_MANAGER] No page_html property found in parameters!`);
       }
 
-      console.log(`[PYODIDE_MANAGER] 🐍 PRE-PYTHON CHECK END =================`);
+      console.log(`[PYODIDE_MANAGER] PRE-PYTHON CHECK END =================`);
 
-      // Шаг 5: Вызываем Python-функцию напрямую, как если бы это была JS-функция.
-      // Pyodide сам позаботится о корректном преобразовании `processedParams` из JS-объекта
-      // в Python-словарь (точнее, в `JsProxy`).
-      this.logger.addMessage('DEBUG', `Вызов ${functionName} с обработанными параметрами...`);
+      this.logger.addMessage('DEBUG', `Calling ${functionName} with processed parameters...`);
       const resultProxy = await toolFunc(processedParams);
 
-      this.logger.addMessage('DEBUG', `Python-функция ${functionName} вернула результат (PyProxy).`);
+      this.logger.addMessage('DEBUG', `Python function ${functionName} returned result (PyProxy).`);
 
-      // Шаг 6: Конвертируем результат (PyProxy) обратно в нативный JS-объект
       const result = resultProxy.toJs({ dict_converter: Object.fromEntries });
-      resultProxy.destroy(); // Освобождаем память, занятую PyProxy
+      resultProxy.destroy();
 
       return result;
 
     } catch (error: any) {
-      this.logger.addMessage('ERROR', `Ошибка при вызове Python-инструмента ${pluginId}/${functionName}: ${error.message}`);
+      this.logger.addMessage('ERROR', `Error calling Python tool ${pluginId}/${functionName}: ${error.message}`);
       throw error;
     }
   }
 }
 
 // ==============================================================================
-// WORKFLOW ENGINE
+// CHUNK MANAGER FOR LARGE DATA ASSEMBLY
 // ==============================================================================
+
+class ChunkManager {
+  private transfers = new Map<string, { chunks: string[], total: number }>();
+  private readonly logger = console; // Use console for detailed logging
+
+  public addChunk(transferId: string, chunkData: string, chunkIndex: number, totalChunks: number): void {
+    // Initialize transfer if needed
+    if (!this.transfers.has(transferId)) {
+      this.transfers.set(transferId, { chunks: new Array(totalChunks), total: totalChunks });
+      this.logger.log(`[CHUNKING] Initialized transfer ${transferId} for ${totalChunks} chunks`);
+    }
+
+    const transfer = this.transfers.get(transferId)!;
+
+    // Adjust for 1-based indexing (assuming sender uses 1-n instead of 0-(n-1))
+    const adjustedIndex = chunkIndex - 1;
+
+    // Check bounds
+    if (adjustedIndex < 0 || adjustedIndex >= transfer.total) {
+      this.logger.error(`[CHUNKING] ERROR: Invalid chunk index ${chunkIndex} (adjusted to ${adjustedIndex}) for total ${totalChunks}. Ignoring chunk.`);
+      return;
+    }
+
+    // Check for duplicate chunks
+    if (transfer.chunks[adjustedIndex] !== undefined) {
+      this.logger.warn(`[CHUNKING] WARNING: Chunk ${chunkIndex} (adjusted ${adjustedIndex}) for transfer ${transferId} already exists! Overwriting...`);
+    }
+
+    // Store chunk
+    transfer.chunks[adjustedIndex] = chunkData;
+
+    // Calculate received chunks count
+    const receivedChunks = transfer.chunks.filter(chunk => chunk !== undefined).length;
+
+    this.logger.log(`[CHUNKING] Stored chunk ${chunkIndex} (adjusted to ${adjustedIndex}) (${chunkData.length} chars) for ${transferId}: ${receivedChunks}/${totalChunks}`);
+    this.logger.log(`[CHUNKING] Chunk ${chunkIndex} first 50 chars: "${chunkData.substring(0, 50)}"`);
+
+    // Check completion
+    if (receivedChunks === totalChunks) {
+      this.logger.log(`[CHUNKING] All chunks received for transfer ${transferId}. Ready for assembly.`);
+    }
+  }
+
+  public isComplete(transferId: string): boolean {
+    const transfer = this.transfers.get(transferId);
+    if (!transfer) {
+      this.logger.warn(`[CHUNKING] Transfer ${transferId} not found in isComplete check`);
+      return false;
+    }
+
+    const receivedChunks = transfer.chunks.filter(chunk => chunk !== undefined).length;
+    const isComplete = receivedChunks === transfer.total;
+
+    this.logger.log(`[CHUNKING] Checking completion for ${transferId}: ${receivedChunks}/${transfer.total} (${isComplete ? 'COMPLETE' : 'INCOMPLETE'})`);
+
+    return isComplete;
+  }
+
+  public getAssembled(transferId: string): string {
+    this.logger.log(`[CHUNKING] Starting assembly for ${transferId}`);
+
+    if (!this.isComplete(transferId)) {
+      this.logger.error(`[CHUNKING] ERROR: Transfer ${transferId} is not complete. Cannot assemble.`);
+      throw new Error(`Transfer ${transferId} is not complete.`);
+    }
+
+    const transfer = this.transfers.get(transferId)!;
+
+    // Debug: Check each chunk before assembly
+    this.logger.log(`[CHUNKING] Pre-assembly chunk validation:`);
+    for (let i = 0; i < transfer.chunks.length; i++) {
+      const chunk = transfer.chunks[i];
+      if (chunk === undefined) {
+        this.logger.error(`[CHUNKING] ERROR: Chunk ${i} is undefined! This will cause 'undefined' in assembled string.`);
+      } else if (chunk === null) {
+        this.logger.error(`[CHUNKING] ERROR: Chunk ${i} is null! This will cause 'null' in assembled string.`);
+      } else if (chunk.length === 0) {
+        this.logger.warn(`[CHUNKING] WARNING: Chunk ${i} is empty string`);
+      }
+      this.logger.log(`[CHUNKING] Chunk ${i}: length=${chunk?.length || 0}, first20="${chunk?.substring(0, 20) || 'null/undefined'}", last20="${chunk?.substring(chunk.length - 20) || 'null/undefined'}"`);
+    }
+
+    const assembled = transfer.chunks.join('');
+
+    // Detailed logging of assembly process
+    this.logger.log(`[CHUNKING] Assembling ${transfer.chunks.length} chunks for ${transferId}`);
+    this.logger.log(`[CHUNKING] Chunk sizes: ${transfer.chunks.map((chunk, i) => `${i}:${chunk?.length || 0}`).join(', ')}`);
+
+    const totalExpectedLength = transfer.chunks.reduce((sum, chunk) => sum + (chunk?.length || 0), 0);
+    this.logger.log(`[CHUNKING] Expected total length: ${totalExpectedLength}`);
+    this.logger.log(`[CHUNKING] Actual assembled length: ${assembled.length}`);
+
+    if (assembled.length !== totalExpectedLength) {
+      this.logger.error(`[CHUNKING] ERROR: Length mismatch! Expected ${totalExpectedLength}, got ${assembled.length}`);
+    }
+
+    this.logger.log(`[CHUNKING] Assembly sample: "${assembled.substring(0, 100)}"...`);
+
+    // Final validation - ensure assembled data is not empty
+    if (assembled.length === 0) {
+      this.logger.error(`[CHUNKING] ERROR: Assembled string is empty! No data was collected.`);
+      this.logger.error(`[CHUNKING] Chunk details summary:`);
+      for (let i = 0; i < transfer.chunks.length; i++) {
+        this.logger.error(`[CHUNKING] Chunk ${i}: ${transfer.chunks[i] === undefined ? 'UNDEFINED' : `length=${transfer.chunks[i].length}`}`);
+      }
+    } else {
+      this.logger.log(`[CHUNKING] SUCCESS: Assembled ${assembled.length} characters`);
+    }
+
+    // Clean up
+    this.transfers.delete(transferId);
+    this.logger.log(`[CHUNKING] Transfer ${transferId} cleaned up from memory`);
+
+    return assembled;
+  }
+
+  public getStats(transferId: string): any {
+    const transfer = this.transfers.get(transferId);
+    if (!transfer) return null;
+
+    const chunkStats = transfer.chunks.map((chunk, i) => ({
+      index: i,
+      size: chunk?.length || 0,
+      present: chunk !== undefined
+    }));
+
+    return {
+      transferId,
+      totalChunks: transfer.total,
+      receivedChunks: transfer.chunks.filter(c => c !== undefined).length,
+      isComplete: this.isComplete(transferId),
+      chunkStats
+    };
+  }
+}
 
 // ==============================================================================
 // WORKFLOW ENGINE
-// ==============================================================================
-// Этот класс - "прораб" или "оркестратор" для плагинов. Он отвечает за:
-// - Загрузку "рецепта" плагина (`workflow.json`).
-// - Последовательное выполнение шагов, описанных в "рецепте".
-// - Обработку условного выполнения шагов (run_if).
-// - Передачу данных (контекста) между шагами.
-// - Вызов соответствующих "рабочих": `_callPythonTool` для Python-логики
-//   и `_callHostApi` для JavaScript-логики.
 // ==============================================================================
 
 class WorkflowEngine {
@@ -716,8 +769,8 @@ class WorkflowEngine {
   private batchProcessor: BatchProcessor;
 
   constructor(
-    logger: OffscreenLogger, 
-    pyodideManager: PyodideManager, 
+    logger: OffscreenLogger,
+    pyodideManager: PyodideManager,
     aiClient: AiClient,
     memoryManager: MemoryManager,
     batchProcessor: BatchProcessor
@@ -729,15 +782,9 @@ class WorkflowEngine {
       this.batchProcessor = batchProcessor;
   }
 
-  /**
-    * Главный метод, запускающий выполнение всего воркфлоу для плагина.
-    * @param pluginId Идентификатор плагина (имя папки).
-    * @param context Начальный контекст, обычно содержит `input` и `hostApi`.
-    */
   async runWorkflow(pluginId: string, context: Partial<WorkflowContext>): Promise<WorkflowExecutionResult> {
     const workflowStartTime = performance.now();
 
-    // Создаем полный, изолированный контекст для этого конкретного запуска
     const fullContext: WorkflowContext = {
       steps: {},
       input: context.input || {},
@@ -756,50 +803,43 @@ class WorkflowEngine {
       errors: []
     };
 
-    this.logger.addMessage('ENGINE', `🏁 Запуск воркфлоу для плагина: ${pluginId}`);
+    this.logger.addMessage('ENGINE', `Starting workflow for plugin: ${pluginId}`);
 
     try {
-      // Шаг 1: Загружаем и валидируем "рецепт"
       const workflow = await this._loadAndValidateWorkflowDefinition(pluginId);
       if (!workflow) {
-        const errorMsg = `Не удалось загрузить или валидировать определение воркфлоу для плагина ${pluginId}`;
+        const errorMsg = `Failed to load or validate workflow definition for plugin ${pluginId}`;
         throw new Error(errorMsg);
       }
-      this.logger.addMessage('ENGINE', `📋 Воркфлоу загружен: ${workflow.steps.length} шагов`);
+      this.logger.addMessage('ENGINE', `Workflow loaded: ${workflow.steps.length} steps`);
 
-      // Добавляем начальные данные в контекст
       if (workflow.initialInput) {
         fullContext.input = { ...fullContext.input, ...workflow.initialInput };
-        this.logger.addMessage('ENGINE', `🔧 Применены начальные данные: ${Object.keys(workflow.initialInput).join(', ')}`);
+        this.logger.addMessage('ENGINE', `Applied initial data: ${Object.keys(workflow.initialInput).join(', ')}`);
       }
 
-      // Шаг 2: Проверяем зависимости и готовим план выполнения
       const executionPlan = this._buildExecutionPlan(workflow);
-      this.logger.addMessage('ENGINE', `📋 Сформирован план выполнения: ${executionPlan.length} шагов`);
+      this.logger.addMessage('ENGINE', `Execution plan formed: ${executionPlan.length} steps`);
 
-      // Шаг 3: Последовательно выполняем шаги с обработкой ошибок
       for (const step of executionPlan) {
         const stepStartTime = performance.now();
 
         try {
-          // Шаг 3a: Проверяем, нужно ли выполнять этот шаг
           const shouldRun = this._evaluateRunIf(step.run_if, fullContext);
           if (!shouldRun) {
-            this.logger.addMessage('ENGINE', `⏭️ Пропущен шаг: ${step.id} (условие run_if не выполнено)`);
+            this.logger.addMessage('ENGINE', `Skipped step: ${step.id} (run_if condition not met)`);
             continue;
           }
 
-          this.logger.addMessage('ENGINE', `▶️ Выполнение шага: ${step.id} (${step.tool}) - ${step.description || 'без описания'}`);
+          this.logger.addMessage('ENGINE', `Executing step: ${step.id} (${step.tool}) - ${step.description || 'no description'}`);
 
-          // Шаг 3b: Выполняем шаг с retry логикой
           const stepResult = await this._executeStepWithRetry(step, fullContext);
 
-          // Сохраняем результат в контекст и результаты выполнения
           fullContext.steps[step.id] = { output: stepResult.result };
           executionResult.stepResults[step.id] = stepResult;
 
           const stepDuration = performance.now() - stepStartTime;
-          this.logger.addMessage('ENGINE', `✅ Шаг ${step.id} выполнен за ${stepDuration.toFixed(0)}ms${stepResult.retryCount > 0 ? ` (повторы: ${stepResult.retryCount})` : ''}`);
+          this.logger.addMessage('ENGINE', `Step ${step.id} completed in ${stepDuration.toFixed(0)}ms${stepResult.retryCount > 0 ? ` (retries: ${stepResult.retryCount})` : ''}`);
 
         } catch (stepError: any) {
           const stepDuration = performance.now() - stepStartTime;
@@ -821,25 +861,21 @@ class WorkflowEngine {
             error: workflowError
           };
 
-          // Обработка стратегии error'а
           if (step.on_error === 'fail' || step.on_error === undefined) {
-            throw stepError; // Критическая ошибка - останавливаем воркфлоу
+            throw stepError;
           } else if (step.on_error === 'skip') {
-            this.logger.addMessage('WARN', `⚠️ Шаг ${step.id} пропущен из-за ошибки: ${stepError.message}`);
+            this.logger.addMessage('WARN', `Step ${step.id} skipped due to error: ${stepError.message}`);
             continue;
           }
-          // retry обрабатывается в _executeStepWithRetry
         }
       }
 
-      // Шаг 4: Завершение и подготовка финального результата
       const workflowDuration = performance.now() - workflowStartTime;
       executionResult.totalDuration = workflowDuration;
       executionResult.success = executionResult.errors.filter(e => !e.recoverable).length === 0;
 
-      this.logger.addMessage('ENGINE', `🔔 Воркфлоу завершен за ${workflowDuration.toFixed(0)}ms, статус: ${executionResult.success ? 'SUCCESS' : 'PARTIAL_SUCCESS'}`);
+      this.logger.addMessage('ENGINE', `Workflow completed in ${workflowDuration.toFixed(0)}ms, status: ${executionResult.success ? 'SUCCESS' : 'PARTIAL_SUCCESS'}`);
 
-      // Формируем финальный результат
       const lastStepId = Object.keys(fullContext.steps).slice(-1)[0];
       if (lastStepId && executionResult.stepResults[lastStepId]?.success) {
         executionResult.result = executionResult.stepResults[lastStepId].result;
@@ -847,7 +883,7 @@ class WorkflowEngine {
       } else {
         executionResult.result = {
           status: executionResult.success ? 'completed' : 'partial_completion',
-          message: `Воркфлоу завершен с ${executionResult.errors.length} ошибками`,
+          message: `Workflow completed with ${executionResult.errors.length} errors`,
           executedSteps: Object.keys(executionResult.stepResults).length,
           totalSteps: workflow.steps.length
         };
@@ -865,998 +901,299 @@ class WorkflowEngine {
         recoverable: false
       });
 
-      this.logger.addMessage('CRITICAL', `💀 Критическая ошибка воркфлоу в ${pluginId}: ${criticalError.message}`);
+      this.logger.addMessage('CRITICAL', `Workflow execution failed: ${criticalError.message}`);
+      executionResult.success = false;
+      executionResult.result = {
+        status: 'failed',
+        message: criticalError.message,
+        executedSteps: Object.keys(executionResult.stepResults).length,
+        totalSteps: 0
+      };
+
       return executionResult;
     }
   }
 
-  /** Загружает и валидирует `workflow.json` для указанного плагина. */
   private async _loadAndValidateWorkflowDefinition(pluginId: string): Promise<WorkflowDefinition | null> {
     try {
-      const workflow = await this._loadWorkflowDefinition(pluginId);
-      if (!workflow) return null;
-
-      const validationErrors = this._validateWorkflowDefinition(workflow);
-      if (validationErrors.length > 0) {
-        this.logger.addMessage('ERROR', `Валидация воркфлоу провалилась: ${validationErrors.join(', ')}`);
-        return null;
-      }
-
-      this.logger.addMessage('INFO', `Воркфлоу валидный: ${workflow.name} v${workflow.version || '1.0'}`);
-      return workflow;
-    } catch (error) {
-      this.logger.addMessage('ERROR', `Ошибка валидации воркфлоу: ${error}`);
-      return null;
-    }
-  }
-
-  /** Загружает `workflow.json` для указанного плагина. */
-  private async _loadWorkflowDefinition(pluginId: string): Promise<WorkflowDefinition | null> {
-    try {
-      const workflowUrl = `plugins/${pluginId}/workflow.json`;
-      const response = await fetch(workflowUrl);
+      const response = await fetch(`plugins/${pluginId}/workflow.json`);
       if (!response.ok) {
-        this.logger.addMessage('ERROR', `Не удалось загрузить workflow.json (статус: ${response.status}) для плагина ${pluginId}`);
-        return null;
+        throw new Error(`Failed to load workflow.json for plugin ${pluginId}`);
       }
-      const workflow = await response.json();
-
-      // Устанавливаем значения по умолчанию
-      if (!workflow.name) workflow.name = pluginId;
-      if (!workflow.steps) workflow.steps = [];
-
+      const workflow: WorkflowDefinition = await response.json();
       return workflow;
     } catch (error) {
-      this.logger.addMessage('ERROR', `Сетевая ошибка при загрузке воркфлоу: ${error}`);
+      this.logger.addMessage('ERROR', `Failed to load workflow definition for ${pluginId}: ${(error as Error).message}`);
       return null;
     }
   }
 
-  /** Валидирует определение воркфлоу. */
-  private _validateWorkflowDefinition(workflow: WorkflowDefinition): string[] {
-    const errors: string[] = [];
-
-    if (!workflow.steps || !Array.isArray(workflow.steps)) {
-      errors.push('шаги (steps) должны быть массивом');
-    }
-
-    const stepIds = new Set();
-    for (const step of workflow.steps) {
-      if (!step.id) {
-        errors.push('все шаги должны иметь id');
-      } else if (stepIds.has(step.id)) {
-        errors.push(`дублированный step id: ${step.id}`);
-      } else {
-        stepIds.add(step.id);
-      }
-
-      if (!step.tool) {
-        errors.push(`шаг ${step.id || 'без_id'} должен иметь tool`);
-      }
-    }
-
-    return errors;
-  }
-
-  /** Строит план выполнения с учетом зависимостей. */
   private _buildExecutionPlan(workflow: WorkflowDefinition): WorkflowStep[] {
-    // Пока простая последовательность без зависимостей
-    // В будущем можно добавить топологическую сортировку
     return workflow.steps;
   }
 
-  /** Выполняет шаг с логикой повтора. */
+  private _evaluateRunIf(runIf: string | undefined, context: WorkflowContext): boolean {
+    if (!runIf) return true;
+
+    try {
+      const result = this._evaluateExpression(runIf, context);
+      return result === true;
+    } catch (error) {
+      this.logger.addMessage('WARN', `Failed to evaluate run_if condition "${runIf}": ${(error as Error).message}`);
+      return false;
+    }
+  }
+
+  private _evaluateExpression(expr: string, context: WorkflowContext): any {
+    return true; // Placeholder - implement expression evaluation
+  }
+
   private async _executeStepWithRetry(step: WorkflowStep, context: WorkflowContext): Promise<StepExecutionResult> {
+    let lastError: any;
     const maxRetries = step.retry_count || 0;
-    let lastError: any = null;
-    let attempt = 0;
 
-    for (attempt = 0; attempt <= maxRetries; attempt++) {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        if (attempt > 0) {
-          this.logger.addMessage('WARN', `🔄 Повтор попытки ${attempt}/${maxRetries} для шага ${step.id}`);
-          await this._delay(Math.pow(2, attempt) * 100); // Exponential backoff
-        }
-
-        const result = await this._executeStepWithTimeout(step, context);
-
+        const result = await this._executeSingleStep(step, context);
         return {
           success: true,
-          result,
-          duration: performance.now(),
+          result: result,
+          duration: 0, // placeholder
           startTime: Date.now(),
           endTime: Date.now(),
-          retryCount: attempt
+          retryCount: attempt,
         };
-
-      } catch (error: any) {
-        lastError = error;
-        if (attempt >= maxRetries) break;
-
-        this.logger.addMessage('WARN', `❌ Ошибка в шаге ${step.id} (попытка ${attempt + 1}): ${error.message}`);
+      } catch (error) {
+        lastError = error as Error;
+        if (attempt < maxRetries) {
+          this.logger.addMessage('WARN', `Step ${step.id} retry ${attempt + 1}/${maxRetries} after error: ${(error as Error).message}`);
+          await this._delay(1000 * (attempt + 1)); // exponential backoff
+        }
       }
     }
 
-    // Все попытки провалились
-    throw lastError || new Error(`Неизвестная ошибка в шаге ${step.id}`);
+    throw lastError;
   }
 
-  /** Выполняет шаг с таймаутом. */
-  private async _executeStepWithTimeout(step: WorkflowStep, context: WorkflowContext): Promise<any> {
-    const timeoutMs = step.timeout_ms || 30000; // 30 секунд по умолчанию
-
-    const executionPromise = this._executeStep(step, context);
-
-    if (timeoutMs > 0) {
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error(`Таймаут выполнения шага ${step.id} (${timeoutMs}ms)`)), timeoutMs);
-      });
-
-      return Promise.race([executionPromise, timeoutPromise]);
+  private async _executeSingleStep(step: WorkflowStep, context: WorkflowContext): Promise<any> {
+    if (step.tool === 'python_call') {
+      return await this.pyodideManager.loadAndRunFunction(context.pluginId, 'execute', step.inputs || {});
     }
-
-    return executionPromise;
+    throw new Error(`Unknown tool: ${step.tool}`);
   }
 
-  /** Определяет, является ли ошибка восстанавливаемой. */
-  private _isRecoverableError(error: any): boolean {
-    const nonRecoverableErrors = [
-      'требуемый файл не найден',
-      'модуль не существует',
-      'синтаксическая ошибка'
-    ];
-
-    const message = error.message.toLowerCase();
-    return !nonRecoverableErrors.some(err => message.includes(err));
-  }
-
-  /** Задержка выполнения. */
   private _delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  /** Маршрутизирует выполнение шага к правильному исполнителю. */
-  private async _executeStep(step: WorkflowStep, context: WorkflowContext): Promise<any> {
+  private _isRecoverableError(error: any): boolean {
+    // Implement error type analysis
+    return false; // placeholder
+  }
+}
+// ==============================================================================
+// MAIN OFFSCREEN DOCUMENT CONTROLLER
+// ==============================================================================
+
+// Global instances
+const logger = new OffscreenLogger();
+const memoryManager = new MemoryManager();
+const aiClient = new AiClient();
+const batchProcessor = new BatchProcessor(aiClient);
+const pyodideManager = new PyodideManager(logger);
+const chunkManager = new ChunkManager();
+const workflowEngine = new WorkflowEngine(logger, pyodideManager, aiClient, memoryManager, batchProcessor);
+
+// Message handling interfaces
+interface ExecuteWorkflowMessage {
+  type: 'EXECUTE_WORKFLOW';
+  data: {
+    pluginId: string;
+    requestId: string;
+    transferId: string;
+    useChunks: boolean;
+    pageHtml: string;
+  };
+}
+
+interface HostCallResponseMessage {
+  type: 'HOST_CALL_RESPONSE';
+  callId: string;
+  result?: any;
+  error?: string;
+}
+
+interface HtmlChunkMessage {
+  type: 'HTML_CHUNK';
+  transferId: string;
+  chunkIndex: number;
+  totalChunks: number;
+  chunkData: string;
+}
+
+type OffscreenMessage =
+  | ExecuteWorkflowMessage
+  | HostCallResponseMessage
+  | HtmlChunkMessage;
+
+// ==============================================================================
+// MESSAGE HANDLER
+// ==============================================================================
+
+chrome.runtime.onMessage.addListener(
+  async (message: OffscreenMessage, sender, sendResponse) => {
     try {
-      const toolInput = this._resolveInputs(step.inputs ?? {}, context);
-      const [toolType, toolName] = step.tool.split('.');
+      switch (message.type) {
+        case 'EXECUTE_WORKFLOW':
+          await handleExecuteWorkflow(message.data);
+          break;
 
-      switch (toolType) {
-        case 'python':
-          return await this._callPythonTool(context.pluginId, toolName, toolInput, context);
+        case 'HOST_CALL_RESPONSE':
+          handleHostCallResponse(message);
+          break;
 
-        case 'host':
-          return await this._callHostApi(toolName, toolInput, context);
-
-        case 'ai':
-          return await this._callAiService(toolName, toolInput, context);
-
-        case 'data_processing':
-          return await this._callDataProcessor(toolName, toolInput, context);
-
-        case 'memory':
-          return await this._callMemoryOperation(toolName, toolInput, context);
-
-        case 'batch_ai':
-          return await this._callBatchAiService(toolName, toolInput, context);
+        case 'HTML_CHUNK':
+          handleHtmlChunk(message);
+          break;
 
         default:
-          throw new Error(`Неизвестный тип инструмента: ${step.tool}`);
+          logger.addMessage('WARN', `Unknown message type: ${(message as any).type}`);
       }
     } catch (error: any) {
-      this.logger.addMessage('ERROR', `Ошибка выполнения шага ${step.id}: ${error.message}`, {
-        stepId: step.id,
-        tool: step.tool,
-        input: step.inputs,
-        error: error.message
-      });
-      throw error;
-    }
-  }
-
-  /** Вызывает JavaScript-функцию из `hostApi`. */
-  private async _callHostApi(functionName: string, params: Record<string, any>, context: WorkflowContext): Promise<any> {
-    const api = context.hostApi;
-    if (api && typeof api[functionName] === 'function') {
-      return await api[functionName](params);
-    }
-    throw new Error(`Host API функция "${functionName}" не найдена`);
-  }
-
-  /** Вызывает Python-функцию через PyodideManager. */
-  private async _callPythonTool(pluginId: string, toolName: string, input: Record<string, any>, context: WorkflowContext): Promise<any> {
-    try {
-      this.logger.addMessage('DEBUG', `Python tool: ${pluginId}.${toolName}`, input);
-      return await this.pyodideManager.loadAndRunFunction(pluginId, toolName, input);
-    } catch (error) {
-      this.logger.addMessage('ERROR', `Ошибка вызова Python инструмента ${pluginId}.${toolName}: ${error}`);
-      throw error;
-    }
-  }
-
-  /** Вызывает AI сервис напрямую. */
-  private async _callAiService(modelName: string, input: Record<string, any>, context: WorkflowContext): Promise<any> {
-    const { prompt, context: aiContext } = input;
-
-    if (!prompt) {
-      throw new Error('Промпт обязателен для AI вызова');
+      logger.addMessage('ERROR', `Error handling message ${message.type}: ${error.message}`);
+      sendResponse({ success: false, error: error.message });
     }
 
-    this.logger.addMessage('AI', `Вызов AI модели: ${modelName}`, { prompt: prompt.substring(0, 100) + '...' });
-    return await this.aiClient.call(modelName, prompt, aiContext);
+    return true; // Keep channel open for async responses
   }
+);
 
-  /** Вызывает batch AI сервис через BatchProcessor. */
-  private async _callBatchAiService(modelName: string, input: Record<string, any>, context: WorkflowContext): Promise<any> {
-    const { prompts, context: aiContext } = input;
+// ==============================================================================
+// MESSAGE HANDLERS
+// ==============================================================================
 
-    if (!Array.isArray(prompts) || prompts.length === 0) {
-      throw new Error('Массив промптов обязателен для batch AI вызова');
-    }
+async function handleExecuteWorkflow(data: ExecuteWorkflowMessage['data']): Promise<void> {
+  try {
+    logger.addMessage('INFO', `Starting workflow execution for plugin: ${data.pluginId}`);
 
-    this.logger.addMessage('AI_BATCH', `Batch запрос к ${modelName}: ${prompts.length} запросов`);
+    // Assemble HTML data if chunked
+    let pageHtml = data.pageHtml;
+    if (data.useChunks) {
+      logger.addMessage('DEBUG', `Waiting for chunked HTML data: ${data.transferId}`);
+      // Wait for chunks - chunks arrive via separate messages
+      // Timeout after 30 seconds
+      const timeoutMs = 30000;
+      const startTime = Date.now();
 
-    const promises = prompts.map((prompt: string, index: number) =>
-      this.batchProcessor.addRequest(modelName, prompt, aiContext)
-    );
-
-    return await Promise.all(promises);
-  }
-
-  /** Вызывает операции с памятью. */
-  private async _callMemoryOperation(operation: string, input: Record<string, any>, context: WorkflowContext): Promise<any> {
-    const { key, value, ttl } = input;
-
-    switch (operation) {
-      case 'store':
-        if (!key || value === undefined) {
-          throw new Error('Ключ и значение обязательны для операции store');
+      while (!chunkManager.isComplete(data.transferId)) {
+        if (Date.now() - startTime > timeoutMs) {
+          // Log transfer stats before timeout
+          const stats = chunkManager.getStats(data.transferId);
+          logger.addMessage('ERROR', `Chunk assembly timeout. Transfer stats:`, stats);
+          throw new Error(`Timeout waiting for HTML chunks (${timeoutMs}ms)`);
         }
-        this.memoryManager.cache(key, value, ttl);
-        return { success: true, key };
-
-      case 'retrieve':
-        if (!key) {
-          throw new Error('Ключ обязателен для операции retrieve');
-        }
-        return this.memoryManager.getCached(key);
-
-      case 'clear':
-        // Очистка определенного ключа или всех данных
-        throw new Error('Операция clear пока не реализована');
-
-      default:
-        throw new Error(`Неизвестная операция памяти: ${operation}`);
-    }
-  }
-
-  /** Вызывает операции обработки данных. */
-  private async _callDataProcessor(operation: string, input: Record<string, any>, context: WorkflowContext): Promise<any> {
-    try {
-      switch (operation) {
-        case 'transform':
-          return await this._processDataTransformation(input, context);
-
-        case 'validate':
-          return await this._processDataValidation(input, context);
-
-        case 'aggregate':
-          return await this._processDataAggregation(input, context);
-
-        case 'filter':
-          return await this._processDataFilter(input, context);
-
-        default:
-          throw new Error(`Неизвестная операция обработки данных: ${operation}`);
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
-    } catch (error: any) {
-      this.logger.addMessage('ERROR', `Ошибка обработки данных ${operation}: ${error.message}`);
-      throw error;
-    }
-  }
 
-  /** Преобразование данных. */
-  private async _processDataTransformation(input: Record<string, any>, context: WorkflowContext): Promise<any> {
-    const { data, transformations } = input;
+      // Log transfer stats before assembly
+      const statsBefore = chunkManager.getStats(data.transferId);
+      logger.addMessage('DEBUG', `Pre-assembly stats:`, statsBefore);
 
-    if (!data) throw new Error('Данные обязательны для преобразования');
-    if (!Array.isArray(transformations)) throw new Error('Массив трансформаций обязателен');
+      // Assemble HTML
+      pageHtml = chunkManager.getAssembled(data.transferId);
 
-    let result = data;
+      // Validate assembled data
+      logger.addMessage('DEBUG', `HTML data assembled: ${pageHtml.length} characters`);
 
-    for (const transform of transformations) {
-      switch (transform.type) {
-        case 'map':
-          result = await this._applyMapTransform(result, transform.func);
-          break;
-        case 'filter':
-          result = await this._applyFilterTransform(result, transform.func);
-          break;
-        case 'reduce':
-          result = await this._applyReduceTransform(result, transform.func);
-          break;
-        default:
-          throw new Error(`Неизвестный тип трансформации: ${transform.type}`);
+      // Check if assembled data makes sense
+      if (pageHtml.length < 1000) {
+        logger.addMessage('ERROR', `WARNING: Assembled HTML suspiciously short: ${pageHtml.length} chars`);
+        logger.addMessage('ERROR', `HTML content: "${pageHtml.substring(0, 200)}"`);
+      } else if (pageHtml.length > 10000000) {
+        // This should be around 1M chars normally
+        logger.addMessage('DEBUG', `HTML length looks reasonable: ${pageHtml.length} chars`);
       }
-    }
 
-    return result;
-  }
-
-  /** Валидация данных. */
-  private async _processDataValidation(input: Record<string, any>, context: WorkflowContext): Promise<any> {
-    const { data, rules } = input;
-
-    if (!data) throw new Error('Данные обязательны для валидации');
-    if (!Array.isArray(rules)) throw new Error('Массив правил валидации обязателен');
-
-    const errors: string[] = [];
-    const warnings: string[] = [];
-
-    for (const rule of rules) {
-      try {
-        const isValid = await this._executeValidationRule(data, rule);
-        if (!isValid) {
-          (rule.severity === 'error' ? errors : warnings).push(rule.message || `Правило ${rule.type} не выполнено`);
-        }
-      } catch (error: any) {
-        errors.push(`Ошибка валидации: ${error.message}`);
+      // Quick validation that it looks like HTML
+      if (!pageHtml.includes('<html') && !pageHtml.includes('<HTML') && !pageHtml.includes('<!DOCTYPE')) {
+        logger.addMessage('WARN', `Assembled data doesn't look like HTML. First 500 chars: "${pageHtml.substring(0, 500)}"`);
       }
+
+      logger.addMessage('INFO', `✅ HTML data successfully assembled from chunks: ${pageHtml.length} characters`);
     }
 
-    return {
-      valid: errors.length === 0,
-      data,
-      errors,
-      warnings,
-      errorCount: errors.length,
-      warningCount: warnings.length
+    // Create workflow context
+    const context: Partial<WorkflowContext> = {
+      input: { pageHtml },
+      pluginId: data.pluginId
     };
-  }
 
-  /** Агрегация данных. */
-  private async _processDataAggregation(input: Record<string, any>, context: WorkflowContext): Promise<any> {
-    const { data, groupBy, aggregations } = input;
+    // Run workflow
+    const result = await workflowEngine.runWorkflow(data.pluginId, context);
 
-    if (!Array.isArray(data)) throw new Error('Массив данных обязателен для агрегации');
-    if (!groupBy || !aggregations) throw new Error('Поля groupBy и aggregations обязательны');
+    // Send result back to background
+    await chrome.runtime.sendMessage({
+      type: 'WORKFLOW_COMPLETED',
+      requestId: data.requestId,
+      success: result.success,
+      result: result.result,
+      error: !result.success ? result.errors.map(e => e.error).join('; ') : undefined
+    });
 
-    const groups: Record<string, any[]> = {};
+    logger.addMessage('INFO', `Workflow completed: success=${result.success}`);
 
-    // Группировка данных
-    for (const item of data) {
-      const key = this._getAggregationKey(item, groupBy);
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(item);
-    }
+  } catch (error: any) {
+    logger.addMessage('ERROR', `Workflow execution failed: ${error.message}`);
 
-    // Применение агрегатных функций
-    const result: Record<string, any> = {};
-    for (const groupKey in groups) {
-      result[groupKey] = { ...this._extractGroupKeyValues(groups[groupKey][0], groupBy) };
-
-      for (const agg of aggregations) {
-        result[groupKey][agg.field] = this._executeAggregation(groups[groupKey], agg.func, agg.field);
-      }
-    }
-
-    return Object.values(result);
-  }
-
-  /** Фильтрация данных. */
-  private async _processDataFilter(input: Record<string, any>, context: WorkflowContext): Promise<any> {
-    const { data, filters } = input;
-
-    if (!Array.isArray(data)) throw new Error('Массив данных обязателен для фильтрации');
-    if (!Array.isArray(filters)) throw new Error('Массив фильтров обязателен');
-
-    return data.filter(item => {
-      for (const filter of filters) {
-        if (!this._executeFilterCondition(item, filter)) {
-          return false;
-        }
-      }
-      return true;
+    await chrome.runtime.sendMessage({
+      type: 'WORKFLOW_COMPLETED',
+      requestId: data.requestId,
+      success: false,
+      result: null,
+      error: error.message
     });
   }
+}
 
-  // Вспомогательные методы для обработки данных
-  private async _applyMapTransform(data: any, func: string): Promise<any> {
-    // Упрощенная реализация - в реальности может использовать AI или host API
-    if (typeof data === 'string' && func === 'toUpperCase') {
-      return data.toUpperCase();
-    }
-    return data;
-  }
-
-  private async _applyFilterTransform(data: any[], func: string): Promise<any> {
-    // Упрощенная реализация фильтрации
-    return data;
-  }
-
-  private async _applyReduceTransform(data: any[], func: string): Promise<any> {
-    // Упрощенная реализация редукции
-    if (typeof func === 'number') return data.reduce((sum, item) => sum + item, 0);
-    return data;
-  }
-
-  private async _executeValidationRule(data: any, rule: any): Promise<boolean> {
-    // Упрощенная логика валидации
-    switch (rule.type) {
-      case 'required':
-        return rule.fields.every((field: string) => data.hasOwnProperty(field));
-      case 'type':
-        return typeof data[rule.field] === rule.expectedType;
-      default:
-        return true;
-    }
-  }
-
-  private _getAggregationKey(item: any, groupBy: any): string {
-    if (Array.isArray(groupBy)) {
-      return groupBy.map(field => item[field]).join('_');
-    }
-    return String(item[groupBy]);
-  }
-
-  private _extractGroupKeyValues(item: any, groupBy: any): any {
-    const result: any = {};
-    if (Array.isArray(groupBy)) {
-      groupBy.forEach(field => result[field] = item[field]);
+function handleHostCallResponse(message: HostCallResponseMessage): void {
+  const promise = pyodideManager.hostCallPromises.get(message.callId);
+  if (promise) {
+    pyodideManager.hostCallPromises.delete(message.callId);
+    if (message.error) {
+      promise.reject(new Error(message.error));
     } else {
-      result[groupBy] = item[groupBy];
+      promise.resolve(message.result);
     }
-    return result;
-  }
-
-  private _executeAggregation(group: any[], func: string, field: string): any {
-    switch (func) {
-      case 'sum':
-        return group.reduce((sum, item) => sum + (item[field] || 0), 0);
-      case 'avg':
-        return group.reduce((sum, item) => sum + (item[field] || 0), 0) / group.length;
-      case 'count':
-        return group.length;
-      case 'min':
-        return Math.min(...group.map(item => item[field] || 0));
-      case 'max':
-        return Math.max(...group.map(item => item[field] || 0));
-      default:
-        return null;
-    }
-  }
-
-  private _executeFilterCondition(item: any, filter: any): boolean {
-    const value = item[filter.field];
-    const expected = filter.value;
-
-    switch (filter.operator) {
-      case 'equals': return value === expected;
-      case 'contains': return String(value).includes(String(expected));
-      case 'gt': return value > expected;
-      case 'lt': return value < expected;
-      default: return true;
-    }
-  }
-
-  /** Вычисляет условие `run_if` для шага. */
-  private _evaluateRunIf(condition: string | undefined, context: WorkflowContext): boolean {
-    if (condition === undefined || condition === null) return true;
-
-    const parts = condition.match(/^{{\s*(.*?)\s*}}\s*(==|!=|>|<|>=|<=)\s*(.*)$/);
-    if (!parts) {
-      this.logger.addMessage('WARN', `Некорректное условие run_if: ${condition}`);
-      return false;
-    }
-
-    const [, path, operator, expectedValueStr] = parts;
-    const actualValue = this._getContextValue(path, context);
-    const expectedValue = this._parseValue(expectedValueStr);
-    
-    switch (operator) {
-      case '==': return actualValue == expectedValue;
-      case '!=': return actualValue != expectedValue;
-      case '>':  return actualValue > expectedValue;
-      case '<':  return actualValue < expectedValue;
-      case '>=': return actualValue >= expectedValue;
-      case '<=': return actualValue <= expectedValue;
-      default: return false;
-    }
-  }
-
-  /** Умное преобразование строкового значения из `run_if` в нужный тип. */
-  private _parseValue(value: string): any {
-    const trimmed = value.trim();
-    if (trimmed === 'true') return true;
-    if (trimmed === 'false') return false;
-    if (trimmed === 'null') return null;
-    if (trimmed === 'undefined') return undefined;
-
-    const numValue = parseFloat(trimmed);
-    if (!isNaN(numValue) && String(numValue) === trimmed) return numValue;
-
-    // Возвращаем как строку, убирая кавычки по краям
-    return trimmed.replace(/^['"]|['"]$/g, '');
-  }
-
-  /** Безопасно извлекает значение из вложенного контекста по пути (e.g., "steps.analyze.output.score"). */
-  private _getContextValue(path: string, context: WorkflowContext): any {
-    return path.split('.').reduce((acc, part) => {
-        return (acc && typeof acc === 'object' && acc[part] !== undefined) ? acc[part] : null;
-    }, context as any);
-  }
-
-  /** Подставляет значения из контекста в `inputs` шага с улучшенной поддержкой переменных. */
-  private _resolveInputs(inputs: Record<string, any>, context: WorkflowContext): Record<string, any> {
-    const resolved: Record<string, any> = {};
-
-    for (const [key, value] of Object.entries(inputs)) {
-      resolved[key] = this._resolveValue(value, context);
-    }
-
-    this.logger.addMessage('DEBUG', `Разрешены входы для шага`, { original: inputs, resolved });
-    return resolved;
-  }
-
-  /** Глубокое разрешение значений с поддержкой вложенных выражений. */
-  private _resolveValue(value: any, context: WorkflowContext): any {
-    if (typeof value === 'string') {
-      // Поддержка выражений типа {{variable.path}} и {{functions()}}
-      const templateRegex = /\{\{([^}]+)\}\}/g;
-      let resolvedValue = value;
-
-      resolvedValue = resolvedValue.replace(templateRegex, (match, expression) => {
-        const result = this._evaluateExpression(expression.trim(), context);
-        return String(result ?? '');
-      });
-
-      return resolvedValue;
-    }
-
-    if (Array.isArray(value)) {
-      return value.map(item => this._resolveValue(item, context));
-    }
-
-    if (value && typeof value === 'object') {
-      const resolved: Record<string, any> = {};
-      for (const [k, v] of Object.entries(value)) {
-        resolved[k] = this._resolveValue(v, context);
-      }
-      return resolved;
-    }
-
-    return value;
-  }
-
-  /** Вычисляет сложные выражения в контексте. */
-  private _evaluateExpression(expression: string, context: WorkflowContext): any {
-    try {
-      // Проверка на встроенные функции
-      if (expression.startsWith('functions.')) {
-        const functionName = expression.slice(10); // Убираем 'functions.'
-        return this._executeBuiltInFunction(functionName, context);
-      }
-
-      // Проверка на переменные среды
-      if (expression.startsWith('env.')) {
-        const envKey = expression.slice(4);
-        return this._getEnvironmentVariable(envKey);
-      }
-
-      // Проверка на контекстные переменные
-      if (expression.startsWith('context.')) {
-        const contextPath = expression.slice(8);
-        return this._getContextValue(contextPath, context);
-      }
-
-      // Простой путь к переменной контекста
-      return this._getContextValue(expression, context);
-
-    } catch (error) {
-      this.logger.addMessage('WARN', `Ошибка вычисления выражения ${expression}: ${error}`);
-      return null;
-    }
-  }
-
-  /** Выполняет встроенные функции. */
-  private _executeBuiltInFunction(functionName: string, context: WorkflowContext): any {
-    switch (functionName) {
-      case 'currentTimestamp':
-        return Date.now();
-
-      case 'currentDate':
-        return new Date().toISOString().split('T')[0];
-
-      case 'workflowId':
-        return context.pluginId;
-
-      case 'stepCount':
-        return Object.keys(context.steps).length;
-
-      case 'rand':
-        return Math.random();
-
-      default:
-        throw new Error(`Неизвестная встроенная функция: ${functionName}`);
-    }
-  }
-
-  /** Получает переменные среды выполнения. */
-  private _getEnvironmentVariable(key: string): any {
-    // Можно расширить для реальных переменных среды
-    const envVars: Record<string, any> = {
-      nodeVersion: '18.x',
-      os: 'linux',
-      platform: 'chrome_extension',
-      version: '1.0.0'
-    };
-
-    return envVars[key] || null;
-  }
-  
-  // Пример функции, которая может использоваться для определения критичности шага
-  private _isCriticalStep(stepId: string): boolean {
-    return false; // Пока все шаги некритичны
-  }
-
-  // --- Публичные геттеры для доступа к компонентам ---
-  public getLogger(): OffscreenLogger { return this.logger; }
-  public getMemoryManager(): MemoryManager { return this.memoryManager; }
-  public getBatchProcessor(): BatchProcessor { return this.batchProcessor; }
-  public async getPyodideManager(): Promise<PyodideManager> {
-    await this.pyodideManager.awaitReady();
-    return this.pyodideManager;
+  } else {
+    logger.addMessage('WARN', `Received host call response for unknown callId: ${message.callId}`);
   }
 }
 
-// ==============================================================================
-// ОСНОВНОЙ ДОКУМЕНТ - ИНИЦИАЛИЗАЦИЯ И КОММУНИКАЦИЯ
-// ==============================================================================
-
-class OffscreenDocument {
-  // Теперь у нас есть прямые ссылки на все ключевые компоненты
-   private logger: OffscreenLogger;
-  private pyodideManager: PyodideManager;
-  private aiClient: AiClient;
-  private memoryManager: MemoryManager;
-  private batchProcessor: BatchProcessor;
-  private workflowEngine: WorkflowEngine;
-  private isInitialized = false;
-
-  constructor() {
-    console.log('[OffscreenDocument] Initializing components...');
-    
-    // --- Шаг 1: Создаем все зависимости в одном месте ---
-    this.logger = new OffscreenLogger();
-    this.pyodideManager = new PyodideManager(this.logger);
-    this.aiClient = new AiClient();
-    this.memoryManager = new MemoryManager();
-    this.batchProcessor = new BatchProcessor(this.aiClient);
-    
-    // --- Шаг 2: Внедряем зависимости в WorkflowEngine ---
-    this.workflowEngine = new WorkflowEngine(
-      this.logger,
-      this.pyodideManager,
-      this.aiClient,
-      this.memoryManager,
-      this.batchProcessor
-    );
-    
-    // --- Шаг 3: Запускаем асинхронную инициализацию ---
-    this._waitForPyodide();
-    this._setupMessageHandling();
-  }
- 
-
-/*   private workflowEngine: WorkflowEngine;
-  private isInitialized = false;
-
-  constructor() {
-    this.workflowEngine = new WorkflowEngine();
-    console.log('[OffscreenDocument] Initializing...');
-    this._waitForPyodide();
-    this._setupMessageHandling();
-  } */
-
-
-  private async _waitForPyodide(): Promise<void> {
-    try {
-      await this.pyodideManager.awaitReady(); // Используем наш экземпляр
-      await this._sendToBackground({ type: 'OFFSCREEN_READY' });
-      this.isInitialized = true;
-      console.log('[OffscreenDocument] ✅ Initialization complete');
-    } catch (error: any) {
-      console.error('[OffscreenDocument] ❌ Initialization failed:', error);
-      await this._sendToBackground({ type: 'OFFSCREEN_INIT_ERROR', error: error.message });
-    }
-  }
-
-
-   private _setupMessageHandling(): void {
-    chrome.runtime.onMessage.addListener((message) => {
-      if (message.type === 'EXECUTE_WORKFLOW') {
-        // Мы не ждем Promise от _routeMessage, так как ответ придет отдельным сообщением
-        this._routeMessage(message);
-      } else if (message.type === 'HOST_CALL_RESPONSE') {
-        // Обработка ответов на запросы от Python
-        // @ts-ignore
-        const promise = this.workflowEngine.getPyodideManager().hostCallPromises.get(message.callId);
-        if (promise) {
-          if (message.error) promise.reject(new Error(message.error));
-          else promise.resolve(message.result);
-          // @ts-ignore
-          this.workflowEngine.getPyodideManager().hostCallPromises.delete(message.callId);
-        }
-      }
-    });
-    console.log('[OffscreenDocument] Message handler established');
-  }
- /*
-  private _setupMessageHandling(): void {
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-      // Этот слушатель теперь простой. Он просто запускает задачу.
-      // Ответ будет отправлен отдельным, новым сообщением.
-      if (message.type === 'EXECUTE_WORKFLOW') {
-          this._routeMessage(message);
-      }
-      // Этот слушатель может обрабатывать и другие типы сообщений, если нужно.
-      return true; // Возвращаем true, чтобы канал оставался открытым.
-    });
-    console.log('[OffscreenDocument] Message handler established');
-  }
-*/
-  private _handleHostCallResponse(message: any): void {
-    const { callId, result, error } = message;
-    console.log(`[Offscreen] Обработка ответа для callId: ${callId}`, { result: result?.toString(), hasError: !!error });
-
-    try {
-      const promise = this.pyodideManager.hostCallPromises.get(callId);
-
-      if (promise) {
-        if (error) {
-          console.error(`[Offscreen] Ошибка в host call ${callId}:`, error);
-          promise.reject(new Error(error));
-        } else {
-          console.log(`[Offscreen] Успешный ответ для callId ${callId}:`, result);
-          promise.resolve(result);
-        }
-        this.pyodideManager.hostCallPromises.delete(callId);
-      } else {
-        console.warn(`[Offscreen] Promise для callId ${callId} не найден (возможно, истек timeout)`);
-      }
-
-      // Логируем статистику активных promises
-      console.log(`[Offscreen] Активные host call promises: ${this.pyodideManager.hostCallPromises.size}`);
-
-    } catch (handlerError: any) {
-      console.error(`[Offscreen] Критическая ошибка в обработке host call response:`, handlerError);
-    }
-  }
-
-
-  // Эта функция теперь не использует sendResponse.
-  // Она запускает процесс и отправляет результат/ошибку отдельным сообщением.
-   private async _routeMessage(message: any): Promise<void> {
-    const logger = this.workflowEngine.getLogger();
-    logger.addMessage('DEBUG', `Получено сообщение типа: ${message.type}`, message);
-
-    const { pluginId, pageHtml, pageHtmlChunks, input, requestId } = message.data;
-
-    // DEBUG: Логируем получение данных от background
-    console.log('[OFFSCREEN] 🔍 Получены данные от background:');
-    console.log(`[OFFSCREEN] 🔍 pageHtml: ${pageHtml ? pageHtml.length : 'NULL'} символов`);
-    console.log(`[OFFSCREEN] 🔍 pageHtmlChunks: ${pageHtmlChunks ? (Array.isArray(pageHtmlChunks) ? pageHtmlChunks.length : 'NOT_ARRAY') : 'NULL'}`);
-
-    if (pageHtmlChunks && Array.isArray(pageHtmlChunks)) {
-      console.log(`[OFFSCREEN] 🔍 Первый чанк: ${pageHtmlChunks[0] ? pageHtmlChunks[0].substring(0, 100) : 'EMPTY'}`);
-      console.log(`[OFFSCREEN] 🔍 Размеры чанков: ${pageHtmlChunks.map(c => c.length).slice(0, 5).join(', ')}${pageHtmlChunks.length > 5 ? '...' : ''}`);
-    }
-
-    // Обрабатываем чанки HTML если они переданы + проверка данных
-    let finalPageHtml = pageHtml;
-    if (pageHtmlChunks && pageHtmlChunks === 'USE_TRANSFERRED_CHUNKS') {
-      // Используем чанки из transferMap (если они были переданы отдельно)
-      const transferId = `${requestId}_${pluginId}_${Date.now() - 10000}`; // Примерный transfer ID
-      const transferData = {}; // TODO: получить из глобального storage
-
-      console.log('[OFFSCREEN] 🔧 Attempting to reconstruct HTML from transferred chunks...');
-      console.log('[OFFSCREEN] 🔧 Transfer ID search pattern:', transferId);
-
-      // Временно создаем fallback
-      console.warn('[OFFSCREEN] ⚠️ Transfer chunk reconstruction not implemented yet, using empty HTML');
-      finalPageHtml = '<html><body>Chunked HTML not available yet</body></html>';
-
-    } else if (pageHtmlChunks && Array.isArray(pageHtmlChunks) && pageHtmlChunks.length > 0) {
-      console.log(`[OFFSCREEN] 🔧 Начинаем сборку ${pageHtmlChunks.length} чанков...`);
-
-      // Дополнительная проверка: все чанки должны быть строками
-      const validChunks = pageHtmlChunks.filter(chunk => typeof chunk === 'string');
-      if (validChunks.length !== pageHtmlChunks.length) {
-        console.warn(`[OFFSCREEN] ⚠️ Найдены невалидные чанки. Валидных: ${validChunks.length}/${pageHtmlChunks.length}`);
-      }
-
-      if (validChunks.length === 0) {
-        console.error('[OFFSCREEN] ❌ Нет валидных чанков HTML!');
-        finalPageHtml = pageHtml || '';
-      } else {
-        finalPageHtml = validChunks.join('');
-        if (finalPageHtml.length < 100) {
-          console.warn(`[OFFSCREEN] ⚠️ Собранный HTML слишком короткий: ${finalPageHtml.length} символов`);
-        }
-      }
-
-      console.log(`[OFFSCREEN] ✅ Собран HTML: ${finalPageHtml.length} символов`);
-      console.log(`[OFFSCREEN] 📄 Начало HTML: ${finalPageHtml.substring(0, 200)}...`);
-      console.log(`[OFFSCREEN] 📄 Конец HTML: ${finalPageHtml.substring(Math.max(0, finalPageHtml.length - 200))}...`);
-
-      this.logger.addMessage('DEBUG', `Собран HTML из ${validChunks.length} чанков: ${finalPageHtml.length} символов`);
-    } else if (!pageHtml) {
-      console.warn('[OFFSCREEN] ⚠️ Не получен ни HTML ни чанки!');
-      finalPageHtml = '<html><body>No HTML content received</body></html>';
-    }
-
-    // === ФИНАЛЬНЫЕ ПРОВЕРКИ ПЕРЕД ЗАПУСКОМ WORKFLOW ===
-    console.log(`[OFFSCREEN] 📊 WORKFLOW PREPARATION =================`);
-    console.log(`[OFFSCREEN] 📊 Plugin: ${pluginId || 'UNKNOWN'}`);
-    console.log(`[OFFSCREEN] 📊 Request: ${requestId || 'UNKNOWN'}`);
-    console.log(`[OFFSCREEN] 📊 Html size: ${finalPageHtml ? finalPageHtml.length : 'NULL'} символов`);
-    console.log(`[OFFSCREEN] 📊 Html valid: ${finalPageHtml && typeof finalPageHtml === 'string'}`);
-    console.log(`[OFFSCREEN] 📊 Html sample: ${finalPageHtml ? finalPageHtml.substring(0, 100) + '...' : 'NULL'}`);
-
-    if (!finalPageHtml || finalPageHtml.length < 1000) {
-      console.warn(`[OFFSCREEN] ⚠️ CRITICAL: HTML content is too small or missing!`);
-      console.warn(`[OFFSCREEN] ⚠️ Size: ${finalPageHtml ? finalPageHtml.length : 'NULL'}`);
-      console.warn(`[OFFSCREEN] ⚠️ Content: ${finalPageHtml || 'NULL'}`);
-    }
-
-    if (!pluginId) {
-      console.error(`[OFFSCREEN] ❌ CRITICAL: No pluginId provided! Argument:`, message.data);
-    }
-
-    console.log(`[OFFSCREEN] 📊 WORKFLOW PREPARATION END =================`);
-
-    // DEBUG: Логируем финальные данные перед передачей в workflow
-    console.log(`[OFFSCREEN] 📤 Передаем в workflow: page_html=${finalPageHtml ? finalPageHtml.length : 'NULL'} символов`);
-    console.log(`[OFFSCREEN] 📤 Plugin: ${pluginId}, Request: ${requestId}`);
-
-    try {
-      const result = await this.workflowEngine.runWorkflow(pluginId, {
-        input: { ...input, page_html: finalPageHtml },
-        hostApi: {}
-      });
-
-      // ▼▼▼ ОТПРАВЛЯЕМ УСПЕШНЫЙ РЕЗУЛЬТАТ ОТДЕЛЬНЫМ СООБЩЕНИЕМ ▼▼▼
-      await this._sendToBackground({
-        type: 'WORKFLOW_COMPLETED',
-        requestId: requestId,
-        result: result,
-        success: true
-      });
-
-    } catch (error: any) {
-      // ▼▼▼ ОТПРАВЛЯЕМ ОШИБКУ ОТДЕЛЬНЫМ СООБЩЕНИЕМ ▼▼▼
-      await this._sendToBackground({
-        type: 'WORKFLOW_COMPLETED',
-        requestId: requestId,
-        error: error.message,
-        success: false
-      });
-    }
-  } 
-
-/*  private async _routeMessage(message: any): Promise<void> {
-    const logger = this.workflowEngine.getLogger();
-    logger.addMessage('DEBUG', `Получено сообщение типа: ${message.type}`, message);
-    
-    // Извлекаем данные, которые отправил background.js
-    const { pluginId, pageHtml, input, requestId } = message.data;
-
-    try {
-      const result = await this.workflowEngine.runWorkflow(pluginId, {
-        input: { ...input, page_html: finalPageHtml },
-        hostApi: {} // Host API будет реализован через HOST_CALL сообщения
-      });
-
-      // ▼▼▼ КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Отправляем результат отдельным сообщением ▼▼▼
-      await this._sendToBackground({
-        type: 'WORKFLOW_COMPLETED',
-        requestId: requestId, // Используем ID запроса для связки
-        result: result,
-        success: true
-      });
-
-    } catch (error: any) {
-      // И в случае ошибки тоже отправляем отдельное сообщение
-      await this._sendToBackground({
-        type: 'WORKFLOW_COMPLETED',
-        requestId: requestId,
-        error: error.message,
-        success: false
-      });
-    }
-  }
-*/
-
-  private async _sendToBackground(message: any): Promise<void> {
-    try {
-      await chrome.runtime.sendMessage(message);
-    } catch (error: any) {
-      if (error.message.includes('Receiving end does not exist')) {
-        console.warn('[OffscreenDocument] Background script not ready yet.');
-      } else {
-        console.error('[OffscreenDocument] Failed to send message to background:', error);
-      }
-    }
-  }
-  
-
-  // Публичный метод для отладки
-  async getStats(): Promise<any> {
-    return {
-      initialized: this.isInitialized,
-      memory: this.workflowEngine.getMemoryManager().getStats(),
-      logs: this.workflowEngine.getLogger().getLogs().length
-    };
-  }
+function handleHtmlChunk(message: HtmlChunkMessage): void {
+  chunkManager.addChunk(message.transferId, message.chunkData, message.chunkIndex, message.totalChunks);
+  logger.addMessage('DEBUG', `Received chunk ${message.chunkIndex + 1}/${message.totalChunks} for ${message.transferId}`);
 }
 
 // ==============================================================================
-// ГЛОБАЛЬНАЯ ИНИЦИАЛИЗАЦИЯ
+// INITIALIZATION
 // ==============================================================================
 
-// Инициализация глобальных переменных
-let offscreenDocument: OffscreenDocument | undefined;
-document.addEventListener('DOMContentLoaded', () => {
-  offscreenDocument = new OffscreenDocument();
-  (window as any).offscreenDebug = offscreenDocument;
-});
+async function initializeOffscreen(): Promise<void> {
+  try {
+    logger.addMessage('INFO', 'Offscreen document initialized');
+
+    // Wait for Pyodide to be ready
+    await pyodideManager.awaitReady();
+    logger.addMessage('INFO', 'Offscreen document fully operational');
+
+  } catch (error: any) {
+    logger.addMessage('CRITICAL', `Failed to initialize offscreen document: ${error.message}`);
+  }
+}
+
+// Start initialization
+initializeOffscreen();
+
+logger.addMessage('INFO', 'Offscreen document loaded successfully');
 
 export {};
-// ==============================================================================
-// ДОКУМЕНТАЦИЯ И ЭКСПОРТЫ
-// ==============================================================================
-
-/**
- * КЛАССЫ И МЕТОДЫ ДОКУМЕНТАЦИИ:
- *
- * 1. OffscreenLogger - система логирования
- *    - addMessage(level, message, data?) - добавить сообщение
- *    - renderResult(stepId, result) - рендерить результат
- *    - getLogs() - получить все логи
- *
- * 2. MemoryManager - управление памятью
- *    - getObject(type, factory, ...args) - получить объект из пула
- *    - returnObject(type, obj) - вернуть объект в пул
- *    - cache(key, value, ttl) - кешировать значение
- *    - getCached(key) - получить из кеша
- *    - getStats() - статистика использования
- *
- * 3. BatchProcessor - группировка AI запросов
- *    - addRequest(model, prompt, context?) - добавить запрос
- *    - Автоматическая обработка батчей
- *
- * 4. AiClient - клиент AI API
- *    - call(model, prompt, context?) - вызвать AI модель
- *    - getCached(cacheKey) - получить из кеша
- *
- * 5. PyodideManager - управление Python runtime
- *    - awaitReady() - дождаться готовности
- *    - runPython(code, context?) - выполнить Python код
- *    - loadAndRunFunction(pluginId, funcName, params) - загрузить и выполнить функцию
- *
- * 6. WorkflowEngine - движок выполнения workflow
- *    - runWorkflow(pluginId, context) - запустить workflow
- *    - getLogger() - получить логгер
- *    - getMemoryManager() - получить менеджер памяти
- *    - getBatchProcessor() - получить batch processor
- *    - getPyodideManager() - получить Pyodide менеджер
- *
- * 7. OffscreenDocument - основной класс документа
- *    - getStats() - получить статистику
- *
- * ПАТТЕРНЫ КОММУНИКАЦИИ:
- * - Сообщения от background поступают через chrome.runtime.onMessage
- * - Ответы отправляются через chrome.runtime.sendMessage
- * - Типы сообщений: execute_workflow, call_python_tool, get_status, health_check
- * - Все операции асинхронные с try/catch обработкой ошибок
- */
