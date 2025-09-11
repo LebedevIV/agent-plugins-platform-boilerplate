@@ -283,9 +283,16 @@ class WorkflowPromiseManager {
   resolve(requestId: string, result: any): boolean {
     const pending = this.promises.get(requestId);
     if (pending) {
-      pending.resolve(result);
+      // SAFE RESULT HANDLING: Ensure result is never undefined
+      const safeResult = result !== undefined ? result : null;
+
+      if (result === undefined) {
+        console.warn(`[WorkflowPromises] ⚠️ WARNING: Resolving with undefined result for ${requestId}, using null fallback`);
+      }
+
+      pending.resolve(safeResult);
       this.promises.delete(requestId);
-      
+
       // const duration = Date.now() - pending.startTime;
       // console.log(`[WorkflowPromises] Resolved ${requestId} in ${duration}ms`);
       return true;
@@ -446,6 +453,9 @@ class BackgroundController {
     this.setupMessageHandling();
     this.setupPeriodicCleanup();
     console.log('Background Controller initialized (Enhanced v3.0)');
+
+    // DIAGNOSTIC: Setup transfer scope monitoring
+    setInterval(() => this.logTransferScopeState(), 10000); // Every 10 seconds
   }
 
   private delay(ms: number): Promise<void> {
@@ -456,6 +466,23 @@ class BackgroundController {
   private getTransferTimeout(): number {
     console.log(`[Background][DIAG] Using transfer timeout: ${this.chunkManager['TRANSFER_TIMEOUT']}ms`);
     return this.chunkManager['TRANSFER_TIMEOUT'];
+  }
+
+  // DIAGNOSTIC: Log current transfer scope state
+  private logTransferScopeState(): void {
+    const stats = this.promiseManager.getStats();
+    const transferKeys = Array.from(this.chunkManager['transfers'].keys());
+    const assembledKeys = Array.from(this.chunkManager['assembledHtmls'].keys());
+    const pendingKeys = Array.from(this.pendingWorkflows.keys());
+
+    if (stats.active > 0 || transferKeys.length > 0 || pendingKeys.length > 0) {
+      console.log(`[Background][SCOPE_DEBUG] ===== CURRENT TRANSFER SCOPE STATE =====`);
+      console.log(`[Background][SCOPE_DEBUG] Active promises: ${stats.active} (oldest: ${stats.oldestAge}ms ago)`);
+      console.log(`[Background][SCOPE_DEBUG] Active chunk transfers: [${transferKeys.join(', ')}]`);
+      console.log(`[Background][SCOPE_DEBUG] Assembled HTMLs: [${assembledKeys.join(', ')}]`);
+      console.log(`[Background][SCOPE_DEBUG] Pending workflows: [${pendingKeys.join(', ')}]`);
+      console.log(`[Background][SCOPE_DEBUG] ================================================`);
+    }
   }
   
   private setupMessageHandling(): void {
@@ -509,25 +536,52 @@ class BackgroundController {
           console.log(`[Background][ASSEMBLY] ✅ Received HTML_ASSEMBLED for ${message.transferId} (${(message as any).html.length} chars)`);
           this.chunkManager.setAssembledHtml(message.transferId, (message as any).html);
 
+          // DIAGNOSTIC: Log assembled HTML details
+          console.log(`[Background][ASSEMBLY][DIAG] Checking transfer scope for ${message.transferId}:`);
+          console.log(`[Background][ASSEMBLY][DIAG] - Transfer exists in chunkManager: ${this.chunkManager.wasChunked(message.transferId)}`);
+          console.log(`[Background][ASSEMBLY][DIAG] - Pending workflows count: ${this.pendingWorkflows.size}`);
+          console.log(`[Background][ASSEMBLY][DIAG] - Pending workflows keys: [${Array.from(this.pendingWorkflows.keys()).join(', ')}]`);
+
           // Check if we have a pending workflow for this transfer
           const pendingWorkflow = this.pendingWorkflows.get(message.transferId);
           if (pendingWorkflow) {
             console.log(`[Background][ASSEMBLY] 🚀 Sending EXECUTE_WORKFLOW for pending workflow ${pendingWorkflow.requestId}`);
 
+            // DIAGNOSTIC: Validate HTML data before sending
+            const assembledHtml = (message as any).html;
+            if (!assembledHtml || assembledHtml.length === 0) {
+              console.error(`[Background][ASSEMBLY] ❌ CRITICAL: Assembled HTML is empty or undefined!`);
+              console.error(`[Background][ASSEMBLY] Transfer ID: ${message.transferId}`);
+
+              // Try to get from chunkManager as fallback
+              const fallbackHtml = this.chunkManager.getAssembledHtml(message.transferId);
+              if (fallbackHtml) {
+                console.log(`[Background][ASSEMBLY] ✅ Using fallback HTML from chunkManager (${fallbackHtml.length} chars)`);
+                (message as any).html = fallbackHtml;
+              } else {
+                console.error(`[Background][ASSEMBLY] ❌ NO FALLBACK HTML available!`);
+                throw new Error(`Assembled HTML is empty for transfer ${message.transferId}`);
+              }
+            }
+
             await chrome.runtime.sendMessage({
               type: 'EXECUTE_WORKFLOW',
-              data: {
-                pluginId: pendingWorkflow.pluginId,
-                requestId: pendingWorkflow.requestId,
-                transferId: message.transferId,
-                useChunks: false, // HTML is already assembled, no need to use chunks
-                pageHtml: pendingWorkflow.pageHtml, // Original HTML (fallback if needed)
-                assembledHtml: (message as any).html // Pre-assembled HTML from chunks
-              }
+              pluginId: pendingWorkflow.pluginId,
+              requestId: pendingWorkflow.requestId,
+              transferId: message.transferId,
+              pageKey: `transfer_${message.transferId}`, // Add pageKey for offscreen
+              useChunks: false, // HTML is already assembled, no need to use chunks
+              pageHtml: pendingWorkflow.pageHtml, // Original HTML (fallback if needed)
+              assembledHtml: (message as any).html // Pre-assembled HTML from chunks
             });
 
             // Remove from pending workflows
             this.pendingWorkflows.delete(message.transferId);
+            console.log(`[Background][ASSEMBLY] ✅ Removed transfer ${message.transferId} from pending workflows`);
+
+          } else {
+            console.warn(`[Background][ASSEMBLY] ⚠️ No pending workflow found for transfer ${message.transferId}`);
+            console.warn(`[Background][ASSEMBLY] Available pending workflows: [${Array.from(this.pendingWorkflows.keys()).join(', ')}]`);
           }
           break;
           
@@ -615,25 +669,30 @@ class BackgroundController {
   }
   
   private handleWorkflowCompleted(message: WorkflowCompletedMessage): void {
-    // console.log('[BACKGROUND DEBUG] Handling workflow completed:');
-    // console.log('[BACKGROUND DEBUG] requestId:', message.requestId);
-    // console.log('[BACKGROUND DEBUG] success:', message.success);
-    // console.log('[BACKGROUND DEBUG] has result:', message.result !== undefined);
-    // console.log('[BACKGROUND DEBUG] result type:', typeof message.result);
-    // console.log('[BACKGROUND DEBUG] has error:', !!message.error);
-    // console.log('[BACKGROUND DEBUG] error:', message.error);
+    console.log('[BACKGROUND DEBUG] Handling workflow completed:');
+    console.log('[BACKGROUND DEBUG] requestId:', message.requestId);
+    console.log('[BACKGROUND DEBUG] success:', message.success);
+    console.log('[BACKGROUND DEBUG] has result:', message.result !== undefined);
+    console.log('[BACKGROUND DEBUG] result type:', typeof message.result);
+    console.log('[BACKGROUND DEBUG] has error:', !!message.error);
 
-    // DIAGNOSTIC: Check result before using it
+    // CRITICAL FIX: Safe result handling to prevent "result is not defined" error
     if (message.success) {
+      // Ensure result is NEVER undefined, even if message.result is undefined
+      const safeResult = message.result !== undefined ? message.result : null;
+
       if (message.result === undefined) {
-        console.error('[BACKGROUND DEBUG] CRITICAL: message.result is undefined despite success=true!');
-        console.error('[BACKGROUND DEBUG] This will cause ReferenceError when trying to use `result`');
+        console.warn('[BACKGROUND DEBUG] ⚠️ WARNING: message.result was undefined despite success=true!');
+        console.warn('[BACKGROUND DEBUG] Using null fallback to prevent ReferenceError');
+        console.warn('[BACKGROUND DEBUG] Original error field:', message.error);
       }
-      // console.log('[BACKGROUND DEBUG] Resolving promise with result');
-      this.promiseManager.resolve(message.requestId, message.result);
+
+      console.log('[BACKGROUND DEBUG] Resolving promise with safe result:', safeResult);
+      this.promiseManager.resolve(message.requestId, safeResult);
     } else {
-      // console.log('[BACKGROUND DEBUG] Rejecting promise with error');
-      this.promiseManager.reject(message.requestId, new Error(message.error || 'Unknown workflow error'));
+      console.log('[BACKGROUND DEBUG] Rejecting promise with error');
+      const errorMessage = message.error || 'Unknown workflow error';
+      this.promiseManager.reject(message.requestId, new Error(errorMessage));
     }
   }
   

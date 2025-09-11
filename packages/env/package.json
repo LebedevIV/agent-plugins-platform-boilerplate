@@ -1,6 +1,6 @@
 {
   "name": "@extension/env",
-  "version": "0.5.665",
+  "version": "0.5.668",
   "description": "chrome extension - environment variables",
   "type": "module",
   "private": true,
