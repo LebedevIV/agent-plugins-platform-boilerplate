@@ -28,7 +28,7 @@ export async function ensureOffscreenDocument(): Promise<void> {
   console.log('[OffscreenManager] Creating offscreen document...');
   await chrome.offscreen.createDocument({
     url: OFFSCREEN_DOCUMENT_PATH,
-    reasons: [chrome.offscreen.Reason.USER_MEDIA, chrome.offscreen.Reason.DOM_PARSER],
+    reasons: [chrome.offscreen.Reason.DOM_SCRAPING],
     justification: 'Required for running Pyodide and complex plugin logic.',
   });
   console.log('[OffscreenManager] Offscreen document created.');

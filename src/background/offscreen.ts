@@ -17,7 +17,7 @@ class EnhancedChunkManager {
   }
 
   public addChunk(transferId: string, chunkData: string, chunkIndex: number, totalChunks: number): void {
-    console.log(`[EnhancedChunkManager] Processing chunk ${chunkIndex}/${totalChunks-1} for transfer ${transferId}`);
+    console.log(`[Offscreen::ChunkManager] Processing chunk ${chunkIndex}/${totalChunks-1} for transfer ${transferId}`);
 
     // Initialize transfer if needed
     if (!this.transfers.has(transferId)) {
@@ -28,20 +28,21 @@ class EnhancedChunkManager {
         startTime: Date.now()
       };
       this.transfers.set(transferId, transfer);
-      console.log(`[EnhancedChunkManager] Initialized transfer ${transferId} for ${totalChunks} chunks`);
+      console.log(`[Offscreen::ChunkManager] ✅ INITIALIZED transfer ${transferId} for ${totalChunks} chunks in OFFSCREEN instance`);
+      console.log(`[Offscreen::ChunkManager] Total transfers in OFFSCREEN: [${Array.from(this.transfers.keys()).join(', ')}]`);
     }
 
     const transfer = this.transfers.get(transferId)!;
 
     // Validate chunkIndex bounds
     if (chunkIndex < 0 || chunkIndex >= totalChunks) {
-      console.error(`[EnhancedChunkManager] Invalid chunk index ${chunkIndex} for total ${totalChunks}`);
+      // console.error(`[EnhancedChunkManager] Invalid chunk index ${chunkIndex} for total ${totalChunks}`);
       return;
     }
 
     // Check for totalChunks mismatch
     if (transfer.chunks.length !== totalChunks) {
-      console.error(`[EnhancedChunkManager] Total chunks mismatch! Existing: ${transfer.chunks.length}, Received: ${totalChunks}`);
+      // console.error(`[EnhancedChunkManager] Total chunks mismatch! Existing: ${transfer.chunks.length}, Received: ${totalChunks}`);
       return;
     }
 
@@ -51,17 +52,21 @@ class EnhancedChunkManager {
       transfer.acked[chunkIndex] = true; // Mark as acknowledged since we're receiving it
       transfer.totalSize += chunkData.length;
 
-      console.log(`[EnhancedChunkManager] Stored chunk ${chunkIndex}: ${chunkData.length} chars, total size now: ${transfer.totalSize}`);
+      console.log(`[Offscreen::ChunkManager] 💾 Successfully stored chunk ${chunkIndex}/${totalChunks - 1} for ${transferId}`);
+      console.log(`[Offscreen::ChunkManager] - Chunk size: ${chunkData.length} chars`);
+      console.log(`[Offscreen::ChunkManager] - Total size now: ${transfer.totalSize} chars`);
     } else {
-      console.log(`[EnhancedChunkManager] Chunk ${chunkIndex} already exists, skipping`);
+      console.log(`[Offscreen::ChunkManager] ⚠️ Chunk ${chunkIndex} already exists for ${transferId}, skipping`);
     }
 
     // Check completion status
     const completedChunks = transfer.acked.filter(ack => ack === true).length;
-    console.log(`[EnhancedChunkManager] Progress: ${completedChunks}/${totalChunks} chunks for ${transferId}`);
+    console.log(`[Offscreen::ChunkManager] 📊 Progress for ${transferId}: ${completedChunks}/${totalChunks} chunks`);
 
     if (completedChunks === totalChunks) {
-      console.log(`[EnhancedChunkManager] ✅ All chunks received for transfer ${transferId}`);
+      console.log(`[Offscreen::ChunkManager] ✅ ALL CHUNKS RECEIVED for transfer ${transferId}`);
+      console.log(`[Offscreen::ChunkManager] - Total transfer size: ${transfer.totalSize} characters`);
+      console.log(`[Offscreen::ChunkManager] - Transfer duration: ${Date.now() - transfer.startTime}ms`);
     }
   }
 
@@ -72,7 +77,7 @@ class EnhancedChunkManager {
     const completedChunks = transfer.acked.filter(ack => ack === true).length;
     const isComplete = completedChunks === transfer.chunks.length;
 
-    console.log(`[EnhancedChunkManager] Checking completion for ${transferId}: ${completedChunks}/${transfer.chunks.length} (${isComplete ? 'COMPLETE' : 'INCOMPLETE'})`);
+    // console.log(`[EnhancedChunkManager] Checking completion for ${transferId}: ${completedChunks}/${transfer.chunks.length} (${isComplete ? 'COMPLETE' : 'INCOMPLETE'})`);
 
     return isComplete;
   }
@@ -89,7 +94,7 @@ class EnhancedChunkManager {
   }
 
   public getAssembledData(transferId: string): string {
-    console.log(`[EnhancedChunkManager] Starting assembly for ${transferId}`);
+    // console.log(`[EnhancedChunkManager] Starting assembly for ${transferId}`);
 
     const transfer = this.transfers.get(transferId);
 
@@ -115,7 +120,7 @@ class EnhancedChunkManager {
       }
     }
 
-    console.log(`[EnhancedChunkManager] Successfully assembled ${assembled.length} characters from ${transfer.chunks.length} chunks`);
+    // console.log(`[EnhancedChunkManager] Successfully assembled ${assembled.length} characters from ${transfer.chunks.length} chunks`);
 
     return assembled;
   }
@@ -132,7 +137,7 @@ class EnhancedChunkManager {
     });
 
     expiredTransfers.forEach(id => {
-      console.warn(`[EnhancedChunkManager] Cleaning up expired transfer: ${id}`);
+      // console.warn(`[EnhancedChunkManager] Cleaning up expired transfer: ${id}`);
       this.transfers.delete(id);
     });
   }
@@ -158,8 +163,8 @@ class SimpleWorkflowEngine {
 
   async executeWorkflow(pluginId: string, pageHtml: string) {
     try {
-      this.logger.log(`[WorkflowEngine] Starting workflow for plugin: ${pluginId}`);
-      this.logger.log(`[WorkflowEngine] HTML length: ${pageHtml?.length || 0} characters`);
+      // this.logger.log(`[WorkflowEngine] Starting workflow for plugin: ${pluginId}`);
+      // this.logger.log(`[WorkflowEngine] HTML length: ${pageHtml?.length || 0} characters`);
 
       // Simple return object that matches expected interface
       return {
@@ -211,6 +216,7 @@ interface ExecuteWorkflowMessage {
     transferId: string;
     useChunks: boolean;
     pageHtml: string;
+    assembledHtml?: string; // New field for pre-assembled HTML from chunks
   };
 }
 
@@ -224,32 +230,57 @@ interface HtmlChunkMessage {
 
 // Handle EXECUTE_WORKFLOW message
 async function handleExecuteWorkflow(data: ExecuteWorkflowMessage['data']) {
-  console.log(`[offscreen] === STARTING WORKFLOW EXECUTION ===`);
-  console.log(`[offscreen] Plugin: ${data.pluginId}`);
-  console.log(`[offscreen] Request ID: ${data.requestId}`);
-  console.log(`[offscreen] Transfer ID: ${data.transferId}`);
-  console.log(`[offscreen] Use Chunks: ${data.useChunks}`);
-  console.log(`[offscreen] Page HTML Length: ${data.pageHtml?.length || 0} characters`);
+  console.log(`[offscreen][DIAG] ===== STARTING WORKFLOW EXECUTION =====`);
+  console.log(`[offscreen][DIAG] Plugin: ${data.pluginId}`);
+  console.log(`[offscreen][DIAG] Request ID: ${data.requestId}`);
+  console.log(`[offscreen][DIAG] Transfer ID: ${data.transferId}`);
+  console.log(`[offscreen][DIAG] Use Chunks: ${data.useChunks}`);
+  console.log(`[offscreen][DIAG] Page HTML Length: ${data.pageHtml?.length || 0} characters`);
+  console.log(`[offscreen][DIAG] Current time: ${new Date().toISOString()}`);
 
   let pageHtml = data.pageHtml;
 
+  // Use pre-assembled HTML if provided
+  if (data.assembledHtml) {
+    console.log(`[offscreen][DIAG] 🔄 Using pre-assembled HTML (${data.assembledHtml.length} chars) from EXECUTE_WORKFLOW`);
+    pageHtml = data.assembledHtml;
+  }
+
   try {
+    // DIAGNOSTIC: Always check ChunkManager state regardless of useChunks flag
+    console.log(`[offscreen][DIAG] CHECKING CHUNK MANAGER STATE:`);
+    console.log(`[offscreen][DIAG] Transfer exists: ${chunkManager['transfers'].has(data.transferId)}`);
+    const availableTransfers = Array.from(chunkManager['transfers'].keys());
+    console.log(`[offscreen][DIAG] Available transfers: [${availableTransfers.join(', ')}]`);
+
+    if (chunkManager['transfers'].has(data.transferId)) {
+      const stats = chunkManager.getStats(data.transferId);
+      console.log(`[offscreen][DIAG] Transfer stats:`, stats);
+      console.log(`[offscreen][DIAG] Is complete: ${chunkManager.isComplete(data.transferId)}`);
+      const transfer = chunkManager['transfers'].get(data.transferId);
+      if (transfer) {
+        const elapsedTime = Date.now() - transfer.startTime;
+        console.log(`[offscreen][DIAG] Elapsed time since transfer start: ${elapsedTime}ms`);
+        console.log(`[offscreen][DIAG] Transfer timeout: ${chunkManager['TRANSFER_TIMEOUT']}ms`);
+        console.log(`[offscreen][DIAG] Transfer expired: ${elapsedTime > chunkManager['TRANSFER_TIMEOUT']}`);
+      }
+    }
+
     // If using chunks, assemble the HTML
     if (data.useChunks) {
-      console.log(`[offscreen] 🔄 Assembling HTML from chunks for transferId: ${data.transferId}`);
+      console.log(`[offscreen][DIAG] 🔄 Assembling HTML from chunks for transferId: ${data.transferId}`);
 
       if (!chunkManager['transfers'].has(data.transferId)) {
-        console.log(`[offscreen] ❌ Transfer ${data.transferId} not found in ChunkManager!`);
-        const available = Array.from(chunkManager['transfers'].keys());
-        console.log(`[offscreen] Available transfers: [${available.join(', ')}]`);
-        throw new Error(`Transfer ${data.transferId} not found. Available: ${available.join(', ')}`);
+        console.log(`[offscreen][DIAG] ❌ TRANSFER ${data.transferId} NOT FOUND IN CHUNK MANAGER!`);
+        console.log(`[offscreen][DIAG] Available transfers: [${availableTransfers.join(', ')}]`);
+        throw new Error(`Transfer ${data.transferId} not found in ChunkManager. Available: ${availableTransfers.join(', ')}`);
       }
 
       const stats = chunkManager.getStats(data.transferId);
-      console.log(`[offscreen] 📊 Transfer stats:`, stats);
+      // console.log(`[offscreen] 📊 Transfer stats:`, stats);
 
       if (!chunkManager.isComplete(data.transferId)) {
-        console.log(`[offscreen] ⏳ Transfer incomplete, checking for missing chunks...`);
+        // console.log(`[offscreen] ⏳ Transfer incomplete, checking for missing chunks...`);
         const transfer = chunkManager['transfers'].get(data.transferId);
         const missingChunks = [];
         if (transfer) {
@@ -259,41 +290,41 @@ async function handleExecuteWorkflow(data: ExecuteWorkflowMessage['data']) {
             }
           }
         }
-        console.log(`[offscreen] ❌ Missing chunks: ${missingChunks.join(', ')}`);
+        // console.log(`[offscreen] ❌ Missing chunks: ${missingChunks.join(', ')}`);
         throw new Error(`Transfer incomplete. Missing chunks: ${missingChunks.join(', ')}`);
       }
 
-      console.log(`[offscreen] 🛠️ Starting HTML assembly...`);
+      // console.log(`[offscreen] 🛠️ Starting HTML assembly...`);
       const assemblyStartTime = Date.now();
       pageHtml = chunkManager.getAssembledData(data.transferId);
       const assemblyTime = Date.now() - assemblyStartTime;
 
-      console.log(`[offscreen] ✅ HTML assembled successfully!`);
-      console.log(`[offscreen] - Length: ${pageHtml.length} characters`);
-      console.log(`[offscreen] - Assembly time: ${assemblyTime}ms`);
-      console.log(`[offscreen] - Sample (first 200 chars): "${pageHtml.substring(0, 200)}"`);
+      // console.log(`[offscreen] ✅ HTML assembled successfully!`);
+      // console.log(`[offscreen] - Length: ${pageHtml.length} characters`);
+      // console.log(`[offscreen] - Assembly time: ${assemblyTime}ms`);
+      // console.log(`[offscreen] - Sample (first 200 chars): "${pageHtml.substring(0, 200)}"`);
 
     } else {
-      console.log(`[offscreen] 📄 Using direct HTML (no chunks)`);
-      console.log(`[offscreen] - Length: ${pageHtml?.length || 0} characters`);
+      // console.log(`[offscreen] 📄 Using direct HTML (no chunks)`);
+      // console.log(`[offscreen] - Length: ${pageHtml?.length || 0} characters`);
     }
 
     // Validate final HTML
     if (!pageHtml || pageHtml.length === 0) {
-      console.log(`[offscreen] ❌ ERROR: Final HTML is empty or undefined!`);
+      // console.log(`[offscreen] ❌ ERROR: Final HTML is empty or undefined!`);
       throw new Error('Assembled HTML is empty');
     }
 
     // Execute workflow
-    console.log(`[offscreen] 🚀 Executing workflow for plugin: ${data.pluginId}`);
+    // console.log(`[offscreen] 🚀 Executing workflow for plugin: ${data.pluginId}`);
     const workflowStartTime = Date.now();
 
     const result = await workflowEngine.executeWorkflow(data.pluginId, pageHtml);
 
     const workflowTime = Date.now() - workflowStartTime;
-    console.log(`[offscreen] ✅ Workflow completed in ${workflowTime}ms`);
-    console.log(`[offscreen] - Success: ${result.success}`);
-    console.log(`[offscreen] - Result:`, result.result);
+    // console.log(`[offscreen] ✅ Workflow completed in ${workflowTime}ms`);
+    // console.log(`[offscreen] - Success: ${result.success}`);
+    // console.log(`[offscreen] - Result:`, result.result);
 
     // Send result back to background
     await chrome.runtime.sendMessage({
@@ -303,11 +334,11 @@ async function handleExecuteWorkflow(data: ExecuteWorkflowMessage['data']) {
       success: true
     });
 
-    console.log(`[offscreen] === WORKFLOW EXECUTION COMPLETED SUCCESSFULLY ===`);
+    // console.log(`[offscreen] === WORKFLOW EXECUTION COMPLETED SUCCESSFULLY ===`);
 
   } catch (error: any) {
     console.error(`[offscreen] 💥 Workflow execution failed:`, error);
-    console.error(`[offscreen] Stack trace:`, error.stack);
+    // console.error(`[offscreen] Stack trace:`, error.stack);
 
     // Send error back to background
     await chrome.runtime.sendMessage({
@@ -317,16 +348,17 @@ async function handleExecuteWorkflow(data: ExecuteWorkflowMessage['data']) {
       success: false
     });
 
-    console.log(`[offscreen] === WORKFLOW EXECUTION FAILED ===`);
+    // console.log(`[offscreen] === WORKFLOW EXECUTION FAILED ===`);
   }
 }
 
 // Handle HTML_CHUNK message
-function handleHtmlChunk(message: HtmlChunkMessage) {
-  console.log(`[offscreen] === RECEIVED HTML CHUNK ===`);
-  console.log(`[offscreen] Transfer ID: ${message.transferId}`);
-  console.log(`[offscreen] Chunk Index: ${message.chunkIndex}/${message.totalChunks - 1}`);
-  console.log(`[offscreen] Chunk Length: ${message.chunkData.length} characters`);
+async function handleHtmlChunk(message: HtmlChunkMessage) {
+  console.log(`[offscreen][CHUNKING] ===== RECEIVED HTML CHUNK =====`);
+  console.log(`[offscreen][CHUNKING] Transfer ID: ${message.transferId}`);
+  console.log(`[offscreen][CHUNKING] Chunk Index: ${message.chunkIndex}/${message.totalChunks - 1}`);
+  console.log(`[offscreen][CHUNKING] Chunk Length: ${message.chunkData.length} characters`);
+  console.log(`[offscreen][CHUNKING] Timestamp: ${new Date().toISOString()}`);
 
   chunkManager.addChunk(
     message.transferId,
@@ -337,18 +369,34 @@ function handleHtmlChunk(message: HtmlChunkMessage) {
 
   // Check if all chunks received
   if (chunkManager.isComplete(message.transferId)) {
-    console.log(`[offscreen] ✅ All chunks received for transfer ${message.transferId}`);
+    console.log(`[offscreen][CHUNKING] ✅ ALL CHUNKS RECEIVED for transfer ${message.transferId}`);
     const finalStats = chunkManager.getStats(message.transferId);
-    console.log(`[offscreen] Final stats:`, finalStats);
+    console.log(`[offscreen][CHUNKING] Final stats:`, finalStats);
+
+    // Assembly HTML and send it back to background
+    try {
+      const assembledHtml = chunkManager.getAssembledData(message.transferId);
+      console.log(`[offscreen][CHUNKING] 🔄 ASSEMBLED HTML ready for transfer ${message.transferId} (${assembledHtml.length} chars)`);
+
+      await chrome.runtime.sendMessage({
+        type: 'HTML_ASSEMBLED',
+        transferId: message.transferId,
+        html: assembledHtml
+      });
+      console.log(`[offscreen][CHUNKING] 📤 SENT HTML_ASSEMBLED message for transfer ${message.transferId}`);
+    } catch (assemblyError) {
+      console.error(`[offscreen][CHUNKING] ❌ FAILED to assemble HTML for transfer ${message.transferId}:`, assemblyError);
+    }
   }
 
   // Send acknowledgment back
+  console.log(`[offscreen][CHUNKING] 📤 Sending ACK for chunk ${message.chunkIndex} of ${message.transferId}`);
   chrome.runtime.sendMessage({
     type: 'HTML_CHUNK_ACK',
     transferId: message.transferId,
     chunkIndex: message.chunkIndex
   }).catch(err => {
-    console.error(`[offscreen] Failed to send chunk acknowledgment:`, err);
+    console.error(`[offscreen][CHUNKING] Failed to send chunk acknowledgment:`, err);
   });
 }
 
@@ -357,9 +405,9 @@ function handleHtmlChunk(message: HtmlChunkMessage) {
 // ==============================================================================
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log(`[offscreen] ===== OFFSCREEN MESSAGE RECEIVED =====`);
-  console.log(`[offscreen] Type: ${message.type}`);
-  console.log(`[offscreen] Sender:`, sender);
+  // console.log(`[offscreen] ===== OFFSCREEN MESSAGE RECEIVED =====`);
+  // console.log(`[offscreen] Type: ${message.type}`);
+  // console.log(`[offscreen] Sender:`, sender);
 
   switch (message.type) {
     case 'EXECUTE_WORKFLOW':
@@ -386,7 +434,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // INITIALIZATION
 // ==============================================================================
 
-console.log('[offscreen] Offscreen document loaded successfully');
-console.log('[offscreen] Ready to handle EXECUTE_WORKFLOW messages');
+// console.log('[offscreen] Offscreen document loaded successfully');
+// console.log('[offscreen] Ready to handle EXECUTE_WORKFLOW messages');
 
 export {};

@@ -48,7 +48,7 @@ async function initializePyodide() {
     console.log('[offscreen] Setting up js bridge for Python scripts...');
     pyodide.globals.set('js', {
       sendMessageToChat: (message) => {
-        console.log('[offscreen][js bridge] sendMessageToChat called:', message);
+        console.log('[offscreen][js bridge] ATTEMPTING to send:', message);
         const jsMessage = message.toJs ? message.toJs({ dict_converter: Object.fromEntries }) : message;
         chrome.runtime.sendMessage({
           type: 'PYODIDE_MESSAGE',
@@ -190,6 +190,14 @@ function handleHtmlChunk(chunkMessage) {
   // Store the chunk
   transfer.chunks[chunkIndex] = chunkData;
   transfer.receivedChunks++;
+
+  // Diagnostic logging for chunk storage
+  if (transfer.chunks[chunkIndex] !== undefined) {
+    console.log(`[offscreen][DIAG] Successfully stored chunk ${chunkIndex}, size: ${chunkData.length}`);
+  } else {
+    console.error(`[offscreen][DIAG] FAILED to store chunk ${chunkIndex}!`);
+  }
+
   console.log(`[offscreen][CHUNKING] Stored chunk ${chunkIndex + 1}/${totalChunks} for transfer ${transferId}`);
 
   // Send acknowledgment
@@ -206,6 +214,24 @@ function handleHtmlChunk(chunkMessage) {
     // Automatically mark transfer as completed when all chunks are received
     transfer.completed = true;
     console.log(`[offscreen][CHUNKING] Transfer ${transferId} automatically marked as completed (all chunks received)`);
+
+    // Assemble the complete HTML from all chunks
+    const assembledHtml = transfer.chunks.join('');
+    console.log(`[offscreen][CHUNKING] Successfully assembled HTML for transfer ${transferId}, total length: ${assembledHtml.length}`);
+
+    // Send HTML_ASSEMBLED message to background
+    chrome.runtime.sendMessage({
+      type: 'HTML_ASSEMBLED',
+      transferId,
+      html: assembledHtml,
+      metadata: transfer.metadata
+    });
+
+    console.log(`[offscreen][CHUNKING] Sent HTML_ASSEMBLED message to background for transfer ${transferId}`);
+
+    // Clean up the transfer to free memory
+    htmlTransfers.delete(transferId);
+    console.log(`[offscreen][CHUNKING] Cleanup: Removed transfer ${transferId} from memory`);
   }
 }
 
@@ -394,11 +420,11 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
 
 // Handle messages from background script
 chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
-  console.log('[offscreen] ===== OFFSCREEN MESSAGE RECEIVED =====');
-  console.log('[offscreen] Received message:', message);
-  console.log('[offscreen] Sender info:', sender);
-  console.log('[offscreen] Message type:', message.type);
-  console.log('[offscreen] Message timestamp:', new Date().toISOString());
+  // console.log('[offscreen] ===== OFFSCREEN MESSAGE RECEIVED =====');
+  // console.log('[offscreen] Received message:', message);
+  // console.log('[offscreen] Sender info:', sender);
+  // console.log('[offscreen] Message type:', message.type);
+  // console.log('[offscreen] Message timestamp:', new Date().toISOString());
 
   // Handle chunked messages first
   if (message.type === 'HTML_CHUNK' || message.type === 'HTML_CHUNK_COMPLETE' || message.type === 'START_WORKFLOW_AFTER_CHUNKS') {

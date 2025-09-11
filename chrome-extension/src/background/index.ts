@@ -154,6 +154,40 @@ function splitHtmlIntoChunks(html: string, chunkSize: number = CHUNK_SIZE): stri
   return chunks;
 }
 
+// Function to assemble HTML from chunks
+function assembleHtmlFromChunks(transferId: string): string {
+  const transfer = activeTransfers.get(transferId);
+  if (!transfer) {
+    throw new Error(`Transfer ${transferId} not found`);
+  }
+
+  // Проверяем, что все чанки получены
+  const completedCount = transfer.received.size;
+  const total = transfer.totalChunks;
+
+  if (completedCount !== total) {
+    throw new Error(`Transfer ${transferId} not complete: ${completedCount}/${total} chunks acknowledged`);
+  }
+
+  console.log(`[background][ASSEMBLY] Assembling HTML from ${transfer.chunks.length} chunks`);
+  console.log(`[background][ASSEMBLY] Transfer ID: ${transferId}`);
+  console.log(`[background][ASSEMBLY] Total chunks acknowledged: ${completedCount}/${total}`);
+
+  // Собираем чанки в правильном порядке
+  let assembledHtml = '';
+  for (let i = 0; i < transfer.chunks.length; i++) {
+    const chunk = transfer.chunks[i];
+    if (chunk !== undefined && chunk !== null && typeof chunk === 'string') {
+      assembledHtml += chunk;
+    } else {
+      throw new Error(`Invalid chunk at index ${i} in transfer ${transferId}`);
+    }
+  }
+
+  console.log(`[background][ASSEMBLY] HTML assembled successfully: ${assembledHtml.length} characters`);
+  return assembledHtml;
+}
+
 // Function to send HTML in chunks
 async function sendHtmlInChunks(
   pluginId: string,
@@ -641,15 +675,15 @@ const addPluginLog = (log: Omit<PluginLogEntry, 'timestamp'>) => {
 // Обработчики сообщений для работы с плагинами
 chrome.runtime.onMessage.addListener(
   async (message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => {
-    console.log('[background] Got message:', message, 'from:', sender?.origin || sender?.id || 'unknown');
-    console.log('[background] Message timestamp:', new Date().toISOString());
-    console.log('[background] Sender details:', {
-      id: sender?.id,
-      origin: sender?.origin,
-      url: sender?.url,
-      tab: sender?.tab,
-      frameId: sender?.frameId
-    });
+    // console.log('[background] Got message:', message, 'from:', sender?.origin || sender?.id || 'unknown');
+    // console.log('[background] Message timestamp:', new Date().toISOString());
+    // console.log('[background] Sender details:', {
+    //   id: sender?.id,
+    //   origin: sender?.origin,
+    //   url: sender?.url,
+    //   tab: sender?.tab,
+    //   frameId: sender?.frameId
+    // });
 
     if (
       typeof message === 'object' &&
@@ -665,12 +699,12 @@ chrome.runtime.onMessage.addListener(
 
     if (typeof message === 'object' && message !== null && 'type' in message) {
       const msg = message as ExtensionMessage;
-      console.log('[background] ===== MAIN MESSAGE HANDLER =====');
-      console.log('[background] Processing message type:', msg.type);
-      console.log('[background] Sender origin:', sender?.origin || 'none');
-      console.log('[background] Sender ID:', sender?.id || 'none');
-      console.log('[background] Message content preview:', JSON.stringify(message).substring(0, 200) + '...');
-      console.log('[background] Timestamp:', new Date().toISOString());
+      // console.log('[background] ===== MAIN MESSAGE HANDLER =====');
+      // console.log('[background] Processing message type:', msg.type);
+      // console.log('[background] Sender origin:', sender?.origin || 'none');
+      // console.log('[background] Sender ID:', sender?.id || 'none');
+      // console.log('[background] Message content preview:', JSON.stringify(message).substring(0, 200) + '...');
+      // console.log('[background] Timestamp:', new Date().toISOString());
 
       if (msg.type === 'TEST_SYNC') {
         console.log('[background] Processing TEST_SYNC request');
@@ -696,10 +730,10 @@ chrome.runtime.onMessage.addListener(
       }
 
       if (msg.type === 'PING') {
-        console.log('[background] Processing PING request');
-        console.log('[background] PING timestamp:', new Date().toISOString());
+        // console.log('[background] Processing PING request');
+        // console.log('[background] PING timestamp:', new Date().toISOString());
         sendResponse({ pong: true, timestamp: Date.now() });
-        console.log('[background] PING response sent');
+        // console.log('[background] PING response sent');
         return true;
       }
 
@@ -1141,23 +1175,14 @@ chrome.runtime.onMessage.addListener(
                 // Отправляем HTML кусками и получаем transferId
                 const transferId = await sendHtmlInChunks(msg.pluginId!, pageKey, pageHtml, requestId);
 
-                // После успешной передачи чанков, отправляем команду запуска workflow
-                const workflowCommand = {
-                  type: 'EXECUTE_WORKFLOW',
-                  pluginId: msg.pluginId,
-                  pageKey: pageKey,
-                  requestId: requestId,
-                  transferId: transferId, // <-- ДОБАВИТЬ transferId
-                  useChunks: true, // <-- Изменить с pageHtmlChunks
-                  pageHtml: '', // <-- Пустая строка, поскольку используем чанки
-                  timestamp: Date.now()
-                };
+                // Ожидаем HTML_ASSEMBLED от оффскрина вместо локальной сборки
+                console.log('[background][OFFSCREEN DELEGATION] All chunks sent, waiting for HTML_ASSEMBLED from offscreen...');
 
-                console.log('[background][OFFSCREEN DELEGATION] Sending workflow start command after chunks...');
-                console.log('[background][DEBUG] Workflow command payload:', JSON.stringify(workflowCommand, null, 2));
-                const result = await chrome.runtime.sendMessage(workflowCommand);
-    
-                console.log('[background][OFFSCREEN DELEGATION] Workflow command sent, result:', result);
+                // HTML_ASSEMBLED обработчик в конце файла отправит EXECUTE_WORKFLOW автоматически
+                // Здесь просто завершаем работу и ждем сообщения HTML_ASSEMBLED от оффскрина
+                sendResponse({ success: true });
+
+                console.log('[background][OFFSCREEN DELEGATION] Workflow command sent, transferId:', transferId);
                 console.log('[background][DEBUG] About to check sendResponse function...');
 
               } catch (chunkingError) {
