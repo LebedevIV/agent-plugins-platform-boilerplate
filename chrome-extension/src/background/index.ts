@@ -160,7 +160,7 @@ async function sendHtmlInChunks(
   pageKey: string,
   html: string,
   requestId: string
-): Promise<void> {
+): Promise<string> {
   const transferId = `${requestId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   const chunks = splitHtmlIntoChunks(html);
 
@@ -169,7 +169,7 @@ async function sendHtmlInChunks(
   console.log('[background][CHUNKING] - Total chunks:', chunks.length);
   console.log('[background][CHUNKING] - Original HTML size:', html.length, 'chars');
 
-  return new Promise<void>((resolve, reject) => {
+  return new Promise<string>((resolve, reject) => {
     // Set timeout for entire transfer (30 seconds)
     const timeout = setTimeout(() => {
       activeTransfers.delete(transferId);
@@ -185,7 +185,7 @@ async function sendHtmlInChunks(
       resolve: () => {
         clearTimeout(timeout);
         activeTransfers.delete(transferId);
-        resolve();
+        resolve(transferId);
       },
       reject: (error) => {
         clearTimeout(timeout);
@@ -1138,8 +1138,8 @@ chrome.runtime.onMessage.addListener(
                   throw new Error('Invalid HTML data for chunking');
                 }
 
-                // Отправляем HTML кусками
-                await sendHtmlInChunks(msg.pluginId!, pageKey, pageHtml, requestId);
+                // Отправляем HTML кусками и получаем transferId
+                const transferId = await sendHtmlInChunks(msg.pluginId!, pageKey, pageHtml, requestId);
 
                 // После успешной передачи чанков, отправляем команду запуска workflow
                 const workflowCommand = {
@@ -1147,7 +1147,9 @@ chrome.runtime.onMessage.addListener(
                   pluginId: msg.pluginId,
                   pageKey: pageKey,
                   requestId: requestId,
-                  pageHtmlChunks: 'USE_TRANSFERRED_CHUNKS', // Указываем использовать переданные чанки
+                  transferId: transferId, // <-- ДОБАВИТЬ transferId
+                  useChunks: true, // <-- Изменить с pageHtmlChunks
+                  pageHtml: '', // <-- Пустая строка, поскольку используем чанки
                   timestamp: Date.now()
                 };
 
@@ -1175,6 +1177,8 @@ chrome.runtime.onMessage.addListener(
                 pageKey: pageKey,
                 pageHtml: pageHtml,
                 requestId: requestId,
+                transferId: requestId, // <-- ДОБАВИТЬ transferId
+                useChunks: false, // <-- ДОБАВИТЬ useChunks для консистентности
                 timestamp: Date.now()
               };
 

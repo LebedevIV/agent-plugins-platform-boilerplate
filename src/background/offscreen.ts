@@ -1,4 +1,5 @@
 /**
+ * src/background/offscreen.ts
  * Offscreen Document for Agent Plugins Platform
  * 
  * This is the "workhorse" of the extension where all heavy operations
@@ -18,6 +19,7 @@ declare global {
 
 // Export to make it an external module
 declare const importScripts: typeof globalThis.importScripts;
+
 
 interface PyodideInterface {
   runPythonAsync(code: string): Promise<any>;
@@ -631,22 +633,29 @@ class ChunkManager {
     if (!this.transfers.has(transferId)) {
       this.transfers.set(transferId, { chunks: new Array(totalChunks), total: totalChunks });
       this.logger.log(`[CHUNKING] Initialized transfer ${transferId} for ${totalChunks} chunks`);
+    } else {
+      // Check for totalChunks mismatch if transfer already exists
+      const existingTransfer = this.transfers.get(transferId)!;
+      if (existingTransfer.total !== totalChunks) {
+        this.logger.error(`[CHUNKING] ERROR: Total chunks mismatch for ${transferId}! Existing: ${existingTransfer.total}, Received: ${totalChunks}, IGNORED`);
+        return; // Don't process this chunk
+      }
     }
 
     const transfer = this.transfers.get(transferId)!;
 
-    // Adjust for 1-based indexing (assuming sender uses 1-n instead of 0-(n-1))
-    const adjustedIndex = chunkIndex - 1;
+    // Use chunkIndex directly as 0-based (sender already uses 0-based indexing)
+    const adjustedIndex = chunkIndex;
 
     // Check bounds
     if (adjustedIndex < 0 || adjustedIndex >= transfer.total) {
-      this.logger.error(`[CHUNKING] ERROR: Invalid chunk index ${chunkIndex} (adjusted to ${adjustedIndex}) for total ${totalChunks}. Ignoring chunk.`);
+      this.logger.error(`[CHUNKING] ERROR: Invalid chunk index ${chunkIndex} for total ${totalChunks} (range: 0-${totalChunks-1}). Ignoring chunk.`);
       return;
     }
 
     // Check for duplicate chunks
     if (transfer.chunks[adjustedIndex] !== undefined) {
-      this.logger.warn(`[CHUNKING] WARNING: Chunk ${chunkIndex} (adjusted ${adjustedIndex}) for transfer ${transferId} already exists! Overwriting...`);
+      this.logger.warn(`[CHUNKING] WARNING: Chunk ${chunkIndex} for transfer ${transferId} already exists! Overwriting...`);
     }
 
     // Store chunk
@@ -655,12 +664,30 @@ class ChunkManager {
     // Calculate received chunks count
     const receivedChunks = transfer.chunks.filter(chunk => chunk !== undefined).length;
 
-    this.logger.log(`[CHUNKING] Stored chunk ${chunkIndex} (adjusted to ${adjustedIndex}) (${chunkData.length} chars) for ${transferId}: ${receivedChunks}/${totalChunks}`);
-    this.logger.log(`[CHUNKING] Chunk ${chunkIndex} first 50 chars: "${chunkData.substring(0, 50)}"`);
+    this.logger.log(`[CHUNKING] Chunk ${chunkIndex}/${totalChunks-1} RECEIVED: length=${chunkData.length}, progress ${receivedChunks}/${totalChunks} for ${transferId}`);
+    if (chunkData.length === 0) {
+      this.logger.warn(`[CHUNKING] WARNING: Chunk ${chunkIndex} is empty!`);
+    } else if (chunkData.length < 100) {
+      this.logger.warn(`[CHUNKING] WARNING: Chunk ${chunkIndex} is suspiciously small (${chunkData.length} chars): "${chunkData}"`);
+    } else {
+      this.logger.log(`[CHUNKING] Chunk ${chunkIndex} sample: first="${chunkData.substring(0, 50)}..." last="...${chunkData.substring(Math.max(0, chunkData.length - 20))}"`);
+    }
 
-    // Check completion
+    // Check completion with detailed stats
     if (receivedChunks === totalChunks) {
-      this.logger.log(`[CHUNKING] All chunks received for transfer ${transferId}. Ready for assembly.`);
+      const missingChunks = [];
+      for (let i = 0; i < transfer.total; i++) {
+        if (transfer.chunks[i] === undefined) {
+          missingChunks.push(i);
+        }
+      }
+      if (missingChunks.length > 0) {
+        this.logger.error(`[CHUNKING] MISSING CHUNKS DETECTED: ${missingChunks.join(', ')}`);
+      } else {
+        this.logger.log(`[CHUNKING] ✅ All ${receivedChunks} chunks received for transfer ${transferId}. Ready for assembly.`);
+      }
+    } else {
+      this.logger.log(`[CHUNKING] Still waiting for ${totalChunks - receivedChunks} chunks. Current progress: ${receivedChunks}/${totalChunks}`);
     }
   }
 
@@ -682,55 +709,166 @@ class ChunkManager {
   public getAssembled(transferId: string): string {
     this.logger.log(`[CHUNKING] Starting assembly for ${transferId}`);
 
+    // Validate transfer exists
+    if (!this.transfers.has(transferId)) {
+      this.logger.error(`[CHUNKING] ERROR: Transfer ${transferId} not found! Cannot assemble.`);
+      throw new Error(`Transfer ${transferId} not found`);
+    }
+
+    // Check completion status
     if (!this.isComplete(transferId)) {
-      this.logger.error(`[CHUNKING] ERROR: Transfer ${transferId} is not complete. Cannot assemble.`);
-      throw new Error(`Transfer ${transferId} is not complete.`);
+      const stats = this.getStats(transferId)!;
+      this.logger.error(`[CHUNKING] ERROR: Transfer ${transferId} is not complete. Cannot assemble. Stats: ${JSON.stringify(stats)}`);
+      throw new Error(`Transfer ${transferId} is not complete`);
     }
 
     const transfer = this.transfers.get(transferId)!;
 
-    // Debug: Check each chunk before assembly
-    this.logger.log(`[CHUNKING] Pre-assembly chunk validation:`);
+    // Critical validation: Check that all chunks are present and valid
+    this.logger.log(`[CHUNKING] Pre-assembly chunk validation for ${transfer.chunks.length} chunks:`);
+
+    let validChunks = 0;
+    const invalidChunks = [];
+    const chunkSizes = [];
+
     for (let i = 0; i < transfer.chunks.length; i++) {
       const chunk = transfer.chunks[i];
-      if (chunk === undefined) {
-        this.logger.error(`[CHUNKING] ERROR: Chunk ${i} is undefined! This will cause 'undefined' in assembled string.`);
-      } else if (chunk === null) {
-        this.logger.error(`[CHUNKING] ERROR: Chunk ${i} is null! This will cause 'null' in assembled string.`);
-      } else if (chunk.length === 0) {
-        this.logger.warn(`[CHUNKING] WARNING: Chunk ${i} is empty string`);
+      const isValid = chunk !== undefined && chunk !== null && typeof chunk === 'string';
+
+      if (!isValid) {
+        invalidChunks.push(i);
+        this.logger.error(`[CHUNKING] CRITICAL ERROR: Chunk ${i} is invalid! Type: ${typeof chunk}, Value: ${chunk}`);
+      } else {
+        validChunks++;
+        chunkSizes.push(chunk.length);
+        if (chunk.length === 0) {
+          this.logger.warn(`[CHUNKING] WARNING: Chunk ${i} is empty string (0 length)`);
+        }
       }
-      this.logger.log(`[CHUNKING] Chunk ${i}: length=${chunk?.length || 0}, first20="${chunk?.substring(0, 20) || 'null/undefined'}", last20="${chunk?.substring(chunk.length - 20) || 'null/undefined'}"`);
+
+      // Log chunk boundaries (first and last few characters)
+      if (isValid && chunk.length > 0) {
+        const firstChars = chunk.substring(0, Math.min(30, chunk.length));
+        const lastChars = chunk.length > 30 ? chunk.substring(chunk.length - 30) : '';
+        this.logger.log(`[CHUNKING] Chunk ${i}: length=${chunk.length}, starts="${firstChars}..." ${lastChars ? `ends="...${lastChars}"` : ''}`);
+      }
     }
 
-    const assembled = transfer.chunks.join('');
-
-    // Detailed logging of assembly process
-    this.logger.log(`[CHUNKING] Assembling ${transfer.chunks.length} chunks for ${transferId}`);
-    this.logger.log(`[CHUNKING] Chunk sizes: ${transfer.chunks.map((chunk, i) => `${i}:${chunk?.length || 0}`).join(', ')}`);
-
-    const totalExpectedLength = transfer.chunks.reduce((sum, chunk) => sum + (chunk?.length || 0), 0);
-    this.logger.log(`[CHUNKING] Expected total length: ${totalExpectedLength}`);
-    this.logger.log(`[CHUNKING] Actual assembled length: ${assembled.length}`);
-
-    if (assembled.length !== totalExpectedLength) {
-      this.logger.error(`[CHUNKING] ERROR: Length mismatch! Expected ${totalExpectedLength}, got ${assembled.length}`);
+    // Stop assembly if we have invalid chunks
+    if (invalidChunks.length > 0) {
+      this.logger.error(`[CHUNKING] CRITICAL: Cannot assemble due to ${invalidChunks.length} invalid chunks: ${invalidChunks.join(', ')}`);
+      this.logger.error(`[CHUNKING] Valid chunks: ${validChunks}/${transfer.chunks.length}`);
+      throw new Error(`Cannot assemble: ${invalidChunks.length} invalid chunks detected`);
     }
 
-    this.logger.log(`[CHUNKING] Assembly sample: "${assembled.substring(0, 100)}"...`);
+    if (validChunks === 0) {
+      this.logger.error(`[CHUNKING] CRITICAL: No valid chunks available for assembly!`);
+      throw new Error(`No valid chunks available for transfer ${transferId}`);
+    }
 
-    // Final validation - ensure assembled data is not empty
+    // Detailed chunk inspection before assembly
+    this.logger.log(`[CHUNKING] Detailed chunk inspection before assembly:`);
+    for (let i = 0; i < transfer.chunks.length; i++) {
+      const chunk = transfer.chunks[i];
+      if (chunk !== undefined && typeof chunk === 'string') {
+        this.logger.log(`[CHUNKING] Chunk ${i}: length=${chunk.length}`);
+        this.logger.log(`[CHUNKING]   First 100 chars: "${chunk.substring(0, 100).replace(/\n/g, '\\n')}"`);
+        this.logger.log(`[CHUNKING]   Last 50 chars: "...${chunk.substring(Math.max(0, chunk.length - 50)).replace(/\n/g, '\\n')}"`);
+        if (chunk.length < 1000) {
+          this.logger.log(`[CHUNKING] WARNING: Chunk ${i} is suspiciously small (${chunk.length} chars)`);
+        }
+      } else {
+        this.logger.log(`[CHUNKING] Chunk ${i}: INVALID (type: ${typeof chunk}, value: ${chunk})`);
+      }
+    }
+
+    // Assemble chunks with detailed validation
+    this.logger.log(`[CHUNKING] Assembling ${validChunks} valid chunks for ${transferId}...`);
+
+    let assembled = '';
+
+    // Assembly progress tracking
+    let progressCounter = 0;
+
+    // Assemble step by step with individual checks
+    for (let i = 0; i < transfer.chunks.length; i++) {
+      const chunk = transfer.chunks[i];
+      if (chunk && typeof chunk === 'string') {
+        assembled += chunk;
+        progressCounter++;
+        if (progressCounter % 5 === 0 || progressCounter === transfer.chunks.length) {
+          this.logger.log(`[CHUNKING] Assembly progress: ${progressCounter}/${transfer.chunks.length}, assembled length: ${assembled.length}`);
+        }
+      } else {
+        this.logger.error(`[CHUNKING] SKIPPED invalid chunk ${i} during assembly (should not happen after validation)`);
+      }
+    }
+
+    // Calculate expected total length from individual chunks
+    const totalExpectedLength = transfer.chunks.reduce((sum, chunk) => {
+      if (chunk && typeof chunk === 'string') {
+        return sum + chunk.length;
+      }
+      return sum;
+    }, 0);
+
+    this.logger.log(`[CHUNKING] Assembly results:`);
+    this.logger.log(`[CHUNKING] - Expected total length: ${totalExpectedLength} characters`);
+    this.logger.log(`[CHUNKING] - Actual assembled length: ${assembled.length} characters`);
+    this.logger.log(`[CHUNKING] - Chunk count: ${transfer.chunks.length}`);
+    this.logger.log(`[CHUNKING] - Chunk sizes: [${chunkSizes.join(', ')}]`);
+
+    const totalChunkSize = chunkSizes.reduce((a, b) => a + b, 0);
+    this.logger.log(`[CHUNKING] - Sum of chunk sizes: ${totalChunkSize}`);
+
+    // Length validation
+    if (assembled.length !== totalExpectedLength || assembled.length !== totalChunkSize) {
+      this.logger.error(`[CHUNKING] CRITICAL ERROR: Length mismatch!`);
+      this.logger.error(`[CHUNKING] - Assembled length: ${assembled.length}`);
+      this.logger.error(`[CHUNKING] - Expected length: ${totalExpectedLength}`);
+      this.logger.error(`[CHUNKING] - Sum of chunks: ${totalChunkSize}`);
+      this.logger.error(`[CHUNKING] - Discrepancy: ${Math.abs(assembled.length - totalExpectedLength)} characters`);
+    }
+
+    // Content validation - check for common error patterns
+    if (assembled.includes('undefined') || assembled.includes('null')) {
+      this.logger.error(`[CHUNKING] WARNING: Assembled content contains 'undefined' or 'null' - possible string conversion error`);
+      this.logger.error(`[CHUNKING] First 200 characters: "${assembled.substring(0, 200)}"`);
+    }
+
+    // Success logging
+    this.logger.log(`[CHUNKING] ✅ SUCCESS: Assembled ${assembled.length} characters from ${transfer.chunks.length} chunks`);
+
+    // Final assembled string validation
+    this.logger.log(`[CHUNKING] Final assembled string validation:`);
+    this.logger.log(`[CHUNKING] - Starts with DOCTYPE or HTML: ${assembled.startsWith('<!DOCTYPE') || assembled.startsWith('<html')}`);
+    this.logger.log(`[CHUNKING] - Contains typical HTML elements: ${assembled.includes('<head>') && assembled.includes('<body>')}`);
+    this.logger.log(`[CHUNKING] - No null chars: ${!assembled.includes('\0')}`);
+    this.logger.log(`[CHUNKING] - Is valid HTML structure: ${assembled.includes('<') && assembled.includes('>')}`);
+
+    if (assembled.length < 1000) {
+      this.logger.error(`[CHUNKING] CRITICAL: Assembled HTML is too small (${assembled.length}), expected ~1M chars`);
+      this.logger.error(`[CHUNKING] Full content: "${assembled}"`);
+    } else if (assembled.length > 1000 && assembled.length < 10000) {
+      this.logger.warn(`[CHUNKING] WARNING: Assembled HTML is small (${assembled.length}), may be incomplete`);
+    }
+
+    this.logger.log(`[CHUNKING] Assembly sample (first 200 chars): "${assembled.substring(0, 200)}"`);
+    if (assembled.length > 200) {
+      this.logger.log(`[CHUNKING] Assembly sample (last 200 chars): "...${assembled.substring(assembled.length - 200)}"`);
+    }
+
+    // Final empty check
     if (assembled.length === 0) {
-      this.logger.error(`[CHUNKING] ERROR: Assembled string is empty! No data was collected.`);
-      this.logger.error(`[CHUNKING] Chunk details summary:`);
-      for (let i = 0; i < transfer.chunks.length; i++) {
-        this.logger.error(`[CHUNKING] Chunk ${i}: ${transfer.chunks[i] === undefined ? 'UNDEFINED' : `length=${transfer.chunks[i].length}`}`);
-      }
-    } else {
-      this.logger.log(`[CHUNKING] SUCCESS: Assembled ${assembled.length} characters`);
+      this.logger.error(`[CHUNKING] CRITICAL ERROR: Final assembled string is empty despite having valid chunks!`);
+      this.logger.error(`[CHUNKING] This indicates a serious assembly bug - reporting details:`);
+      transfer.chunks.forEach((chunk, i) => {
+        console.error(`Chunk ${i}: type=${typeof chunk}, length=${chunk?.length || 'N/A'}, first10="${chunk?.substring(0, 10) || 'N/A'}"`);
+      });
+      throw new Error(`Assembled string is empty despite having ${transfer.chunks.length} chunks`);
     }
 
-    // Clean up
+    // Clean up and return
     this.transfers.delete(transferId);
     this.logger.log(`[CHUNKING] Transfer ${transferId} cleaned up from memory`);
 
@@ -1010,7 +1148,7 @@ interface ExecuteWorkflowMessage {
   data: {
     pluginId: string;
     requestId: string;
-    transferId: string;
+    transferId: string; // <-- ЭТО ПОЛЕ ДОЛЖНО БЫТЬ
     useChunks: boolean;
     pageHtml: string;
   };
@@ -1040,118 +1178,168 @@ type OffscreenMessage =
 // MESSAGE HANDLER
 // ==============================================================================
 
-chrome.runtime.onMessage.addListener(
-  async (message: OffscreenMessage, sender, sendResponse) => {
-    try {
-      switch (message.type) {
-        case 'EXECUTE_WORKFLOW':
-          await handleExecuteWorkflow(message.data);
-          break;
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log(`[offscreen] ===== OFFSCREEN MESSAGE RECEIVED =====`);
+  console.log(`[offscreen] Received message:`, message);
+  console.log(`[offscreen] Sender info:`, sender);
 
-        case 'HOST_CALL_RESPONSE':
-          handleHostCallResponse(message);
-          break;
+  switch (message.type) {
+    case 'EXECUTE_WORKFLOW':
+      handleExecuteWorkflow(message.data)
+        .then(() => sendResponse({ success: true })) // <-- Важно: вызываем sendResponse
+        .catch(error => sendResponse({ success: false, error: error.message }));
+      return true; // Keep channel open for async response
 
-        case 'HTML_CHUNK':
-          handleHtmlChunk(message);
-          break;
+    case 'HTML_CHUNK':
+      handleHtmlChunk(message);
+      sendResponse({ received: true }); // <-- Исправление 2: Добавляем sendResponse
+      break;
 
-        default:
-          logger.addMessage('WARN', `Unknown message type: ${(message as any).type}`);
-      }
-    } catch (error: any) {
-      logger.addMessage('ERROR', `Error handling message ${message.type}: ${error.message}`);
-      sendResponse({ success: false, error: error.message });
-    }
+    case 'HOST_CALL_RESPONSE':
+      handleHostCallResponse(message);
+      sendResponse({ received: true }); // <-- Исправление 2: Добавляем sendResponse
+      break;
 
-    return true; // Keep channel open for async responses
+    default:
+      console.warn('[offscreen] Unknown message type:', message.type);
+      sendResponse({ success: false, error: 'Unknown message type' }); // <-- Исправление 2: Добавляем sendResponse
+      break;
   }
-);
 
+  return true; // Keep channel open for async responses
+});
 // ==============================================================================
 // MESSAGE HANDLERS
 // ==============================================================================
 
+
 async function handleExecuteWorkflow(data: ExecuteWorkflowMessage['data']): Promise<void> {
   try {
-    logger.addMessage('INFO', `Starting workflow execution for plugin: ${data.pluginId}`);
+    logger.addMessage('INFO', `=== STARTING WORKFLOW EXECUTION ===`);
+    logger.addMessage('INFO', `Plugin: ${data.pluginId}`);
+    logger.addMessage('INFO', `Request ID: ${data.requestId}`);
+    logger.addMessage('INFO', `Transfer ID: ${data.transferId}`);
+    logger.addMessage('INFO', `Use Chunks: ${data.useChunks}`);
+    logger.addMessage('INFO', `Page HTML Length: ${data.pageHtml?.length || 0} characters`);
 
-    // Assemble HTML data if chunked
-    let pageHtml = data.pageHtml;
+    let pageHtml = data.pageHtml; // По умолчанию берем то, что пришло (для маленьких страниц)
+
     if (data.useChunks) {
-      logger.addMessage('DEBUG', `Waiting for chunked HTML data: ${data.transferId}`);
-      // Wait for chunks - chunks arrive via separate messages
-      // Timeout after 30 seconds
-      const timeoutMs = 30000;
-      const startTime = Date.now();
+      logger.addMessage('DEBUG', `🔄 HTML передан чанками. Начинаем процесс сборки для transferId: ${data.transferId}`);
 
-      while (!chunkManager.isComplete(data.transferId)) {
-        if (Date.now() - startTime > timeoutMs) {
-          // Log transfer stats before timeout
-          const stats = chunkManager.getStats(data.transferId);
-          logger.addMessage('ERROR', `Chunk assembly timeout. Transfer stats:`, stats);
-          throw new Error(`Timeout waiting for HTML chunks (${timeoutMs}ms)`);
-        }
-        await new Promise(resolve => setTimeout(resolve, 100));
+      // Log available transfers for debugging
+      const availableTransfers = Array.from(chunkManager['transfers'].keys());
+      logger.addMessage('DEBUG', `Available transfers in ChunkManager: [${availableTransfers.join(', ')}]`);
+
+      // Проверить существование transfer
+      if (!chunkManager['transfers'].has(data.transferId)) {
+        logger.addMessage('ERROR', `❌ Transfer ${data.transferId} не найден в ChunkManager!`);
+        logger.addMessage('ERROR', `Доступные transfer-ы: ${availableTransfers.join(', ')}`);
+        throw new Error(`Transfer ${data.transferId} not found. Available: ${availableTransfers.join(', ')}`);
       }
 
-      // Log transfer stats before assembly
-      const statsBefore = chunkManager.getStats(data.transferId);
-      logger.addMessage('DEBUG', `Pre-assembly stats:`, statsBefore);
+      // Получить статистику перед сборкой
+      const preAssemblyStats = chunkManager.getStats(data.transferId);
+      logger.addMessage('DEBUG', `📊 Статистика чанков перед сборкой: ${JSON.stringify(preAssemblyStats)}`);
 
-      // Assemble HTML
+      // Проверить завершенность
+      if (!chunkManager.isComplete(data.transferId)) {
+        logger.addMessage('ERROR', `⏳ Не все чанки получены для transferId: ${data.transferId}`);
+        const incompleteStats = chunkManager.getStats(data.transferId);
+        logger.addMessage('ERROR', `Незавершенная статистика: ${JSON.stringify(incompleteStats)}`);
+
+        // Найти недостающие чанки
+        const transfer = chunkManager['transfers'].get(data.transferId);
+        const missingChunks = [];
+        if (transfer) {
+          for (let i = 0; i < transfer.total; i++) {
+            if (transfer.chunks[i] === undefined) {
+              missingChunks.push(i);
+            }
+          }
+        }
+        logger.addMessage('ERROR', `❌ Недостающие чанки: ${missingChunks.join(', ')}`);
+
+        throw new Error(`Не все чанки HTML были получены для transferId: ${data.transferId}. Недостающие: ${missingChunks.join(', ')}`);
+      }
+
+      // Собрать HTML из чанков
+      logger.addMessage('DEBUG', `🛠️ Начинаем сборку HTML из чанков...`);
+      const assemblyStartTime = performance.now();
+
       pageHtml = chunkManager.getAssembled(data.transferId);
 
-      // Validate assembled data
-      logger.addMessage('DEBUG', `HTML data assembled: ${pageHtml.length} characters`);
+      const assemblyTime = performance.now() - assemblyStartTime;
+      logger.addMessage('INFO', `✅ HTML успешно собран из чанков! Длина: ${pageHtml.length} символов, Время сборки: ${assemblyTime.toFixed(0)}ms`);
 
-      // Check if assembled data makes sense
-      if (pageHtml.length < 1000) {
-        logger.addMessage('ERROR', `WARNING: Assembled HTML suspiciously short: ${pageHtml.length} chars`);
-        logger.addMessage('ERROR', `HTML content: "${pageHtml.substring(0, 200)}"`);
-      } else if (pageHtml.length > 10000000) {
-        // This should be around 1M chars normally
-        logger.addMessage('DEBUG', `HTML length looks reasonable: ${pageHtml.length} chars`);
+      // Проверка размера собранного HTML
+      const expectedSize = 1060000; // ~1.06M
+      if (pageHtml.length < expectedSize * 0.8) { // Менее 80% от ожидаемого
+        logger.addMessage('WARN', `⚠️ Размер собранного HTML suspiciously мал (${pageHtml.length}), ожидалось ~${expectedSize}`);
+        logger.addMessage('WARN', `Первые 200 символов: "${pageHtml.substring(0, 200)}"`);
+      } else if (pageHtml.length >= expectedSize * 0.9) {
+        logger.addMessage('INFO', `✅ Размер собранного HTML выглядит корректно: ${pageHtml.length} символов`);
       }
 
-      // Quick validation that it looks like HTML
-      if (!pageHtml.includes('<html') && !pageHtml.includes('<HTML') && !pageHtml.includes('<!DOCTYPE')) {
-        logger.addMessage('WARN', `Assembled data doesn't look like HTML. First 500 chars: "${pageHtml.substring(0, 500)}"`);
+    } else {
+      logger.addMessage('DEBUG', `📄 HTML получен напрямую без чанков. Длина: ${pageHtml?.length || 0} символов`);
+      if (!pageHtml || pageHtml.length === 0) {
+        logger.addMessage('WARN', `⚠️ Получен пустой или неопределенный HTML`);
       }
-
-      logger.addMessage('INFO', `✅ HTML data successfully assembled from chunks: ${pageHtml.length} characters`);
     }
 
-    // Create workflow context
-    const context: Partial<WorkflowContext> = {
-      input: { pageHtml },
-      pluginId: data.pluginId
+    // Валидация финального HTML
+    if (!pageHtml || pageHtml.length === 0) {
+      logger.addMessage('ERROR', `❌ Финальный HTML пустой после сборки! Это критическая ошибка.`);
+      logger.addMessage('ERROR', `Details: useChunks=${data.useChunks}, transferId=${data.transferId}, originalLength=${data.pageHtml?.length || 0}`);
+      throw new Error('Получен пустой HTML после сборки чанков');
+    }
+
+    const workflowPayload = {
+      page_html: pageHtml,
     };
 
-    // Run workflow
-    const result = await workflowEngine.runWorkflow(data.pluginId, context);
+    logger.addMessage('DEBUG', `📦 WorkflowPayload подготовлен: keys=${Object.keys(workflowPayload).join(', ')}`);
+    logger.addMessage('DEBUG', `📏 workflowPayload.page_html размер: ${workflowPayload.page_html.length} символов`);
+    logger.addMessage('DEBUG', `🔍 HTML проверка: начинается с "<!DOCTYPE" или "<html": ${pageHtml.startsWith('<!DOCTYPE') || pageHtml.startsWith('<html')}`);
 
-    // Send result back to background
+    // Запуск workflow engine
+    logger.addMessage('DEBUG', `🚀 Запуск workflow engine для плагина: ${data.pluginId}`);
+    const workflowStartTime = performance.now();
+
+    const result = await workflowEngine.runWorkflow(data.pluginId, {
+      input: workflowPayload,
+      hostApi: {}
+    });
+
+    const workflowTime = performance.now() - workflowStartTime;
+    logger.addMessage('INFO', `🎉 Workflow-engine завершился успешно за ${workflowTime.toFixed(0)}ms`);
+    logger.addMessage('DEBUG', `Результат workflow: success=${result.success}, шагов=${result.stepResults ? Object.keys(result.stepResults).length : 0}, общее время=${result.totalDuration.toFixed(0)}ms`);
+
+    // Отправляем результат в background
+    logger.addMessage('DEBUG', `📤 Отправка результата workflow в background script`);
     await chrome.runtime.sendMessage({
       type: 'WORKFLOW_COMPLETED',
       requestId: data.requestId,
-      success: result.success,
-      result: result.result,
-      error: !result.success ? result.errors.map(e => e.error).join('; ') : undefined
+      result,
+      success: true
     });
 
-    logger.addMessage('INFO', `Workflow completed: success=${result.success}`);
+    logger.addMessage('INFO', `=== WORKFLOW EXECUTION COMPLETED SUCCESSFULLY ===`);
 
   } catch (error: any) {
-    logger.addMessage('ERROR', `Workflow execution failed: ${error.message}`);
+    logger.addMessage('ERROR', `💥 Workflow execution failed: ${error.message}`);
+    logger.addMessage('ERROR', `Stack trace: ${error.stack}`);
 
+    // Отправляем ошибку в background
     await chrome.runtime.sendMessage({
       type: 'WORKFLOW_COMPLETED',
       requestId: data.requestId,
-      success: false,
-      result: null,
-      error: error.message
+      error: error.message,
+      success: false
     });
+
+    logger.addMessage('ERROR', `=== WORKFLOW EXECUTION FAILED ===`);
   }
 }
 
@@ -1170,13 +1358,24 @@ function handleHostCallResponse(message: HostCallResponseMessage): void {
 }
 
 function handleHtmlChunk(message: HtmlChunkMessage): void {
-  chunkManager.addChunk(message.transferId, message.chunkData, message.chunkIndex, message.totalChunks);
-  logger.addMessage('DEBUG', `Received chunk ${message.chunkIndex + 1}/${message.totalChunks} for ${message.transferId}`);
+  chunkManager.addChunk(
+    message.transferId,
+    message.chunkData,
+    message.chunkIndex,
+    message.totalChunks
+  );
+  logger.addMessage('DEBUG', `[CHUNKING] Received chunk ${message.chunkIndex + 1}/${message.totalChunks} for transfer ${message.transferId}`);
+
+  // Опционально: лог, когда все чанки собраны
+  if (chunkManager.isComplete(message.transferId)) {
+    logger.addMessage('INFO', `[CHUNKING] ✅ All chunks received for transfer ${message.transferId}`);
+  }
 }
 
 // ==============================================================================
 // INITIALIZATION
 // ==============================================================================
+
 
 async function initializeOffscreen(): Promise<void> {
   try {

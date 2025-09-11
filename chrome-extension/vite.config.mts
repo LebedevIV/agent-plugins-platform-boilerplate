@@ -45,9 +45,18 @@ export default defineConfig({
     sourcemap: IS_DEV,
     minify: IS_PROD,
     reportCompressedSize: IS_PROD,
+    // Дополнительные настройки для читаемого production кода
+    terserOptions: IS_DEV ? {} : undefined,
+    cssMinify: IS_DEV,
     watch: watchOption,
     rollupOptions: {
       external: ['chrome', 'unenv/node/process', 'unenv/polyfill/globalthis'],
+      // Настройки для лучшей читабельности в dev
+      output: IS_DEV ? {
+        // Сохраняем имена функций и переменных в dev
+        compact: false,
+        minifyInternalExports: false,
+      } : undefined,
     },
   },
 });

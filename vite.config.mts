@@ -6,4 +6,8 @@ export default {
       '@platform-core': resolve(__dirname, 'platform-core'),
     },
   },
-}; 
+  build: {
+    minify: false,
+    sourcemap: true,
+  },
+};
