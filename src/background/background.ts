@@ -174,7 +174,35 @@ class EnhancedChunkManager {
       duration: Date.now() - transfer.startTime
     };
   }
-  
+
+  getAssembledData(transferId: string): string {
+    const transfer = this.transfers.get(transferId);
+
+    if (!transfer) {
+      throw new Error(`Transfer ${transferId} not found`);
+    }
+
+    const completed_count = transfer.acked.filter(ack => ack === true).length;
+    const total = transfer.chunks.length;
+
+    if (completed_count !== total) {
+      throw new Error(`Transfer ${transferId} not complete: ${completed_count}/${total} chunks acknowledged`);
+    }
+
+    // Assemble chunks in order
+    let assembled = '';
+    for (let i = 0; i < transfer.chunks.length; i++) {
+      const chunk = transfer.chunks[i];
+      if (chunk !== undefined && chunk !== null && typeof chunk === 'string') {
+        assembled += chunk;
+      } else {
+        throw new Error(`Invalid chunk at index ${i} in transfer ${transferId}`);
+      }
+    }
+
+    return assembled;
+  }
+
   // Cleanup expired transfers
   cleanup(): void {
     const now = Date.now();
@@ -382,11 +410,15 @@ class BackgroundController {
   private chunkManager = new EnhancedChunkManager();
   private promiseManager = new WorkflowPromiseManager();
   private hostApi = new HostApiProvider();
-  
+
   constructor() {
     this.setupMessageHandling();
     this.setupPeriodicCleanup();
     console.log('Background Controller initialized (Enhanced v3.0)');
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
   
   private setupMessageHandling(): void {
@@ -465,19 +497,113 @@ class BackgroundController {
       
       // Create workflow promise before sending data
       const resultPromise = this.promiseManager.create(requestId, message.pluginId);
-      
-      // Send HTML data
+
+      console.log(`[Background] Sending HTML (${pageHtml.length} chars) in chunks`);
       await this.chunkManager.sendInChunks(pageHtml, transferId);
-      
-      // Send execution command
+
+      // Wait to ensure chunks are processed and acknowledged
+      console.log(`[Background] All chunks sent, waiting 1s for processing and acknowledgments...`);
+      await this.delay(1000);
+
+      // Wait for all chunks to be acknowledged with retries
+      const MAX_ASSEMBLY_RETRIES = 10;
+      let assemblyRetry = 0;
+      let assembledHtml: string = '';
+
+      console.log(`[WORKFLOW ASSEMBLY] === STARTING HTML ASSEMBLY PROCESS ===`);
+      console.log(`[WORKFLOW ASSEMBLY] Transfer ID: ${transferId}`);
+      console.log(`[WORKFLOW ASSEMBLY] Original HTML length: ${pageHtml.length} characters`);
+      console.log(`[WORKFLOW ASSEMBLY] Will retry up to ${MAX_ASSEMBLY_RETRIES} times`);
+
+      while (assemblyRetry < MAX_ASSEMBLY_RETRIES) {
+        try {
+          console.log(`[WORKFLOW ASSEMBLY] Attempt ${assemblyRetry + 1}/${MAX_ASSEMBLY_RETRIES} to gather assembled HTML from chunks`);
+
+          // Check if all chunks are acknowledged
+          const stats = this.chunkManager.getTransferStats(transferId);
+          if (stats && stats.completed >= stats.total) {
+            console.log(`[WORKFLOW ASSEMBLY] SUCCESS: All chunks acknowledged: ${stats.completed}/${stats.total}`);
+
+            // Assemble HTML from chunks
+            assembledHtml = this.chunkManager.getAssembledData(transferId);
+            console.log(`[WORKFLOW ASSEMBLY] ASSEMBLY COMPLETE: ${assembledHtml?.length || 0} characters assembled`);
+            console.log(`[WORKFLOW ASSEMBLY] ASSEMBLY VERIFICATION:`);
+            console.log(`[WORKFLOW ASSEMBLY] - Original length: ${pageHtml.length}`);
+            console.log(`[WORKFLOW ASSEMBLY] - Assembled length: ${assembledHtml.length}`);
+            console.log(`[WORKFLOW ASSEMBLY] - Length difference: ${Math.abs(pageHtml.length - assembledHtml.length)}`);
+
+            // Validate assembly quality
+            if (Math.abs(pageHtml.length - assembledHtml.length) > 100) {
+              console.warn(`[WORKFLOW ASSEMBLY] WARNING: Significant length difference detected!`);
+            } else {
+              console.log(`[WORKFLOW ASSEMBLY] ✅ Assembly length validation passed`);
+            }
+
+            // Show preview of assembled data
+            const previewLength = Math.min(200, assembledHtml.length);
+            console.log(`[WORKFLOW ASSEMBLY] Assembled HTML preview (first ${previewLength} chars):`);
+            console.log(assembledHtml.substring(0, previewLength));
+
+            break;
+          } else {
+            console.log(`[WORKFLOW ASSEMBLY] In progress: ${stats?.completed || 0}/${stats?.total || 0} chunks acknowledged`);
+            await this.delay(500); // Wait 500ms between retries
+            assemblyRetry++;
+          }
+        } catch (error) {
+          console.error(`[Background] Assembly attempt ${assemblyRetry + 1} failed:`, error);
+          if (assemblyRetry === MAX_ASSEMBLY_RETRIES - 1) {
+            throw new Error(`Failed to assemble HTML after ${MAX_ASSEMBLY_RETRIES} attempts: ${error}`);
+          }
+          await this.delay(500);
+          assemblyRetry++;
+        }
+      }
+
+      if (!assembledHtml || assembledHtml.length === 0) {
+        throw new Error('Assembled HTML is empty');
+      }
+
+      // Дополнительная валидация transfer
+      const finalStats = this.chunkManager.getTransferStats(transferId);
+      console.log(`[WORKFLOW VALIDATION] Transfer ${transferId} final stats:`);
+      console.log(`[WORKFLOW VALIDATION] - Completed chunks: ${finalStats?.completed || 0}`);
+      console.log(`[WORKFLOW VALIDATION] - Total chunks: ${finalStats?.total || 0}`);
+      console.log(`[WORKFLOW VALIDATION] - Transfer duration: ${finalStats?.duration || 0}ms`);
+
+      if (!finalStats || finalStats.completed !== finalStats.total) {
+        console.error(`[WORKFLOW VALIDATION] CRITICAL: Transfer validation failed!`);
+        console.error(`[WORKFLOW VALIDATION] Expected: ${finalStats?.total || 'unknown'} completed chunks`);
+        console.error(`[WORKFLOW VALIDATION] Actual: ${finalStats?.completed || 'unknown'} completed chunks`);
+        throw new Error(`Transfer validation failed: ${finalStats?.completed || 0}/${finalStats?.total || 0} chunks acknowledged`);
+      }
+
+      console.log(`[WORKFLOW VALIDATION] ✅ Transfer ${transferId} validation passed`);
+
+      // Основная диагностика перед отправкой EXECUTE_WORKFLOW
+      console.log(`[WORKFLOW DEBUG] === EXECUTE_WORKFLOW PREPARATION ===`);
+      console.log(`[WORKFLOW DEBUG] Plugin: ${message.pluginId}`);
+      console.log(`[WORKFLOW DEBUG] Request ID: ${requestId}`);
+      console.log(`[WORKFLOW DEBUG] Transfer ID: ${transferId}`);
+      console.log(`[WORKFLOW DEBUG] Assembled HTML length: ${assembledHtml.length} characters`);
+      console.log(`[WORKFLOW DEBUG] HTML preview (first 200 chars):`, assembledHtml.substring(0, 200));
+      console.log(`[WORKFLOW DEBUG] HTML preview (last 200 chars):`, assembledHtml.substring(Math.max(0, assembledHtml.length - 200)));
+
+      // Validate HTML before sending
+      if (assembledHtml.length < 1000) {
+        console.warn(`[WORKFLOW DEBUG] WARNING: HTML length is suspiciously small: ${assembledHtml.length} chars`);
+        console.warn(`[WORKFLOW DEBUG] Full HTML content:`, assembledHtml);
+      }
+
+      console.log(`[Background] Sending EXECUTE_WORKFLOW with assembled HTML`);
       await chrome.runtime.sendMessage({
         type: 'EXECUTE_WORKFLOW',
         data: {
           pluginId: message.pluginId,
           requestId,
           transferId,
-          useChunks: this.chunkManager.wasChunked(transferId),
-          pageHtml: this.chunkManager.wasChunked(transferId) ? '' : pageHtml
+          useChunks: false,
+          pageHtml: assembledHtml
         }
       });
       
@@ -505,9 +631,24 @@ class BackgroundController {
   }
   
   private handleWorkflowCompleted(message: WorkflowCompletedMessage): void {
+    console.log('[BACKGROUND DEBUG] Handling workflow completed:');
+    console.log('[BACKGROUND DEBUG] requestId:', message.requestId);
+    console.log('[BACKGROUND DEBUG] success:', message.success);
+    console.log('[BACKGROUND DEBUG] has result:', message.result !== undefined);
+    console.log('[BACKGROUND DEBUG] result type:', typeof message.result);
+    console.log('[BACKGROUND DEBUG] has error:', !!message.error);
+    console.log('[BACKGROUND DEBUG] error:', message.error);
+
+    // DIAGNOSTIC: Check result before using it
     if (message.success) {
+      if (message.result === undefined) {
+        console.error('[BACKGROUND DEBUG] CRITICAL: message.result is undefined despite success=true!');
+        console.error('[BACKGROUND DEBUG] This will cause ReferenceError when trying to use `result`');
+      }
+      console.log('[BACKGROUND DEBUG] Resolving promise with result');
       this.promiseManager.resolve(message.requestId, message.result);
     } else {
+      console.log('[BACKGROUND DEBUG] Rejecting promise with error');
       this.promiseManager.reject(message.requestId, new Error(message.error || 'Unknown workflow error'));
     }
   }
