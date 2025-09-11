@@ -1,0 +1,8 @@
+Large HTML Test File Summary:
+- Target size: 1.03 MB
+- Generated size: 1.24 MB
+- Expected chunks: 40
+- Creation time: 2025-09-11T14:02:58.215Z
+
+This file contains detailed technical content about our race condition protection
+mechanisms and is designed to thoroughly test the enhanced chunk transfer system.

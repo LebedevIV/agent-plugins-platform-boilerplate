@@ -239,22 +239,68 @@ async function sendChunksSequentially(transferId: string): Promise<void> {
   const transfer = activeTransfers.get(transferId);
   if (!transfer) {
     console.error('[background][CHUNKING] Transfer not found:', transferId);
-    throw new Error('Transfer not found');
+
+    // Check if offscreen has already assembled HTML and notified us
+    const assembledCheck = await chrome.runtime.sendMessage({
+      type: 'CHECK_TRANSFER_STATUS',
+      transferId
+    }).catch(() => null);
+
+    if (assembledCheck?.assembledNotified) {
+      console.warn('[background][CHUNKING] Transfer was already assembled in offscreen:', transferId);
+      return;
+    }
+
+    throw new Error(`Transfer ${transferId} not found`);
+  }
+
+  // Дополнительные проверки на валидность transfer состояния
+  if (!Array.isArray(transfer.chunks) || transfer.chunks.length === 0) {
+    console.error('[background][CHUNKING] Invalid transfer chunks for:', transferId);
+    activeTransfers.delete(transferId); // Очистить невалидный transfer
+    throw new Error(`Invalid transfer chunks for ${transferId}`);
   }
 
   console.log(`[background][CHUNKING] Starting to send ${transfer.chunks.length} chunks (0-${transfer.chunks.length - 1})`);
 
+  // Флаг для остановки передачи при получении HTML_ASSEMBLED
+  let transferCompleted = false;
+
+  // Храним функцию для обновления флага
+  const setTransferCompleted = (completed: boolean) => {
+    console.log(`[background][CHUNKING] Transfer ${transferId} completion status set to:`, completed);
+    transferCompleted = completed;
+  };
+
+  // Export the setter to global scope for HTML_ASSEMBLED handler
+  (globalThis as any)[`setTransferCompleted_${transferId}`] = setTransferCompleted;
+
   for (let i = 0; i < transfer.chunks.length; i++) {
-    if (!activeTransfers.has(transferId)) {
+    // Проверяем, что transfer все еще существует на каждой итерации
+    const currentTransfer = activeTransfers.get(transferId);
+    if (!currentTransfer) {
       console.log('[background][CHUNKING] Transfer cancelled or completed');
       // Transfer was cancelled or completed
       return;
     }
 
+    // Проверяем, не завершен ли transfer после HTML_ASSEMBLED
+    if (transferCompleted) {
+      console.log('[background][CHUNKING] Transfer completed, skipping remaining chunks');
+      return;
+    }
+
     try {
+      // Проверяем, не завершен ли transfer после HTML_ASSEMBLED перед отправкой чанка
+      if (transferCompleted) {
+        console.log(`[background][CHUNKING] Transfer ${transferId} completed, skipping sending chunk ${i}`);
+        return;
+      }
+
       // Дополнительная проверка на существование чанка
-      if (!transfer.chunks[i]) {
-        console.error(`[background][CHUNKING] Chunk ${i} does not exist. Total chunks: ${transfer.chunks.length}`);
+      if (!currentTransfer.chunks[i]) {
+        console.error(`[background][CHUNKING] Chunk ${i} does not exist in transfer ${transferId}. Total chunks: ${currentTransfer.chunks.length}`);
+        activeTransfers.delete(transferId); // Очистить transfer с ошибкой
         throw new Error(`Chunk ${i} not found in transfer ${transferId}`);
       }
 
@@ -271,6 +317,12 @@ async function sendChunksSequentially(transferId: string): Promise<void> {
 
       await chrome.runtime.sendMessage(chunkMessage);
 
+      // Проверить перед ожиданием acknowledgment'а, не завершен ли transfer
+      if (transferCompleted) {
+        console.log(`[background][CHUNKING] Transfer ${transferId} completed during chunk ${i} wait, skipping waitForChunkAck`);
+        return;
+      }
+
       // Wait for chunk acknowledgment with timeout
       await waitForChunkAck(transferId, i);
 
@@ -281,7 +333,10 @@ async function sendChunksSequentially(transferId: string): Promise<void> {
 
     } catch (error) {
       console.error(`[background][CHUNKING] Failed to send chunk ${i}:`, error);
-      transfer.reject(error);
+      // Не reject'им если transfer уже завершен
+      if (!transferCompleted) {
+        transfer.reject(error);
+      }
       return;
     }
   }
@@ -307,7 +362,14 @@ async function sendChunksSequentially(transferId: string): Promise<void> {
 async function waitForChunkAck(transferId: string, chunkIndex: number): Promise<void> {
   const transfer = activeTransfers.get(transferId);
   if (!transfer) {
-    throw new Error('Transfer not found');
+    console.error(`[background][CHUNKING] Transfer ${transferId} not found in waitForChunkAck`);
+    throw new Error(`Transfer ${transferId} not found`);
+  }
+
+  // Дополнительные проверки на валидность transfer состояния
+  if (!transfer.received || typeof transfer.received.has !== 'function') {
+    console.error(`[background][CHUNKING] Invalid transfer state for ${transferId}`);
+    throw new Error(`Invalid transfer state for ${transferId}`);
   }
 
   // Wait up to 5 seconds for acknowledgment
@@ -316,7 +378,14 @@ async function waitForChunkAck(transferId: string, chunkIndex: number): Promise<
 
   while (!transfer.received.has(chunkIndex)) {
     if (Date.now() - startTime > ackTimeout) {
+      console.error(`[background][CHUNKING] Timeout waiting for chunk ${chunkIndex} acknowledgment for transfer ${transferId}`);
       throw new Error(`Timeout waiting for chunk ${chunkIndex} acknowledgment`);
+    }
+
+    // Проверяем, что transfer все еще существует (не был удален по timeout)
+    if (!activeTransfers.has(transferId)) {
+      console.error(`[background][CHUNKING] Transfer ${transferId} was removed during chunk wait`);
+      throw new Error(`Transfer ${transferId} was removed during operation`);
     }
 
     // Wait 100ms and check again
@@ -329,20 +398,47 @@ async function waitForChunkAck(transferId: string, chunkIndex: number): Promise<
 // Handle chunk acknowledgments
 function handleChunkAcknowledgment(ackMessage: HtmlChunkAckMessage): void {
   const transfer = activeTransfers.get(ackMessage.transferId);
-  if (transfer) {
-    if (ackMessage.received) {
-      transfer.received.add(ackMessage.chunkIndex);
+  if (!transfer) {
+    console.warn('[background][CHUNKING] Acknowledgment for unknown or already cleaned transfer:', ackMessage.transferId);
+    return;
+  }
 
-      // Check if all chunks received
-      if (transfer.received.size === transfer.totalChunks) {
-        console.log('[background][CHUNKING] All chunks acknowledged, transfer complete');
-        transfer.resolve();
-      }
+  // Проверяем тип сообщения
+  if (typeof ackMessage.received !== 'boolean') {
+    console.error('[background][CHUNKING] Invalid acknowledgment message:', ackMessage);
+    return;
+  }
+
+  if (ackMessage.received) {
+    if (typeof ackMessage.chunkIndex === 'number' && ackMessage.chunkIndex >= 0) {
+      transfer.received.add(ackMessage.chunkIndex);
+      console.log(`[background][CHUNKING] Chunk ${ackMessage.chunkIndex} acknowledged for transfer ${ackMessage.transferId}`);
     } else {
-      console.error(`[background][CHUNKING] Chunk ${ackMessage.chunkIndex} acknowledgment failed`);
+      console.error(`[background][CHUNKING] Invalid chunk index in acknowledgment:`, ackMessage);
+    }
+
+    // Check if all chunks received
+    if (transfer.received.size === transfer.totalChunks) {
+      console.log('[background][CHUNKING] All chunks acknowledged, transfer complete');
+      // Resolve promise, которая будет очищать transfer через resolve функцию
+      transfer.resolve();
+
+      // Дополнительная очистка через timeout на случай, если resolve не сработал
+      setTimeout(() => {
+        if (activeTransfers.has(ackMessage.transferId)) {
+          console.warn('[background][CHUNKING] Transfer not cleaned by resolve, manually cleaning:', ackMessage.transferId);
+          activeTransfers.delete(ackMessage.transferId);
+        }
+      }, 1000);
     }
   } else {
-    console.warn('[background][CHUNKING] Acknowledgment for unknown transfer:', ackMessage.transferId);
+    console.error(`[background][CHUNKING] Chunk ${ackMessage.chunkIndex} acknowledgment received as failed for transfer ${ackMessage.transferId}`);
+
+    // Удаляем transfer при ошибке и reject'им promise
+    activeTransfers.delete(ackMessage.transferId);
+    if (transfer.reject) {
+      transfer.reject(new Error(`Chunk ${ackMessage.chunkIndex} acknowledgment failed`));
+    }
   }
 }
 
@@ -1162,6 +1258,8 @@ chrome.runtime.onMessage.addListener(
             console.log('[background][OFFSCREEN DELEGATION] HTML size check:', pageHtml.length, 'chars');
             console.log('[background][OFFSCREEN DELEGATION] Chunking threshold: 64000 chars');
 
+            let result: any = null; // <-- ОБЪЯВИТЬ result В НАЧАЛЕ ФУНКЦИИ
+
             if (pageHtml.length > 64000) { // Используем chunking для больших данных (>64KB)
               console.log('[background][OFFSCREEN DELEGATION] Large HTML detected, using chunking approach');
               console.log('[background][OFFSCREEN DELEGATION][DEBUG] HTML size:', pageHtml.length, 'chars (>${64000})');
@@ -1181,6 +1279,7 @@ chrome.runtime.onMessage.addListener(
                 // HTML_ASSEMBLED обработчик в конце файла отправит EXECUTE_WORKFLOW автоматически
                 // Здесь просто завершаем работу и ждем сообщения HTML_ASSEMBLED от оффскрина
                 sendResponse({ success: true });
+                result = { success: true }; // <-- УСТАНОВИТЬ result ДЛЯ КОНСИСТЕНТНОСТИ
 
                 console.log('[background][OFFSCREEN DELEGATION] Workflow command sent, transferId:', transferId);
                 console.log('[background][DEBUG] About to check sendResponse function...');
@@ -1188,6 +1287,7 @@ chrome.runtime.onMessage.addListener(
               } catch (chunkingError) {
                 console.error('[background][OFFSCREEN DELEGATION] Chunking failed:', chunkingError);
                 sendResponse({ error: `Failed to send large HTML data: ${(chunkingError as Error).message}` });
+                result = { error: chunkingError.message }; // <-- УСТАНОВИТЬ result В СЛУЧАЕ ОШИБКИ
                 return;
               }
 
@@ -1219,7 +1319,7 @@ chrome.runtime.onMessage.addListener(
               // Отправить задачу в offscreen document
               console.log('[background][OFFSCREEN DELEGATION] Sending to offscreen...');
               console.log('[background][DEBUG] Sending chrome.runtime.sendMessage with payload above...');
-              const result = await chrome.runtime.sendMessage(workflowPayload);
+              result = await chrome.runtime.sendMessage(workflowPayload);
               console.log('[background][DEBUG] chrome.runtime.sendMessage completed, result:', result);
             }
 
@@ -1887,60 +1987,123 @@ const handleHostApiMessage = async (
 
 // Обработчик сообщений от Offscreen Document
 chrome.runtime.onMessage.addListener(
- async (message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => {
+  async (message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => {
    // Проверяем, что сообщение исходит от нашего offscreen документа
-   if (sender.url?.includes('offscreen.html')) {
-     console.log('[background][OFFSCREEN RESPONSE] Message from offscreen received:', message);
+    if (sender.url?.includes('offscreen.html')) {
+      console.log('[background][OFFSCREEN RESPONSE] Message from offscreen received:', message);
 
-     if (typeof message === 'object' && message !== null && 'type' in message) {
-       const msg = message as ExtensionMessage;
+      if (typeof message === 'object' && message !== null && 'type' in message) {
+        const msg = message as ExtensionMessage;
 
-       if (msg.type === 'WORKFLOW_LOG') {
-         // Ретрансмировать логи от offscreen в UI
-         console.log('[background][OFFSCREEN RESPONSE] Relaying workflow log:', msg);
-         chrome.runtime.sendMessage({
-           type: 'LOG_EVENT',
-           pluginId: msg.pluginId,
-           message: msg.message,
-           level: msg.level || 'info',
-           stepId: msg.stepId,
-           logData: msg.logData,
-           pageKey: msg.pageKey
-         });
-         return true;
+        if (msg.type === 'HTML_ASSEMBLED') {
+          // Обработчик для HTML_ASSEMBLED - сборка чанков завершена
+          console.log('[background][OFFSCREEN RESPONSE] HTML_ASSEMBLED received:', msg);
 
-       } else if (msg.type === 'WORKFLOW_RESULT') {
-         // Ретрансмировать результаты воркфлоу в UI
-         console.log('[background][OFFSCREEN RESPONSE] Relaying workflow result:', msg);
+          // Получить transfer и проверить его существование
+          const transfer = msg.transferId ? activeTransfers.get(msg.transferId) : null;
+          if (msg.transferId) {
+            if (!transfer) {
+              console.warn('[background][OFFSCREEN RESPONSE] Transfer not found for HTML_ASSEMBLED:', msg.transferId);
+              msg.data = { error: 'Transfer not found', transferId: msg.transferId };
+            } else {
+              console.log('[background][OFFSCREEN RESPONSE] Transfer found, proceeding with EXECUTE_WORKFLOW...');
 
-         // Отправить результат и обновить чат
-         if (msg.pluginId && msg.pageKey) {
-           const resultMessage: ChatMessage = {
-             role: 'plugin',
-             content: msg.data
-               ? `✅ Результат воркфлоу:\n\`\`\`json\n${JSON.stringify(msg.data, null, 2)}\n\`\`\``
-               : '✅ Воркфлоу выполнен успешно',
-             timestamp: Date.now()
-           };
+              // УСТАНОВИТЬ ФЛАГ ЗАВЕРШЕНИЯ TRANSFER'А - ЭТО КЛОЮЧЕВОЕ ИСПРАВЛЕНИЕ
+              const setTransferCompleted = (globalThis as any)[`setTransferCompleted_${msg.transferId}`];
+              if (setTransferCompleted) {
+                setTransferCompleted(true);
+                console.log(`[background][OFFSCREEN RESPONSE] ✅ Set transferCompleted flag for ${msg.transferId}`);
+              } else {
+                console.warn(`[background][OFFSCREEN RESPONSE] ⚠️ setTransferCompleted function not found for transfer ${msg.transferId}`);
+              }
+            }
 
-           try {
-             await pluginChatApi.saveMessage(msg.pluginId, getPageKey(msg.pageKey), resultMessage);
-             broadcastChatUpdate(msg.pluginId, getPageKey(msg.pageKey));
-             console.log('[background][OFFSCREEN RESPONSE] Workflow result saved to chat');
-           } catch (saveError) {
-             console.error('[background][OFFSCREEN RESPONSE] Failed to save result to chat:', saveError);
-           }
-         }
+            // Автоматически отправить EXECUTE_WORKFLOW после сборки HTML
+            if (msg.pluginId && msg.pageKey) {
+              const executeMessage = {
+                type: 'EXECUTE_WORKFLOW',
+                pluginId: msg.pluginId,
+                pageKey: msg.pageKey,
+                requestId: msg.requestId || msg.transferId,
+                transferId: msg.transferId,
+                useChunks: true,
+                timestamp: Date.now()
+              };
 
-         // Также ретрансмировать результат через стандартное сообщение
-         chrome.runtime.sendMessage({
-           type: 'WORKFLOW_COMPLETED',
-           pluginId: msg.pluginId,
-           result: msg.data,
-           requestId: msg.requestId
-         });
+              try {
+                console.log('[background][OFFSCREEN RESPONSE] Sending EXECUTE_WORKFLOW to offscreen...');
+                await chrome.runtime.sendMessage(executeMessage);
+                console.log('[background][OFFSCREEN RESPONSE] EXECUTE_WORKFLOW sent successfully');
+              } catch (sendError) {
+                console.error('[background][OFFSCREEN RESPONSE] Failed to send EXECUTE_WORKFLOW:', sendError);
+                msg.data = { error: `Failed to execute workflow: ${sendError.message}` };
+              }
+            }
+          }
 
-         return true;
+          // Очистить transfer после обработки HTML_ASSEMBLED
+          if (msg.transferId && activeTransfers.has(msg.transferId)) {
+            console.log('[background][OFFSCREEN RESPONSE] Cleaning up transfer:', msg.transferId);
+            activeTransfers.delete(msg.transferId);
+
+            // Очистить функцию установки флага после удаления transfer'а
+            delete (globalThis as any)[`setTransferCompleted_${msg.transferId}`];
+          }
+
+          return true;
+
+        } else if (msg.type === 'WORKFLOW_LOG') {
+          // Ретрансмировать логи от offscreen в UI
+          console.log('[background][OFFSCREEN RESPONSE] Relaying workflow log:', msg);
+          chrome.runtime.sendMessage({
+            type: 'LOG_EVENT',
+            pluginId: msg.pluginId,
+            message: msg.message,
+            level: msg.level || 'info',
+            stepId: msg.stepId,
+            logData: msg.logData,
+            pageKey: msg.pageKey
+          });
+          return true;
+
+        } else if (msg.type === 'WORKFLOW_RESULT') {
+          // Ретрансмировать результаты воркфлоу в UI
+          console.log('[background][OFFSCREEN RESPONSE] Relaying workflow result:', msg);
+
+          // Отправить результат и обновить чат
+          if (msg.pluginId && msg.pageKey) {
+            const resultMessage: ChatMessage = {
+              role: 'plugin',
+              content: msg.data
+                ? `✅ Результат воркфлоу:\n\`\`\`json\n${JSON.stringify(msg.data, null, 2)}\n\`\`\``
+                : '✅ Воркфлоу выполнен успешно',
+              timestamp: Date.now()
+            };
+
+            try {
+              await pluginChatApi.saveMessage(msg.pluginId, getPageKey(msg.pageKey), resultMessage);
+              broadcastChatUpdate(msg.pluginId, getPageKey(msg.pageKey));
+              console.log('[background][OFFSCREEN RESPONSE] Workflow result saved to chat');
+            } catch (saveError) {
+              console.error('[background][OFFSCREEN RESPONSE] Failed to save result to chat:', saveError);
+            }
+          }
+
+          // Очистить transfer после успешного завершения WORKFLOW_RESULT
+          if (msg.transferId && activeTransfers.has(msg.transferId)) {
+            console.log('[background][OFFSCREEN RESPONSE] Cleaning up transfer after workflow result:', msg.transferId);
+            activeTransfers.delete(msg.transferId);
+          }
+
+          // Также ретрансмировать результат через стандартное сообщение
+          chrome.runtime.sendMessage({
+            type: 'WORKFLOW_COMPLETED',
+            pluginId: msg.pluginId,
+            result: msg.data,
+            requestId: msg.requestId
+          });
+
+          return true;
        } else if (msg.type === 'WORKFLOW_ERROR') {
          // Ретрансмировать ошибки воркфлоу в UI
          console.error('[background][OFFSCREEN RESPONSE] Workflow error received:', msg);

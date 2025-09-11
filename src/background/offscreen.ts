@@ -1,4 +1,32 @@
 // ==============================================================================
+// HEARTBEAT MONITORING - Connection health monitoring for offscreen
+// ==============================================================================
+
+interface HeartbeatMessage {
+  type: 'HEARTBEAT_CHECK';
+  heartbeatId: string;
+  timestamp: number;
+  backgroundHealth: {
+    transfers: number;
+    promises: number;
+    memoryUsage?: number;
+    uptime: number;
+  };
+}
+
+interface HeartbeatResponseMessage {
+  type: 'HEARTBEAT_RESPONSE';
+  heartbeatId: string;
+  timestamp: number;
+  offscreenHealth: {
+    transfers: number;
+    workflows: number;
+    memoryUsage?: number;
+    uptime: number;
+  };
+}
+
+// ==============================================================================
 // ENHANCED CHUNK MANAGER - Same as in background.ts for compatibility
 // ==============================================================================
 
@@ -208,6 +236,9 @@ class SimpleWorkflowEngine {
 let chunkManager = new EnhancedChunkManager();
 const workflowEngine = new SimpleWorkflowEngine();
 
+// Global uptime tracking for offscreen
+let offscreenStartTime = Date.now();
+
 interface ExecuteWorkflowMessage {
   type: 'EXECUTE_WORKFLOW';
   data: {
@@ -352,6 +383,60 @@ async function handleExecuteWorkflow(data: ExecuteWorkflowMessage['data']) {
   }
 }
 
+// Handle HEARTBEAT_CHECK message
+async function handleHeartbeatCheck(message: HeartbeatMessage) {
+  console.log(`[offscreen][HEARTBEAT] 💓 Received heartbeat check ${message.heartbeatId}`);
+
+  try {
+    // Collect offscreen health data
+    const offscreenHealth = collectOffscreenHealthData();
+
+    // Send heartbeat response
+    const response: HeartbeatResponseMessage = {
+      type: 'HEARTBEAT_RESPONSE',
+      heartbeatId: message.heartbeatId,
+      timestamp: Date.now(),
+      offscreenHealth
+    };
+
+    const latency = Date.now() - message.timestamp;
+    console.log(`[offscreen][HEARTBEAT] 📤 Sending heartbeat response ${message.heartbeatId} (${latency}ms latency)`);
+
+    await chrome.runtime.sendMessage(response);
+    console.log(`[offscreen][HEARTBEAT] ✅ Heartbeat response sent successfully`);
+
+  } catch (error) {
+    console.error(`[offscreen][HEARTBEAT] ❌ Failed to send heartbeat response:`, error);
+  }
+}
+
+function collectOffscreenHealthData() {
+  // Collect offscreen script health metrics
+  const transferCount = chunkManager['transfers'].size;
+  const uptime = Date.now() - offscreenStartTime;
+
+  // Count active workflows (simplified - we could track this better)
+  const workflowCount = 0; // SimpleWorkflowEngine doesn't track active workflows
+
+  return {
+    transfers: transferCount,
+    workflows: workflowCount,
+    memoryUsage: getMemoryUsage(),
+    uptime
+  };
+}
+
+function getMemoryUsage(): number | undefined {
+  try {
+    if ('memory' in performance) {
+      return (performance as any).memory.usedJSHeapSize;
+    }
+  } catch (error) {
+    // Memory monitoring not available
+  }
+  return undefined;
+}
+
 // Handle HTML_CHUNK message
 async function handleHtmlChunk(message: HtmlChunkMessage) {
   console.log(`[offscreen][CHUNKING] ===== RECEIVED HTML CHUNK =====`);
@@ -420,6 +505,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       handleHtmlChunk(message);
       sendResponse({ received: true });
       break;
+
+    case 'HEARTBEAT_CHECK':
+      handleHeartbeatCheck(message as HeartbeatMessage)
+        .then(() => sendResponse({ success: true }))
+        .catch(error => sendResponse({ success: false, error: error.message }));
+      return true; // Keep channel open for async responses
 
     default:
       console.warn(`[offscreen] Unknown message type:`, message.type);

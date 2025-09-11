@@ -179,7 +179,8 @@ function handleHtmlChunk(chunkMessage) {
       chunks: new Array(totalChunks),
       receivedChunks: 0,
       metadata,
-      completed: false
+      completed: false,
+      assembledNotified: false // Track if background acknowledged HTML_ASSEMBLED
     });
     console.log(`[offscreen][CHUNKING] Initialized new transfer: ${transferId} (${totalChunks} chunks)`);
   }
@@ -227,11 +228,13 @@ function handleHtmlChunk(chunkMessage) {
       metadata: transfer.metadata
     });
 
+    // Mark that we have notified background about assembly completion
+    transfer.assembledNotified = true;
+
     console.log(`[offscreen][CHUNKING] Sent HTML_ASSEMBLED message to background for transfer ${transferId}`);
 
-    // Clean up the transfer to free memory
-    htmlTransfers.delete(transferId);
-    console.log(`[offscreen][CHUNKING] Cleanup: Removed transfer ${transferId} from memory`);
+    // DO NOT clean up transfer here - wait for confirmation from background to prevent race condition
+    console.log(`[offscreen][CHUNKING] Transfer ${transferId} kept alive for background confirmation (assembledNotified: true)`);
   }
 }
 
@@ -426,9 +429,55 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
   // console.log('[offscreen] Message type:', message.type);
   // console.log('[offscreen] Message timestamp:', new Date().toISOString());
 
-  // Handle chunked messages first
-  if (message.type === 'HTML_CHUNK' || message.type === 'HTML_CHUNK_COMPLETE' || message.type === 'START_WORKFLOW_AFTER_CHUNKS') {
-    return handleChunkedMessage(message, sendResponse);
+  // Handle HTML_ASSEMBLED confirmation from background to cleanup transfer
+  if (message.type === 'HTML_ASSEMBLED_CONFIRMED') {
+    const { transferId } = message;
+
+    if (htmlTransfers.has(transferId)) {
+      htmlTransfers.delete(transferId);
+      console.log(`[offscreen][CHUNKING] Transfer ${transferId} cleaned up after background confirmation`);
+    } else {
+      console.warn(`[offscreen][CHUNKING] Transfer ${transferId} not found for cleanup confirmation`);
+    }
+
+    return true;
+  }
+
+  // Handle HTML_ASSEMBLED rejection from background
+  if (message.type === 'HTML_ASSEMBLED_REJECTED') {
+    const { transferId, reason } = message;
+
+    console.error(`[offscreen][CHUNKING] ❌ Transfer ${transferId} REJECTED by background: ${reason}`);
+
+    if (htmlTransfers.has(transferId)) {
+      const transfer = htmlTransfers.get(transferId);
+      console.log(`[offscreen][CHUNKING] Transfer details:`, {
+        completed: transfer.completed,
+        receivedChunks: transfer.receivedChunks,
+        totalChunks: transfer.chunks.length,
+        assembledNotified: transfer.assembledNotified
+      });
+
+      // Mark transfer as failed but keep it for diagnostics
+      transfer.failed = true;
+      transfer.failureReason = reason;
+    } else {
+      console.warn(`[offscreen][CHUNKING] Transfer ${transferId} not found to mark as failed`);
+    }
+
+    return true;
+  }
+
+  // Handle transfer status check from background
+  if (message.type === 'CHECK_TRANSFER_STATUS') {
+    const { transferId } = message;
+    const transfer = htmlTransfers.get(transferId);
+
+    return {
+      transferExists: !!transfer,
+      assembledNotified: transfer?.assembledNotified || false,
+      completed: transfer?.completed || false
+    };
   }
 
   // Handle chunked messages first
