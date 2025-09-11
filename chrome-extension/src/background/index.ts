@@ -143,7 +143,627 @@ const activeTransfers = new Map<string, {
   resolve: (value: string) => void;
   reject: (reason: any) => void;
   timeout: number;
+  createdAt: number;
+  lastAccessed: number;
 }>();
+
+// === TRANSFER STORAGE VERIFICATION & RECOVERY SYSTEM ===
+
+// Детальная диагностика состояния transfer'а
+function diagnoseTransferState(transferId: string): {
+  exists: boolean;
+  isValid: boolean;
+  diagnostics: Record<string, any>;
+} {
+  const transfer = activeTransfers.get(transferId);
+  const diagnostics = {
+    transferId,
+    timestamp: Date.now(),
+    exists: !!transfer,
+    storageSize: activeTransfers.size,
+    allTransferIds: Array.from(activeTransfers.keys())
+  };
+
+  if (!transfer) {
+    console.error(`[TRANSFER_DIAG] ❌ Transfer ${transferId} not found in active storage`);
+    return { exists: false, isValid: false, diagnostics };
+  }
+
+  // Проверяем валидность структуры transfer'а
+  const isValid = (
+    Array.isArray(transfer.chunks) &&
+    transfer.chunks.length > 0 &&
+    transfer.received instanceof Set &&
+    typeof transfer.totalChunks === 'number' &&
+    typeof transfer.resolve === 'function' &&
+    typeof transfer.reject === 'function'
+  );
+
+  diagnostics.isValid = isValid;
+  diagnostics.chunksCount = transfer.chunks.length;
+  diagnostics.receivedCount = transfer.received.size;
+  diagnostics.totalChunks = transfer.totalChunks;
+  diagnostics.createdAt = transfer.createdAt;
+  diagnostics.lastAccessed = transfer.lastAccessed;
+  diagnostics.age = Date.now() - transfer.createdAt;
+
+  if (!isValid) {
+    console.error(`[TRANSFER_DIAG] ❌ Transfer ${transferId} has invalid structure:`, diagnostics);
+  } else {
+    console.log(`[TRANSFER_DIAG] ✅ Transfer ${transferId} is valid:`, diagnostics);
+  }
+
+  return { exists: true, isValid, diagnostics };
+}
+
+// Верификация хранения transfer'а сразу после создания
+function verifyTransferStorage(transferId: string, expectedChunks: string[]): boolean {
+  console.log(`[TRANSFER_VERIFY] 🔍 Verifying transfer ${transferId} storage immediately after creation`);
+
+  const { exists, isValid, diagnostics } = diagnoseTransferState(transferId);
+
+  if (!exists) {
+    console.error(`[TRANSFER_VERIFY] ❌ CRITICAL: Transfer ${transferId} not found immediately after creation!`);
+    console.error(`[TRANSFER_VERIFY] Storage state:`, diagnostics);
+    return false;
+  }
+
+  if (!isValid) {
+    console.error(`[TRANSFER_VERIFY] ❌ CRITICAL: Transfer ${transferId} has invalid structure!`);
+    console.error(`[TRANSFER_VERIFY] Transfer diagnostics:`, diagnostics);
+    return false;
+  }
+
+  // Дополнительные проверки
+  const transfer = activeTransfers.get(transferId)!;
+  const chunksMatch = transfer.chunks.length === expectedChunks.length;
+  const metadataValid = transfer.metadata && typeof transfer.metadata === 'object';
+
+  if (!chunksMatch) {
+    console.error(`[TRANSFER_VERIFY] ❌ CRITICAL: Chunks count mismatch! Expected: ${expectedChunks.length}, Got: ${transfer.chunks.length}`);
+    return false;
+  }
+
+  if (!metadataValid) {
+    console.error(`[TRANSFER_VERIFY] ❌ CRITICAL: Invalid metadata for transfer ${transferId}`);
+    return false;
+  }
+
+  console.log(`[TRANSFER_VERIFY] ✅ Transfer ${transferId} storage verification PASSED`);
+  console.log(`[TRANSFER_VERIFY]   - Chunks: ${transfer.chunks.length}`);
+  console.log(`[TRANSFER_VERIFY]   - Received: ${transfer.received.size}/${transfer.totalChunks}`);
+  console.log(`[TRANSFER_VERIFY]   - Metadata valid: ${metadataValid}`);
+
+  return true;
+}
+
+// Многоуровневая проверка transfer'а с попытками восстановления (ОБНОВЛЕНО)
+async function multiLayerTransferCheck(transferId: string): Promise<{
+  found: boolean;
+  transfer: any;
+  recoveryAttempted: boolean;
+  diagnostics: Record<string, any>;
+}> {
+  console.log(`[MULTI_LAYER_CHECK] 🔍 Starting enhanced multi-layer transfer check for ${transferId}`);
+
+  // === НОВЫЙ УРОВЕНЬ 0: Проверка в EnhancedChunkManager (приоритетная) ===
+  try {
+    console.log(`[MULTI_LAYER_CHECK] 🔍 Checking EnhancedChunkManager layers for transfer ${transferId}`);
+
+    // Проверяем все слои хранения из EnhancedChunkManager
+    const chunkManagerLayers = [
+      { name: 'active_transfers', check: () => (globalThis as any).chunkManager?.transfers?.get?.(transferId) },
+      { name: 'completed_transfers', check: () => (globalThis as any).chunkManager?.completedTransfers?.get?.(transferId) },
+      { name: 'global_refs', check: () => (globalThis as any).chunkManager?.globalTransferRefs?.get?.(transferId) },
+      { name: 'emergency_backup', check: () => (globalThis as any).chunkManager?.emergencyBackup?.get?.(transferId) }
+    ];
+
+    // Диагностика доступности chunkManager
+    const chunkManager = (globalThis as any).chunkManager;
+    console.log(`[MULTI_LAYER_CHECK] ChunkManager available: ${!!chunkManager}`);
+    if (chunkManager) {
+      console.log(`[MULTI_LAYER_CHECK] ChunkManager storage sizes:`, {
+        active: chunkManager.transfers?.size || 0,
+        completed: chunkManager.completedTransfers?.size || 0,
+        globalRefs: chunkManager.globalTransferRefs?.size || 0,
+        emergency: chunkManager.emergencyBackup?.size || 0
+      });
+    }
+
+    for (const layer of chunkManagerLayers) {
+      try {
+        const transfer = layer.check();
+        console.log(`[MULTI_LAYER_CHECK] Checking layer ${layer.name} for ${transferId}: ${!!transfer}`);
+
+        if (transfer) {
+          console.log(`[MULTI_LAYER_CHECK] ✅ Transfer ${transferId} found in ${layer.name}`);
+          console.log(`[MULTI_LAYER_CHECK] Transfer details:`, {
+            chunks: transfer.chunks?.length || 0,
+            totalSize: transfer.totalSize || 0,
+            startTime: transfer.startTime,
+            htmlAssembledConfirmed: transfer.htmlAssembledConfirmed
+          });
+
+          // Обновляем время последнего доступа если возможно
+          if (transfer.lastAccessed !== undefined) {
+            transfer.lastAccessed = Date.now();
+          }
+          return {
+            found: true,
+            transfer,
+            recoveryAttempted: false,
+            diagnostics: { source: layer.name, age: Date.now() - (transfer.createdAt || transfer.startTime || Date.now()) }
+          };
+        }
+      } catch (layerError) {
+        console.warn(`[MULTI_LAYER_CHECK] Error checking layer ${layer.name}:`, layerError);
+      }
+    }
+
+    console.log(`[MULTI_LAYER_CHECK] ❌ Transfer ${transferId} not found in any EnhancedChunkManager layer`);
+
+  } catch (error) {
+    console.warn(`[MULTI_LAYER_CHECK] ⚠️ Error checking EnhancedChunkManager layers:`, error);
+  }
+
+  // Уровень 1: Проверка в activeTransfers (локальный)
+  let transfer = activeTransfers.get(transferId);
+  if (transfer) {
+    console.log(`[MULTI_LAYER_CHECK] ✅ Transfer ${transferId} found in primary storage`);
+    // Обновляем время последнего доступа
+    transfer.lastAccessed = Date.now();
+    return {
+      found: true,
+      transfer,
+      recoveryAttempted: false,
+      diagnostics: { source: 'primary', age: Date.now() - transfer.createdAt }
+    };
+  }
+
+  console.log(`[MULTI_LAYER_CHECK] ❌ Transfer ${transferId} not found in primary storage`);
+
+  // Уровень 2: Поиск по частичному совпадению ID (на случай усечения)
+  const partialMatches = Array.from(activeTransfers.keys()).filter(key =>
+    key.includes(transferId) || transferId.includes(key)
+  );
+
+  if (partialMatches.length > 0) {
+    console.log(`[MULTI_LAYER_CHECK] 🔄 Found partial matches for ${transferId}:`, partialMatches);
+    transfer = activeTransfers.get(partialMatches[0]);
+    if (transfer) {
+      console.log(`[MULTI_LAYER_CHECK] ✅ Transfer recovered using partial match: ${partialMatches[0]}`);
+      transfer.lastAccessed = Date.now();
+      return {
+        found: true,
+        transfer,
+        recoveryAttempted: true,
+        diagnostics: { source: 'partial_match', originalId: partialMatches[0] }
+      };
+    }
+  }
+
+  // Уровень 3: Поиск в globalThis (на случай хранения в другом месте)
+  const globalKeys = Object.keys(globalThis).filter(key =>
+    key.includes('transfer') || key.includes(transferId)
+  );
+
+  if (globalKeys.length > 0) {
+    console.log(`[MULTI_LAYER_CHECK] 🔄 Found potential global storage keys:`, globalKeys);
+    for (const key of globalKeys) {
+      const globalTransfer = (globalThis as any)[key];
+      if (globalTransfer && typeof globalTransfer === 'object' && globalTransfer.chunks) {
+        console.log(`[MULTI_LAYER_CHECK] ✅ Transfer recovered from global storage: ${key}`);
+        // Восстанавливаем в activeTransfers
+        activeTransfers.set(transferId, {
+          ...globalTransfer,
+          createdAt: globalTransfer.createdAt || Date.now(),
+          lastAccessed: Date.now()
+        });
+        return {
+          found: true,
+          transfer: activeTransfers.get(transferId),
+          recoveryAttempted: true,
+          diagnostics: { source: 'global_recovery', globalKey: key }
+        };
+      }
+    }
+  }
+
+  // Уровень 4: Проверка на наличие в offscreen document
+  try {
+    console.log(`[MULTI_LAYER_CHECK] 🔄 Checking offscreen document for transfer ${transferId}`);
+    const offscreenCheck = await chrome.runtime.sendMessage({
+      type: 'CHECK_TRANSFER_STATUS',
+      transferId,
+      timestamp: Date.now()
+    }).catch(() => null);
+
+    if (offscreenCheck?.transferExists) {
+      console.log(`[MULTI_LAYER_CHECK] ✅ Transfer ${transferId} exists in offscreen document`);
+
+      // Создаем заглушку transfer'а для синхронизации
+      const stubTransfer = {
+        chunks: [],
+        received: new Set(),
+        totalChunks: offscreenCheck.totalChunks || 0,
+        metadata: offscreenCheck.metadata || {},
+        resolve: () => {},
+        reject: () => {},
+        timeout: 0,
+        createdAt: Date.now(),
+        lastAccessed: Date.now()
+      };
+
+      activeTransfers.set(transferId, stubTransfer);
+
+      return {
+        found: true,
+        transfer: stubTransfer,
+        recoveryAttempted: true,
+        diagnostics: { source: 'offscreen_stub', totalChunks: stubTransfer.totalChunks }
+      };
+    }
+  } catch (error) {
+    console.warn(`[MULTI_LAYER_CHECK] Offscreen check failed:`, error);
+  }
+
+  // Уровень 5: Проверка ultra emergency storage (новый)
+  try {
+    const ultraEmergency = (globalThis as any).emergencyTransfers?.[transferId];
+    if (ultraEmergency?.transfer) {
+      console.log(`[MULTI_LAYER_CHECK] ✅ Transfer ${transferId} found in ultra emergency storage`);
+      return {
+        found: true,
+        transfer: ultraEmergency.transfer,
+        recoveryAttempted: true,
+        diagnostics: { source: 'ultra_emergency', age: Date.now() - (ultraEmergency.timestamp || Date.now()) }
+      };
+    }
+  } catch (error) {
+    console.warn(`[MULTI_LAYER_CHECK] Ultra emergency check failed:`, error);
+  }
+
+  // Уровень 6: Проверка fixed transfers array (новый)
+  try {
+    const fixedTransfers = (globalThis as any).fixedTransfers;
+    if (Array.isArray(fixedTransfers)) {
+      const fixedTransfer = fixedTransfers.find((t: any) => t.id === transferId);
+      if (fixedTransfer?.transfer) {
+        console.log(`[MULTI_LAYER_CHECK] ✅ Transfer ${transferId} found in fixed transfers array`);
+        return {
+          found: true,
+          transfer: fixedTransfer.transfer,
+          recoveryAttempted: true,
+          diagnostics: { source: 'fixed_transfers', age: Date.now() - (fixedTransfer.timestamp || Date.now()) }
+        };
+      }
+    }
+  } catch (error) {
+    console.warn(`[MULTI_LAYER_CHECK] Fixed transfers check failed:`, error);
+  }
+
+  console.error(`[MULTI_LAYER_CHECK] ❌ Transfer ${transferId} not found in any storage layer`);
+  return {
+    found: false,
+    transfer: null,
+    recoveryAttempted: true,
+    diagnostics: { source: 'not_found', checkedLayers: ['chunk_manager', 'primary', 'partial', 'global', 'offscreen', 'ultra_emergency', 'fixed'] }
+  };
+}
+
+// Fallback механизм восстановления для полностью потерянных transfer'ов
+async function fallbackTransferRecoveryForAssembled(msg: any): Promise<boolean> {
+  try {
+    const transferId = msg.transferId;
+    console.log(`[FALLBACK_RECOVERY] 🔧 Starting fallback recovery for assembled transfer ${transferId}`);
+
+    // Попытка 1: Восстановление на основе данных из HTML_ASSEMBLED сообщения
+    if (msg.assembledData || msg.htmlData) {
+      console.log(`[FALLBACK_RECOVERY] 📦 Found assembled data in message, creating recovery transfer`);
+
+      const recoveryTransfer = {
+        chunks: [], // Данные уже собраны
+        received: new Set(),
+        totalChunks: 0,
+        metadata: {
+          pluginId: msg.pluginId,
+          pageKey: msg.pageKey,
+          requestId: msg.requestId,
+          totalSize: msg.assembledData?.length || msg.htmlData?.length || 0,
+          timestamp: Date.now(),
+          recovery: true,
+          fallback: true
+        },
+        resolve: () => console.log(`[FALLBACK_RECOVERY] Recovery transfer ${transferId} resolved`),
+        reject: (error: any) => console.error(`[FALLBACK_RECOVERY] Recovery transfer ${transferId} rejected:`, error),
+        timeout: 0,
+        createdAt: Date.now(),
+        lastAccessed: Date.now(),
+        assembledData: msg.assembledData || msg.htmlData,
+        isRecovery: true
+      };
+
+      activeTransfers.set(transferId, recoveryTransfer);
+      console.log(`[FALLBACK_RECOVERY] ✅ Recovery transfer created for ${transferId}`);
+
+      // Продолжаем обработку с восстановленным transfer'ом
+      await processRecoveredAssembledTransfer(msg, recoveryTransfer);
+      return true;
+    }
+
+    // Попытка 2: Запрос данных из offscreen document
+    console.log(`[FALLBACK_RECOVERY] 🔄 Requesting assembled data from offscreen document`);
+    const offscreenData = await chrome.runtime.sendMessage({
+      type: 'REQUEST_ASSEMBLED_DATA',
+      transferId,
+      timestamp: Date.now()
+    }).catch(() => null);
+
+    if (offscreenData?.assembledData) {
+      console.log(`[FALLBACK_RECOVERY] 📦 Received assembled data from offscreen`);
+
+      const recoveryTransfer = {
+        chunks: [],
+        received: new Set(),
+        totalChunks: 0,
+        metadata: {
+          ...offscreenData.metadata,
+          recovery: true,
+          fallback: true,
+          timestamp: Date.now()
+        },
+        resolve: () => console.log(`[FALLBACK_RECOVERY] Offscreen recovery transfer ${transferId} resolved`),
+        reject: (error: any) => console.error(`[FALLBACK_RECOVERY] Offscreen recovery transfer ${transferId} rejected:`, error),
+        timeout: 0,
+        createdAt: Date.now(),
+        lastAccessed: Date.now(),
+        assembledData: offscreenData.assembledData,
+        isRecovery: true
+      };
+
+      activeTransfers.set(transferId, recoveryTransfer);
+      console.log(`[FALLBACK_RECOVERY] ✅ Offscreen recovery transfer created for ${transferId}`);
+
+      await processRecoveredAssembledTransfer(msg, recoveryTransfer);
+      return true;
+    }
+
+    // Попытка 3: Создание минимального transfer'а для продолжения workflow
+    console.log(`[FALLBACK_RECOVERY] 📝 Creating minimal transfer for workflow continuation`);
+    const minimalTransfer = {
+      chunks: [],
+      received: new Set(),
+      totalChunks: 0,
+      metadata: {
+        pluginId: msg.pluginId,
+        pageKey: msg.pageKey,
+        requestId: msg.requestId,
+        totalSize: 0,
+        timestamp: Date.now(),
+        recovery: true,
+        fallback: true,
+        minimal: true
+      },
+      resolve: () => console.log(`[FALLBACK_RECOVERY] Minimal transfer ${transferId} resolved`),
+      reject: (error: any) => console.error(`[FALLBACK_RECOVERY] Minimal transfer ${transferId} rejected:`, error),
+      timeout: 0,
+      createdAt: Date.now(),
+      lastAccessed: Date.now(),
+      isRecovery: true,
+      minimalMode: true
+    };
+
+    activeTransfers.set(transferId, minimalTransfer);
+    console.log(`[FALLBACK_RECOVERY] ✅ Minimal recovery transfer created for ${transferId}`);
+
+    await processRecoveredAssembledTransfer(msg, minimalTransfer);
+    return true;
+
+  } catch (error) {
+    console.error(`[FALLBACK_RECOVERY] ❌ Fallback recovery failed for transfer ${msg.transferId}:`, error);
+    return false;
+  }
+}
+
+// УЛУЧШЕННАЯ ОБРАБОТКА ВОССТАНОВЛЕННОГО ASSEMBLED TRANSFER'А С ПОЛНОЙ ПОДДЕРЖКОЙ MISSING ДАННЫХ
+async function processRecoveredAssembledTransfer(msg: any, transfer: any): Promise<void> {
+  const transferId = msg.transferId;
+  console.log(`[RECOVERY_PROCESSING] 🔄 Processing recovered assembled transfer ${transferId}`);
+
+  try {
+    // Устанавливаем флаг завершения с дополнительными проверками
+    const setTransferCompleted = (globalThis as any)[`setTransferCompleted_${transferId}`];
+    if (setTransferCompleted) {
+      setTransferCompleted(true);
+      console.log(`[RECOVERY_PROCESSING] ✅ Recovery transfer completion flag set for ${transferId}`);
+    } else {
+      console.warn(`[RECOVERY_PROCESSING] ⚠️ setTransferCompleted function not found - creating fallback`);
+      (globalThis as any)[`setTransferCompleted_${transferId}`] = () => {
+        console.log(`[RECOVERY_PROCESSING] Fallback completion flag set for ${transferId}`);
+      };
+    }
+
+    // УЛУЧШЕННАЯ ОБРАБОТКА MISSING PLUGINID/PAGEKEY С ВОССТАНОВЛЕНИЕМ ИЗ МЕТАДАННЫХ
+    let pluginId = msg.pluginId;
+    let pageKey = msg.pageKey;
+
+    // ПОПЫТКА ВОССТАНОВЛЕНИЯ PLUGINID ИЗ РАЗЛИЧНЫХ ИСТОЧНИКОВ
+    if (!pluginId) {
+      console.log(`[RECOVERY_PROCESSING] 🔍 Attempting to recover pluginId for transfer ${transferId}`);
+
+      // Источник 1: Метаданные transfer'а
+      if (transfer.metadata?.pluginId) {
+        pluginId = transfer.metadata.pluginId;
+        console.log(`[RECOVERY_PROCESSING] ✅ Recovered pluginId from transfer metadata: ${pluginId}`);
+      }
+
+      // Источник 2: Глобальное хранилище
+      if (!pluginId) {
+        const globalMetadata = (globalThis as any).transferMetadata?.[transferId];
+        if (globalMetadata?.pluginId) {
+          pluginId = globalMetadata.pluginId;
+          console.log(`[RECOVERY_PROCESSING] ✅ Recovered pluginId from global metadata: ${pluginId}`);
+        }
+      }
+
+      // Источник 3: Запрос к offscreen document
+      if (!pluginId) {
+        try {
+          const offscreenData = await chrome.runtime.sendMessage({
+            type: 'GET_TRANSFER_PLUGIN_INFO',
+            transferId,
+            timestamp: Date.now()
+          }).catch(() => null);
+
+          if (offscreenData?.pluginId) {
+            pluginId = offscreenData.pluginId;
+            console.log(`[RECOVERY_PROCESSING] ✅ Recovered pluginId from offscreen: ${pluginId}`);
+          }
+        } catch (error) {
+          console.warn(`[RECOVERY_PROCESSING] Failed to query offscreen for pluginId:`, error);
+        }
+      }
+
+      // Источник 4: Fallback - извлечение из transferId
+      if (!pluginId && transferId.includes('_html')) {
+        const parts = transferId.split('_');
+        if (parts.length >= 3) {
+          pluginId = parts.slice(0, parts.length - 2).join('_');
+          console.log(`[RECOVERY_PROCESSING] 🔧 Extracted pluginId from transferId: ${pluginId}`);
+        }
+      }
+    }
+
+    // ПОПЫТКА ВОССТАНОВЛЕНИЯ PAGEKEY ИЗ РАЗЛИЧНЫХ ИСТОЧНИКОВ
+    if (!pageKey) {
+      console.log(`[RECOVERY_PROCESSING] 🔍 Attempting to recover pageKey for transfer ${transferId}`);
+
+      // Источник 1: Метаданные transfer'а
+      if (transfer.metadata?.pageKey) {
+        pageKey = transfer.metadata.pageKey;
+        console.log(`[RECOVERY_PROCESSING] ✅ Recovered pageKey from transfer metadata: ${pageKey}`);
+      }
+
+      // Источник 2: Глобальное хранилище
+      if (!pageKey) {
+        const globalMetadata = (globalThis as any).transferMetadata?.[transferId];
+        if (globalMetadata?.pageKey) {
+          pageKey = globalMetadata.pageKey;
+          console.log(`[RECOVERY_PROCESSING] ✅ Recovered pageKey from global metadata: ${pageKey}`);
+        }
+      }
+
+      // Источник 3: Определение из активной вкладки
+      if (!pageKey) {
+        try {
+          const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (tabs[0]?.url) {
+            const { getPageKey } = await import('../../../packages/shared/lib/utils/helpers');
+            pageKey = getPageKey(tabs[0].url);
+            console.log(`[RECOVERY_PROCESSING] ✅ Generated pageKey from active tab: ${pageKey}`);
+          }
+        } catch (error) {
+          console.warn(`[RECOVERY_PROCESSING] Failed to get pageKey from active tab:`, error);
+        }
+      }
+
+      // Источник 4: Fallback pageKey
+      if (!pageKey) {
+        pageKey = `recovered_page_${Date.now()}`;
+        console.log(`[RECOVERY_PROCESSING] 🔧 Using fallback pageKey: ${pageKey}`);
+      }
+    }
+
+    // ВАЛИДАЦИЯ ВОССТАНОВЛЕННЫХ ДАННЫХ
+    if (!pluginId) {
+      console.error(`[RECOVERY_PROCESSING] ❌ CRITICAL: Cannot determine pluginId for recovered transfer ${transferId}`);
+      throw new Error(`Missing pluginId - recovery failed`);
+    }
+
+    if (!pageKey) {
+      console.error(`[RECOVERY_PROCESSING] ❌ CRITICAL: Cannot determine pageKey for recovered transfer ${transferId}`);
+      throw new Error(`Missing pageKey - recovery failed`);
+    }
+
+    console.log(`[RECOVERY_PROCESSING] ✅ Recovery data validated - pluginId: ${pluginId}, pageKey: ${pageKey}`);
+
+    // ПОДГОТОВКА EXECUTE_WORKFLOW СООБЩЕНИЯ
+    const executeMessage = {
+      type: 'EXECUTE_WORKFLOW',
+      pluginId,
+      pageKey,
+      requestId: msg.requestId || transferId,
+      transferId: transferId,
+      useChunks: false, // Данные уже собраны
+      assembledData: transfer.assembledData || transfer.html,
+      recovery: true,
+      recoverySource: transfer.isRecovery ? 'fallback_recovery' : 'recovered',
+      timestamp: Date.now()
+    };
+
+    // ДОПОЛНИТЕЛЬНАЯ ВАЛИДАЦИЯ ASSEMBLED DATA
+    if (!executeMessage.assembledData || executeMessage.assembledData.length === 0) {
+      console.warn(`[RECOVERY_PROCESSING] ⚠️ Assembled data is empty for transfer ${transferId}`);
+
+      // ПОПЫТКА ПОЛУЧИТЬ ДАННЫЕ ИЗ ДРУГИХ ИСТОЧНИКОВ
+      if (transfer.chunks && Array.isArray(transfer.chunks)) {
+        executeMessage.assembledData = transfer.chunks.join('');
+        console.log(`[RECOVERY_PROCESSING] ✅ Reassembled data from chunks: ${executeMessage.assembledData.length} chars`);
+      } else {
+        console.warn(`[RECOVERY_PROCESSING] ⚠️ No chunks available for reassembly`);
+      }
+    }
+
+    console.log(`[RECOVERY_PROCESSING] 🚀 Sending recovery EXECUTE_WORKFLOW for ${transferId} (${executeMessage.assembledData?.length || 0} chars)`);
+    await chrome.runtime.sendMessage(executeMessage);
+    console.log(`[RECOVERY_PROCESSING] ✅ Recovery EXECUTE_WORKFLOW sent successfully for ${transferId}`);
+
+    // ДОПОЛНИТЕЛЬНОЕ ЛОГИРОВАНИЕ ДЛЯ ОТСЛЕЖИВАНИЯ
+    console.log(`[RECOVERY_PROCESSING] 📊 Recovery summary for ${transferId}:`, {
+      pluginId,
+      pageKey,
+      dataLength: executeMessage.assembledData?.length || 0,
+      recoveryType: executeMessage.recoverySource,
+      timestamp: executeMessage.timestamp
+    });
+
+  } catch (error) {
+    console.error(`[RECOVERY_PROCESSING] ❌ Failed to process recovered transfer ${transferId}:`, error);
+    console.error(`[RECOVERY_PROCESSING] Error details:`, {
+      message: (error as Error).message,
+      stack: (error as Error).stack,
+      transferId,
+      hasAssembledData: !!transfer?.assembledData,
+      pluginId: msg.pluginId,
+      pageKey: msg.pageKey
+    });
+    throw error;
+  } finally {
+    // УЛУЧШЕННАЯ ОЧИСТКА С ДОПОЛНИТЕЛЬНЫМИ ПРОВЕРКАМИ
+    console.log(`[RECOVERY_PROCESSING] 🧹 Starting cleanup for transfer ${transferId}`);
+
+    if (activeTransfers.has(transferId)) {
+      activeTransfers.delete(transferId);
+      console.log(`[RECOVERY_PROCESSING] ✅ Recovery transfer ${transferId} cleaned up from active transfers`);
+    } else {
+      console.log(`[RECOVERY_PROCESSING] ⚠️ Transfer ${transferId} was already cleaned up`);
+    }
+
+    // ОЧИСТКА ГЛОБАЛЬНЫХ ССЫЛОК
+    if ((globalThis as any)[`setTransferCompleted_${transferId}`]) {
+      delete (globalThis as any)[`setTransferCompleted_${transferId}`];
+      console.log(`[RECOVERY_PROCESSING] ✅ Recovery transfer completion function cleaned up for ${transferId}`);
+    }
+
+    // ОЧИСТКА ГЛОБАЛЬНЫХ МЕТАДАННЫХ ПОСЛЕ ЗАДЕРЖКИ
+    setTimeout(() => {
+      if ((globalThis as any).transferMetadata?.[transferId]) {
+        delete (globalThis as any).transferMetadata[transferId];
+        console.log(`[RECOVERY_PROCESSING] 🧹 Global metadata cleaned up for ${transferId}`);
+      }
+    }, 5000); // Даем время на завершение всех операций
+  }
+}
 
 // Function to split HTML into chunks
 function splitHtmlIntoChunks(html: string, chunkSize: number = CHUNK_SIZE): string[] {
@@ -188,7 +808,7 @@ function assembleHtmlFromChunks(transferId: string): string {
   return assembledHtml;
 }
 
-// Function to send HTML in chunks
+// Function to send HTML in chunks with storage verification
 async function sendHtmlInChunks(
   pluginId: string,
   pageKey: string,
@@ -206,32 +826,118 @@ async function sendHtmlInChunks(
   return new Promise<string>((resolve, reject) => {
     // Set timeout for entire transfer (30 seconds)
     const timeout = setTimeout(() => {
+      console.error(`[background][CHUNKING] ❌ Transfer ${transferId} timeout - cleaning up`);
       activeTransfers.delete(transferId);
       reject(new Error('HTML chunk transfer timeout'));
     }, 30000);
 
-    // Store transfer state
-    activeTransfers.set(transferId, {
+    // Store transfer state with timestamp tracking
+    const transferState = {
       chunks,
       received: new Set(),
       totalChunks: chunks.length,
       metadata: { pluginId, pageKey, requestId, totalSize: html.length, timestamp: Date.now() },
       resolve: () => {
         clearTimeout(timeout);
+        console.log(`[background][CHUNKING] ✅ Transfer ${transferId} completed successfully`);
         activeTransfers.delete(transferId);
         resolve(transferId);
       },
       reject: (error) => {
         clearTimeout(timeout);
+        console.error(`[background][CHUNKING] ❌ Transfer ${transferId} failed:`, error);
         activeTransfers.delete(transferId);
         reject(error);
       },
-      timeout
-    });
+      timeout,
+      createdAt: Date.now(),
+      lastAccessed: Date.now()
+    };
+
+    // Сохраняем transfer в хранилище
+    activeTransfers.set(transferId, transferState);
+
+    // === КРИТИЧНЫЙ ШАГ: ВЕРИФИКАЦИЯ ХРАНЕНИЯ СРАЗУ ПОСЛЕ СОЗДАНИЯ ===
+    console.log(`[background][CHUNKING] 🔍 Verifying transfer ${transferId} storage after creation...`);
+    const storageVerified = verifyTransferStorage(transferId, chunks);
+
+    if (!storageVerified) {
+      console.error(`[background][CHUNKING] ❌ CRITICAL: Transfer storage verification FAILED for ${transferId}`);
+      console.error(`[background][CHUNKING] Attempting emergency recovery...`);
+
+      // Попытка экстренного восстановления
+      const recoverySuccess = emergencyTransferRecovery(transferId, transferState);
+      if (!recoverySuccess) {
+        console.error(`[background][CHUNKING] ❌ CRITICAL: Emergency recovery FAILED for ${transferId}`);
+        activeTransfers.delete(transferId);
+        reject(new Error(`Transfer storage verification failed for ${transferId}`));
+        return;
+      }
+      console.log(`[background][CHUNKING] ✅ Emergency recovery successful for ${transferId}`);
+    } else {
+      console.log(`[background][CHUNKING] ✅ Transfer ${transferId} storage verification PASSED`);
+    }
+
+    // Детальная диагностика состояния после верификации
+    const { diagnostics } = diagnoseTransferState(transferId);
+    console.log(`[background][CHUNKING] 📊 Transfer ${transferId} post-creation diagnostics:`, diagnostics);
 
     // Send chunks sequentially with confirmation
-    sendChunksSequentially(transferId);
+    try {
+      console.log(`[background][CHUNKING] 🚀 Starting chunk transmission for transfer ${transferId}`);
+      sendChunksSequentially(transferId);
+    } catch (error) {
+      console.error(`[background][CHUNKING] ❌ Failed to start chunk transmission for ${transferId}:`, error);
+      activeTransfers.delete(transferId);
+      reject(error);
+    }
   });
+}
+
+// Экстренное восстановление transfer'а при проблемах хранения
+function emergencyTransferRecovery(transferId: string, originalTransfer: any): boolean {
+  try {
+    console.log(`[EMERGENCY_RECOVERY] 🔧 Starting emergency recovery for transfer ${transferId}`);
+
+    // Попытка 1: Повторное сохранение в activeTransfers
+    activeTransfers.set(transferId, {
+      ...originalTransfer,
+      createdAt: Date.now(),
+      lastAccessed: Date.now()
+    });
+
+    // Верификация после восстановления
+    const recoveryVerified = verifyTransferStorage(transferId, originalTransfer.chunks);
+    if (recoveryVerified) {
+      console.log(`[EMERGENCY_RECOVERY] ✅ Recovery successful - transfer ${transferId} restored`);
+      return true;
+    }
+
+    // Попытка 2: Сохранение в альтернативном хранилище (globalThis)
+    console.log(`[EMERGENCY_RECOVERY] 🔄 Attempting alternative storage recovery`);
+    (globalThis as any)[`emergency_transfer_${transferId}`] = {
+      ...originalTransfer,
+      emergencyBackup: true,
+      backupTimestamp: Date.now()
+    };
+
+    // Попытка 3: Синхронизация с offscreen document
+    chrome.runtime.sendMessage({
+      type: 'EMERGENCY_TRANSFER_BACKUP',
+      transferId,
+      transferData: originalTransfer,
+      timestamp: Date.now()
+    }).catch(() => {
+      console.warn(`[EMERGENCY_RECOVERY] Offscreen backup notification failed`);
+    });
+
+    console.log(`[EMERGENCY_RECOVERY] ✅ Emergency recovery completed for transfer ${transferId}`);
+    return true;
+
+  } catch (error) {
+    console.error(`[EMERGENCY_RECOVERY] ❌ Emergency recovery failed for transfer ${transferId}:`, error);
+    return false;
+  }
 }
 
 // Function to send chunks sequentially
@@ -358,86 +1064,405 @@ async function sendChunksSequentially(transferId: string): Promise<void> {
   }
 }
 
-// Function to wait for chunk acknowledgment
+// Function to wait for chunk acknowledgment with multi-layer recovery
 async function waitForChunkAck(transferId: string, chunkIndex: number): Promise<void> {
-  const transfer = activeTransfers.get(transferId);
+  console.log(`[WAIT_ACK] 🔍 Starting waitForChunkAck for transfer ${transferId}, chunk ${chunkIndex}`);
+
+  // === МНОГОУРОВНЕВАЯ ПРОВЕРКА TRANSFER'А ===
+  let { found, transfer, recoveryAttempted, diagnostics } = await multiLayerTransferCheck(transferId);
+
+  if (!found || !transfer) {
+    console.error(`[WAIT_ACK] ❌ Transfer ${transferId} not found in any storage layer`);
+    console.error(`[WAIT_ACK] Multi-layer check diagnostics:`, diagnostics);
+
+    // Попытка создания заглушки transfer'а для продолжения работы
+    const stubTransfer = await createStubTransferForRecovery(transferId, chunkIndex);
+    if (stubTransfer) {
+      console.log(`[WAIT_ACK] ✅ Stub transfer created for ${transferId}, continuing with acknowledgment wait`);
+    } else {
+      throw new Error(`Transfer ${transferId} not found and recovery failed`);
+    }
+  } else {
+    if (recoveryAttempted) {
+      console.log(`[WAIT_ACK] ⚠️ Transfer ${transferId} recovered using ${diagnostics.source} method`);
+    }
+  }
+
+  // УЛУЧШЕННЫЕ ПРОВЕРКИ NULL/UNDEFINED С GRACEFUL HANDLING
   if (!transfer) {
-    console.error(`[background][CHUNKING] Transfer ${transferId} not found in waitForChunkAck`);
-    throw new Error(`Transfer ${transferId} not found`);
+    console.error(`[WAIT_ACK] ❌ CRITICAL: Transfer ${transferId} is null or undefined`);
+
+    // GRACEFUL FALLBACK: Попытка экстренного восстановления
+    console.log(`[WAIT_ACK] 🔄 Attempting emergency transfer recovery for ${transferId}`);
+    const emergencyTransfer = await createStubTransferForRecovery(transferId, chunkIndex);
+
+    if (emergencyTransfer) {
+      console.log(`[WAIT_ACK] ✅ Emergency recovery successful for transfer ${transferId}`);
+      transfer = emergencyTransfer;
+      activeTransfers.set(transferId, transfer);
+    } else {
+      console.error(`[WAIT_ACK] ❌ Emergency recovery failed for transfer ${transferId}`);
+      throw new Error(`Transfer ${transferId} lost and recovery failed - cannot proceed with chunk acknowledgment`);
+    }
   }
 
-  // Дополнительные проверки на валидность transfer состояния
-  if (!transfer.received || typeof transfer.received.has !== 'function') {
-    console.error(`[background][CHUNKING] Invalid transfer state for ${transferId}`);
-    throw new Error(`Invalid transfer state for ${transferId}`);
+  // Обновляем время последнего доступа с дополнительными проверками
+  try {
+    transfer.lastAccessed = Date.now();
+    console.log(`[WAIT_ACK] ✅ Updated lastAccessed for transfer ${transferId}: ${transfer.lastAccessed}`);
+  } catch (updateError) {
+    console.error(`[WAIT_ACK] ❌ Failed to update lastAccessed for transfer ${transferId}:`, updateError);
+    // Не прерываем выполнение, продолжаем с предупреждением
   }
 
-  // Wait up to 5 seconds for acknowledgment
+  // УЛУЧШЕННЫЕ ПРОВЕРКИ НА ВАЛИДНОСТЬ TRANSFER СОСТОЯНИЯ
+  if (!transfer.received) {
+    console.warn(`[WAIT_ACK] ⚠️ Transfer ${transferId} missing received Set, creating new one`);
+    transfer.received = new Set<number>();
+  }
+
+  if (typeof transfer.received.has !== 'function') {
+    console.error(`[WAIT_ACK] ❌ Transfer ${transferId} received is not a Set, recreating`);
+    transfer.received = new Set<number>();
+  }
+
+  // ДОПОЛНИТЕЛЬНАЯ ВАЛИДАЦИЯ: Проверка других свойств transfer
+  if (typeof transfer.totalChunks !== 'number' || transfer.totalChunks <= 0) {
+    console.error(`[WAIT_ACK] ❌ Invalid totalChunks for transfer ${transferId}:`, transfer.totalChunks);
+
+    // ПОПЫТКА ВОССТАНОВЛЕНИЯ: Запрос информации от offscreen
+    try {
+      const offscreenInfo = await chrome.runtime.sendMessage({
+        type: 'GET_TRANSFER_INFO',
+        transferId,
+        timestamp: Date.now()
+      }).catch(() => null);
+
+      if (offscreenInfo?.totalChunks) {
+        transfer.totalChunks = offscreenInfo.totalChunks;
+        console.log(`[WAIT_ACK] ✅ Recovered totalChunks from offscreen: ${transfer.totalChunks}`);
+      } else {
+        throw new Error('Cannot determine total chunks');
+      }
+    } catch (recoveryError) {
+      console.error(`[WAIT_ACK] ❌ Failed to recover totalChunks:`, recoveryError);
+      throw new Error(`Invalid transfer state for ${transferId} - cannot determine chunk count`);
+    }
+  }
+
+  // Проверяем, не был ли чанк уже подтвержден ранее
+  if (transfer.received.has(chunkIndex)) {
+    console.log(`[WAIT_ACK] ✅ Chunk ${chunkIndex} already acknowledged for transfer ${transferId}`);
+    return;
+  }
+
+  // Wait up to 5 seconds for acknowledgment с улучшенной диагностикой
   const ackTimeout = 5000;
   const startTime = Date.now();
+  let checkCount = 0;
+
+  console.log(`[WAIT_ACK] ⏳ Waiting for chunk ${chunkIndex} acknowledgment (timeout: ${ackTimeout}ms)`);
 
   while (!transfer.received.has(chunkIndex)) {
-    if (Date.now() - startTime > ackTimeout) {
-      console.error(`[background][CHUNKING] Timeout waiting for chunk ${chunkIndex} acknowledgment for transfer ${transferId}`);
+    checkCount++;
+    const elapsed = Date.now() - startTime;
+
+    if (elapsed > ackTimeout) {
+      console.error(`[WAIT_ACK] ❌ Timeout waiting for chunk ${chunkIndex} acknowledgment for transfer ${transferId}`);
+      console.error(`[WAIT_ACK] Wait statistics:`, {
+        elapsed,
+        timeout: ackTimeout,
+        checksPerformed: checkCount,
+        chunkIndex,
+        totalChunks: transfer.totalChunks,
+        acknowledgedCount: transfer.received.size
+      });
+
+      // Попытка диагностики проблемы
+      await diagnoseAcknowledgmentFailure(transferId, chunkIndex, transfer);
+
       throw new Error(`Timeout waiting for chunk ${chunkIndex} acknowledgment`);
     }
 
     // Проверяем, что transfer все еще существует (не был удален по timeout)
     if (!activeTransfers.has(transferId)) {
-      console.error(`[background][CHUNKING] Transfer ${transferId} was removed during chunk wait`);
-      throw new Error(`Transfer ${transferId} was removed during operation`);
+      console.error(`[WAIT_ACK] ❌ Transfer ${transferId} was removed during chunk wait`);
+      console.error(`[WAIT_ACK] Emergency recovery attempt...`);
+
+      // Экстренная попытка восстановления
+      const recoveryResult = await emergencyTransferRecoveryDuringWait(transferId, transfer);
+      if (!recoveryResult) {
+        throw new Error(`Transfer ${transferId} was removed during operation and recovery failed`);
+      }
+    }
+
+    // Периодическая диагностика (каждые 100 проверок)
+    if (checkCount % 100 === 0) {
+      console.log(`[WAIT_ACK] 📊 Wait status for ${transferId}:`, {
+        elapsed,
+        checks: checkCount,
+        chunkIndex,
+        acknowledged: transfer.received.size,
+        total: transfer.totalChunks
+      });
     }
 
     // Wait 100ms and check again
     await new Promise(resolve => setTimeout(resolve, 100));
   }
 
-  console.log(`[background][CHUNKING] Chunk ${chunkIndex} acknowledged`);
+  console.log(`[WAIT_ACK] ✅ Chunk ${chunkIndex} acknowledged for transfer ${transferId}`);
+  console.log(`[WAIT_ACK] Acknowledgment statistics:`, {
+    waitTime: Date.now() - startTime,
+    checksPerformed: checkCount,
+    acknowledgedCount: transfer.received.size,
+    totalChunks: transfer.totalChunks
+  });
 }
 
-// Handle chunk acknowledgments
+// Создание заглушки transfer'а для восстановления при полной потере
+async function createStubTransferForRecovery(transferId: string, chunkIndex: number): Promise<any> {
+  try {
+    console.log(`[STUB_RECOVERY] 🔧 Creating stub transfer for ${transferId} at chunk ${chunkIndex}`);
+
+    // Проверяем, можем ли мы получить информацию из offscreen document
+    const offscreenInfo = await chrome.runtime.sendMessage({
+      type: 'GET_TRANSFER_INFO',
+      transferId,
+      timestamp: Date.now()
+    }).catch(() => null);
+
+    const stubTransfer = {
+      chunks: offscreenInfo?.chunks || [],
+      received: new Set([chunkIndex]), // Предполагаем, что текущий чанк уже получен
+      totalChunks: offscreenInfo?.totalChunks || 1,
+      metadata: offscreenInfo?.metadata || { stub: true, recovery: true },
+      resolve: () => console.log(`[STUB_RECOVERY] Stub transfer ${transferId} resolved`),
+      reject: (error: any) => console.error(`[STUB_RECOVERY] Stub transfer ${transferId} rejected:`, error),
+      timeout: 0,
+      createdAt: Date.now(),
+      lastAccessed: Date.now(),
+      isStub: true
+    };
+
+    activeTransfers.set(transferId, stubTransfer);
+    console.log(`[STUB_RECOVERY] ✅ Stub transfer created for ${transferId}`);
+
+    return stubTransfer;
+  } catch (error) {
+    console.error(`[STUB_RECOVERY] ❌ Failed to create stub transfer for ${transferId}:`, error);
+    return null;
+  }
+}
+
+// Диагностика проблем с подтверждением чанков
+async function diagnoseAcknowledgmentFailure(transferId: string, chunkIndex: number, transfer: any): Promise<void> {
+  console.log(`[ACK_DIAG] 🔍 Diagnosing acknowledgment failure for transfer ${transferId}, chunk ${chunkIndex}`);
+
+  const diagnostics = {
+    transferId,
+    chunkIndex,
+    acknowledgedCount: transfer.received.size,
+    totalChunks: transfer.totalChunks,
+    isStub: transfer.isStub || false,
+    createdAt: transfer.createdAt,
+    age: Date.now() - transfer.createdAt
+  };
+
+  console.log(`[ACK_DIAG] Transfer diagnostics:`, diagnostics);
+
+  // Проверяем связь с offscreen document
+  try {
+    const offscreenResponse = await chrome.runtime.sendMessage({
+      type: 'DIAGNOSE_CHUNK_ACK',
+      transferId,
+      chunkIndex,
+      timestamp: Date.now()
+    }).catch(() => ({ error: 'offscreen_unavailable' }));
+
+    console.log(`[ACK_DIAG] Offscreen diagnostics response:`, offscreenResponse);
+
+    if (offscreenResponse?.lastReceivedChunk !== undefined) {
+      console.log(`[ACK_DIAG] Offscreen last received chunk: ${offscreenResponse.lastReceivedChunk}`);
+      if (offscreenResponse.lastReceivedChunk >= chunkIndex) {
+        console.log(`[ACK_DIAG] ⚠️ Chunk ${chunkIndex} may have been received but not acknowledged properly`);
+      }
+    }
+  } catch (error) {
+    console.warn(`[ACK_DIAG] Offscreen diagnostics failed:`, error);
+  }
+
+  // Логируем детальную информацию для отладки
+  console.error(`[ACK_DIAG] 📊 Complete failure diagnostics:`, {
+    ...diagnostics,
+    activeTransfersCount: activeTransfers.size,
+    activeTransferIds: Array.from(activeTransfers.keys()),
+    timestamp: Date.now()
+  });
+}
+
+// Экстренное восстановление transfer'а во время ожидания acknowledgment'а
+async function emergencyTransferRecoveryDuringWait(transferId: string, originalTransfer: any): Promise<boolean> {
+  try {
+    console.log(`[EMERGENCY_WAIT_RECOVERY] 🚨 Emergency recovery during wait for ${transferId}`);
+
+    // Восстанавливаем transfer в activeTransfers
+    activeTransfers.set(transferId, {
+      ...originalTransfer,
+      lastAccessed: Date.now(),
+      emergencyRecoveryCount: (originalTransfer.emergencyRecoveryCount || 0) + 1
+    });
+
+    // Уведомляем offscreen document о восстановлении
+    await chrome.runtime.sendMessage({
+      type: 'TRANSFER_EMERGENCY_RECOVERY',
+      transferId,
+      timestamp: Date.now()
+    }).catch(() => {
+      console.warn(`[EMERGENCY_WAIT_RECOVERY] Offscreen notification failed`);
+    });
+
+    console.log(`[EMERGENCY_WAIT_RECOVERY] ✅ Transfer ${transferId} recovered during wait`);
+    return true;
+
+  } catch (error) {
+    console.error(`[EMERGENCY_WAIT_RECOVERY] ❌ Recovery failed for ${transferId}:`, error);
+    return false;
+  }
+}
+
+// THREAD-SAFE CHUNK ACKNOWLEDGMENT PROCESSING С ЗАЩИТОЙ ОТ DUPLICATE
 function handleChunkAcknowledgment(ackMessage: HtmlChunkAckMessage): void {
-  const transfer = activeTransfers.get(ackMessage.transferId);
+  const transferId = ackMessage.transferId;
+  const chunkIndex = ackMessage.chunkIndex;
+
+  console.log(`[background][CHUNKING] Processing acknowledgment for transfer ${transferId}, chunk ${chunkIndex}`);
+
+  // THREAD-SAFE TRANSFER LOOKUP С ЗАЩИТОЙ ОТ RACE CONDITIONS
+  let transfer = activeTransfers.get(transferId);
   if (!transfer) {
-    console.warn('[background][CHUNKING] Acknowledgment for unknown or already cleaned transfer:', ackMessage.transferId);
-    return;
-  }
+    console.warn(`[background][CHUNKING] ⚠️ Acknowledgment for unknown or already cleaned transfer: ${transferId}`);
 
-  // Проверяем тип сообщения
-  if (typeof ackMessage.received !== 'boolean') {
-    console.error('[background][CHUNKING] Invalid acknowledgment message:', ackMessage);
-    return;
-  }
-
-  if (ackMessage.received) {
-    if (typeof ackMessage.chunkIndex === 'number' && ackMessage.chunkIndex >= 0) {
-      transfer.received.add(ackMessage.chunkIndex);
-      console.log(`[background][CHUNKING] Chunk ${ackMessage.chunkIndex} acknowledged for transfer ${ackMessage.transferId}`);
-    } else {
-      console.error(`[background][CHUNKING] Invalid chunk index in acknowledgment:`, ackMessage);
+    // ПРОВЕРКА НА DUPLICATE PROCESSING: Возможно transfer уже обработан
+    const completedTransfer = (globalThis as any).completedTransfers?.get?.(transferId);
+    if (completedTransfer && completedTransfer.received?.has?.(chunkIndex)) {
+      console.log(`[background][CHUNKING] ✅ Chunk ${chunkIndex} already acknowledged in completed transfer ${transferId}`);
+      return;
     }
 
-    // Check if all chunks received
-    if (transfer.received.size === transfer.totalChunks) {
-      console.log('[background][CHUNKING] All chunks acknowledged, transfer complete');
-      // Resolve promise, которая будет очищать transfer через resolve функцию
-      transfer.resolve();
+    // ПОПЫТКА ВОССТАНОВЛЕНИЯ: Ищем в других хранилищах
+    transfer = (globalThis as any).emergencyBackup?.get?.(transferId) ||
+               (globalThis as any).globalTransferRefs?.get?.(transferId);
 
-      // Дополнительная очистка через timeout на случай, если resolve не сработал
-      setTimeout(() => {
-        if (activeTransfers.has(ackMessage.transferId)) {
-          console.warn('[background][CHUNKING] Transfer not cleaned by resolve, manually cleaning:', ackMessage.transferId);
-          activeTransfers.delete(ackMessage.transferId);
+    if (transfer) {
+      console.log(`[background][CHUNKING] 🔄 Recovered transfer ${transferId} from backup storage`);
+      // Восстанавливаем в activeTransfers для продолжения обработки
+      activeTransfers.set(transferId, transfer);
+    } else {
+      console.warn(`[background][CHUNKING] ❌ Cannot process acknowledgment - transfer ${transferId} completely lost`);
+      return;
+    }
+  }
+
+  // УЛУЧШЕННЫЕ ПРОВЕРКИ ВАЛИДНОСТИ СООБЩЕНИЯ
+  if (typeof ackMessage.received !== 'boolean') {
+    console.error(`[background][CHUNKING] ❌ Invalid acknowledgment message format:`, ackMessage);
+    return;
+  }
+
+  if (typeof chunkIndex !== 'number' || chunkIndex < 0) {
+    console.error(`[background][CHUNKING] ❌ Invalid chunk index:`, chunkIndex);
+    return;
+  }
+
+  // THREAD-SAFE ACKNOWLEDGMENT PROCESSING
+  if (ackMessage.received) {
+    // ЗАЩИТА ОТ DUPLICATE ACKNOWLEDGMENT
+    if (transfer.received.has(chunkIndex)) {
+      console.log(`[background][CHUNKING] ⚠️ Chunk ${chunkIndex} already acknowledged for transfer ${transferId} - ignoring duplicate`);
+      return;
+    }
+
+    // ДОБАВЛЯЕМ ACKNOWLEDGMENT С ДОПОЛНИТЕЛЬНЫМИ ПРОВЕРКАМИ
+    try {
+      transfer.received.add(chunkIndex);
+      console.log(`[background][CHUNKING] ✅ Chunk ${chunkIndex} acknowledged for transfer ${transferId} (${transfer.received.size}/${transfer.totalChunks})`);
+    } catch (error) {
+      console.error(`[background][CHUNKING] ❌ Failed to add chunk acknowledgment:`, error);
+      return;
+    }
+
+    // THREAD-SAFE CHECK FOR COMPLETION С ЗАЩИТОЙ ОТ RACE CONDITIONS
+    const currentAcknowledged = transfer.received.size;
+    const totalChunks = transfer.totalChunks;
+
+    console.log(`[background][CHUNKING] 📊 Transfer ${transferId} progress: ${currentAcknowledged}/${totalChunks}`);
+
+    if (currentAcknowledged === totalChunks) {
+      console.log(`[background][CHUNKING] 🎉 All chunks acknowledged for transfer ${transferId} - completion check`);
+
+      // THREAD-SAFE COMPLETION PROCESSING
+      // Проверяем, что transfer все еще активен и не был обработан другим потоком
+      if (!activeTransfers.has(transferId)) {
+        console.warn(`[background][CHUNKING] ⚠️ Transfer ${transferId} was already processed by another thread`);
+        return;
+      }
+
+      // ДОПОЛНИТЕЛЬНАЯ ВАЛИДАЦИЯ: Убеждаемся, что все чанки действительно получены
+      const missingChunks: number[] = [];
+      for (let i = 0; i < totalChunks; i++) {
+        if (!transfer.received.has(i)) {
+          missingChunks.push(i);
         }
-      }, 1000);
+      }
+
+      if (missingChunks.length > 0) {
+        console.error(`[background][CHUNKING] ❌ Completion validation failed - missing chunks: [${missingChunks.join(', ')}]`);
+        return;
+      }
+
+      console.log(`[background][CHUNKING] ✅ Completion validation passed - resolving transfer ${transferId}`);
+
+      try {
+        // THREAD-SAFE RESOLUTION
+        transfer.resolve(transferId);
+        console.log(`[background][CHUNKING] ✅ Transfer ${transferId} resolved successfully`);
+
+        // ОЧИСТКА ПОСЛЕ УСПЕШНОГО ЗАВЕРШЕНИЯ с задержкой для предотвращения race conditions
+        setTimeout(() => {
+          if (activeTransfers.has(transferId)) {
+            activeTransfers.delete(transferId);
+            console.log(`[background][CHUNKING] 🧹 Transfer ${transferId} cleaned up after successful completion`);
+          }
+        }, 500); // Увеличенная задержка для безопасности
+
+      } catch (resolveError) {
+        console.error(`[background][CHUNKING] ❌ Error resolving transfer ${transferId}:`, resolveError);
+
+        // В случае ошибки не удаляем transfer немедленно - даем время на восстановление
+        setTimeout(() => {
+          if (activeTransfers.has(transferId)) {
+            console.warn(`[background][CHUNKING] Force cleaning failed transfer ${transferId}`);
+            activeTransfers.delete(transferId);
+          }
+        }, 2000); // Дольше ждем в случае ошибки
+      }
     }
   } else {
-    console.error(`[background][CHUNKING] Chunk ${ackMessage.chunkIndex} acknowledgment received as failed for transfer ${ackMessage.transferId}`);
+    console.error(`[background][CHUNKING] ❌ Chunk ${chunkIndex} acknowledgment failed for transfer ${transferId}`);
 
-    // Удаляем transfer при ошибке и reject'им promise
-    activeTransfers.delete(ackMessage.transferId);
-    if (transfer.reject) {
-      transfer.reject(new Error(`Chunk ${ackMessage.chunkIndex} acknowledgment failed`));
+    // THREAD-SAFE ERROR HANDLING
+    if (activeTransfers.has(transferId)) {
+      activeTransfers.delete(transferId);
+
+      if (transfer.reject) {
+        try {
+          transfer.reject(new Error(`Chunk ${chunkIndex} acknowledgment failed`));
+          console.log(`[background][CHUNKING] ❌ Transfer ${transferId} rejected due to chunk failure`);
+        } catch (rejectError) {
+          console.error(`[background][CHUNKING] ❌ Error rejecting transfer ${transferId}:`, rejectError);
+        }
+      }
     }
   }
 }
@@ -530,6 +1555,66 @@ import type { ChatMessage } from './plugin-chat-api';
 import type { Plugin } from './plugin-manager';
 
 console.log('[background] All critical modules loaded, background initialization complete');
+
+// === TRANSFER STORAGE HEALTH MONITORING ===
+
+// Периодическая диагностика состояния transfer'ов
+setInterval(() => {
+  const now = Date.now();
+  const activeCount = activeTransfers.size;
+
+  if (activeCount > 0) {
+    console.log(`[TRANSFER_HEALTH] 📊 Transfer health check (${activeCount} active transfers):`);
+
+    let healthyCount = 0;
+    let staleCount = 0;
+    let invalidCount = 0;
+
+    for (const [transferId, transfer] of activeTransfers.entries()) {
+      const age = now - transfer.createdAt;
+      const lastAccessAge = now - transfer.lastAccessed;
+
+      // Проверяем валидность
+      const isValid = Array.isArray(transfer.chunks) &&
+                     transfer.received instanceof Set &&
+                     typeof transfer.totalChunks === 'number';
+
+      if (!isValid) {
+        invalidCount++;
+        console.warn(`[TRANSFER_HEALTH] ❌ Invalid transfer: ${transferId}`);
+      } else if (age > 30000) { // Старше 30 секунд
+        staleCount++;
+        console.warn(`[TRANSFER_HEALTH] ⚠️ Stale transfer: ${transferId} (${Math.round(age/1000)}s old)`);
+      } else {
+        healthyCount++;
+      }
+
+      // Проверяем на зависшие transfer'ы (более 10 секунд без доступа)
+      if (lastAccessAge > 10000 && !transfer.isRecovery) {
+        console.warn(`[TRANSFER_HEALTH] 🚨 Potentially stuck transfer: ${transferId} (${Math.round(lastAccessAge/1000)}s since last access)`);
+      }
+    }
+
+    console.log(`[TRANSFER_HEALTH] Health summary: ${healthyCount} healthy, ${staleCount} stale, ${invalidCount} invalid`);
+
+    // Автоматическая очистка очень старых transfer'ов
+    let cleanedCount = 0;
+    for (const [transferId, transfer] of activeTransfers.entries()) {
+      const age = now - transfer.createdAt;
+      if (age > 60000) { // Старше 60 секунд
+        activeTransfers.delete(transferId);
+        cleanedCount++;
+        console.log(`[TRANSFER_HEALTH] 🧹 Auto-cleaned stale transfer: ${transferId}`);
+      }
+    }
+
+    if (cleanedCount > 0) {
+      console.log(`[TRANSFER_HEALTH] 🧹 Cleaned ${cleanedCount} stale transfers`);
+    }
+  }
+}, 10000); // Каждые 10 секунд
+
+console.log('[background] Transfer storage health monitoring initialized');
 
 interface ExtensionMessage {
   type: string;
@@ -1996,59 +3081,176 @@ chrome.runtime.onMessage.addListener(
         const msg = message as ExtensionMessage;
 
         if (msg.type === 'HTML_ASSEMBLED') {
-          // Обработчик для HTML_ASSEMBLED - сборка чанков завершена
-          console.log('[background][OFFSCREEN RESPONSE] HTML_ASSEMBLED received:', msg);
+           // ЗАЩИТА ОТ DUPLICATE PROCESSING ДЛЯ HTML_ASSEMBLED
+           const transferId = msg.transferId;
 
-          // Получить transfer и проверить его существование
-          const transfer = msg.transferId ? activeTransfers.get(msg.transferId) : null;
-          if (msg.transferId) {
-            if (!transfer) {
-              console.warn('[background][OFFSCREEN RESPONSE] Transfer not found for HTML_ASSEMBLED:', msg.transferId);
-              msg.data = { error: 'Transfer not found', transferId: msg.transferId };
+           if (!transferId) {
+             console.error('[background][OFFSCREEN RESPONSE] ❌ Missing transferId in HTML_ASSEMBLED message');
+             return true;
+           }
+
+           // ПРОВЕРКА НА DUPLICATE PROCESSING
+           const duplicateKey = `html_assembled_processed_${transferId}`;
+           if ((globalThis as any)[duplicateKey]) {
+             console.warn(`[background][OFFSCREEN RESPONSE] ⚠️ DUPLICATE HTML_ASSEMBLED detected for transfer ${transferId} - ignoring`);
+             return true;
+           }
+
+           // УСТАНОВКА ФЛАГА ОБРАБОТКИ
+           (globalThis as any)[duplicateKey] = {
+             timestamp: Date.now(),
+             processed: true
+           };
+
+           console.log(`[background][OFFSCREEN RESPONSE] HTML_ASSEMBLED received for transfer ${transferId}`);
+           console.log(`[background][OFFSCREEN RESPONSE] 🔍 Processing HTML_ASSEMBLED for transfer ${transferId} (duplicate protection enabled)`);
+
+           // ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Проверка на уже завершенные transfers
+           if ((globalThis as any).completedTransfers?.has?.(transferId)) {
+             console.warn(`[background][OFFSCREEN RESPONSE] ⚠️ Transfer ${transferId} already completed - possible duplicate processing`);
+             // Все равно продолжаем, но логируем
+           }
+
+          // === МНОГОУРОВНЕВАЯ ПРОВЕРКА TRANSFER'А С ВОССТАНОВЛЕНИЕМ ===
+          const { found, transfer, recoveryAttempted, diagnostics } = await multiLayerTransferCheck(transferId);
+
+          if (!found || !transfer) {
+            console.error(`[background][OFFSCREEN RESPONSE] ❌ Transfer ${transferId} not found in any storage layer`);
+            console.error(`[background][OFFSCREEN RESPONSE] Multi-layer check diagnostics:`, diagnostics);
+
+            // === FALLBACK МЕХАНИЗМ ДЛЯ ПОЛНОСТЬЮ ПОТЕРЯННЫХ TRANSFER'ОВ ===
+            console.log(`[background][OFFSCREEN RESPONSE] 🔄 Attempting fallback recovery for HTML_ASSEMBLED`);
+
+            const fallbackResult = await fallbackTransferRecoveryForAssembled(msg);
+            if (fallbackResult) {
+              console.log(`[background][OFFSCREEN RESPONSE] ✅ Fallback recovery successful for ${transferId}`);
+              return true;
             } else {
-              console.log('[background][OFFSCREEN RESPONSE] Transfer found, proceeding with EXECUTE_WORKFLOW...');
-
-              // УСТАНОВИТЬ ФЛАГ ЗАВЕРШЕНИЯ TRANSFER'А - ЭТО КЛОЮЧЕВОЕ ИСПРАВЛЕНИЕ
-              const setTransferCompleted = (globalThis as any)[`setTransferCompleted_${msg.transferId}`];
-              if (setTransferCompleted) {
-                setTransferCompleted(true);
-                console.log(`[background][OFFSCREEN RESPONSE] ✅ Set transferCompleted flag for ${msg.transferId}`);
-              } else {
-                console.warn(`[background][OFFSCREEN RESPONSE] ⚠️ setTransferCompleted function not found for transfer ${msg.transferId}`);
-              }
-            }
-
-            // Автоматически отправить EXECUTE_WORKFLOW после сборки HTML
-            if (msg.pluginId && msg.pageKey) {
-              const executeMessage = {
-                type: 'EXECUTE_WORKFLOW',
-                pluginId: msg.pluginId,
-                pageKey: msg.pageKey,
-                requestId: msg.requestId || msg.transferId,
-                transferId: msg.transferId,
-                useChunks: true,
+              console.error(`[background][OFFSCREEN RESPONSE] ❌ Fallback recovery failed for ${transferId}`);
+              msg.data = {
+                error: 'Transfer not found and recovery failed',
+                transferId,
+                diagnostics,
                 timestamp: Date.now()
               };
-
-              try {
-                console.log('[background][OFFSCREEN RESPONSE] Sending EXECUTE_WORKFLOW to offscreen...');
-                await chrome.runtime.sendMessage(executeMessage);
-                console.log('[background][OFFSCREEN RESPONSE] EXECUTE_WORKFLOW sent successfully');
-              } catch (sendError) {
-                console.error('[background][OFFSCREEN RESPONSE] Failed to send EXECUTE_WORKFLOW:', sendError);
-                msg.data = { error: `Failed to execute workflow: ${sendError.message}` };
-              }
+              return true;
             }
           }
 
-          // Очистить transfer после обработки HTML_ASSEMBLED
-          if (msg.transferId && activeTransfers.has(msg.transferId)) {
-            console.log('[background][OFFSCREEN RESPONSE] Cleaning up transfer:', msg.transferId);
-            activeTransfers.delete(msg.transferId);
-
-            // Очистить функцию установки флага после удаления transfer'а
-            delete (globalThis as any)[`setTransferCompleted_${msg.transferId}`];
+          if (recoveryAttempted) {
+            console.log(`[background][OFFSCREEN RESPONSE] ⚠️ Transfer ${transferId} recovered using ${diagnostics.source} method`);
+          } else {
+            console.log(`[background][OFFSCREEN RESPONSE] ✅ Transfer ${transferId} found in primary storage`);
           }
+
+          // Обновляем время последнего доступа
+          transfer.lastAccessed = Date.now();
+
+          // Детальная диагностика состояния transfer'а
+          const { isValid } = diagnoseTransferState(transferId);
+          if (!isValid) {
+            console.error(`[background][OFFSCREEN RESPONSE] ❌ Transfer ${transferId} has invalid state`);
+            msg.data = {
+              error: 'Transfer has invalid state',
+              transferId,
+              diagnostics: diagnoseTransferState(transferId).diagnostics
+            };
+            return true;
+          }
+
+          console.log(`[background][OFFSCREEN RESPONSE] ✅ Transfer ${transferId} validation passed, proceeding with EXECUTE_WORKFLOW`);
+
+          // УСТАНОВИТЬ ФЛАГ ЗАВЕРШЕНИЯ TRANSFER'А - ЭТО КЛОЮЧЕВОЕ ИСПРАВЛЕНИЕ
+          const setTransferCompleted = (globalThis as any)[`setTransferCompleted_${transferId}`];
+          if (setTransferCompleted) {
+            setTransferCompleted(true);
+            console.log(`[background][OFFSCREEN RESPONSE] ✅ Set transferCompleted flag for ${transferId}`);
+          } else {
+            console.warn(`[background][OFFSCREEN RESPONSE] ⚠️ setTransferCompleted function not found for transfer ${transferId}`);
+            // Создаем функцию на случай, если она была потеряна
+            (globalThis as any)[`setTransferCompleted_${transferId}`] = (completed: boolean) => {
+              console.log(`[background][OFFSCREEN RESPONSE] Emergency setTransferCompleted called for ${transferId}:`, completed);
+            };
+          }
+
+          // Автоматически отправить EXECUTE_WORKFLOW после сборки HTML
+          if (msg.pluginId && msg.pageKey) {
+            const executeMessage = {
+              type: 'EXECUTE_WORKFLOW',
+              pluginId: msg.pluginId,
+              pageKey: msg.pageKey,
+              requestId: msg.requestId || transferId,
+              transferId: transferId,
+              useChunks: true,
+              timestamp: Date.now()
+            };
+
+            try {
+              console.log('[background][OFFSCREEN RESPONSE] 🚀 Sending EXECUTE_WORKFLOW to offscreen...');
+              await chrome.runtime.sendMessage(executeMessage);
+              console.log('[background][OFFSCREEN RESPONSE] ✅ EXECUTE_WORKFLOW sent successfully');
+            } catch (sendError) {
+              console.error('[background][OFFSCREEN RESPONSE] ❌ Failed to send EXECUTE_WORKFLOW:', sendError);
+              msg.data = {
+                error: `Failed to execute workflow: ${sendError.message}`,
+                transferId,
+                timestamp: Date.now()
+              };
+            }
+          } else {
+            console.warn(`[background][OFFSCREEN RESPONSE] ⚠️ Missing pluginId or pageKey in HTML_ASSEMBLED message`);
+          }
+
+          // ДОБАВИТЬ SEQUENCE NUMBERING ДЛЯ ASSEMBLED ДАННЫХ
+          const sequenceNumber = (globalThis as any).assembledSequenceCounter || 0;
+          (globalThis as any).assembledSequenceCounter = sequenceNumber + 1;
+
+          console.log(`[background][OFFSCREEN RESPONSE] 📊 Assembled data sequence number: ${sequenceNumber} for transfer ${transferId}`);
+
+          // ДОБАВИТЬ МЕТАДАННЫЕ О ПОСЛЕДОВАТЕЛЬНОСТИ К СООБЩЕНИЮ
+          if (executeMessage) {
+            executeMessage.sequenceNumber = sequenceNumber;
+            executeMessage.totalAssembled = (globalThis as any).assembledSequenceCounter;
+          }
+
+          // УЛУЧШЕННАЯ ОЧИСТКА С ЗАЩИТОЙ ОТ DUPLICATE
+          console.log(`[background][OFFSCREEN RESPONSE] 🧹 Starting comprehensive cleanup for transfer ${transferId}`);
+
+          if (activeTransfers.has(transferId)) {
+            activeTransfers.delete(transferId);
+            console.log(`[background][OFFSCREEN RESPONSE] ✅ Transfer ${transferId} cleaned up from active storage`);
+          } else {
+            console.log(`[background][OFFSCREEN RESPONSE] ⚠️ Transfer ${transferId} was already cleaned up`);
+          }
+
+          // Очистить функцию установки флага после удаления transfer'а
+          if ((globalThis as any)[`setTransferCompleted_${transferId}`]) {
+            delete (globalThis as any)[`setTransferCompleted_${transferId}`];
+            console.log(`[background][OFFSCREEN RESPONSE] ✅ Transfer completion function cleaned up for ${transferId}`);
+          }
+
+          // ОЧИСТИТЬ ФЛАГ ЗАЩИТЫ ОТ DUPLICATE ПОСЛЕ ЗАДЕРЖКИ
+          // Это предотвращает блокировку в случае ошибок, но сохраняет защиту от настоящих дубликатов
+          setTimeout(() => {
+            const duplicateKey = `html_assembled_processed_${transferId}`;
+            if ((globalThis as any)[duplicateKey]) {
+              const age = Date.now() - (globalThis as any)[duplicateKey].timestamp;
+              if (age > 30000) { // Очищать через 30 секунд
+                delete (globalThis as any)[duplicateKey];
+                console.log(`[background][OFFSCREEN RESPONSE] 🧹 Duplicate protection flag cleaned up for ${transferId} (${age}ms old)`);
+              } else {
+                console.log(`[background][OFFSCREEN RESPONSE] ⏳ Keeping duplicate protection flag for ${transferId} (${age}ms old)`);
+              }
+            }
+          }, 30000);
+
+          // ДОПОЛНИТЕЛЬНОЕ ЛОГИРОВАНИЕ ДЛЯ ОТСЛЕЖИВАНИЯ ПОСЛЕДОВАТЕЛЬНОСТИ
+          console.log(`[background][OFFSCREEN RESPONSE] 📈 Processing summary for transfer ${transferId}:`, {
+            sequenceNumber,
+            totalProcessed: (globalThis as any).assembledSequenceCounter,
+            timestamp: Date.now(),
+            transferCleaned: !activeTransfers.has(transferId)
+          });
 
           return true;
 

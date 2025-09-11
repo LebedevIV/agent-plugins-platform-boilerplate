@@ -2,7 +2,7 @@
 set -e
 
 # Script to launch Chrome with the Pyodide extension for testing
-EXT_DIR="$(PWD)/dist"
+EXT_DIR="$(pwd)/dist"
 PROFILE_DIR="/tmp/test-profile-$$"
 
 echo "🔧 Extension Test Runner"

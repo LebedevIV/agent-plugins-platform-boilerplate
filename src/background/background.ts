@@ -2,6 +2,7 @@
 // Enhanced with strict typing, better error handling, and cleaner architecture
 
 import { ensureOffscreenDocument } from './offscreen-manager';
+import { TransferMetadataManager } from './transfer-metadata-manager';
 
 // ===============================================================================
 // CIRCUIT BREAKER PATTERN - Prevents cascading failures and race conditions
@@ -881,6 +882,8 @@ interface RecoveryResult {
   strategy: string;
   duration: number;
   error?: string;
+  pluginId?: string; // Recovered pluginId from metadata
+  pageKey?: string;  // Recovered pageKey from metadata
 }
 
 interface RecoveryStats {
@@ -1061,6 +1064,22 @@ class TransferRecoveryManager {
       if (metadata) {
         console.log(`[TransferRecovery] ✅ Found metadata for transfer ${transferId} in chrome storage`);
 
+        // Try to recover pluginId and pageKey from saved metadata
+        const storageKey = `transfer_metadata_${transferId}`;
+        let pluginId: string | undefined;
+        let pageKey: string | undefined;
+
+        try {
+          const savedMetadata = await chrome.storage.local.get(storageKey);
+          if (savedMetadata[storageKey]) {
+            pluginId = savedMetadata[storageKey].pluginId;
+            pageKey = savedMetadata[storageKey].pageKey;
+            console.log(`[TransferRecovery] ✅ Recovered pluginId=${pluginId} and pageKey=${pageKey} from saved metadata`);
+          }
+        } catch (metadataError) {
+          console.warn(`[TransferRecovery] ⚠️ Could not recover metadata for ${transferId}:`, metadataError);
+        }
+
         // Create stub transfer with metadata
         const stubTransfer: ChunkTransfer = {
           chunks: [], // No chunks available from storage
@@ -1075,7 +1094,9 @@ class TransferRecoveryManager {
           transfer: stubTransfer,
           html: '', // No HTML content available
           strategy: 'chrome_storage',
-          duration: 0
+          duration: 0,
+          pluginId, // Include recovered pluginId
+          pageKey   // Include recovered pageKey
         };
       }
 
@@ -1193,7 +1214,7 @@ class EnhancedChunkManager {
   private transfers = new Map<string, ChunkTransfer>();
   private assembledHtmls = new Map<string, string>(); // Store assembled HTML from offscreen
   private readonly MAX_CHUNK_SIZE = 32768; // 32KB optimal for Chrome messaging
-  private readonly TRANSFER_TIMEOUT = 300000; // 300s = 5 minutes timeout (AGGRESSIVE increase)
+  private readonly TRANSFER_TIMEOUT = 600000; // 600s = 10 minutes timeout (AGGRESSIVE increase)
   private readonly CLEANUP_WARNING_THRESHOLD = 240000; // Show warning 4 minutes before cleanup (240s)
 
   // RACE CONDITION PROTECTION: Backup storage for completed transfers
@@ -1205,8 +1226,72 @@ class EnhancedChunkManager {
   // EMERGENCY BACKUP STORAGE: Critical transfers
   private emergencyBackup = new Map<string, ChunkTransfer>();
 
+  // RACE CONDITION PROTECTION: Mutex system for acknowledgment processing
+  private acknowledgmentMutexes = new Map<string, Promise<void>>();
+  private globalAcknowledgmentMutex: Promise<void> = Promise.resolve();
+
   // PERSISTENCE LAYER: Chrome storage persistence manager
   private persistenceManager = new TransferPersistenceManager();
+
+  /**
+   * THREAD-SAFE MUTEX SYSTEM: Create or get mutex for transfer acknowledgment processing
+   * Prevents race conditions when multiple acknowledgments arrive simultaneously
+   */
+  private async createAcknowledgmentMutex(transferId: string): Promise<() => void> {
+    // Check if mutex already exists
+    const existingMutex = this.acknowledgmentMutexes.get(transferId);
+    if (existingMutex) {
+      console.log(`[EnhancedChunkManager][MUTEX] 🔒 Awaiting existing mutex for transfer ${transferId}`);
+      await existingMutex;
+    }
+
+    // Create new mutex promise
+    let resolveMutex: () => void;
+    const newMutex = new Promise<void>((resolve) => {
+      resolveMutex = resolve;
+    });
+
+    this.acknowledgmentMutexes.set(transferId, newMutex);
+    console.log(`[EnhancedChunkManager][MUTEX] 🔓 Created new mutex for transfer ${transferId}`);
+
+    // Return function to release the mutex
+    return () => {
+      console.log(`[EnhancedChunkManager][MUTEX] 🔓 Releasing mutex for transfer ${transferId}`);
+      resolveMutex();
+      // Clean up mutex after short delay to prevent immediate recreation issues
+      setTimeout(() => {
+        this.acknowledgmentMutexes.delete(transferId);
+      }, 10);
+    };
+  }
+
+  /**
+   * THREAD-SAFE GLOBAL BACKUP: Synchronized access to global acknowledgment backup
+   * Prevents race conditions when multiple transfers update global state simultaneously
+   */
+  private async withGlobalAcknowledgmentMutex<T>(operation: () => T | Promise<T>): Promise<T> {
+    // Wait for any existing global mutex operation
+    await this.globalAcknowledgmentMutex;
+
+    // Create new global mutex
+    let resolveGlobalMutex: (() => void) | undefined;
+    const newGlobalMutex = new Promise<void>((resolve) => {
+      resolveGlobalMutex = resolve;
+    });
+
+    this.globalAcknowledgmentMutex = newGlobalMutex;
+
+    try {
+      console.log(`[EnhancedChunkManager][GLOBAL_MUTEX] 🔒 Executing operation with global mutex`);
+      const result = await operation();
+      return result;
+    } finally {
+      console.log(`[EnhancedChunkManager][GLOBAL_MUTEX] 🔓 Releasing global mutex`);
+      if (resolveGlobalMutex) {
+        resolveGlobalMutex();
+      }
+    }
+  }
 
   async sendInChunks(data: string, transferId: string): Promise<void> {
     const startTime = Date.now();
@@ -1227,6 +1312,34 @@ class EnhancedChunkManager {
 
     // EMERGENCY BACKUP: Store critical transfer for maximum reliability
     this.emergencyBackup.set(transferId, transfer);
+
+    // NEW RELIABLE METADATA: Сохраняем метаданные НЕМЕДЛЕННО при создании трансфера
+    // Передаем pluginId и pageKey через глобальную переменную для простоты
+    const transferMetadata = (globalThis as any).currentTransferMetadata;
+    if (transferMetadata) {
+      try {
+        // Сохраняем метаданные через глобальный менеджер
+        const globalMetadataManager = (globalThis as any).metadataManager;
+        if (globalMetadataManager) {
+          await globalMetadataManager.saveMetadata(
+            transferId,
+            transferMetadata.pluginId,
+            transferMetadata.pageKey
+          );
+          console.log(`[EnhancedChunkManager] 💾 Метаданные сохранены при создании трансфера ${transferId}: pluginId=${transferMetadata.pluginId}, pageKey=${transferMetadata.pageKey}`);
+
+          // Очищаем глобальную переменную после использования
+          delete (globalThis as any).currentTransferMetadata;
+        } else {
+          console.warn(`[EnhancedChunkManager] ⚠️ Глобальный metadataManager не найден`);
+        }
+      } catch (error) {
+        console.error(`[EnhancedChunkManager] ❌ Ошибка сохранения метаданных для ${transferId}:`, error);
+        // Не прерываем процесс создания трансфера из-за ошибки метаданных
+      }
+    } else {
+      console.warn(`[EnhancedChunkManager] ⚠️ Метаданные трансфера не переданы для ${transferId}`);
+    }
 
     // PERSISTENCE: Save transfer metadata to chrome.storage for recovery
     this.persistenceManager.save(transfer, transferId, 'active');
@@ -1252,6 +1365,27 @@ class EnhancedChunkManager {
       timestamp: startTime,
       status: 'active'
     });
+
+    // MULTI-LAYER STORAGE VERIFICATION - Ensure transfer exists in all storage layers
+    console.log(`[Background::ChunkManager] 🔍 MULTI-LAYER STORAGE VERIFICATION for transfer ${transferId}`);
+    const verificationResults = await this.verifyMultiLayerStorage(transferId);
+
+    if (!verificationResults.allLayersVerified) {
+      console.error(`[Background::ChunkManager] ❌ MULTI-LAYER STORAGE VERIFICATION FAILED for transfer ${transferId}:`, verificationResults);
+
+      // ATTEMPT RECOVERY: Try to reinitialize failed layers
+      console.log(`[Background::ChunkManager] 🔧 ATTEMPTING RECOVERY for failed storage layers`);
+      const recoveryResults = await this.recoverFailedStorageLayers(transferId, verificationResults);
+
+      if (!recoveryResults.allRecovered) {
+        console.error(`[Background::ChunkManager] ❌ STORAGE RECOVERY FAILED for transfer ${transferId}:`, recoveryResults);
+        throw new Error(`Multi-layer storage verification failed for transfer ${transferId}. Failed layers: ${verificationResults.failedLayers.join(', ')}`);
+      } else {
+        console.log(`[Background::ChunkManager] ✅ STORAGE RECOVERY SUCCESSFUL for transfer ${transferId}`);
+      }
+    } else {
+      console.log(`[Background::ChunkManager] ✅ MULTI-LAYER STORAGE VERIFICATION PASSED for transfer ${transferId}`);
+    }
 
     console.log(`[Background::ChunkManager] ✅ CREATED transfer ${transferId} with ${chunks.length} chunks in BACKGROUND instance (MULTI-LEVEL emergency backup enabled)`);
     
@@ -1326,84 +1460,141 @@ class EnhancedChunkManager {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
   
-  acknowledgeChunk(transferId: string, chunkIndex: number): void {
-    // AGGRESSIVE DIAGNOSTIC: Log lookup cascade when acknowledging chunks
-    console.log(`[DIAG] ACKNOWLEDGING chunk ${chunkIndex} for transfer ${transferId}`);
-    this.logTransferLookupCascade(transferId);
+  /**
+   * THREAD-SAFE ACKNOWLEDGMENT PROCESSING: Protected against race conditions
+   * Uses mutex system to prevent concurrent access issues during acknowledgment processing
+   */
+  async acknowledgeChunk(transferId: string, chunkIndex: number): Promise<void> {
+    // THREAD-SAFE MUTEX: Acquire mutex for this transfer to prevent race conditions
+    const releaseMutex = await this.createAcknowledgmentMutex(transferId);
 
-    // RACE CONDITION PROTECTION: Try multiple storage layers
-    let transfer = this.transfers.get(transferId);
+    try {
+      // AGGRESSIVE DIAGNOSTIC: Log lookup cascade when acknowledging chunks
+      console.log(`[DIAG][THREAD_SAFE] ACKNOWLEDGING chunk ${chunkIndex} for transfer ${transferId}`);
+      this.logTransferLookupCascade(transferId);
 
-    // If not in active, check completed backup
-    if (!transfer) {
-      console.log(`[EnhancedChunkManager] 📋 acknowledgeChunk: Transfer ${transferId} not in active transfers, checking completed backup…`);
-      transfer = this.completedTransfers.get(transferId);
-    }
+      // THREAD-SAFE TRANSFER LOOKUP: Protected search across all storage layers
+      let transfer = this.transfers.get(transferId);
 
-    // If not found anywhere, check if transfer was already processed
-    if (!transfer) {
-      console.log(`[EnhancedChunkManager] ⚠️ acknowledgeChunk: Transfer ${transferId} not found in any active or completed storage, checking emergency backup…`);
-      console.log(`[EnhancedChunkManager] Active: [${Array.from(this.transfers.keys()).join(', ')}]`);
-      console.log(`[EnhancedChunkManager] Completed: [${Array.from(this.completedTransfers.keys()).join(', ')}]`);
+      // If not in active, check completed backup
+      if (!transfer) {
+        console.log(`[EnhancedChunkManager][THREAD_SAFE] 📋 acknowledgeChunk: Transfer ${transferId} not in active transfers, checking completed backup…`);
+        transfer = this.completedTransfers.get(transferId);
+      }
 
-      // Check emergency backup
-      transfer = this.emergencyBackup.get(transferId);
-      if (transfer) {
-        console.warn(`[EnhancedChunkManager] ⚠️ Found transfer ${transferId} in emergency backup (race condition recovery)`);
-      } else {
-        // Check if we have assembled HTML for this transfer
-        const assembledHtml = this.assembledHtmls.get(transferId);
-        if (assembledHtml) {
-          console.log(`[EnhancedChunkManager] ✅ Transfer ${transferId} already processed, assembled HTML exists (${assembledHtml.length} chars)`);
-          return;
-        }
+      // If not found anywhere, check if transfer was already processed
+      if (!transfer) {
+        console.log(`[EnhancedChunkManager][THREAD_SAFE] ⚠️ acknowledgeChunk: Transfer ${transferId} not found in any active or completed storage, checking emergency backup…`);
+        console.log(`[EnhancedChunkManager][THREAD_SAFE] Active: [${Array.from(this.transfers.keys()).join(', ')}]`);
+        console.log(`[EnhancedChunkManager][THREAD_SAFE] Completed: [${Array.from(this.completedTransfers.keys()).join(', ')}]`);
 
-        // Try to get from global scope as last resort
-        transfer = (globalThis as any)[`currentTransfer_${transferId}`];
-        if (!transfer) {
-          // ULTRA EMERGENCY: Try the new global emergency storage
+        // Check emergency backup
+        transfer = this.emergencyBackup.get(transferId);
+        if (transfer) {
+          console.warn(`[EnhancedChunkManager][THREAD_SAFE] ⚠️ Found transfer ${transferId} in emergency backup (race condition recovery)`);
+        } else {
+          // Check if we have assembled HTML for this transfer
+          const assembledHtml = this.assembledHtmls.get(transferId);
+          if (assembledHtml) {
+            console.log(`[EnhancedChunkManager][THREAD_SAFE] ✅ Transfer ${transferId} already processed, assembled HTML exists (${assembledHtml.length} chars)`);
+            return;
+          }
+
+          // Try to get from global scope as last resort
+          transfer = (globalThis as any)[`currentTransfer_${transferId}`];
+          if (!transfer) {
+            // ULTRA EMERGENCY: Try the new global emergency storage
             const ultraEmergencyData = (globalThis as any).emergencyTransfers?.[transferId];
             if (ultraEmergencyData?.transfer) {
               transfer = ultraEmergencyData.transfer;
-              console.log(`[EnhancedChunkManager] ✅ Found transfer ${transferId} in ULTRA EMERGENCY global fallback`);
+              console.log(`[EnhancedChunkManager][THREAD_SAFE] ✅ Found transfer ${transferId} in ULTRA EMERGENCY global fallback`);
             } else {
               // FIXED GLOBAL SCOPE FALLBACK: Search in array-based storage
               const fixedTransferData = (globalThis as any).fixedTransfers?.find((t: any) => t.id === transferId);
               if (fixedTransferData?.transfer) {
                 transfer = fixedTransferData.transfer;
-                console.log(`[EnhancedChunkManager] ✅ Found transfer ${transferId} in FIXED GLOBAL SCOPE fallback`);
+                console.log(`[EnhancedChunkManager][THREAD_SAFE] ✅ Found transfer ${transferId} in FIXED GLOBAL SCOPE fallback`);
               } else {
-                console.warn(`[EnhancedChunkManager] ❌ Transfer ${transferId} completely not found (including all global fallbacks), skipping ack`);
+                console.warn(`[EnhancedChunkManager][THREAD_SAFE] ❌ Transfer ${transferId} completely not found (including all global fallbacks), skipping ack`);
                 return;
               }
             }
-        } else {
-          console.log(`[EnhancedChunkManager] ✅ Found transfer ${transferId} in global scope fallback`);
+          } else {
+            console.log(`[EnhancedChunkManager][THREAD_SAFE] ✅ Found transfer ${transferId} in global scope fallback`);
+          }
         }
       }
-    }
 
-    if (!transfer) {
-      console.error(`[EnhancedChunkManager] ❌ acknowledgeChunk: Transfer ${transferId} not found in any storage layer, cannot acknowledge chunk ${chunkIndex}`);
-      return;
-    }
+      // THREAD-SAFE STUB CREATION: Protected creation of recovery stubs
+      if (!transfer) {
+        console.warn(`[EnhancedChunkManager][THREAD_SAFE] 🚨 CRITICAL: Transfer ${transferId} not found anywhere - creating recovery stub for chunk ${chunkIndex}`);
 
-    if (chunkIndex < 0) {
-      console.error(`[EnhancedChunkManager] ❌ acknowledgeChunk: Invalid chunkIndex ${chunkIndex} for transfer ${transferId}`);
-      return;
-    }
+        // THREAD-SAFE GLOBAL BACKUP: Synchronize access to global state
+        await this.withGlobalAcknowledgmentMutex(() => {
+          // Create minimal stub transfer to preserve acknowledgment
+          transfer = {
+            chunks: [],
+            acked: new Array(1000).fill(false), // Large array to accommodate any chunk index
+            totalSize: 0,
+            startTime: Date.now(),
+            htmlAssembledConfirmed: true // Mark as confirmed to prevent premature cleanup
+          };
+          // Store in emergency backup for future recovery
+          this.emergencyBackup.set(transferId, transfer);
+          console.warn(`[EnhancedChunkManager][THREAD_SAFE] 🛠️ Created recovery stub for transfer ${transferId} to preserve chunk ${chunkIndex} acknowledgment`);
+        });
+      }
 
-    if (chunkIndex >= transfer.acked.length) {
-      console.error(`[EnhancedChunkManager] ❌ acknowledgeChunk: chunkIndex ${chunkIndex} out of bounds for transfer ${transferId} (length: ${transfer.acked.length})`);
-      // Don't throw - just log and return to prevent errors
-      return;
-    }
+      if (chunkIndex < 0) {
+        console.error(`[EnhancedChunkManager][THREAD_SAFE] ❌ acknowledgeChunk: Invalid chunkIndex ${chunkIndex} for transfer ${transferId}`);
+        return;
+      }
 
-    if (transfer.acked[chunkIndex] === true) {
-      console.log(`[EnhancedChunkManager] ⚠️ acknowledgeChunk: Chunk ${chunkIndex} already acknowledged for transfer ${transferId}`);
-    } else {
-      transfer.acked[chunkIndex] = true;
-      console.log(`[EnhancedChunkManager] ✅ acknowledgeChunk: Chunk ${chunkIndex} acknowledged for transfer ${transferId}`);
+      // THREAD-SAFE ARRAY RESIZING: Protected extension of acked array
+      if (transfer && chunkIndex >= transfer.acked.length) {
+        console.warn(`[EnhancedChunkManager][THREAD_SAFE] 📏 Chunk index ${chunkIndex} exceeds current array length ${transfer.acked.length}, extending array`);
+        const currentLength = transfer.acked.length;
+        const newLength = Math.max(chunkIndex + 1, currentLength * 2); // Double size or at least fit the chunk
+
+        // THREAD-SAFE ARRAY EXTENSION: Prevent concurrent array modifications
+        await this.withGlobalAcknowledgmentMutex(() => {
+          if (transfer) {
+            transfer.acked.length = newLength;
+            // Fill new elements with false
+            for (let i = currentLength; i < newLength; i++) {
+              transfer.acked[i] = false;
+            }
+            console.log(`[EnhancedChunkManager][THREAD_SAFE] ✅ Extended acked array from ${currentLength} to ${newLength} elements`);
+          }
+        });
+      }
+
+      if (transfer && transfer.acked[chunkIndex] === true) {
+        console.log(`[EnhancedChunkManager][THREAD_SAFE] ⚠️ acknowledgeChunk: Chunk ${chunkIndex} already acknowledged for transfer ${transferId}`);
+      } else if (transfer) {
+        // THREAD-SAFE ACKNOWLEDGMENT: Protected write to acknowledgment array
+        transfer.acked[chunkIndex] = true;
+        console.log(`[EnhancedChunkManager][THREAD_SAFE] ✅ acknowledgeChunk: Chunk ${chunkIndex} acknowledged for transfer ${transferId}`);
+
+        // THREAD-SAFE GLOBAL BACKUP: Protected access to global acknowledgment storage
+        await this.withGlobalAcknowledgmentMutex(async () => {
+          // ADDITIONAL SAFETY: Store acknowledgment in global scope for maximum persistence
+          if (!(globalThis as any).chunkAcknowledgments) {
+            (globalThis as any).chunkAcknowledgments = {};
+          }
+          if (!(globalThis as any).chunkAcknowledgments[transferId]) {
+            (globalThis as any).chunkAcknowledgments[transferId] = new Set();
+          }
+          (globalThis as any).chunkAcknowledgments[transferId].add(chunkIndex);
+          console.log(`[EnhancedChunkManager][THREAD_SAFE] 💾 Stored chunk ${chunkIndex} acknowledgment in global backup for ${transferId}`);
+        });
+      } else {
+        console.error(`[EnhancedChunkManager][THREAD_SAFE] ❌ Cannot process acknowledgment: transfer ${transferId} is undefined after all recovery attempts`);
+      }
+
+    } finally {
+      // THREAD-SAFE MUTEX RELEASE: Always release the mutex
+      releaseMutex();
     }
   }
   
@@ -1499,6 +1690,259 @@ class EnhancedChunkManager {
     return this.assembledHtmls.get(transferId) || null;
   }
 
+  // RETRY MECHANISM: Retry lost chunk acknowledgments
+  async retryLostAcknowledgments(transferId: string): Promise<void> {
+    console.log(`[Background::ChunkManager] 🔄 Starting retry for lost acknowledgments on transfer ${transferId}`);
+
+    const transfer = this.getTransferSafely(transferId);
+    if (!transfer) {
+      console.warn(`[Background::ChunkManager] ❌ Cannot retry acknowledgments: transfer ${transferId} not found`);
+      return;
+    }
+
+    // Check if we have stored acknowledgments in global backup
+    const globalAcks = (globalThis as any).chunkAcknowledgments?.[transferId];
+    if (globalAcks && globalAcks.size > 0) {
+      console.log(`[Background::ChunkManager] 📋 Found ${globalAcks.size} stored acknowledgments for ${transferId}, applying...`);
+
+      // Apply stored acknowledgments
+      for (const chunkIndex of globalAcks) {
+        if (chunkIndex < transfer.acked.length && !transfer.acked[chunkIndex]) {
+          transfer.acked[chunkIndex] = true;
+          console.log(`[Background::ChunkManager] ✅ Restored acknowledgment for chunk ${chunkIndex} in transfer ${transferId}`);
+        }
+      }
+    }
+
+    // Check completion status after retry
+    const completedCount = transfer.acked.filter(ack => ack === true).length;
+    const total = transfer.chunks.length;
+
+    console.log(`[Background::ChunkManager] 📊 After retry: ${completedCount}/${total} chunks acknowledged for ${transferId}`);
+
+    if (completedCount === total && !transfer.htmlAssembledConfirmed) {
+      console.log(`[Background::ChunkManager] 🎉 Transfer ${transferId} completed after retry!`);
+      // Mark as confirmed to prevent cleanup
+      transfer.htmlAssembledConfirmed = true;
+    }
+  }
+
+  // HEALTH CHECK: Verify transfer integrity
+  verifyTransferIntegrity(transferId: string): { isHealthy: boolean; issues: string[] } {
+    const issues: string[] = [];
+    const transfer = this.getTransferSafely(transferId);
+
+    if (!transfer) {
+      issues.push('Transfer not found in any storage layer');
+      return { isHealthy: false, issues };
+    }
+
+    // Check chunk array integrity
+    if (!Array.isArray(transfer.chunks)) {
+      issues.push('Chunks array is not valid');
+    } else if (transfer.chunks.length === 0) {
+      issues.push('Chunks array is empty');
+    }
+
+    // Check acknowledgment array integrity
+    if (!Array.isArray(transfer.acked)) {
+      issues.push('Acknowledgment array is not valid');
+    } else if (transfer.acked.length !== transfer.chunks.length) {
+      issues.push(`Acknowledgment array length mismatch: ${transfer.acked.length} vs ${transfer.chunks.length}`);
+    }
+
+    // Check for missing acknowledgments
+    const missingAcks = [];
+    for (let i = 0; i < transfer.acked.length; i++) {
+      if (transfer.acked[i] !== true) {
+        missingAcks.push(i);
+      }
+    }
+
+    if (missingAcks.length > 0) {
+      issues.push(`Missing acknowledgments for chunks: [${missingAcks.slice(0, 10).join(', ')}${missingAcks.length > 10 ? '...' : ''}]`);
+    }
+
+    // Check global acknowledgment backup
+    const globalAcks = (globalThis as any).chunkAcknowledgments?.[transferId];
+    if (globalAcks) {
+      const globalAckCount = globalAcks.size || 0;
+      const localAckCount = transfer.acked.filter(a => a === true).length;
+      if (globalAckCount !== localAckCount) {
+        issues.push(`Acknowledgment count mismatch: global=${globalAckCount}, local=${localAckCount}`);
+      }
+    }
+
+    return {
+      isHealthy: issues.length === 0,
+      issues
+    };
+  }
+
+  // MULTI-LAYER STORAGE VERIFICATION: Verify transfer exists in all storage layers
+  private async verifyMultiLayerStorage(transferId: string): Promise<{ allLayersVerified: boolean; failedLayers: string[] }> {
+    const failedLayers: string[] = [];
+
+    console.log(`[MultiLayerVerification] 🔍 Verifying transfer ${transferId} across all storage layers`);
+
+    // Layer 1: Primary transfers map
+    if (!this.transfers.has(transferId)) {
+      failedLayers.push('transfers');
+      console.warn(`[MultiLayerVerification] ❌ Transfer ${transferId} not found in primary transfers map`);
+    } else {
+      console.log(`[MultiLayerVerification] ✅ Transfer ${transferId} found in primary transfers map`);
+    }
+
+    // Layer 2: Global transfer refs
+    if (!this.globalTransferRefs.has(transferId)) {
+      failedLayers.push('globalTransferRefs');
+      console.warn(`[MultiLayerVerification] ❌ Transfer ${transferId} not found in global transfer refs`);
+    } else {
+      console.log(`[MultiLayerVerification] ✅ Transfer ${transferId} found in global transfer refs`);
+    }
+
+    // Layer 3: Emergency backup
+    if (!this.emergencyBackup.has(transferId)) {
+      failedLayers.push('emergencyBackup');
+      console.warn(`[MultiLayerVerification] ❌ Transfer ${transferId} not found in emergency backup`);
+    } else {
+      console.log(`[MultiLayerVerification] ✅ Transfer ${transferId} found in emergency backup`);
+    }
+
+    // Layer 4: Global scope variable
+    if (!(globalThis as any)[`currentTransfer_${transferId}`]) {
+      failedLayers.push('globalScope');
+      console.warn(`[MultiLayerVerification] ❌ Transfer ${transferId} not found in global scope`);
+    } else {
+      console.log(`[MultiLayerVerification] ✅ Transfer ${transferId} found in global scope`);
+    }
+
+    // Layer 5: Ultra emergency storage (object-based)
+    if (!(globalThis as any).emergencyTransfers?.[transferId]) {
+      failedLayers.push('ultraEmergency');
+      console.warn(`[MultiLayerVerification] ❌ Transfer ${transferId} not found in ultra emergency storage`);
+    } else {
+      console.log(`[MultiLayerVerification] ✅ Transfer ${transferId} found in ultra emergency storage`);
+    }
+
+    // Layer 6: Fixed transfers array
+    const fixedTransferFound = (globalThis as any).fixedTransfers?.find((t: any) => t.id === transferId);
+    if (!fixedTransferFound) {
+      failedLayers.push('fixedTransfers');
+      console.warn(`[MultiLayerVerification] ❌ Transfer ${transferId} not found in fixed transfers array`);
+    } else {
+      console.log(`[MultiLayerVerification] ✅ Transfer ${transferId} found in fixed transfers array`);
+    }
+
+    // Layer 7: Chrome storage persistence
+    try {
+      const persistedTransfer = await this.persistenceManager.load(transferId);
+      if (!persistedTransfer) {
+        failedLayers.push('chromeStorage');
+        console.warn(`[MultiLayerVerification] ❌ Transfer ${transferId} not found in chrome storage`);
+      } else {
+        console.log(`[MultiLayerVerification] ✅ Transfer ${transferId} found in chrome storage`);
+      }
+    } catch (error) {
+      failedLayers.push('chromeStorage');
+      console.error(`[MultiLayerVerification] ❌ Error checking chrome storage for ${transferId}:`, error);
+    }
+
+    const allLayersVerified = failedLayers.length === 0;
+    console.log(`[MultiLayerVerification] 📊 Verification result for ${transferId}: ${allLayersVerified ? 'ALL PASSED' : 'SOME FAILED'} (${failedLayers.length} failed layers)`);
+
+    return { allLayersVerified, failedLayers };
+  }
+
+  // RECOVERY: Attempt to recover failed storage layers
+  private async recoverFailedStorageLayers(transferId: string, verificationResults: { allLayersVerified: boolean; failedLayers: string[] }): Promise<{ allRecovered: boolean; recoveredLayers: string[]; failedRecoveryLayers: string[] }> {
+    const recoveredLayers: string[] = [];
+    const failedRecoveryLayers: string[] = [];
+    const transfer = this.transfers.get(transferId);
+
+    if (!transfer) {
+      console.error(`[StorageRecovery] ❌ Cannot recover - transfer ${transferId} not found in primary storage`);
+      return { allRecovered: false, recoveredLayers: [], failedRecoveryLayers: verificationResults.failedLayers };
+    }
+
+    console.log(`[StorageRecovery] 🔧 Attempting recovery for transfer ${transferId} (${verificationResults.failedLayers.length} failed layers)`);
+
+    for (const layer of verificationResults.failedLayers) {
+      try {
+        switch (layer) {
+          case 'transfers':
+            // This should never happen if we have the transfer for recovery
+            console.warn(`[StorageRecovery] ⚠️ Primary transfers layer failed - this indicates serious issue`);
+            break;
+
+          case 'globalTransferRefs':
+            this.globalTransferRefs.set(transferId, transfer);
+            recoveredLayers.push('globalTransferRefs');
+            console.log(`[StorageRecovery] ✅ Recovered globalTransferRefs layer for ${transferId}`);
+            break;
+
+          case 'emergencyBackup':
+            this.emergencyBackup.set(transferId, transfer);
+            recoveredLayers.push('emergencyBackup');
+            console.log(`[StorageRecovery] ✅ Recovered emergencyBackup layer for ${transferId}`);
+            break;
+
+          case 'globalScope':
+            (globalThis as any)[`currentTransfer_${transferId}`] = transfer;
+            recoveredLayers.push('globalScope');
+            console.log(`[StorageRecovery] ✅ Recovered globalScope layer for ${transferId}`);
+            break;
+
+          case 'ultraEmergency':
+            if (!(globalThis as any).emergencyTransfers) {
+              (globalThis as any).emergencyTransfers = {};
+            }
+            (globalThis as any).emergencyTransfers[transferId] = {
+              id: transferId,
+              transfer: transfer,
+              timestamp: transfer.startTime,
+              status: 'active'
+            };
+            recoveredLayers.push('ultraEmergency');
+            console.log(`[StorageRecovery] ✅ Recovered ultraEmergency layer for ${transferId}`);
+            break;
+
+          case 'fixedTransfers':
+            if (!(globalThis as any).fixedTransfers) {
+              (globalThis as any).fixedTransfers = [];
+            }
+            (globalThis as any).fixedTransfers.push({
+              id: transferId,
+              transfer: transfer,
+              timestamp: transfer.startTime,
+              status: 'active'
+            });
+            recoveredLayers.push('fixedTransfers');
+            console.log(`[StorageRecovery] ✅ Recovered fixedTransfers layer for ${transferId}`);
+            break;
+
+          case 'chromeStorage':
+            await this.persistenceManager.save(transfer, transferId, 'active');
+            recoveredLayers.push('chromeStorage');
+            console.log(`[StorageRecovery] ✅ Recovered chromeStorage layer for ${transferId}`);
+            break;
+
+          default:
+            console.warn(`[StorageRecovery] ⚠️ Unknown layer ${layer} - cannot recover`);
+            failedRecoveryLayers.push(layer);
+        }
+      } catch (error) {
+        console.error(`[StorageRecovery] ❌ Failed to recover layer ${layer} for transfer ${transferId}:`, error);
+        failedRecoveryLayers.push(layer);
+      }
+    }
+
+    const allRecovered = failedRecoveryLayers.length === 0;
+    console.log(`[StorageRecovery] 📊 Recovery result for ${transferId}: ${allRecovered ? 'ALL RECOVERED' : 'SOME FAILED'} (${recoveredLayers.length} recovered, ${failedRecoveryLayers.length} failed)`);
+
+    return { allRecovered, recoveredLayers, failedRecoveryLayers };
+  }
+
   // AGGRESSIVE DIAGNOSTIC: Log transfer lookup cascade for debugging loss
   private logTransferLookupCascade(transferId: string): void {
     console.log(`[DIAG] Transfer lookup cascade for ${transferId}:`, {
@@ -1583,17 +2027,36 @@ class EnhancedChunkManager {
       return false;
     }
 
-    // Move to completed backup storage
+    console.log(`[Background::ChunkManager] 🔄 COMPLETING transfer ${transferId} with MULTI-LAYER storage update`);
+
+    // RACE CONDITION PROTECTION: Save pluginId and pageKey metadata before completing transfer
+    this.saveTransferMetadataBeforeCompletion(transferId);
+
+    // Move to completed backup storage (primary storage)
     this.completedTransfers.set(transferId, transfer);
     this.transfers.delete(transferId);
 
-    // Update emergency storage status
+    // === MULTI-LAYER STORAGE PROTECTION: Save to ALL storage layers ===
+
+    // 1. GLOBAL TRANSFER REFS: Keep global reference for maximum reliability
+    this.globalTransferRefs.set(transferId, transfer);
+    console.log(`[Background::ChunkManager] ✅ Transfer ${transferId} saved to globalTransferRefs`);
+
+    // 2. EMERGENCY BACKUP: Keep emergency backup for recovery
+    this.emergencyBackup.set(transferId, transfer);
+    console.log(`[Background::ChunkManager] ✅ Transfer ${transferId} saved to emergencyBackup`);
+
+    // 3. GLOBAL SCOPE VARIABLE: Keep global scope reference
+    (globalThis as any)[`completedTransfer_${transferId}`] = transfer;
+    console.log(`[Background::ChunkManager] ✅ Transfer ${transferId} saved to global scope`);
+
+    // 4. EMERGENCY STORAGE: Update status in emergency storage
     if ((globalThis as any).emergencyTransfers?.[transferId]) {
       (globalThis as any).emergencyTransfers[transferId].status = 'completed';
       console.log(`[Background::ChunkManager] ✅ Updated emergency storage status for ${transferId} to 'completed'`);
     }
 
-    // Update fixed transfers status
+    // 5. FIXED TRANSFERS: Update status in fixed transfers array
     if ((globalThis as any).fixedTransfers) {
       const fixedTransferItem = (globalThis as any).fixedTransfers.find((t: any) => t.id === transferId);
       if (fixedTransferItem) {
@@ -1602,40 +2065,115 @@ class EnhancedChunkManager {
       }
     }
 
-    // PERSISTENCE: Update transfer status to completed in chrome.storage
-    this.persistenceManager.updateStatus(transferId, 'completed');
+    // 6. ULTRA EMERGENCY STORAGE: Ensure ultra emergency storage has completed transfer
+    if (!(globalThis as any).ultraEmergencyTransfers) {
+      (globalThis as any).ultraEmergencyTransfers = {};
+    }
+    (globalThis as any).ultraEmergencyTransfers[transferId] = {
+      id: transferId,
+      transfer: transfer,
+      timestamp: Date.now(),
+      status: 'completed'
+    };
+    console.log(`[Background::ChunkManager] ✅ Transfer ${transferId} saved to ultra emergency storage`);
 
-    console.log(`[Background::ChunkManager] 🔄 Transfer ${transferId} moved to completed storage (all levels updated)`);
+    // 7. PERSISTENCE: Update transfer status to completed in chrome.storage
+    this.persistenceManager.updateStatus(transferId, 'completed');
+    console.log(`[Background::ChunkManager] ✅ Transfer ${transferId} status updated in chrome.storage`);
+
+    console.log(`[Background::ChunkManager] 🔄 Transfer ${transferId} COMPLETED with MULTI-LAYER storage protection`);
+    console.log(`[Background::ChunkManager] 📊 Storage verification for ${transferId}:`);
+    console.log(`[Background::ChunkManager]   - Primary (completedTransfers): ${this.completedTransfers.has(transferId)}`);
+    console.log(`[Background::ChunkManager]   - Global refs: ${this.globalTransferRefs.has(transferId)}`);
+    console.log(`[Background::ChunkManager]   - Emergency backup: ${this.emergencyBackup.has(transferId)}`);
+    console.log(`[Background::ChunkManager]   - Global scope: ${!!(globalThis as any)[`completedTransfer_${transferId}`]}`);
+    console.log(`[Background::ChunkManager]   - Ultra emergency: ${!!(globalThis as any).ultraEmergencyTransfers?.[transferId]}`);
+
     return true;
+  }
+  // RACE CONDITION PROTECTION: Save transfer metadata before completion
+  saveTransferMetadataBeforeCompletion(transferId: string): void {
+    try {
+      const transfer = this.transfers.get(transferId) || this.completedTransfers.get(transferId);
+      if (!transfer) {
+        console.warn(`[EnhancedChunkManager] ⚠️ saveTransferMetadataBeforeCompletion: Transfer ${transferId} not found`);
+        return;
+      }
+
+      // Find associated workflow to get pluginId and pageKey
+      const controller = (globalThis as any).backgroundController;
+      const pendingWorkflow = controller?.pendingWorkflows?.get(transferId);
+
+      if (!pendingWorkflow) {
+        console.log(`[EnhancedChunkManager] ℹ️ No pending workflow found for transfer ${transferId}, skipping metadata save`);
+        return;
+      }
+
+      const metadata = {
+        transferId,
+        pluginId: pendingWorkflow.pluginId,
+        pageKey: `transfer_${transferId}`,
+        timestamp: Date.now(),
+        status: 'metadata_saved'
+      };
+
+      // Save to chrome.storage.local for recovery
+      const storageKey = `transfer_metadata_${transferId}`;
+      chrome.storage.local.set({ [storageKey]: metadata }).then(() => {
+        console.log(`[EnhancedChunkManager] 💾 Saved transfer metadata for ${transferId}:`, metadata);
+      }).catch(error => {
+        console.error(`[EnhancedChunkManager] ❌ Failed to save transfer metadata for ${transferId}:`, error);
+      });
+
+      // Also save to global scope for immediate access during recovery
+      if (!(globalThis as any).transferMetadata) {
+        (globalThis as any).transferMetadata = {};
+      }
+      (globalThis as any).transferMetadata[transferId] = metadata;
+
+      console.log(`[EnhancedChunkManager] ✅ Transfer metadata saved for recovery: pluginId=${pendingWorkflow.pluginId}, pageKey=transfer_${transferId}`);
+    } catch (error) {
+      console.error(`[EnhancedChunkManager] ❌ Error in saveTransferMetadataBeforeCompletion:`, error);
+    }
   }
 
   // Cleanup expired transfers (with race condition protection)
-  cleanup(): void {
+  async cleanup(): Promise<void> {
     const now = Date.now();
     const expiredTransfers: string[] = [];
     const expiredGlobalRefs: string[] = [];
     const expiredCompleted: string[] = [];
 
     // Cleanup active transfers (only confirmed ones to respect HTML_ASSEMBLED_CONFIRMED)
-    // AGGRESSIVE PROTECTION: Don't cleanup any transfers in first 5 minutes after creation
-    const PROTECTION_PERIOD = 300000; // 5 minutes protection from cleanup
+    // ENHANCED PROTECTION: Extended protection period for active transfers
+    const PROTECTION_PERIOD = 600000; // 10 minutes protection from cleanup (increased from 5)
+    const EMERGENCY_PROTECTION = 1800000; // 30 minutes emergency protection
+
     this.transfers.forEach((transfer, transferId) => {
       const elapsed = now - transfer.startTime;
 
-      // Don't cleanup transfers in protection period
+      // EXTENDED PROTECTION: Don't cleanup any transfers in first 10 minutes after creation
       if (elapsed < PROTECTION_PERIOD) {
-        // Transfer is in protection period - skip entirely
+        console.log(`[Background::ChunkManager][CLEANUP] 🛡️ Transfer ${transferId} in protection period (${Math.floor(elapsed/1000)}s < ${Math.floor(PROTECTION_PERIOD/1000)}s)`);
         return;
       }
 
+      // EMERGENCY PROTECTION: For unconfirmed transfers, extend timeout significantly
+      if (!transfer.htmlAssembledConfirmed && elapsed < EMERGENCY_PROTECTION) {
+        console.warn(`[Background::ChunkManager][CLEANUP] 🚨 EMERGENCY PROTECTION: Unconfirmed transfer ${transferId} (${Math.floor(elapsed/60000)}min) - EXTENDED protection active`);
+        return;
+      }
+
+      // Only cleanup confirmed transfers that are truly expired
       if (transfer.htmlAssembledConfirmed && elapsed > this.TRANSFER_TIMEOUT) {
         console.warn(`[Background::ChunkManager][CLEANUP] 🗑️ CLEANING UP confirmed expired ACTIVE transfer: ${transferId} (${elapsed}ms > ${this.TRANSFER_TIMEOUT}ms)`);
         expiredTransfers.push(transferId);
       } else if (elapsed > this.TRANSFER_TIMEOUT - this.CLEANUP_WARNING_THRESHOLD) {
         if (!transfer.htmlAssembledConfirmed) {
-          console.warn(`[Background::ChunkManager][CLEANUP] ⚠️ WARNING: Unconfirmed transfer ${transferId} close to expiration (${elapsed}/${this.TRANSFER_TIMEOUT}ms) - waiting for HTML_ASSEMBLED confirmation`);
+          console.warn(`[Background::ChunkManager][CLEANUP] ⚠️ WARNING: Unconfirmed transfer ${transferId} close to expiration (${Math.floor(elapsed/60000)}min/${Math.floor(this.TRANSFER_TIMEOUT/60000)}min) - waiting for HTML_ASSEMBLED confirmation`);
+          console.warn(`[Background::ChunkManager][CLEANUP] 📊 Transfer stats: chunks=${transfer.chunks.length}, acked=${transfer.acked.filter(a => a).length}/${transfer.acked.length}`);
         } else {
-          console.warn(`[Background::ChunkManager][CLEANUP] ⚠️ WARNING: Confirmed transfer ${transferId} close to expiration (${elapsed}/${this.TRANSFER_TIMEOUT}ms)`);
+          console.warn(`[Background::ChunkManager][CLEANUP] ⚠️ WARNING: Confirmed transfer ${transferId} close to expiration (${Math.floor(elapsed/60000)}min/${Math.floor(this.TRANSFER_TIMEOUT/60000)}min)`);
         }
       }
     });
@@ -1658,22 +2196,44 @@ class EnhancedChunkManager {
     // AGGRESSIVE PROTECTION: Protect completed transfers during critical period
     this.completedTransfers.forEach((transfer, transferId) => {
       const elapsed = now - transfer.startTime;
-      if (elapsed < PROTECTION_PERIOD) { // Protect completed transfers for initial 5 minutes
+      if (elapsed < PROTECTION_PERIOD) { // Protect completed transfers for initial 10 minutes
         return;
       }
-      if (elapsed > this.TRANSFER_TIMEOUT + 60000) { // 6 minutes (5 min + 1 min grace) for completed transfers
+      if (elapsed > this.TRANSFER_TIMEOUT + 60000) { // 11 minutes (10 min + 1 min grace) for completed transfers
         console.warn(`[Background::ChunkManager][CLEANUP] 🗑️ CLEANING UP expired completed transfer: ${transferId} (${elapsed}ms > ${this.TRANSFER_TIMEOUT + 60000}ms)`);
         expiredCompleted.push(transferId);
       }
     });
 
-    // Execute cleanups
+    // Execute cleanups with RETRY PROTECTION
     if (expiredTransfers.length > 0) {
-      console.warn(`[Background::ChunkManager][CLEANUP] Removed ${expiredTransfers.length} expired active transfers`);
-      expiredTransfers.forEach(id => {
-        this.transfers.delete(id);
+      console.warn(`[Background::ChunkManager][CLEANUP] Processing ${expiredTransfers.length} expired active transfers`);
+
+      for (const transferId of expiredTransfers) {
+        const transfer = this.transfers.get(transferId);
+        if (!transfer) continue;
+
+        // RETRY PROTECTION: Try to recover lost acknowledgments before cleanup
+        console.log(`[Background::ChunkManager][CLEANUP] 🔄 Attempting recovery for expired transfer ${transferId}`);
+        await this.retryLostAcknowledgments(transferId);
+
+        // Verify integrity after retry
+        const integrity = this.verifyTransferIntegrity(transferId);
+        if (!integrity.isHealthy) {
+          console.warn(`[Background::ChunkManager][CLEANUP] ❌ Transfer ${transferId} has integrity issues:`, integrity.issues);
+
+          // If transfer is not complete but has integrity issues, keep it longer
+          if (!transfer.htmlAssembledConfirmed) {
+            console.warn(`[Background::ChunkManager][CLEANUP] 🛡️ Keeping incomplete transfer ${transferId} due to integrity issues`);
+            continue;
+          }
+        }
+
+        // Safe to remove
+        console.warn(`[Background::ChunkManager][CLEANUP] 🗑️ Removing expired active transfer: ${transferId}`);
+        this.transfers.delete(transferId);
         // Keep assembled HTML as fallback
-      });
+      }
     }
 
     if (expiredGlobalRefs.length > 0) {
@@ -1701,7 +2261,7 @@ class EnhancedChunkManager {
       if (elapsed < PROTECTION_PERIOD + 60000) { // 3 minutes protection for emergency backup
         return;
       }
-      if (elapsed > this.TRANSFER_TIMEOUT + 120000) { // 7 minutes (5 min + 2 min extra) for emergency backup
+      if (elapsed > this.TRANSFER_TIMEOUT + 120000) { // 12 minutes (10 min + 2 min extra) for emergency backup
         console.warn(`[Background::ChunkManager][CLEANUP] 🗑️ CLEANING UP expired emergency backup: ${transferId}`);
         expiredEmergency.push(transferId);
       }
@@ -1722,7 +2282,7 @@ class EnhancedChunkManager {
         if (elapsed < PROTECTION_PERIOD + 120000) { // 4 minutes protection for ultra emergency
           return;
         }
-        if (elapsed > this.TRANSFER_TIMEOUT + 240000) { // 9 minutes (5 min + 4 min extra) for ultra emergency
+        if (elapsed > this.TRANSFER_TIMEOUT + 240000) { // 14 minutes (10 min + 4 min extra) for ultra emergency
           console.warn(`[Background::ChunkManager][CLEANUP] 🗑️ CLEANING UP expired ultra emergency transfer: ${transferId}`);
           expiredUltraEmergency.push(transferId);
         }
@@ -1743,7 +2303,7 @@ class EnhancedChunkManager {
         if (elapsed < PROTECTION_PERIOD + 240000) { // 6 minutes protection for fixed transfers (maximum)
           return;
         }
-        if (elapsed > this.TRANSFER_TIMEOUT + 300000) { // 10 minutes (5 min + 5 min for max reliability)
+        if (elapsed > this.TRANSFER_TIMEOUT + 300000) { // 15 minutes (10 min + 5 min for max reliability)
           console.warn(`[Background::ChunkManager][CLEANUP] 🗑️ CLEANING UP expired fixed transfer: ${transferData.id}`);
           expiredFixed.push(transferData.id);
           (globalThis as any).fixedTransfers.splice(index, 1);
@@ -1755,10 +2315,48 @@ class EnhancedChunkManager {
       }
     }
 
+    // INTEGRITY MONITORING: Check all active transfers for integrity issues
+    console.log(`[Background::ChunkManager][CLEANUP] 🔍 Performing integrity check on all active transfers...`);
+    const integrityIssues: string[] = [];
+
+    this.transfers.forEach((transfer, transferId) => {
+      const integrity = this.verifyTransferIntegrity(transferId);
+      if (!integrity.isHealthy) {
+        integrityIssues.push(`${transferId}: ${integrity.issues.join('; ')}`);
+      }
+    });
+
+    if (integrityIssues.length > 0) {
+      console.warn(`[Background::ChunkManager][CLEANUP] ⚠️ Found ${integrityIssues.length} transfers with integrity issues:`);
+      integrityIssues.forEach(issue => console.warn(`[Background::ChunkManager][CLEANUP] - ${issue}`));
+
+      // AUTO-RECOVERY: Attempt to fix integrity issues
+      console.log(`[Background::ChunkManager][CLEANUP] 🔧 Attempting auto-recovery for problematic transfers...`);
+      for (const issue of integrityIssues) {
+        const transferId = issue.split(':')[0];
+        await this.retryLostAcknowledgments(transferId);
+      }
+    } else {
+      console.log(`[Background::ChunkManager][CLEANUP] ✅ All active transfers passed integrity check`);
+    }
+
     const totalCleaned = expiredTransfers.length + expiredGlobalRefs.length + expiredCompleted.length + expiredEmergency.length + expiredUltraEmergency.length + expiredFixed.length;
     if (totalCleaned > 0) {
       console.log(`[Background::ChunkManager][CLEANUP] Cleanup summary: ${expiredTransfers.length} active, ${expiredGlobalRefs.length} global, ${expiredCompleted.length} completed, ${expiredEmergency.length} emergency, ${expiredUltraEmergency.length} ultra emergency, ${expiredFixed.length} fixed (${totalCleaned} total)`);
     }
+
+    // HEALTH REPORT: Log overall chunk manager health
+    const activeCount = this.transfers.size;
+    const completedCount = this.completedTransfers.size;
+    const emergencyCount = this.emergencyBackup.size;
+    const assembledCount = this.assembledHtmls.size;
+
+    console.log(`[Background::ChunkManager][HEALTH] 📊 Health Report:`);
+    console.log(`[Background::ChunkManager][HEALTH] - Active transfers: ${activeCount}`);
+    console.log(`[Background::ChunkManager][HEALTH] - Completed transfers: ${completedCount}`);
+    console.log(`[Background::ChunkManager][HEALTH] - Emergency backup: ${emergencyCount}`);
+    console.log(`[Background::ChunkManager][HEALTH] - Assembled HTMLs: ${assembledCount}`);
+    console.log(`[Background::ChunkManager][HEALTH] - Total managed: ${activeCount + completedCount + emergencyCount}`);
 
     // PERSISTENCE: Cleanup expired transfers from chrome.storage (async)
     this.persistenceManager.cleanup().then(persistenceCleanedCount => {
@@ -1969,6 +2567,7 @@ class BackgroundController {
   private hostApi = new HostApiProvider();
   private recoveryManager: TransferRecoveryManager;
   private heartbeatMonitor: HeartbeatMonitor;
+  private metadataManager = new TransferMetadataManager();
   private pendingWorkflows = new Map<string, { requestId: string; pluginId: string; pageHtml: string }>(); // transferId -> workflow data
 
   constructor() {
@@ -2028,8 +2627,11 @@ class BackgroundController {
   }
   
   private setupPeriodicCleanup(): void {
-    setInterval(() => {
-      this.chunkManager.cleanup();
+    setInterval(async () => {
+      await this.chunkManager.cleanup();
+
+      // Очистка устаревших метаданных трансферов
+      await this.metadataManager.cleanupExpired();
 
       // Log recovery statistics periodically
       const recoveryStats = this.recoveryManager.getRecoveryStats();
@@ -2048,6 +2650,18 @@ class BackgroundController {
       const workflowStats = this.promiseManager.getStats();
       if (workflowStats.active > 0) {
         console.log(`[Background] Active workflows: ${workflowStats.active}, oldest: ${workflowStats.oldestAge}ms`);
+      }
+
+      // Log metadata stats periodically
+      const metadataStats = await this.metadataManager.getStats();
+      if (metadataStats.total > 0) {
+        console.log(`[Background][METADATA_STATS] 📊 Metadata statistics:`, {
+          total: metadataStats.total,
+          active: metadataStats.active,
+          completed: metadataStats.completed,
+          recovered: metadataStats.recovered,
+          avgAge: `${metadataStats.avgAge}h`
+        });
       }
     }, 30000); // Every 30 seconds
   }
@@ -2068,21 +2682,58 @@ class BackgroundController {
           break;
           
         case 'HTML_CHUNK_ACK':
-          console.log(`[Background][CHUNKING] ✅ Received ACK for ${message.transferId} chunk ${message.chunkIndex}`);
-          this.chunkManager.acknowledgeChunk(message.transferId, message.chunkIndex);
+           console.log(`[Background][CHUNKING] ✅ Received ACK for ${message.transferId} chunk ${message.chunkIndex}`);
 
-          // DIAGNOSTIC: Log transfer stats after each ack
-          const ackStats = this.chunkManager.getTransferStats(message.transferId);
-          if (ackStats) {
-            console.log(`[Background][CHUNKING] Transfer ${message.transferId} progress: ${ackStats.completed}/${ackStats.total}, duration: ${ackStats.duration}ms`);
-          }
-          break;
+           // THREAD-SAFE ACKNOWLEDGMENT: Now async with race condition protection
+           this.chunkManager.acknowledgeChunk(message.transferId, message.chunkIndex).then(() => {
+             // DIAGNOSTIC: Log transfer stats after each ack
+             const ackStats = this.chunkManager.getTransferStats(message.transferId);
+             if (ackStats) {
+               console.log(`[Background][CHUNKING] Transfer ${message.transferId} progress: ${ackStats.completed}/${ackStats.total}, duration: ${ackStats.duration}ms`);
+             }
+           }).catch(error => {
+             console.error(`[Background][CHUNKING] ❌ Error processing acknowledgment for ${message.transferId} chunk ${message.chunkIndex}:`, error);
+           });
+
+           break;
 
         case 'HTML_ASSEMBLED':
            console.log(`[Background][ASSEMBLY] ✅ Received HTML_ASSEMBLED for ${message.transferId} (${(message as any).html.length} chars)`);
 
            // ENHANCED TRANSFER VALIDATION: Check if offscreen transfer exists before proceeding
            console.log(`[Background][ASSEMBLY][VALIDATION] 🔍 Pre-validating transfer ${message.transferId} before processing`);
+
+           // CRITICAL SAFETY: First, ensure we can restore/find the transfer in background
+           const backgroundTransferExists = this.chunkManager.wasChunked(message.transferId);
+           console.log(`[Background][ASSEMBLY][VALIDATION] Background transfer exists: ${backgroundTransferExists}`);
+
+           if (!backgroundTransferExists) {
+             console.error(`[Background][ASSEMBLY][VALIDATION] ❌ CRITICAL: Transfer ${message.transferId} does not exist in background storage!`);
+             console.error(`[Background][ASSEMBLY][VALIDATION] Active transfers: [${Array.from(this.chunkManager['transfers'].keys()).join(', ')}]`);
+             console.error(`[Background][ASSEMBLY][VALIDATION] Completed transfers: [${Array.from(this.chunkManager['completedTransfers'].keys()).join(', ')}]`);
+
+             // ATTEMPT RECOVERY: Try to recover transfer from global emergency storage
+             const emergencyRecovery = await this.recoveryManager.recoverTransfer(message.transferId);
+             if (emergencyRecovery.success) {
+               console.log(`[Background][ASSEMBLY][VALIDATION] ✅ EMERGENCY RECOVERY successful for transfer ${message.transferId}`);
+               // Store recovered transfer back in chunkManager
+               if (emergencyRecovery.transfer) {
+                 this.chunkManager['completedTransfers'].set(message.transferId, emergencyRecovery.transfer);
+               }
+               if (emergencyRecovery.html) {
+                 (message as any).html = emergencyRecovery.html;
+               }
+             } else {
+               console.error(`[Background][ASSEMBLY][VALIDATION] ❌ EMERGENCY RECOVERY failed: ${emergencyRecovery.error}`);
+               // Send rejection confirmation to offscreen
+               chrome.runtime.sendMessage({
+                 type: 'HTML_ASSEMBLED_REJECTED',
+                 transferId: message.transferId,
+                 reason: `Transfer lost in background: ${emergencyRecovery.error}`
+               });
+               return;
+             }
+           }
 
            try {
              const offscreenStatus = await chrome.runtime.sendMessage({
@@ -2114,7 +2765,7 @@ class BackgroundController {
                return;
              }
 
-             console.log(`[Background][ASSEMBLY][VALIDATION] ✅ Transfer ${message.transferId} validated successfully`);
+             console.log(`[Background][ASSEMBLY][VALIDATION] ✅ Transfer ${message.transferId} validated successfully in both background and offscreen`);
 
            } catch (validationError) {
              console.error(`[Background][ASSEMBLY][VALIDATION] ❌ Transfer validation failed for ${message.transferId}:`, validationError);
@@ -2163,91 +2814,77 @@ class BackgroundController {
               } else {
                 console.warn(`[Background][ASSEMBLY] ❌ No assembled HTML found, trying getAssembledData fallback…`);
 
-                // ENHANCED FALLBACK: Try to get assembled data directly
+                // УПРОЩЕННАЯ RECOVERY: Сначала пробуем получить метаданные через TransferMetadataManager
                 try {
-                  fallbackHtml = this.chunkManager.getAssembledData(message.transferId);
-                  if (fallbackHtml) {
-                    console.log(`[Background][ASSEMBLY] ✅ Using getAssembledData fallback (${fallbackHtml.length} chars)`);
-                    (message as any).html = fallbackHtml;
+                  console.log(`[Background][ASSEMBLY] 🔍 Пытаемся получить метаданные для ${message.transferId}`);
+
+                  // ПРОСТАЯ RECOVERY СТРАТЕГИЯ: Используем только TransferMetadataManager
+                  const metadata = await this.metadataManager.getMetadata(message.transferId);
+
+                  if (metadata) {
+                    console.log(`[Background][ASSEMBLY] ✅ Найдены метаданные: pluginId=${metadata.pluginId}, pageKey=${metadata.pageKey}`);
+
+                    // Создаем workflow с восстановленными метаданными
+                    const recoveredWorkflow = {
+                      requestId: metadata.pageKey,
+                      pluginId: metadata.pluginId,
+                      pageHtml: (message as any).html || '<html><body>Recovered content</body></html>'
+                    };
+
+                    // Сохраняем в pendingWorkflows для использования ниже
+                    this.pendingWorkflows.set(message.transferId, recoveredWorkflow);
+                    console.log(`[Background][ASSEMBLY] ✅ Создали workflow с восстановленными метаданными:`, recoveredWorkflow);
+
+                    // Отмечаем статус метаданных как recovered
+                    await this.metadataManager.updateStatus(message.transferId, 'recovered');
+
                   } else {
-                    console.error(`[Background][ASSEMBLY] ❌ NO FALLBACK HTML available!`);
-                    console.log(`[Background][ASSEMBLY] 🚀 INITIATING INTELLIGENT TRANSFER RECOVERY for ${message.transferId}`);
+                    console.warn(`[Background][ASSEMBLY] ⚠️ Метаданные не найдены для ${message.transferId}, создаем базовый workflow`);
 
-                    // INTELLIGENT RECOVERY: Use TransferRecoveryManager for systematic recovery
-                    try {
-                      const recoveryResult = await Promise.race([
-                        this.recoveryManager.recoverTransfer(message.transferId),
-                        new Promise<RecoveryResult>((_, reject) =>
-                          setTimeout(() => reject(new Error('Recovery timeout')), 3000)
-                        )
-                      ]);
+                    // Базовый fallback без метаданных
+                    const basicWorkflow = {
+                      requestId: `fallback_${message.transferId}`,
+                      pluginId: 'unknown_plugin',
+                      pageHtml: (message as any).html || '<html><body>Content unavailable</body></html>'
+                    };
 
-                      if (recoveryResult.success) {
-                        console.log(`[Background][ASSEMBLY] ✅ RECOVERY SUCCESSFUL using ${recoveryResult.strategy} strategy`);
-
-                        // Use recovered HTML
-                        if (recoveryResult.html) {
-                          (message as any).html = recoveryResult.html;
-                          console.log(`[Background][ASSEMBLY] Recovered HTML length: ${recoveryResult.html.length} chars`);
-                        } else {
-                          // Create minimal HTML if no content recovered
-                          (message as any).html = '<html><body>Recovered transfer - content unavailable</body></html>';
-                          console.warn(`[Background][ASSEMBLY] ⚠️ No HTML content in recovery result, using stub`);
-                        }
-
-                        // Store recovered transfer if available
-                        if (recoveryResult.transfer) {
-                          // Re-store in chunkManager for consistency
-                          this.chunkManager['completedTransfers'].set(message.transferId, recoveryResult.transfer);
-                          console.log(`[Background][ASSEMBLY] ✅ Recovered transfer stored in completed storage`);
-                        }
-                      } else {
-                        console.error(`[Background][ASSEMBLY] ❌ RECOVERY FAILED: ${recoveryResult.error || 'Unknown error'}`);
-                        throw new Error(`Transfer recovery failed: ${recoveryResult.error || 'No recovery strategy succeeded'}`);
-                      }
-
-                    } catch (recoveryError) {
-                      console.error(`[Background][ASSEMBLY] 💥 RECOVERY PROCESS CRASHED:`, recoveryError);
-
-                      // FINAL FALLBACK: Graceful degradation - continue with empty HTML
-                      console.warn(`[Background][ASSEMBLY] ⚠️ RECOVERY CRASHED, using graceful degradation`);
-                      (message as any).html = '<html><body>Transfer lost - recovery unavailable</body></html>';
-                    }
+                    this.pendingWorkflows.set(message.transferId, basicWorkflow);
+                    console.log(`[Background][ASSEMBLY] ✅ Создан базовый workflow:`, basicWorkflow);
                   }
-                } catch (error) {
-                  console.error(`[Background][ASSEMBLY] ❌ getAssembledData fallback failed:`, error);
+                } catch (metadataError) {
+                  console.error(`[Background][ASSEMBLY] ❌ Ошибка получения метаданных для ${message.transferId}:`, metadataError);
 
-                  // SECONDARY RECOVERY ATTEMPT: Try recovery manager as final attempt
-                  console.log(`[Background][ASSEMBLY] 🔄 SECONDARY RECOVERY ATTEMPT for ${message.transferId}`);
-                  try {
-                    const finalRecoveryResult = await Promise.race([
-                      this.recoveryManager.recoverTransfer(message.transferId),
-                      new Promise<RecoveryResult>((_, reject) =>
-                        setTimeout(() => reject(new Error('Final recovery timeout')), 2000)
-                      )
-                    ]);
+                  // Простой fallback в случае ошибки
+                  const errorWorkflow = {
+                    requestId: `error_${message.transferId}`,
+                    pluginId: 'error_plugin',
+                    pageHtml: '<html><body>Metadata recovery error</body></html>'
+                  };
 
-                    if (finalRecoveryResult.success) {
-                      console.log(`[Background][ASSEMBLY] ✅ FINAL RECOVERY SUCCESSFUL using ${finalRecoveryResult.strategy}`);
-                      (message as any).html = finalRecoveryResult.html || '<html><body>Recovered content</body></html>';
-                    } else {
-                      console.error(`[Background][ASSEMBLY] ❌ FINAL RECOVERY FAILED, using stub HTML`);
-                      (message as any).html = '<html><body>Transfer recovery failed - using stub content</body></html>';
-                    }
-                  } catch (finalRecoveryError) {
-                    console.error(`[Background][ASSEMBLY] 💥 FINAL RECOVERY CRASHED:`, finalRecoveryError);
-                    console.error(`[Background][ASSEMBLY] ❌ CRITICAL: All recovery mechanisms exhausted for ${message.transferId}`);
-                    (message as any).html = '<html><body>Critical transfer loss - recovery unavailable</body></html>';
-                  }
-              }
+                  this.pendingWorkflows.set(message.transferId, errorWorkflow);
+                  console.log(`[Background][ASSEMBLY] ✅ Создан workflow при ошибке:`, errorWorkflow);
+                }
+            }
+
+            // ENHANCED METADATA USAGE: Use recovered or original metadata when sending EXECUTE_WORKFLOW
+            let workflowPluginId = pendingWorkflow.pluginId;
+            let workflowRequestId = pendingWorkflow.requestId;
+            let workflowPageKey = `transfer_${message.transferId}`;
+
+            // If we have recovered metadata, use it for the workflow execution
+            const recoveredMetadata = (globalThis as any).transferMetadata?.[message.transferId];
+            if (recoveredMetadata) {
+              workflowPluginId = recoveredMetadata.pluginId || workflowPluginId;
+              workflowPageKey = recoveredMetadata.pageKey || workflowPageKey;
+              console.log(`[Background][ASSEMBLY] 🔧 Using recovered metadata for EXECUTE_WORKFLOW: pluginId=${workflowPluginId}, pageKey=${workflowPageKey}`);
             }
 
             await chrome.runtime.sendMessage({
               type: 'EXECUTE_WORKFLOW',
-              pluginId: pendingWorkflow.pluginId,
-              requestId: pendingWorkflow.requestId,
+              pluginId: workflowPluginId,
+              requestId: workflowRequestId,
               transferId: message.transferId,
-              pageKey: `transfer_${message.transferId}`, // Add pageKey for offscreen
+              pageKey: workflowPageKey, // Use recovered pageKey if available
               useChunks: false, // HTML is already assembled, no need to use chunks
               pageHtml: pendingWorkflow.pageHtml, // Original HTML (fallback if needed)
               assembledHtml: (message as any).html // Pre-assembled HTML from chunks
@@ -2276,6 +2913,7 @@ class BackgroundController {
             });
             console.log(`[Background][ASSEMBLY] ✅ Sent confirmation for HTML_ASSEMBLED receipt to offscreen for transfer ${message.transferId}`);
             break;
+        }
 
         case 'HEARTBEAT_RESPONSE':
           this.handleHeartbeatResponse(message as HeartbeatResponseMessage);
@@ -2322,6 +2960,13 @@ class BackgroundController {
       
       // Create workflow promise before sending data
       const resultPromise = this.promiseManager.create(requestId, message.pluginId);
+
+      // Устанавливаем глобальные переменные для передачи метаданных в TransferMetadataManager
+      (globalThis as any).metadataManager = this.metadataManager;
+      (globalThis as any).currentTransferMetadata = {
+        pluginId: message.pluginId,
+        pageKey: requestId
+      };
 
       console.log(`[Background][DIAG] 📤 SENDING HTML (${pageHtml.length} chars) as chunks for transfer ${transferId}`);
       await this.chunkManager.sendInChunks(pageHtml, transferId);

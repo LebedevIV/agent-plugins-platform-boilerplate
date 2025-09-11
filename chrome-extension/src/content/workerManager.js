@@ -251,7 +251,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const result = await executePythonErrorTest(message.code);
         sendResponse({ success: true, result });
       } catch (error) {
-        sendResponse({ success: false, error: (error as Error).message });
+        sendResponse({ success: false, error: error?.message || String(error) });
       }
     })();
     return true;

@@ -220,10 +220,22 @@ function handleHtmlChunk(chunkMessage) {
     const assembledHtml = transfer.chunks.join('');
     console.log(`[offscreen][CHUNKING] Successfully assembled HTML for transfer ${transferId}, total length: ${assembledHtml.length}`);
 
-    // Send HTML_ASSEMBLED message to background
+    // Log metadata for debugging
+    console.log(`[offscreen][CHUNKING] Transfer metadata for ${transferId}:`, {
+      pluginId: transfer.metadata?.pluginId,
+      pageKey: transfer.metadata?.pageKey,
+      requestId: transfer.metadata?.requestId,
+      totalSize: transfer.metadata?.totalSize,
+      timestamp: transfer.metadata?.timestamp
+    });
+
+    // Send HTML_ASSEMBLED message to background with extracted pluginId and pageKey
     chrome.runtime.sendMessage({
       type: 'HTML_ASSEMBLED',
       transferId,
+      pluginId: transfer.metadata?.pluginId,
+      pageKey: transfer.metadata?.pageKey,
+      requestId: transfer.metadata?.requestId,
       html: assembledHtml,
       metadata: transfer.metadata
     });
@@ -231,7 +243,7 @@ function handleHtmlChunk(chunkMessage) {
     // Mark that we have notified background about assembly completion
     transfer.assembledNotified = true;
 
-    console.log(`[offscreen][CHUNKING] Sent HTML_ASSEMBLED message to background for transfer ${transferId}`);
+    console.log(`[offscreen][CHUNKING] Sent HTML_ASSEMBLED message to background for transfer ${transferId} with pluginId: ${transfer.metadata?.pluginId}, pageKey: ${transfer.metadata?.pageKey}`);
 
     // DO NOT clean up transfer here - wait for confirmation from background to prevent race condition
     console.log(`[offscreen][CHUNKING] Transfer ${transferId} kept alive for background confirmation (assembledNotified: true)`);
