@@ -18,8 +18,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Protocol, runtime_checkable, Optional
 from re import Match
 
-# Импорт переменных из JavaScript globals через js мост
-from js import page_html_chunk_count, page_html_total_length
+# Импорт для доступа к Pyodide globals
+import pyodide
 
 # ==============================================================================
 # Менеджер памяти для оптимизации Pyodide
@@ -936,6 +936,110 @@ class FastDOMParser:
 # например, "python.analyze_ozon_product".
 # ==============================================================================
 
+def _diagnose_variable_access(variable_name: str) -> Dict[str, Any]:
+    """
+    Расширенная диагностика способов доступа к переменным.
+    Тестирует разные методы доступа и логирует результаты.
+    """
+    js.sendMessageToChat({"content": f"Python: 🔍 ===== ДИАГНОСТИКА ДОСТУПА К '{variable_name}' ====="})
+
+    methods = {}
+    result = None
+    error_details = {}
+
+    # Метод 1: globals()['variable_name']
+    try:
+        result = globals()[variable_name]
+        methods['globals_direct'] = {
+            'success': True,
+            'value': result,
+            'type': type(result).__name__,
+            'length': len(str(result)) if result is not None else 0
+        }
+        js.sendMessageToChat({"content": f"Python: ✅ globals()['{variable_name}'] = {result} (тип: {type(result).__name__})"})
+    except KeyError as e:
+        methods['globals_direct'] = {'success': False, 'error': 'KeyError', 'details': str(e)}
+        error_details['globals_direct'] = str(e)
+        js.sendMessageToChat({"content": f"Python: ❌ globals()['{variable_name}'] - KeyError: {e}"})
+    except Exception as e:
+        methods['globals_direct'] = {'success': False, 'error': type(e).__name__, 'details': str(e)}
+        error_details['globals_direct'] = str(e)
+        js.sendMessageToChat({"content": f"Python: ❌ globals()['{variable_name}'] - {type(e).__name__}: {e}"})
+
+    # Метод 2: pyodide.globals.get()
+    try:
+        pyodide_result = pyodide.globals.get(variable_name)
+        methods['pyodide_globals_get'] = {
+            'success': True,
+            'value': pyodide_result,
+            'type': type(pyodide_result).__name__,
+            'length': len(str(pyodide_result)) if pyodide_result is not None else 0
+        }
+        if pyodide_result != result:
+            js.sendMessageToChat({"content": f"Python: ⚠️ pyodide.globals.get('{variable_name}') = {pyodide_result} (ОТЛИЧАЕТСЯ!)"})
+        else:
+            js.sendMessageToChat({"content": f"Python: ✅ pyodide.globals.get('{variable_name}') = {pyodide_result} (совпадает)"})
+    except Exception as e:
+        methods['pyodide_globals_get'] = {'success': False, 'error': type(e).__name__, 'details': str(e)}
+        error_details['pyodide_globals_get'] = str(e)
+        js.sendMessageToChat({"content": f"Python: ❌ pyodide.globals.get('{variable_name}') - {type(e).__name__}: {e}"})
+
+    # Метод 3: hasattr + getattr
+    try:
+        if hasattr(pyodide.globals, variable_name):
+            getattr_result = getattr(pyodide.globals, variable_name)
+            methods['pyodide_getattr'] = {
+                'success': True,
+                'value': getattr_result,
+                'type': type(getattr_result).__name__,
+                'length': len(str(getattr_result)) if getattr_result is not None else 0
+            }
+            js.sendMessageToChat({"content": f"Python: ✅ getattr(pyodide.globals, '{variable_name}') = {getattr_result}"})
+        else:
+            methods['pyodide_getattr'] = {'success': False, 'error': 'AttributeError', 'details': f"hasattr вернул False"}
+            js.sendMessageToChat({"content": f"Python: ❌ hasattr(pyodide.globals, '{variable_name}') вернул False"})
+    except Exception as e:
+        methods['pyodide_getattr'] = {'success': False, 'error': type(e).__name__, 'details': str(e)}
+        error_details['pyodide_getattr'] = str(e)
+        js.sendMessageToChat({"content": f"Python: ❌ getattr(pyodide.globals, '{variable_name}') - {type(e).__name__}: {e}"})
+
+    # Метод 4: Проверка через dir()
+    try:
+        globals_keys = list(globals().keys())
+        pyodide_keys = list(pyodide.globals.get().keys()) if hasattr(pyodide, 'globals') else []
+        methods['globals_keys'] = {
+            'globals_keys': globals_keys[:20],  # Первые 20 ключей
+            'pyodide_keys': pyodide_keys[:20],
+            'variable_in_globals': variable_name in globals_keys,
+            'variable_in_pyodide': variable_name in pyodide_keys
+        }
+        js.sendMessageToChat({"content": f"Python: 📊 Ключ '{variable_name}' в globals: {variable_name in globals_keys}"})
+        js.sendMessageToChat({"content": f"Python: 📊 Ключ '{variable_name}' в pyodide.globals: {variable_name in pyodide_keys}"})
+    except Exception as e:
+        methods['globals_keys'] = {'success': False, 'error': type(e).__name__, 'details': str(e)}
+        js.sendMessageToChat({"content": f"Python: ❌ Ошибка проверки ключей: {e}"})
+
+    # Рекомендация лучшего метода
+    successful_methods = [k for k, v in methods.items() if isinstance(v, dict) and v.get('success', False)]
+    if successful_methods:
+        best_method = successful_methods[0]  # Первый успешный метод
+        js.sendMessageToChat({"content": f"Python: 🎯 РЕКОМЕНДУЕМЫЙ МЕТОД: {best_method}"})
+        if result is not None:
+            js.sendMessageToChat({"content": f"Python: 📋 ИСПОЛЬЗУЕМ ЗНАЧЕНИЕ: {result}"})
+    else:
+        js.sendMessageToChat({"content": "Python: ❌ НИ ОДИН МЕТОД НЕ СРАБОТАЛ!"})
+
+    js.sendMessageToChat({"content": f"Python: 🔍 ===== КОНЕЦ ДИАГНОСТИКИ '{variable_name}' ====="})
+
+    return {
+        'variable_name': variable_name,
+        'methods': methods,
+        'recommended_value': result,
+        'recommended_method': successful_methods[0] if successful_methods else None,
+        'error_details': error_details,
+        'timestamp': datetime.now().isoformat()
+    }
+
 async def analyze_ozon_product() -> Dict[str, Any]:
     """
     Главная точка входа для анализа страницы товара Ozon.
@@ -955,46 +1059,147 @@ async def analyze_ozon_product() -> Dict[str, Any]:
         js.sendMessageToChat({"content": f"Python: 🔍 Timestamp: {datetime.now().isoformat()}"})
         js.sendMessageToChat({"content": "Python: 📊 Чтение данных из pyodide.globals..."})
 
-        # Шаг 1: Чтение метаданных из JS globals
-        js.sendMessageToChat({"content": "Python: 🔧 Шаг 1: Чтение метаданных из JS globals"})
+        # Шаг 1: Чтение метаданных из Pyodide globals
+        js.sendMessageToChat({"content": "Python: 🔧 Шаг 1: Чтение метаданных из Python globals"})
+        js.sendMessageToChat({"content": "Python: 🔍 Проверка доступности переменных в globals..."})
+
+        # Начало измерения времени чтения данных
+        read_start_time = datetime.now()
+
+
+        # Диагностика состояния globals
         try:
-            chunk_count = page_html_chunk_count
-            total_length = page_html_total_length
-            js.sendMessageToChat({"content": f"Python: ✅ Метаданные прочитаны: chunk_count={chunk_count}, total_length={total_length}"})
+            all_globals = globals()
+            js.sendMessageToChat({"content": f"Python: 📊 Доступно переменных в globals: {len(all_globals)}"})
+            js.sendMessageToChat({"content": f"Python: 📋 Ключи в globals: {list(all_globals.keys())[:10]}..."})
         except Exception as e:
-            js.sendMessageToChat({"content": f"Python: ❌ Ошибка чтения метаданных из JS globals: {e}"})
-            raise ValueError(f"Не удалось прочитать метаданные из JS globals: {e}")
+            js.sendMessageToChat({"content": f"Python: ⚠️ Не удалось получить список всех переменных: {e}"})
+
+        # Чтение page_html_chunk_count через globals()
+        js.sendMessageToChat({"content": "Python: 🔍 ===== ЧТЕНИЕ page_html_chunk_count ====="})
+        try:
+            chunk_count = globals()['page_html_chunk_count']
+            js.sendMessageToChat({"content": f"Python: ✅ page_html_chunk_count = {chunk_count} (тип: {type(chunk_count).__name__}, длина: {len(str(chunk_count))} символов)"})
+        except KeyError as e:
+            js.sendMessageToChat({"content": f"Python: ❌ page_html_chunk_count отсутствует в globals(): {e}"})
+            raise ValueError(f"page_html_chunk_count отсутствует в globals(): {e}")
+        except Exception as e:
+            js.sendMessageToChat({"content": f"Python: ❌ Ошибка чтения page_html_chunk_count: {e}"})
+            raise ValueError(f"Ошибка чтения page_html_chunk_count: {e}")
+
+        # Чтение page_html_total_length через globals()
+        js.sendMessageToChat({"content": "Python: 🔍 ===== ЧТЕНИЕ page_html_total_length ====="})
+        try:
+            total_length = globals()['page_html_total_length']
+            js.sendMessageToChat({"content": f"Python: ✅ page_html_total_length = {total_length} (тип: {type(total_length).__name__}, длина: {len(str(total_length))} символов)"})
+        except KeyError as e:
+            js.sendMessageToChat({"content": f"Python: ❌ page_html_total_length отсутствует в globals(): {e}"})
+            raise ValueError(f"page_html_total_length отсутствует в globals(): {e}")
+        except Exception as e:
+            js.sendMessageToChat({"content": f"Python: ❌ Ошибка чтения page_html_total_length: {e}"})
+            raise ValueError(f"Ошибка чтения page_html_total_length: {e}")
+
+        # Финальное логирование результатов диагностики
+        js.sendMessageToChat({"content": f"Python: ✅ Метаданные прочитаны: chunk_count={chunk_count}, total_length={total_length}"})
+        js.sendMessageToChat({"content": "Python: 📊 Метод доступа: globals()"})
 
         # Валидация метаданных
-        if page_html_chunk_count is None or page_html_total_length is None:
-            raise ValueError("Метаданные page_html_chunk_count или page_html_total_length отсутствуют в pyodide.globals")
+        if chunk_count is None:
+            js.sendMessageToChat({"content": "Python: ❌ page_html_chunk_count отсутствует в pyodide.globals"})
+            raise ValueError("Метаданные page_html_chunk_count отсутствует в pyodide.globals")
+
+        if total_length is None:
+            js.sendMessageToChat({"content": "Python: ❌ page_html_total_length отсутствует в pyodide.globals"})
+            raise ValueError("Метаданные page_html_total_length отсутствует в pyodide.globals")
+
+        js.sendMessageToChat({"content": "Python: ✅ Все метаданные найдены и не равны None"})
 
         try:
-            chunk_count = int(page_html_chunk_count)
-            total_length = int(page_html_total_length)
+            chunk_count = int(chunk_count)
+            total_length = int(total_length)
             js.sendMessageToChat({"content": f"Python: ✅ Метаданные валидны: chunk_count={chunk_count}, total_length={total_length}"})
         except (ValueError, TypeError) as e:
             js.sendMessageToChat({"content": f"Python: ❌ Ошибка преобразования метаданных: {e}"})
             raise ValueError(f"Метаданные должны быть числами: {e}")
 
-        # Шаг 2: Чтение всех чанков из JS globals
-        js.sendMessageToChat({"content": f"Python: 🔧 Шаг 2: Чтение {chunk_count} чанков из JS globals"})
+        # Шаг 2: Чтение всех чанков из Python globals
+        js.sendMessageToChat({"content": f"Python: 🔧 Шаг 2: Чтение {chunk_count} чанков из Python globals"})
         chunks = []
         total_chunks_size = 0
+        chunk_diagnostics = []  # Для сбора диагностики всех чанков
 
         for i in range(chunk_count):
             chunk_key = f'page_html_chunk_{i}'
+            js.sendMessageToChat({"content": f"Python: 🔍 ===== ЧТЕНИЕ ЧАНКА {i} ====="})
+            js.sendMessageToChat({"content": f"Python: 🔍 Ключ чанка: {chunk_key}"})
+
+            # Чтение чанка через globals()
             try:
-                chunk = getattr(js, chunk_key)
-                if chunk is None:
-                    raise ValueError(f"Чанк {chunk_key} отсутствует в JS globals")
-                chunk_str = str(chunk)
-                chunks.append(chunk_str)
-                total_chunks_size += len(chunk_str)
-                js.sendMessageToChat({"content": f"Python: ✅ Чанк {i}: длина={len(chunk_str)}, накоплено={total_chunks_size} символов"})
+                chunk = globals()[chunk_key]
+                js.sendMessageToChat({"content": f"Python: ✅ {chunk_key} прочитан: тип={type(chunk).__name__}, длина={len(str(chunk))} символов"})
+            except KeyError as e:
+                js.sendMessageToChat({"content": f"Python: ❌ {chunk_key} отсутствует в globals(): {e}"})
+                raise ValueError(f"{chunk_key} отсутствует в globals(): {e}")
             except Exception as e:
-                js.sendMessageToChat({"content": f"Python: ❌ Ошибка чтения чанка {chunk_key}: {e}"})
-                raise ValueError(f"Не удалось прочитать чанк {chunk_key}: {e}")
+                js.sendMessageToChat({"content": f"Python: ❌ Ошибка чтения {chunk_key}: {e}"})
+                raise ValueError(f"Ошибка чтения {chunk_key}: {e}")
+
+            # Дополнительная валидация
+            if chunk is None:
+                js.sendMessageToChat({"content": f"Python: ❌ Чанк {chunk_key} равен None"})
+                js.sendMessageToChat({"content": f"Python: 📊 Доступ через globals() завершен с ошибкой"})
+                raise ValueError(f"Чанк {chunk_key} отсутствует в globals")
+
+            # Проверка типа и конвертация
+            try:
+                if not isinstance(chunk, str):
+                    js.sendMessageToChat({"content": f"Python: 🔄 Конвертация чанка {i} из {type(chunk)} в строку"})
+                    chunk_str = str(chunk)
+                else:
+                    chunk_str = chunk
+
+                js.sendMessageToChat({"content": f"Python: ✅ Чанк {i} прочитан: тип={type(chunk).__name__}, длина={len(chunk_str)}"})
+
+            except Exception as e:
+                js.sendMessageToChat({"content": f"Python: ❌ Ошибка конвертации чанка {chunk_key}: {e}"})
+                js.sendMessageToChat({"content": f"Python: 📊 Состояние на момент ошибки: прочитано {len(chunks)} чанков"})
+                raise ValueError(f"Не удалось конвертировать чанк {chunk_key}: {e}")
+
+            # Проверка целостности чанка
+            if len(chunk_str.strip()) == 0:
+                js.sendMessageToChat({"content": f"Python: ⚠️ Чанк {chunk_key} пустой после strip"})
+            elif len(chunk_str) < 10:
+                js.sendMessageToChat({"content": f"Python: ⚠️ Чанк {chunk_key} слишком короткий: {len(chunk_str)} символов"})
+
+            # Сохранение диагностики
+            chunk_diagnostics.append({
+                'chunk_index': i,
+                'chunk_key': chunk_key,
+                'original_type': type(chunk).__name__,
+                'final_length': len(chunk_str),
+                'method_used': 'globals()',
+                'is_empty': len(chunk_str.strip()) == 0
+            })
+
+            chunks.append(chunk_str)
+            total_chunks_size += len(chunk_str)
+            js.sendMessageToChat({"content": f"Python: 📊 Чанк {i} добавлен: накоплено {len(chunks)} чанков, размер={total_chunks_size} символов"})
+
+        # Итоговый отчет по чанкам
+        js.sendMessageToChat({"content": f"Python: 📊 ===== ОТЧЕТ ПО ЧАНКАМ ====="})
+        js.sendMessageToChat({"content": f"Python: ✅ Всего прочитано: {len(chunks)} чанков"})
+        js.sendMessageToChat({"content": f"Python: 📊 Общий размер: {total_chunks_size} символов"})
+
+        # Проверка на пустые чанки
+        empty_chunks = [d for d in chunk_diagnostics if d['is_empty']]
+        if empty_chunks:
+            js.sendMessageToChat({"content": f"Python: ⚠️ Найдено пустых чанков: {len(empty_chunks)}"})
+            for ec in empty_chunks:
+                js.sendMessageToChat({"content": f"Python: ⚠️ Пустой чанк: {ec['chunk_key']}"})
+
+        # Проверка последовательности методов доступа
+        methods_used = list(set(d['method_used'] for d in chunk_diagnostics if d['method_used']))
+        js.sendMessageToChat({"content": f"Python: 📊 Методы доступа к чанкам: {methods_used}"})
 
         # Шаг 3: Сборка полного HTML из чанков
         js.sendMessageToChat({"content": "Python: 🔧 Шаг 3: Сборка полного HTML из чанков"})
@@ -1002,51 +1207,144 @@ async def analyze_ozon_product() -> Dict[str, Any]:
         assembled_length = len(page_html)
         js.sendMessageToChat({"content": f"Python: ✅ HTML собран: длина={assembled_length} символов"})
 
-        # Шаг 4: Проверка целостности собранного HTML
-        js.sendMessageToChat({"content": "Python: 🔧 Шаг 4: Проверка целостности собранного HTML"})
+        # Шаг 4: Расширенная проверка целостности собранного HTML
+        js.sendMessageToChat({"content": "Python: 🔧 Шаг 4: Расширенная проверка целостности собранного HTML"})
+        js.sendMessageToChat({"content": f"Python: 📊 Ожидаемая длина: {total_length} символов"})
+        js.sendMessageToChat({"content": f"Python: 📊 Собранная длина: {assembled_length} символов"})
 
-        # Проверка соответствия ожидаемой длине
+        # Детальная проверка соответствия длины
+        length_difference = assembled_length - total_length
+        length_match_percent = (assembled_length / total_length * 100) if total_length > 0 else 0
+
+        js.sendMessageToChat({"content": f"Python: 📊 Разница в длине: {length_difference} символов ({length_match_percent:.1f}%)"})
+
         if assembled_length != total_length:
-            js.sendMessageToChat({"content": f"Python: ⚠️ Несоответствие длины: ожидалось {total_length}, собрано {assembled_length}"})
             if assembled_length < total_length:
-                js.sendMessageToChat({"content": "Python: ⚠️ СТРОКА ОБРЕЗАНА! Возможно потеря данных."})
+                js.sendMessageToChat({"content": "Python: ❌ СТРОКА ОБРЕЗАНА! Возможна потеря данных."})
+                js.sendMessageToChat({"content": f"Python: 📊 Потеряно: {total_length - assembled_length} символов"})
+            else:
+                js.sendMessageToChat({"content": "Python: ⚠️ Строка длиннее ожидаемой. Возможно, добавлены лишние данные."})
+                js.sendMessageToChat({"content": f"Python: 📊 Лишние: {assembled_length - total_length} символов"})
 
-        # Проверка базовой структуры HTML
+        # Расширенная проверка структуры HTML
+        js.sendMessageToChat({"content": "Python: 🔍 Анализ структуры HTML..."})
+
         has_html_tag = '<html' in page_html.lower()
         has_body_tag = '<body' in page_html.lower()
+        has_head_tag = '<head' in page_html.lower()
         has_div_tag = '<div' in page_html.lower()
+        has_title_tag = '<title' in page_html.lower()
+        has_script_tag = '<script' in page_html.lower()
 
         structure_check = {
             '<html>': has_html_tag,
+            '<head>': has_head_tag,
             '<body>': has_body_tag,
-            '<div>': has_div_tag
+            '<title>': has_title_tag,
+            '<div>': has_div_tag,
+            '<script>': has_script_tag
         }
+
         js.sendMessageToChat({"content": f"Python: 📊 Структура HTML: {structure_check}"})
 
-        # Проверка на незакрытые теги (упрощенная)
-        open_tags = page_html.count('<') - page_html.count('</') - page_html.count('<')  # Примерная оценка
-        if abs(open_tags) > 10:
-            js.sendMessageToChat({"content": f"Python: ⚠️ Возможен дисбаланс тегов: {open_tags}"})
+        # Подсчет найденных структурных элементов
+        structure_score = sum(structure_check.values())
+        max_structure_score = len(structure_check)
+        js.sendMessageToChat({"content": f"Python: 📊 Оценка структуры: {structure_score}/{max_structure_score}"})
 
-        # Финальная валидация HTML
+        # Детальный анализ тегов
+        js.sendMessageToChat({"content": "Python: 🔍 Детальный анализ HTML тегов..."})
+
+        total_open_tags = page_html.count('<')
+        total_close_tags = page_html.count('</')
+        self_closing_tags = page_html.count('/>')
+
+        js.sendMessageToChat({"content": f"Python: 📊 Теги - всего: {total_open_tags}, закрывающих: {total_close_tags}, самозакрывающихся: {self_closing_tags}"})
+
+        # Расчет баланса тегов
+        tag_balance = total_open_tags - total_close_tags - self_closing_tags
+        js.sendMessageToChat({"content": f"Python: 📊 Баланс тегов: {tag_balance}"})
+
+        if abs(tag_balance) > 5:
+            js.sendMessageToChat({"content": f"Python: ⚠️ ОБНАРУЖЕН ДИСБАЛАНС ТЕГОВ: {tag_balance}"})
+            if tag_balance > 0:
+                js.sendMessageToChat({"content": "Python: ⚠️ Больше незакрытых тегов - возможна обрезка"})
+            else:
+                js.sendMessageToChat({"content": "Python: ⚠️ Больше закрывающих тегов - возможны лишние данные"})
+
+        # Проверка на специальные символы и кодировку
+        has_entities = '&' in page_html and ';' in page_html
+        has_unicode = any(ord(c) > 127 for c in page_html[:1000])  # Проверка в первых 1000 символах
+
+        encoding_check = {
+            'HTML_entities': has_entities,
+            'Unicode_chars': has_unicode
+        }
+        js.sendMessageToChat({"content": f"Python: 📊 Кодировка: {encoding_check}"})
+
+        # Финальная валидация HTML с расширенными проверками
+        js.sendMessageToChat({"content": "Python: 🔍 Финальная валидация HTML..."})
+
+        validation_errors = []
+
         if not isinstance(page_html, str):
             try:
                 page_html = str(page_html)
+                js.sendMessageToChat({"content": f"Python: 🔄 Конвертация HTML в строку: {type(page_html)}"})
             except Exception as e:
-                raise ValueError(f"HTML должен быть строкой: {e}")
+                validation_errors.append(f"Не удалось конвертировать в строку: {e}")
 
-        if len(page_html.strip()) < 50:
-            raise ValueError(f"HTML страницы слишком короткий ({len(page_html)} символов). Минимум 50 символов.")
+        stripped_length = len(page_html.strip())
+        js.sendMessageToChat({"content": f"Python: 📊 Длина после strip: {stripped_length} символов"})
+
+        if stripped_length < 50:
+            validation_errors.append(f"HTML слишком короткий ({stripped_length} символов). Минимум 50 символов.")
 
         if not (has_html_tag or has_body_tag or has_div_tag):
-            js.sendMessageToChat({"content": "Python: ⚠️ HTML не содержит типичных тегов. Возможно, это не полноценная страница."})
+            validation_errors.append("HTML не содержит типичных тегов. Возможно, это не полноценная страница.")
+            js.sendMessageToChat({"content": "Python: ⚠️ HTML не содержит типичных тегов"})
+
+        # Проверка первых и последних символов
+        first_chars = page_html[:100] if len(page_html) > 100 else page_html
+        last_chars = page_html[-100:] if len(page_html) > 100 else page_html
+
+        js.sendMessageToChat({"content": f"Python: 📊 Первые 100 символов: '{first_chars[:50]}...'"})
+        js.sendMessageToChat({"content": f"Python: 📊 Последние 100 символов: '...{last_chars[-50:]}'"})
+
+        if validation_errors:
+            for error in validation_errors:
+                js.sendMessageToChat({"content": f"Python: ❌ {error}"})
+            raise ValueError(f"Валидация HTML не пройдена: {'; '.join(validation_errors)}")
+
+        js.sendMessageToChat({"content": "Python: ✅ HTML прошел все проверки валидации"})
+        js.sendMessageToChat({"content": f"Python: 📊 Финальная длина HTML: {len(page_html)} символов"})
 
         # Шаг 5: Финальное логирование перед анализом
-        js.sendMessageToChat({"content": "Python: ✅ Данные из JS globals успешно прочитаны и собраны"})
+        js.sendMessageToChat({"content": "Python: 🔧 Шаг 5: Финальная подготовка к анализу"})
+        js.sendMessageToChat({"content": "Python: ✅ Данные из Python globals успешно прочитаны и собраны"})
         js.sendMessageToChat({"content": f"Python: 📊 Финальная длина HTML: {len(page_html)} символов"})
-        js.sendMessageToChat({"content": "Python: 🚀 Начинаем анализ страницы товара..."})
+        js.sendMessageToChat({"content": f"Python: 📊 Эффективность передачи: {(len(page_html) / total_length * 100):.1f}% от ожидаемого"})
 
-        # First status message - confirm function execution started
+        # Детальный отчет о производительности чтения данных
+        total_read_time = (datetime.now() - read_start_time).total_seconds() * 1000
+        js.sendMessageToChat({"content": f"Python: ⏱️ Время чтения данных: {total_read_time:.1f}ms"})
+        js.sendMessageToChat({"content": f"Python: 📊 Скорость чтения: {(total_chunks_size / total_read_time * 1000):.0f} символов/сек"})
+
+        # Проверка готовности к анализу
+        analysis_ready = len(page_html) > 100 and (has_html_tag or has_body_tag or has_div_tag)
+        js.sendMessageToChat({"content": f"Python: 🎯 Готовность к анализу: {'✅ ДА' if analysis_ready else '❌ НЕТ'}"})
+
+        if not analysis_ready:
+            js.sendMessageToChat({"content": "Python: ⚠️ HTML недостаточно качественный для анализа"})
+            if len(page_html) <= 100:
+                js.sendMessageToChat({"content": "Python: ⚠️ Причина: HTML слишком короткий"})
+            if not (has_html_tag or has_body_tag or has_div_tag):
+                js.sendMessageToChat({"content": "Python: ⚠️ Причина: Отсутствуют базовые HTML теги"})
+
+        js.sendMessageToChat({"content": "Python: 🚀 ===== НАЧИНАЕМ АНАЛИЗ СТРАНИЦЫ ТОВАРА ====="})
+
+        # Статус сообщения - подтверждение запуска функции
+        js.sendMessageToChat({"content": "Python: 🎯 Анализ товара Ozon запущен"})
 
         # Временная заглушка для парсера. В будущем здесь будет использоваться
         # библиотека `beautifulsoup4`, которая будет установлена как зависимость
