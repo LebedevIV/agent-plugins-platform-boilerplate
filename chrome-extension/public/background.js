@@ -1022,14 +1022,14 @@ function requireBrowserPolyfill() {
                   resolve(response);
                 };
               });
-              let result;
+              let result2;
               try {
-                result = listener(message, sender, wrappedSendResponse);
+                result2 = listener(message, sender, wrappedSendResponse);
               } catch (err) {
-                result = Promise.reject(err);
+                result2 = Promise.reject(err);
               }
-              const isResultThenable = result !== true && isThenable(result);
-              if (result !== true && !isResultThenable && !didCallSendResponse) {
+              const isResultThenable = result2 !== true && isThenable(result2);
+              if (result2 !== true && !isResultThenable && !didCallSendResponse) {
                 return false;
               }
               const sendPromisedResult = (promise) => {
@@ -1051,7 +1051,7 @@ function requireBrowserPolyfill() {
                 });
               };
               if (isResultThenable) {
-                sendPromisedResult(result);
+                sendPromisedResult(result2);
               } else {
                 sendPromisedResult(sendResponsePromise);
               }
@@ -1158,6 +1158,10 @@ const getPageKey = function(currentTabUrl) {
     return currentTabUrl;
   }
 };
+const helpers = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  getPageKey
+}, Symbol.toStringTag, { value: "Module" }));
 const pluginChatApi = {
   // Создание чата при начале ввода (ленивая инициализация)
   async createChatIfNotExists(pluginId, pageKey) {
@@ -1199,9 +1203,9 @@ const pluginChatApi = {
           return;
         }
         console.log("[pluginChatApi] createChatIfNotExists: создан новый чат", newChat);
-        chrome.storage.local.get([chatKey], (result) => {
+        chrome.storage.local.get([chatKey], (result2) => {
           var _a3;
-          const savedChat = result[chatKey];
+          const savedChat = result2[chatKey];
           console.log("[pluginChatApi] createChatIfNotExists: проверка после создания", {
             savedChat,
             savedChatType: typeof savedChat,
@@ -1216,9 +1220,9 @@ const pluginChatApi = {
   // Получить чат по ключу или null
   async getOrLoadChat(chatKey) {
     return new Promise((resolve) => {
-      chrome.storage.local.get([chatKey], (result) => {
+      chrome.storage.local.get([chatKey], (result2) => {
         var _a2;
-        const chat = result[chatKey] || null;
+        const chat = result2[chatKey] || null;
         console.log("[pluginChatApi] getOrLoadChat:", {
           chatKey,
           chat,
@@ -1227,7 +1231,7 @@ const pluginChatApi = {
           messages: chat == null ? void 0 : chat.messages,
           messagesType: typeof (chat == null ? void 0 : chat.messages),
           messagesLength: (_a2 = chat == null ? void 0 : chat.messages) == null ? void 0 : _a2.length,
-          storageKeys: Object.keys(result)
+          storageKeys: Object.keys(result2)
         });
         chrome.storage.local.get(null, (allData) => {
           const relatedKeys = Object.keys(allData).filter((key) => key.includes(chatKey.split("::")[0]));
@@ -1295,9 +1299,9 @@ const pluginChatApi = {
           chat,
           success: true
         });
-        chrome.storage.local.get([chatKey], (result) => {
+        chrome.storage.local.get([chatKey], (result2) => {
           var _a3, _b;
-          const savedChat = result[chatKey];
+          const savedChat = result2[chatKey];
           console.log("[pluginChatApi][saveMessage] ПРОВЕРКА storage после set:", {
             savedChat,
             savedChatType: typeof savedChat,
@@ -1346,8 +1350,8 @@ const pluginChatApi = {
     const draftKey = `${pluginId}::${getPageKey(pageKey)}::draft`;
     console.log("[pluginChatApi][getDraft] BEFORE", { draftKey, pluginId, pageKey });
     return new Promise((resolve) => {
-      chrome.storage.local.get([draftKey], (result) => {
-        const draft = result[draftKey];
+      chrome.storage.local.get([draftKey], (result2) => {
+        const draft = result2[draftKey];
         const draftText = draft && typeof draft.text === "string" ? draft.text : "";
         console.log("[pluginChatApi][getDraft] AFTER", { draftKey, pluginId, pageKey, draft, draftText });
         resolve({ draftText });
@@ -1369,8 +1373,8 @@ const pluginChatApi = {
   // Получить список всех черновиков для плагина
   async listDraftsForPlugin(pluginId) {
     return new Promise((resolve) => {
-      chrome.storage.local.get(null, (result) => {
-        const drafts = Object.values(result).filter(
+      chrome.storage.local.get(null, (result2) => {
+        const drafts = Object.values(result2).filter(
           (item) => !!(item && typeof item === "object" && "draftKey" in item && "pluginId" in item && item.pluginId === pluginId)
         );
         console.log("[pluginChatApi] listDraftsForPlugin:", pluginId, drafts);
@@ -1381,8 +1385,8 @@ const pluginChatApi = {
   // Получить список всех чатов для плагина
   async listChatsForPlugin(pluginId) {
     return new Promise((resolve) => {
-      chrome.storage.local.get(null, (result) => {
-        const chats = Object.values(result).filter(
+      chrome.storage.local.get(null, (result2) => {
+        const chats = Object.values(result2).filter(
           (item) => !!(item && typeof item === "object" && "chatKey" in item && "pluginId" in item && item.pluginId === pluginId)
         );
         console.log("[pluginChatApi] listChatsForPlugin:", pluginId, chats);
@@ -1640,13 +1644,13 @@ async function callAiModel(modelAlias, apiKey, prompt) {
         promptLength: prompt.length
       });
     }
-    let result;
+    let result2;
     switch (config.provider) {
       case "google":
-        result = await callGoogleGemini(config, apiKey, prompt, stats);
+        result2 = await callGoogleGemini(config, apiKey, prompt, stats);
         break;
       case "openai":
-        result = await callOpenAI(config, apiKey, prompt, stats);
+        result2 = await callOpenAI(config, apiKey, prompt, stats);
         break;
       default:
         throw new Error(`Неподдерживаемый провайдер: ${config.provider}`);
@@ -1656,13 +1660,13 @@ async function callAiModel(modelAlias, apiKey, prompt) {
     stats.success = true;
     try {
       if (config.provider === "google" && stats.tokensUsed === void 0) {
-        stats.tokensUsed = Math.ceil((prompt.length + result.length) / 4);
+        stats.tokensUsed = Math.ceil((prompt.length + result2.length) / 4);
       }
     } catch (e) {
       stats.tokensUsed = 0;
     }
     updateAiStats(stats);
-    return result;
+    return result2;
   } catch (error) {
     stats.endTime = performance.now();
     stats.responseTime = stats.endTime - stats.startTime;
@@ -1972,9 +1976,34 @@ const offscreenSupported = () => {
     return false;
   }
 };
-const CHUNK_SIZE = 32 * 1024;
-const CHUNK_DELAY = 50;
 const activeTransfers = /* @__PURE__ */ new Map();
+const DIRECT_DATA_KEY = "chrome_extension_direct_data";
+async function storeDataDirectly(data, transferId) {
+  try {
+    const dataKey = `${DIRECT_DATA_KEY}_${transferId}`;
+    const dataObj = {
+      data,
+      transferId,
+      storedAt: Date.now(),
+      size: JSON.stringify(data).length
+    };
+    await chrome.storage.session.set({ [dataKey]: dataObj });
+    console.log(`[DIRECT_TRANSFER] ✅ Данные сохранены в sessionStorage: ${dataKey} (${dataObj.size} chars)`);
+    return dataKey;
+  } catch (error) {
+    console.error(`[DIRECT_TRANSFER] ❌ Ошибка сохранения данных:`, error);
+    throw error;
+  }
+}
+async function cleanupDirectData(transferId) {
+  try {
+    const dataKey = `${DIRECT_DATA_KEY}_${transferId}`;
+    await chrome.storage.session.remove([dataKey]);
+    console.log(`[DIRECT_TRANSFER] 🧹 Данные очищены из sessionStorage: ${dataKey}`);
+  } catch (error) {
+    console.warn(`[DIRECT_TRANSFER] ⚠️ Ошибка очистки данных:`, error);
+  }
+}
 function diagnoseTransferState(transferId) {
   const transfer = activeTransfers.get(transferId);
   const diagnostics = {
@@ -2003,38 +2032,69 @@ function diagnoseTransferState(transferId) {
   }
   return { exists: true, isValid, diagnostics };
 }
-function verifyTransferStorage(transferId, expectedChunks) {
-  console.log(`[TRANSFER_VERIFY] 🔍 Verifying transfer ${transferId} storage immediately after creation`);
-  const { exists, isValid, diagnostics } = diagnoseTransferState(transferId);
-  if (!exists) {
-    console.error(`[TRANSFER_VERIFY] ❌ CRITICAL: Transfer ${transferId} not found immediately after creation!`);
-    console.error(`[TRANSFER_VERIFY] Storage state:`, diagnostics);
-    return false;
-  }
-  if (!isValid) {
-    console.error(`[TRANSFER_VERIFY] ❌ CRITICAL: Transfer ${transferId} has invalid structure!`);
-    console.error(`[TRANSFER_VERIFY] Transfer diagnostics:`, diagnostics);
-    return false;
-  }
-  const transfer = activeTransfers.get(transferId);
-  const chunksMatch = transfer.chunks.length === expectedChunks.length;
-  const metadataValid = transfer.metadata && typeof transfer.metadata === "object";
-  if (!chunksMatch) {
-    console.error(`[TRANSFER_VERIFY] ❌ CRITICAL: Chunks count mismatch! Expected: ${expectedChunks.length}, Got: ${transfer.chunks.length}`);
-    return false;
-  }
-  if (!metadataValid) {
-    console.error(`[TRANSFER_VERIFY] ❌ CRITICAL: Invalid metadata for transfer ${transferId}`);
-    return false;
-  }
-  console.log(`[TRANSFER_VERIFY] ✅ Transfer ${transferId} storage verification PASSED`);
-  console.log(`[TRANSFER_VERIFY]   - Chunks: ${transfer.chunks.length}`);
-  console.log(`[TRANSFER_VERIFY]   - Received: ${transfer.received.size}/${transfer.totalChunks}`);
-  console.log(`[TRANSFER_VERIFY]   - Metadata valid: ${metadataValid}`);
-  return true;
-}
 async function multiLayerTransferCheck(transferId) {
-  console.log(`[MULTI_LAYER_CHECK] 🔍 Starting multi-layer transfer check for ${transferId}`);
+  var _a2, _b, _c, _d, _e, _f;
+  console.log(`[MULTI_LAYER_CHECK] 🔍 Starting enhanced multi-layer transfer check for ${transferId}`);
+  try {
+    console.log(`[MULTI_LAYER_CHECK] 🔍 Checking EnhancedChunkManager layers for transfer ${transferId}`);
+    const chunkManagerLayers = [
+      { name: "active_transfers", check: () => {
+        var _a3, _b2, _c2;
+        return (_c2 = (_b2 = (_a3 = globalThis.chunkManager) == null ? void 0 : _a3.transfers) == null ? void 0 : _b2.get) == null ? void 0 : _c2.call(_b2, transferId);
+      } },
+      { name: "completed_transfers", check: () => {
+        var _a3, _b2, _c2;
+        return (_c2 = (_b2 = (_a3 = globalThis.chunkManager) == null ? void 0 : _a3.completedTransfers) == null ? void 0 : _b2.get) == null ? void 0 : _c2.call(_b2, transferId);
+      } },
+      { name: "global_refs", check: () => {
+        var _a3, _b2, _c2;
+        return (_c2 = (_b2 = (_a3 = globalThis.chunkManager) == null ? void 0 : _a3.globalTransferRefs) == null ? void 0 : _b2.get) == null ? void 0 : _c2.call(_b2, transferId);
+      } },
+      { name: "emergency_backup", check: () => {
+        var _a3, _b2, _c2;
+        return (_c2 = (_b2 = (_a3 = globalThis.chunkManager) == null ? void 0 : _a3.emergencyBackup) == null ? void 0 : _b2.get) == null ? void 0 : _c2.call(_b2, transferId);
+      } }
+    ];
+    const chunkManager = globalThis.chunkManager;
+    console.log(`[MULTI_LAYER_CHECK] ChunkManager available: ${!!chunkManager}`);
+    if (chunkManager) {
+      console.log(`[MULTI_LAYER_CHECK] ChunkManager storage sizes:`, {
+        active: ((_a2 = chunkManager.transfers) == null ? void 0 : _a2.size) || 0,
+        completed: ((_b = chunkManager.completedTransfers) == null ? void 0 : _b.size) || 0,
+        globalRefs: ((_c = chunkManager.globalTransferRefs) == null ? void 0 : _c.size) || 0,
+        emergency: ((_d = chunkManager.emergencyBackup) == null ? void 0 : _d.size) || 0
+      });
+    }
+    for (const layer of chunkManagerLayers) {
+      try {
+        const transfer2 = layer.check();
+        console.log(`[MULTI_LAYER_CHECK] Checking layer ${layer.name} for ${transferId}: ${!!transfer2}`);
+        if (transfer2) {
+          console.log(`[MULTI_LAYER_CHECK] ✅ Transfer ${transferId} found in ${layer.name}`);
+          console.log(`[MULTI_LAYER_CHECK] Transfer details:`, {
+            chunks: ((_e = transfer2.chunks) == null ? void 0 : _e.length) || 0,
+            totalSize: transfer2.totalSize || 0,
+            startTime: transfer2.startTime,
+            htmlAssembledConfirmed: transfer2.htmlAssembledConfirmed
+          });
+          if (transfer2.lastAccessed !== void 0) {
+            transfer2.lastAccessed = Date.now();
+          }
+          return {
+            found: true,
+            transfer: transfer2,
+            recoveryAttempted: false,
+            diagnostics: { source: layer.name, age: Date.now() - (transfer2.createdAt || transfer2.startTime || Date.now()) }
+          };
+        }
+      } catch (layerError) {
+        console.warn(`[MULTI_LAYER_CHECK] Error checking layer ${layer.name}:`, layerError);
+      }
+    }
+    console.log(`[MULTI_LAYER_CHECK] ❌ Transfer ${transferId} not found in any EnhancedChunkManager layer`);
+  } catch (error) {
+    console.warn(`[MULTI_LAYER_CHECK] ⚠️ Error checking EnhancedChunkManager layers:`, error);
+  }
   let transfer = activeTransfers.get(transferId);
   if (transfer) {
     console.log(`[MULTI_LAYER_CHECK] ✅ Transfer ${transferId} found in primary storage`);
@@ -2120,12 +2180,43 @@ async function multiLayerTransferCheck(transferId) {
   } catch (error) {
     console.warn(`[MULTI_LAYER_CHECK] Offscreen check failed:`, error);
   }
+  try {
+    const ultraEmergency = (_f = globalThis.emergencyTransfers) == null ? void 0 : _f[transferId];
+    if (ultraEmergency == null ? void 0 : ultraEmergency.transfer) {
+      console.log(`[MULTI_LAYER_CHECK] ✅ Transfer ${transferId} found in ultra emergency storage`);
+      return {
+        found: true,
+        transfer: ultraEmergency.transfer,
+        recoveryAttempted: true,
+        diagnostics: { source: "ultra_emergency", age: Date.now() - (ultraEmergency.timestamp || Date.now()) }
+      };
+    }
+  } catch (error) {
+    console.warn(`[MULTI_LAYER_CHECK] Ultra emergency check failed:`, error);
+  }
+  try {
+    const fixedTransfers = globalThis.fixedTransfers;
+    if (Array.isArray(fixedTransfers)) {
+      const fixedTransfer = fixedTransfers.find((t) => t.id === transferId);
+      if (fixedTransfer == null ? void 0 : fixedTransfer.transfer) {
+        console.log(`[MULTI_LAYER_CHECK] ✅ Transfer ${transferId} found in fixed transfers array`);
+        return {
+          found: true,
+          transfer: fixedTransfer.transfer,
+          recoveryAttempted: true,
+          diagnostics: { source: "fixed_transfers", age: Date.now() - (fixedTransfer.timestamp || Date.now()) }
+        };
+      }
+    }
+  } catch (error) {
+    console.warn(`[MULTI_LAYER_CHECK] Fixed transfers check failed:`, error);
+  }
   console.error(`[MULTI_LAYER_CHECK] ❌ Transfer ${transferId} not found in any storage layer`);
   return {
     found: false,
     transfer: null,
     recoveryAttempted: true,
-    diagnostics: { source: "not_found" }
+    diagnostics: { source: "not_found", checkedLayers: ["chunk_manager", "primary", "partial", "global", "offscreen", "ultra_emergency", "fixed"] }
   };
 }
 async function fallbackTransferRecoveryForAssembled(msg) {
@@ -2226,6 +2317,7 @@ async function fallbackTransferRecoveryForAssembled(msg) {
   }
 }
 async function processRecoveredAssembledTransfer(msg, transfer) {
+  var _a2, _b, _c, _d, _e, _f, _g;
   const transferId = msg.transferId;
   console.log(`[RECOVERY_PROCESSING] 🔄 Processing recovered assembled transfer ${transferId}`);
   try {
@@ -2233,430 +2325,151 @@ async function processRecoveredAssembledTransfer(msg, transfer) {
     if (setTransferCompleted) {
       setTransferCompleted(true);
       console.log(`[RECOVERY_PROCESSING] ✅ Recovery transfer completion flag set for ${transferId}`);
-    }
-    if (msg.pluginId && msg.pageKey) {
-      const executeMessage = {
-        type: "EXECUTE_WORKFLOW",
-        pluginId: msg.pluginId,
-        pageKey: msg.pageKey,
-        requestId: msg.requestId || transferId,
-        transferId,
-        useChunks: false,
-        // Данные уже собраны
-        assembledData: transfer.assembledData,
-        recovery: true,
-        timestamp: Date.now()
-      };
-      console.log(`[RECOVERY_PROCESSING] 🚀 Sending recovery EXECUTE_WORKFLOW for ${transferId}`);
-      await chrome.runtime.sendMessage(executeMessage);
-      console.log(`[RECOVERY_PROCESSING] ✅ Recovery EXECUTE_WORKFLOW sent successfully for ${transferId}`);
     } else {
-      console.warn(`[RECOVERY_PROCESSING] ⚠️ Missing pluginId or pageKey in recovery message`);
+      console.warn(`[RECOVERY_PROCESSING] ⚠️ setTransferCompleted function not found - creating fallback`);
+      globalThis[`setTransferCompleted_${transferId}`] = () => {
+        console.log(`[RECOVERY_PROCESSING] Fallback completion flag set for ${transferId}`);
+      };
     }
+    let pluginId = msg.pluginId;
+    let pageKey = msg.pageKey;
+    if (!pluginId) {
+      console.log(`[RECOVERY_PROCESSING] 🔍 Attempting to recover pluginId for transfer ${transferId}`);
+      if ((_a2 = transfer.metadata) == null ? void 0 : _a2.pluginId) {
+        pluginId = transfer.metadata.pluginId;
+        console.log(`[RECOVERY_PROCESSING] ✅ Recovered pluginId from transfer metadata: ${pluginId}`);
+      }
+      if (!pluginId) {
+        const globalMetadata = (_b = globalThis.transferMetadata) == null ? void 0 : _b[transferId];
+        if (globalMetadata == null ? void 0 : globalMetadata.pluginId) {
+          pluginId = globalMetadata.pluginId;
+          console.log(`[RECOVERY_PROCESSING] ✅ Recovered pluginId from global metadata: ${pluginId}`);
+        }
+      }
+      if (!pluginId) {
+        try {
+          const offscreenData = await chrome.runtime.sendMessage({
+            type: "GET_TRANSFER_PLUGIN_INFO",
+            transferId,
+            timestamp: Date.now()
+          }).catch(() => null);
+          if (offscreenData == null ? void 0 : offscreenData.pluginId) {
+            pluginId = offscreenData.pluginId;
+            console.log(`[RECOVERY_PROCESSING] ✅ Recovered pluginId from offscreen: ${pluginId}`);
+          }
+        } catch (error) {
+          console.warn(`[RECOVERY_PROCESSING] Failed to query offscreen for pluginId:`, error);
+        }
+      }
+      if (!pluginId && transferId.includes("_html")) {
+        const parts = transferId.split("_");
+        if (parts.length >= 3) {
+          pluginId = parts.slice(0, parts.length - 2).join("_");
+          console.log(`[RECOVERY_PROCESSING] 🔧 Extracted pluginId from transferId: ${pluginId}`);
+        }
+      }
+    }
+    if (!pageKey) {
+      console.log(`[RECOVERY_PROCESSING] 🔍 Attempting to recover pageKey for transfer ${transferId}`);
+      if ((_c = transfer.metadata) == null ? void 0 : _c.pageKey) {
+        pageKey = transfer.metadata.pageKey;
+        console.log(`[RECOVERY_PROCESSING] ✅ Recovered pageKey from transfer metadata: ${pageKey}`);
+      }
+      if (!pageKey) {
+        const globalMetadata = (_d = globalThis.transferMetadata) == null ? void 0 : _d[transferId];
+        if (globalMetadata == null ? void 0 : globalMetadata.pageKey) {
+          pageKey = globalMetadata.pageKey;
+          console.log(`[RECOVERY_PROCESSING] ✅ Recovered pageKey from global metadata: ${pageKey}`);
+        }
+      }
+      if (!pageKey) {
+        try {
+          const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+          if ((_e = tabs[0]) == null ? void 0 : _e.url) {
+            const { getPageKey: getPageKey2 } = await Promise.resolve().then(() => helpers);
+            pageKey = getPageKey2(tabs[0].url);
+            console.log(`[RECOVERY_PROCESSING] ✅ Generated pageKey from active tab: ${pageKey}`);
+          }
+        } catch (error) {
+          console.warn(`[RECOVERY_PROCESSING] Failed to get pageKey from active tab:`, error);
+        }
+      }
+      if (!pageKey) {
+        pageKey = `recovered_page_${Date.now()}`;
+        console.log(`[RECOVERY_PROCESSING] 🔧 Using fallback pageKey: ${pageKey}`);
+      }
+    }
+    if (!pluginId) {
+      console.error(`[RECOVERY_PROCESSING] ❌ CRITICAL: Cannot determine pluginId for recovered transfer ${transferId}`);
+      throw new Error(`Missing pluginId - recovery failed`);
+    }
+    if (!pageKey) {
+      console.error(`[RECOVERY_PROCESSING] ❌ CRITICAL: Cannot determine pageKey for recovered transfer ${transferId}`);
+      throw new Error(`Missing pageKey - recovery failed`);
+    }
+    console.log(`[RECOVERY_PROCESSING] ✅ Recovery data validated - pluginId: ${pluginId}, pageKey: ${pageKey}`);
+    const executeMessage2 = {
+      type: "EXECUTE_WORKFLOW",
+      pluginId,
+      pageKey,
+      requestId: msg.requestId || transferId,
+      transferId,
+      useChunks: false,
+      // Данные уже собраны
+      assembledData: transfer.assembledData || transfer.html,
+      recovery: true,
+      recoverySource: transfer.isRecovery ? "fallback_recovery" : "recovered",
+      timestamp: Date.now()
+    };
+    if (!executeMessage2.assembledData || executeMessage2.assembledData.length === 0) {
+      console.warn(`[RECOVERY_PROCESSING] ⚠️ Assembled data is empty for transfer ${transferId}`);
+      if (transfer.chunks && Array.isArray(transfer.chunks)) {
+        executeMessage2.assembledData = transfer.chunks.join("");
+        console.log(`[RECOVERY_PROCESSING] ✅ Reassembled data from chunks: ${executeMessage2.assembledData.length} chars`);
+      } else {
+        console.warn(`[RECOVERY_PROCESSING] ⚠️ No chunks available for reassembly`);
+      }
+    }
+    console.log(`[RECOVERY_PROCESSING] 🚀 Sending recovery EXECUTE_WORKFLOW for ${transferId} (${((_f = executeMessage2.assembledData) == null ? void 0 : _f.length) || 0} chars)`);
+    await chrome.runtime.sendMessage(executeMessage2);
+    console.log(`[RECOVERY_PROCESSING] ✅ Recovery EXECUTE_WORKFLOW sent successfully for ${transferId}`);
+    console.log(`[RECOVERY_PROCESSING] 📊 Recovery summary for ${transferId}:`, {
+      pluginId,
+      pageKey,
+      dataLength: ((_g = executeMessage2.assembledData) == null ? void 0 : _g.length) || 0,
+      recoveryType: executeMessage2.recoverySource,
+      timestamp: executeMessage2.timestamp
+    });
   } catch (error) {
     console.error(`[RECOVERY_PROCESSING] ❌ Failed to process recovered transfer ${transferId}:`, error);
+    console.error(`[RECOVERY_PROCESSING] Error details:`, {
+      message: error.message,
+      stack: error.stack,
+      transferId,
+      hasAssembledData: !!(transfer == null ? void 0 : transfer.assembledData),
+      pluginId: msg.pluginId,
+      pageKey: msg.pageKey
+    });
     throw error;
   } finally {
+    console.log(`[RECOVERY_PROCESSING] 🧹 Starting cleanup for transfer ${transferId}`);
     if (activeTransfers.has(transferId)) {
       activeTransfers.delete(transferId);
-      console.log(`[RECOVERY_PROCESSING] 🧹 Recovery transfer ${transferId} cleaned up`);
+      console.log(`[RECOVERY_PROCESSING] ✅ Recovery transfer ${transferId} cleaned up from active transfers`);
+    } else {
+      console.log(`[RECOVERY_PROCESSING] ⚠️ Transfer ${transferId} was already cleaned up`);
     }
     if (globalThis[`setTransferCompleted_${transferId}`]) {
       delete globalThis[`setTransferCompleted_${transferId}`];
       console.log(`[RECOVERY_PROCESSING] ✅ Recovery transfer completion function cleaned up for ${transferId}`);
     }
-  }
-}
-function splitHtmlIntoChunks(html, chunkSize = CHUNK_SIZE) {
-  const chunks = [];
-  for (let i = 0; i < html.length; i += chunkSize) {
-    chunks.push(html.slice(i, i + chunkSize));
-  }
-  return chunks;
-}
-async function sendHtmlInChunks(pluginId, pageKey, html, requestId) {
-  const transferId = `${requestId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  const chunks = splitHtmlIntoChunks(html);
-  console.log("[background][CHUNKING] Starting chunked HTML transfer:");
-  console.log("[background][CHUNKING] - Transfer ID:", transferId);
-  console.log("[background][CHUNKING] - Total chunks:", chunks.length);
-  console.log("[background][CHUNKING] - Original HTML size:", html.length, "chars");
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      console.error(`[background][CHUNKING] ❌ Transfer ${transferId} timeout - cleaning up`);
-      activeTransfers.delete(transferId);
-      reject(new Error("HTML chunk transfer timeout"));
-    }, 3e4);
-    const transferState = {
-      chunks,
-      received: /* @__PURE__ */ new Set(),
-      totalChunks: chunks.length,
-      metadata: { pluginId, pageKey, requestId, totalSize: html.length, timestamp: Date.now() },
-      resolve: () => {
-        clearTimeout(timeout);
-        console.log(`[background][CHUNKING] ✅ Transfer ${transferId} completed successfully`);
-        activeTransfers.delete(transferId);
-        resolve(transferId);
-      },
-      reject: (error) => {
-        clearTimeout(timeout);
-        console.error(`[background][CHUNKING] ❌ Transfer ${transferId} failed:`, error);
-        activeTransfers.delete(transferId);
-        reject(error);
-      },
-      timeout,
-      createdAt: Date.now(),
-      lastAccessed: Date.now()
-    };
-    activeTransfers.set(transferId, transferState);
-    console.log(`[background][CHUNKING] 🔍 Verifying transfer ${transferId} storage after creation...`);
-    const storageVerified = verifyTransferStorage(transferId, chunks);
-    if (!storageVerified) {
-      console.error(`[background][CHUNKING] ❌ CRITICAL: Transfer storage verification FAILED for ${transferId}`);
-      console.error(`[background][CHUNKING] Attempting emergency recovery...`);
-      const recoverySuccess = emergencyTransferRecovery(transferId, transferState);
-      if (!recoverySuccess) {
-        console.error(`[background][CHUNKING] ❌ CRITICAL: Emergency recovery FAILED for ${transferId}`);
-        activeTransfers.delete(transferId);
-        reject(new Error(`Transfer storage verification failed for ${transferId}`));
-        return;
+    setTimeout(() => {
+      var _a3;
+      if ((_a3 = globalThis.transferMetadata) == null ? void 0 : _a3[transferId]) {
+        delete globalThis.transferMetadata[transferId];
+        console.log(`[RECOVERY_PROCESSING] 🧹 Global metadata cleaned up for ${transferId}`);
       }
-      console.log(`[background][CHUNKING] ✅ Emergency recovery successful for ${transferId}`);
-    } else {
-      console.log(`[background][CHUNKING] ✅ Transfer ${transferId} storage verification PASSED`);
-    }
-    const { diagnostics } = diagnoseTransferState(transferId);
-    console.log(`[background][CHUNKING] 📊 Transfer ${transferId} post-creation diagnostics:`, diagnostics);
-    try {
-      console.log(`[background][CHUNKING] 🚀 Starting chunk transmission for transfer ${transferId}`);
-      sendChunksSequentially(transferId);
-    } catch (error) {
-      console.error(`[background][CHUNKING] ❌ Failed to start chunk transmission for ${transferId}:`, error);
-      activeTransfers.delete(transferId);
-      reject(error);
-    }
-  });
-}
-function emergencyTransferRecovery(transferId, originalTransfer) {
-  try {
-    console.log(`[EMERGENCY_RECOVERY] 🔧 Starting emergency recovery for transfer ${transferId}`);
-    activeTransfers.set(transferId, {
-      ...originalTransfer,
-      createdAt: Date.now(),
-      lastAccessed: Date.now()
-    });
-    const recoveryVerified = verifyTransferStorage(transferId, originalTransfer.chunks);
-    if (recoveryVerified) {
-      console.log(`[EMERGENCY_RECOVERY] ✅ Recovery successful - transfer ${transferId} restored`);
-      return true;
-    }
-    console.log(`[EMERGENCY_RECOVERY] 🔄 Attempting alternative storage recovery`);
-    globalThis[`emergency_transfer_${transferId}`] = {
-      ...originalTransfer,
-      emergencyBackup: true,
-      backupTimestamp: Date.now()
-    };
-    chrome.runtime.sendMessage({
-      type: "EMERGENCY_TRANSFER_BACKUP",
-      transferId,
-      transferData: originalTransfer,
-      timestamp: Date.now()
-    }).catch(() => {
-      console.warn(`[EMERGENCY_RECOVERY] Offscreen backup notification failed`);
-    });
-    console.log(`[EMERGENCY_RECOVERY] ✅ Emergency recovery completed for transfer ${transferId}`);
-    return true;
-  } catch (error) {
-    console.error(`[EMERGENCY_RECOVERY] ❌ Emergency recovery failed for transfer ${transferId}:`, error);
-    return false;
-  }
-}
-async function sendChunksSequentially(transferId) {
-  const transfer = activeTransfers.get(transferId);
-  if (!transfer) {
-    console.error("[background][CHUNKING] Transfer not found:", transferId);
-    const assembledCheck = await chrome.runtime.sendMessage({
-      type: "CHECK_TRANSFER_STATUS",
-      transferId
-    }).catch(() => null);
-    if (assembledCheck == null ? void 0 : assembledCheck.assembledNotified) {
-      console.warn("[background][CHUNKING] Transfer was already assembled in offscreen:", transferId);
-      return;
-    }
-    throw new Error(`Transfer ${transferId} not found`);
-  }
-  if (!Array.isArray(transfer.chunks) || transfer.chunks.length === 0) {
-    console.error("[background][CHUNKING] Invalid transfer chunks for:", transferId);
-    activeTransfers.delete(transferId);
-    throw new Error(`Invalid transfer chunks for ${transferId}`);
-  }
-  console.log(`[background][CHUNKING] Starting to send ${transfer.chunks.length} chunks (0-${transfer.chunks.length - 1})`);
-  let transferCompleted = false;
-  const setTransferCompleted = (completed) => {
-    console.log(`[background][CHUNKING] Transfer ${transferId} completion status set to:`, completed);
-    transferCompleted = completed;
-  };
-  globalThis[`setTransferCompleted_${transferId}`] = setTransferCompleted;
-  for (let i = 0; i < transfer.chunks.length; i++) {
-    const currentTransfer = activeTransfers.get(transferId);
-    if (!currentTransfer) {
-      console.log("[background][CHUNKING] Transfer cancelled or completed");
-      return;
-    }
-    if (transferCompleted) {
-      console.log("[background][CHUNKING] Transfer completed, skipping remaining chunks");
-      return;
-    }
-    try {
-      if (transferCompleted) {
-        console.log(`[background][CHUNKING] Transfer ${transferId} completed, skipping sending chunk ${i}`);
-        return;
-      }
-      if (!currentTransfer.chunks[i]) {
-        console.error(`[background][CHUNKING] Chunk ${i} does not exist in transfer ${transferId}. Total chunks: ${currentTransfer.chunks.length}`);
-        activeTransfers.delete(transferId);
-        throw new Error(`Chunk ${i} not found in transfer ${transferId}`);
-      }
-      const chunkMessage = {
-        type: "HTML_CHUNK",
-        transferId,
-        chunkIndex: i,
-        totalChunks: transfer.totalChunks,
-        chunkData: transfer.chunks[i],
-        metadata: transfer.metadata
-      };
-      console.log(`[background][CHUNKING] Sending chunk ${i}/${transfer.totalChunks - 1} (${transfer.chunks[i].length} chars)`);
-      await chrome.runtime.sendMessage(chunkMessage);
-      if (transferCompleted) {
-        console.log(`[background][CHUNKING] Transfer ${transferId} completed during chunk ${i} wait, skipping waitForChunkAck`);
-        return;
-      }
-      await waitForChunkAck(transferId, i);
-      if (i < transfer.chunks.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, CHUNK_DELAY));
-      }
-    } catch (error) {
-      console.error(`[background][CHUNKING] Failed to send chunk ${i}:`, error);
-      if (!transferCompleted) {
-        transfer.reject(error);
-      }
-      return;
-    }
-  }
-  try {
-    await chrome.runtime.sendMessage({
-      type: "HTML_CHUNK_COMPLETE",
-      transferId,
-      totalChunks: transfer.totalChunks
-    });
-    console.log("[background][CHUNKING] All chunks sent successfully");
-    transfer.resolve();
-  } catch (error) {
-    console.error("[background][CHUNKING] Failed to send completion message:", error);
-    transfer.reject(error);
-  }
-}
-async function waitForChunkAck(transferId, chunkIndex) {
-  console.log(`[WAIT_ACK] 🔍 Starting waitForChunkAck for transfer ${transferId}, chunk ${chunkIndex}`);
-  const { found, transfer, recoveryAttempted, diagnostics } = await multiLayerTransferCheck(transferId);
-  if (!found || !transfer) {
-    console.error(`[WAIT_ACK] ❌ Transfer ${transferId} not found in any storage layer`);
-    console.error(`[WAIT_ACK] Multi-layer check diagnostics:`, diagnostics);
-    const stubTransfer = await createStubTransferForRecovery(transferId, chunkIndex);
-    if (stubTransfer) {
-      console.log(`[WAIT_ACK] ✅ Stub transfer created for ${transferId}, continuing with acknowledgment wait`);
-    } else {
-      throw new Error(`Transfer ${transferId} not found and recovery failed`);
-    }
-  } else {
-    if (recoveryAttempted) {
-      console.log(`[WAIT_ACK] ⚠️ Transfer ${transferId} recovered using ${diagnostics.source} method`);
-    }
-  }
-  transfer.lastAccessed = Date.now();
-  if (!transfer.received || typeof transfer.received.has !== "function") {
-    console.error(`[WAIT_ACK] ❌ Invalid transfer state for ${transferId}`);
-    console.error(`[WAIT_ACK] Transfer structure:`, Object.keys(transfer));
-    if (!transfer.received) {
-      console.log(`[WAIT_ACK] 🔧 Attempting to restore received Set for ${transferId}`);
-      transfer.received = /* @__PURE__ */ new Set();
-    }
-    if (typeof transfer.received.has !== "function") {
-      console.error(`[WAIT_ACK] ❌ Cannot restore received Set for ${transferId}`);
-      throw new Error(`Invalid transfer state for ${transferId}`);
-    }
-  }
-  if (transfer.received.has(chunkIndex)) {
-    console.log(`[WAIT_ACK] ✅ Chunk ${chunkIndex} already acknowledged for transfer ${transferId}`);
-    return;
-  }
-  const ackTimeout = 5e3;
-  const startTime = Date.now();
-  let checkCount = 0;
-  console.log(`[WAIT_ACK] ⏳ Waiting for chunk ${chunkIndex} acknowledgment (timeout: ${ackTimeout}ms)`);
-  while (!transfer.received.has(chunkIndex)) {
-    checkCount++;
-    const elapsed = Date.now() - startTime;
-    if (elapsed > ackTimeout) {
-      console.error(`[WAIT_ACK] ❌ Timeout waiting for chunk ${chunkIndex} acknowledgment for transfer ${transferId}`);
-      console.error(`[WAIT_ACK] Wait statistics:`, {
-        elapsed,
-        timeout: ackTimeout,
-        checksPerformed: checkCount,
-        chunkIndex,
-        totalChunks: transfer.totalChunks,
-        acknowledgedCount: transfer.received.size
-      });
-      await diagnoseAcknowledgmentFailure(transferId, chunkIndex, transfer);
-      throw new Error(`Timeout waiting for chunk ${chunkIndex} acknowledgment`);
-    }
-    if (!activeTransfers.has(transferId)) {
-      console.error(`[WAIT_ACK] ❌ Transfer ${transferId} was removed during chunk wait`);
-      console.error(`[WAIT_ACK] Emergency recovery attempt...`);
-      const recoveryResult = await emergencyTransferRecoveryDuringWait(transferId, transfer);
-      if (!recoveryResult) {
-        throw new Error(`Transfer ${transferId} was removed during operation and recovery failed`);
-      }
-    }
-    if (checkCount % 100 === 0) {
-      console.log(`[WAIT_ACK] 📊 Wait status for ${transferId}:`, {
-        elapsed,
-        checks: checkCount,
-        chunkIndex,
-        acknowledged: transfer.received.size,
-        total: transfer.totalChunks
-      });
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  console.log(`[WAIT_ACK] ✅ Chunk ${chunkIndex} acknowledged for transfer ${transferId}`);
-  console.log(`[WAIT_ACK] Acknowledgment statistics:`, {
-    waitTime: Date.now() - startTime,
-    checksPerformed: checkCount,
-    acknowledgedCount: transfer.received.size,
-    totalChunks: transfer.totalChunks
-  });
-}
-async function createStubTransferForRecovery(transferId, chunkIndex) {
-  try {
-    console.log(`[STUB_RECOVERY] 🔧 Creating stub transfer for ${transferId} at chunk ${chunkIndex}`);
-    const offscreenInfo = await chrome.runtime.sendMessage({
-      type: "GET_TRANSFER_INFO",
-      transferId,
-      timestamp: Date.now()
-    }).catch(() => null);
-    const stubTransfer = {
-      chunks: (offscreenInfo == null ? void 0 : offscreenInfo.chunks) || [],
-      received: /* @__PURE__ */ new Set([chunkIndex]),
-      // Предполагаем, что текущий чанк уже получен
-      totalChunks: (offscreenInfo == null ? void 0 : offscreenInfo.totalChunks) || 1,
-      metadata: (offscreenInfo == null ? void 0 : offscreenInfo.metadata) || { stub: true, recovery: true },
-      resolve: () => console.log(`[STUB_RECOVERY] Stub transfer ${transferId} resolved`),
-      reject: (error) => console.error(`[STUB_RECOVERY] Stub transfer ${transferId} rejected:`, error),
-      timeout: 0,
-      createdAt: Date.now(),
-      lastAccessed: Date.now(),
-      isStub: true
-    };
-    activeTransfers.set(transferId, stubTransfer);
-    console.log(`[STUB_RECOVERY] ✅ Stub transfer created for ${transferId}`);
-    return stubTransfer;
-  } catch (error) {
-    console.error(`[STUB_RECOVERY] ❌ Failed to create stub transfer for ${transferId}:`, error);
-    return null;
-  }
-}
-async function diagnoseAcknowledgmentFailure(transferId, chunkIndex, transfer) {
-  console.log(`[ACK_DIAG] 🔍 Diagnosing acknowledgment failure for transfer ${transferId}, chunk ${chunkIndex}`);
-  const diagnostics = {
-    transferId,
-    chunkIndex,
-    acknowledgedCount: transfer.received.size,
-    totalChunks: transfer.totalChunks,
-    isStub: transfer.isStub || false,
-    createdAt: transfer.createdAt,
-    age: Date.now() - transfer.createdAt
-  };
-  console.log(`[ACK_DIAG] Transfer diagnostics:`, diagnostics);
-  try {
-    const offscreenResponse = await chrome.runtime.sendMessage({
-      type: "DIAGNOSE_CHUNK_ACK",
-      transferId,
-      chunkIndex,
-      timestamp: Date.now()
-    }).catch(() => ({ error: "offscreen_unavailable" }));
-    console.log(`[ACK_DIAG] Offscreen diagnostics response:`, offscreenResponse);
-    if ((offscreenResponse == null ? void 0 : offscreenResponse.lastReceivedChunk) !== void 0) {
-      console.log(`[ACK_DIAG] Offscreen last received chunk: ${offscreenResponse.lastReceivedChunk}`);
-      if (offscreenResponse.lastReceivedChunk >= chunkIndex) {
-        console.log(`[ACK_DIAG] ⚠️ Chunk ${chunkIndex} may have been received but not acknowledged properly`);
-      }
-    }
-  } catch (error) {
-    console.warn(`[ACK_DIAG] Offscreen diagnostics failed:`, error);
-  }
-  console.error(`[ACK_DIAG] 📊 Complete failure diagnostics:`, {
-    ...diagnostics,
-    activeTransfersCount: activeTransfers.size,
-    activeTransferIds: Array.from(activeTransfers.keys()),
-    timestamp: Date.now()
-  });
-}
-async function emergencyTransferRecoveryDuringWait(transferId, originalTransfer) {
-  try {
-    console.log(`[EMERGENCY_WAIT_RECOVERY] 🚨 Emergency recovery during wait for ${transferId}`);
-    activeTransfers.set(transferId, {
-      ...originalTransfer,
-      lastAccessed: Date.now(),
-      emergencyRecoveryCount: (originalTransfer.emergencyRecoveryCount || 0) + 1
-    });
-    await chrome.runtime.sendMessage({
-      type: "TRANSFER_EMERGENCY_RECOVERY",
-      transferId,
-      timestamp: Date.now()
-    }).catch(() => {
-      console.warn(`[EMERGENCY_WAIT_RECOVERY] Offscreen notification failed`);
-    });
-    console.log(`[EMERGENCY_WAIT_RECOVERY] ✅ Transfer ${transferId} recovered during wait`);
-    return true;
-  } catch (error) {
-    console.error(`[EMERGENCY_WAIT_RECOVERY] ❌ Recovery failed for ${transferId}:`, error);
-    return false;
-  }
-}
-function handleChunkAcknowledgment(ackMessage) {
-  const transfer = activeTransfers.get(ackMessage.transferId);
-  if (!transfer) {
-    console.warn("[background][CHUNKING] Acknowledgment for unknown or already cleaned transfer:", ackMessage.transferId);
-    return;
-  }
-  if (typeof ackMessage.received !== "boolean") {
-    console.error("[background][CHUNKING] Invalid acknowledgment message:", ackMessage);
-    return;
-  }
-  if (ackMessage.received) {
-    if (typeof ackMessage.chunkIndex === "number" && ackMessage.chunkIndex >= 0) {
-      transfer.received.add(ackMessage.chunkIndex);
-      console.log(`[background][CHUNKING] Chunk ${ackMessage.chunkIndex} acknowledged for transfer ${ackMessage.transferId}`);
-    } else {
-      console.error(`[background][CHUNKING] Invalid chunk index in acknowledgment:`, ackMessage);
-    }
-    if (transfer.received.size === transfer.totalChunks) {
-      console.log("[background][CHUNKING] All chunks acknowledged, transfer complete");
-      transfer.resolve();
-      setTimeout(() => {
-        if (activeTransfers.has(ackMessage.transferId)) {
-          console.warn("[background][CHUNKING] Transfer not cleaned by resolve, manually cleaning:", ackMessage.transferId);
-          activeTransfers.delete(ackMessage.transferId);
-        }
-      }, 1e3);
-    }
-  } else {
-    console.error(`[background][CHUNKING] Chunk ${ackMessage.chunkIndex} acknowledgment received as failed for transfer ${ackMessage.transferId}`);
-    activeTransfers.delete(ackMessage.transferId);
-    if (transfer.reject) {
-      transfer.reject(new Error(`Chunk ${ackMessage.chunkIndex} acknowledgment failed`));
-    }
+    }, 5e3);
   }
 }
 const handleLegacyChrome = async (message) => {
@@ -2776,9 +2589,9 @@ const hasOffscreenDocument = async () => {
     return false;
   }
   try {
-    const result = await chrome.offscreen.hasDocument();
-    console.log("[offscreen][manager] Offscreen document exists:", result);
-    return result;
+    const result2 = await chrome.offscreen.hasDocument();
+    console.log("[offscreen][manager] Offscreen document exists:", result2);
+    return result2;
   } catch (error) {
     console.error("[offscreen][manager] Error checking offscreen document:", error);
     return false;
@@ -2951,16 +2764,16 @@ chrome.runtime.onMessage.addListener(
         try {
           (async () => {
             try {
-              const result = await handleTestPyodideDirect(msg);
-              console.log("[background][TEST_PYODIDE_DIRECT] Test completed with result:", result);
-              if (!result) {
+              const result2 = await handleTestPyodideDirect(msg);
+              console.log("[background][TEST_PYODIDE_DIRECT] Test completed with result:", result2);
+              if (!result2) {
                 sendResponse({
                   success: false,
                   error: "No response received from test execution",
                   timestamp: Date.now()
                 });
               } else {
-                sendResponse(result);
+                sendResponse(result2);
               }
             } catch (error) {
               console.error("[background][TEST_PYODIDE_DIRECT] Test failed:", error);
@@ -3278,58 +3091,50 @@ chrome.runtime.onMessage.addListener(
                 return;
               }
               await ensureOffscreenDocument();
-              console.log("[background][OFFSCREEN DELEGATION] ===== DELEGATING TO OFFSCREEN =====");
+              console.log("[background][OFFSCREEN DELEGATION] ===== DELEGATING TO OFFSCREEN (DIRECT DATA EXCHANGE) =====");
               console.log("[background][OFFSCREEN DELEGATION] Preparing workflow payload...");
               const requestId = msg.requestId || `workflow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-              console.log("[background][OFFSCREEN DELEGATION] HTML size check:", pageHtml.length, "chars");
-              console.log("[background][OFFSCREEN DELEGATION] Chunking threshold: 64000 chars");
-              let result = null;
-              if (pageHtml.length > 64e3) {
-                console.log("[background][OFFSCREEN DELEGATION] Large HTML detected, using chunking approach");
-                console.log("[background][OFFSCREEN DELEGATION][DEBUG] HTML size:", pageHtml.length, "chars (>${64000})");
-                try {
-                  if (typeof pageHtml !== "string" || pageHtml.length === 0) {
-                    throw new Error("Invalid HTML data for chunking");
-                  }
-                  const transferId = await sendHtmlInChunks(msg.pluginId, pageKey, pageHtml, requestId);
-                  console.log("[background][OFFSCREEN DELEGATION] All chunks sent, waiting for HTML_ASSEMBLED from offscreen...");
-                  sendResponse({ success: true });
-                  result = { success: true };
-                  console.log("[background][OFFSCREEN DELEGATION] Workflow command sent, transferId:", transferId);
-                  console.log("[background][DEBUG] About to check sendResponse function...");
-                } catch (chunkingError) {
-                  console.error("[background][OFFSCREEN DELEGATION] Chunking failed:", chunkingError);
-                  sendResponse({ error: `Failed to send large HTML data: ${chunkingError.message}` });
-                  result = { error: chunkingError.message };
-                  return;
+              console.log("[background][OFFSCREEN DELEGATION] Direct data exchange - HTML size:", pageHtml.length, "chars");
+              try {
+                if (typeof pageHtml !== "string" || pageHtml.length === 0) {
+                  throw new Error("Invalid HTML data for direct transmission");
                 }
-              } else {
-                console.log("[background][OFFSCREEN DELEGATION] Small HTML, using direct transmission");
-                console.log("[background][OFFSCREEN DELEGATION] Small HTML, using direct transmission");
+                console.log("[background][OFFSCREEN DELEGATION] Storing HTML data in persistence layer...");
+                const dataKey = await storeDataDirectly(pageHtml, requestId);
+                console.log("[background][OFFSCREEN DELEGATION] HTML data stored with key:", dataKey);
                 const workflowPayload = {
                   type: "EXECUTE_WORKFLOW",
                   pluginId: msg.pluginId,
                   pageKey,
-                  pageHtml,
+                  dataKey,
+                  // <-- ПЕРЕДАЕМ КЛЮЧ ДАННЫХ ВМЕСТО САМИХ ДАННЫХ
                   requestId,
                   transferId: requestId,
-                  // <-- ДОБАВИТЬ transferId
                   useChunks: false,
-                  // <-- ДОБАВИТЬ useChunks для консистентности
+                  directExchange: true,
                   timestamp: Date.now()
                 };
-                console.log("[background][OFFSCREEN DELEGATION] Execution payload prepared:", {
+                console.log("[background][OFFSCREEN DELEGATION] Direct execution payload prepared:", {
                   ...workflowPayload,
-                  pageHtml: `${pageHtml.length} chars`
+                  dataKey
                 });
-                console.log("[background][DEBUG] Full workflow payload:", JSON.stringify({
-                  ...workflowPayload,
-                  pageHtml: pageHtml.substring(0, 100) + "..."
-                }, null, 2));
-                console.log("[background][OFFSCREEN DELEGATION] Sending to offscreen...");
-                console.log("[background][DEBUG] Sending chrome.runtime.sendMessage with payload above...");
-                result = await chrome.runtime.sendMessage(workflowPayload);
-                console.log("[background][DEBUG] chrome.runtime.sendMessage completed, result:", result);
+                console.log("[background][OFFSCREEN DELEGATION] Sending workflow request to offscreen...");
+                const result2 = await chrome.runtime.sendMessage(workflowPayload);
+                console.log("[background][DEBUG] Direct data exchange completed, result:", result2);
+                if (result2 && result2.success) {
+                  console.log("[background][OFFSCREEN DELEGATION] Direct workflow execution successful");
+                  await cleanupDirectData(requestId);
+                  sendResponse({ success: true });
+                } else {
+                  console.error("[background][OFFSCREEN DELEGATION] Direct workflow execution failed:", result2 == null ? void 0 : result2.error);
+                  await cleanupDirectData(requestId);
+                  sendResponse({ error: (result2 == null ? void 0 : result2.error) || "Workflow execution failed" });
+                }
+              } catch (directExchangeError) {
+                console.error("[background][OFFSCREEN DELEGATION] Direct data exchange failed:", directExchangeError);
+                await cleanupDirectData(requestId);
+                sendResponse({ error: `Direct data exchange failed: ${directExchangeError.message}` });
+                return;
               }
               console.log("[background][OFFSCREEN DELEGATION] ===== OFFSCREEN EXECUTION COMPLETED =====");
               console.log("[background][OFFSCREEN DELEGATION] Result received:", result);
@@ -3564,10 +3369,10 @@ chrome.runtime.onMessage.addListener(
         });
         (async () => {
           try {
-            const result = await pluginChatApi.saveMessage(pluginId, normPageKey, chatMsg);
+            const result2 = await pluginChatApi.saveMessage(pluginId, normPageKey, chatMsg);
             console.log("[background] SAVE_PLUGIN_CHAT_MESSAGE: saveMessage результат", {
-              result,
-              success: result.success,
+              result: result2,
+              success: result2.success,
               pluginId,
               pageKey,
               normPageKey,
@@ -3575,7 +3380,7 @@ chrome.runtime.onMessage.addListener(
             });
             await pluginChatApi.deleteDraft(pluginId, normPageKey);
             console.log("[background] SAVE_PLUGIN_CHAT_MESSAGE: deleteDraft завершен", {
-              result,
+              result: result2,
               pluginId,
               pageKey,
               normPageKey,
@@ -3871,19 +3676,31 @@ const handleHostApiMessage = async (message, sendResponse) => {
 };
 chrome.runtime.onMessage.addListener(
   async (message, sender, sendResponse) => {
-    var _a2, _b;
+    var _a2, _b, _c, _d;
     if ((_a2 = sender.url) == null ? void 0 : _a2.includes("offscreen.html")) {
       console.log("[background][OFFSCREEN RESPONSE] Message from offscreen received:", message);
       if (typeof message === "object" && message !== null && "type" in message) {
         const msg = message;
         if (msg.type === "HTML_ASSEMBLED") {
-          console.log("[background][OFFSCREEN RESPONSE] HTML_ASSEMBLED received:", msg);
-          if (!msg.transferId) {
+          const transferId = msg.transferId;
+          if (!transferId) {
             console.error("[background][OFFSCREEN RESPONSE] ❌ Missing transferId in HTML_ASSEMBLED message");
             return true;
           }
-          const transferId = msg.transferId;
-          console.log(`[background][OFFSCREEN RESPONSE] 🔍 Processing HTML_ASSEMBLED for transfer ${transferId}`);
+          const duplicateKey = `html_assembled_processed_${transferId}`;
+          if (globalThis[duplicateKey]) {
+            console.warn(`[background][OFFSCREEN RESPONSE] ⚠️ DUPLICATE HTML_ASSEMBLED detected for transfer ${transferId} - ignoring`);
+            return true;
+          }
+          globalThis[duplicateKey] = {
+            timestamp: Date.now(),
+            processed: true
+          };
+          console.log(`[background][OFFSCREEN RESPONSE] HTML_ASSEMBLED received for transfer ${transferId}`);
+          console.log(`[background][OFFSCREEN RESPONSE] 🔍 Processing HTML_ASSEMBLED for transfer ${transferId} (duplicate protection enabled)`);
+          if ((_c = (_b = globalThis.completedTransfers) == null ? void 0 : _b.has) == null ? void 0 : _c.call(_b, transferId)) {
+            console.warn(`[background][OFFSCREEN RESPONSE] ⚠️ Transfer ${transferId} already completed - possible duplicate processing`);
+          }
           const { found, transfer, recoveryAttempted, diagnostics } = await multiLayerTransferCheck(transferId);
           if (!found || !transfer) {
             console.error(`[background][OFFSCREEN RESPONSE] ❌ Transfer ${transferId} not found in any storage layer`);
@@ -3932,7 +3749,7 @@ chrome.runtime.onMessage.addListener(
             };
           }
           if (msg.pluginId && msg.pageKey) {
-            const executeMessage = {
+            const executeMessage2 = {
               type: "EXECUTE_WORKFLOW",
               pluginId: msg.pluginId,
               pageKey: msg.pageKey,
@@ -3943,7 +3760,7 @@ chrome.runtime.onMessage.addListener(
             };
             try {
               console.log("[background][OFFSCREEN RESPONSE] 🚀 Sending EXECUTE_WORKFLOW to offscreen...");
-              await chrome.runtime.sendMessage(executeMessage);
+              await chrome.runtime.sendMessage(executeMessage2);
               console.log("[background][OFFSCREEN RESPONSE] ✅ EXECUTE_WORKFLOW sent successfully");
             } catch (sendError) {
               console.error("[background][OFFSCREEN RESPONSE] ❌ Failed to send EXECUTE_WORKFLOW:", sendError);
@@ -3956,7 +3773,14 @@ chrome.runtime.onMessage.addListener(
           } else {
             console.warn(`[background][OFFSCREEN RESPONSE] ⚠️ Missing pluginId or pageKey in HTML_ASSEMBLED message`);
           }
-          console.log(`[background][OFFSCREEN RESPONSE] 🧹 Cleaning up transfer ${transferId}`);
+          const sequenceNumber = globalThis.assembledSequenceCounter || 0;
+          globalThis.assembledSequenceCounter = sequenceNumber + 1;
+          console.log(`[background][OFFSCREEN RESPONSE] 📊 Assembled data sequence number: ${sequenceNumber} for transfer ${transferId}`);
+          if (executeMessage) {
+            executeMessage.sequenceNumber = sequenceNumber;
+            executeMessage.totalAssembled = globalThis.assembledSequenceCounter;
+          }
+          console.log(`[background][OFFSCREEN RESPONSE] 🧹 Starting comprehensive cleanup for transfer ${transferId}`);
           if (activeTransfers.has(transferId)) {
             activeTransfers.delete(transferId);
             console.log(`[background][OFFSCREEN RESPONSE] ✅ Transfer ${transferId} cleaned up from active storage`);
@@ -3967,6 +3791,24 @@ chrome.runtime.onMessage.addListener(
             delete globalThis[`setTransferCompleted_${transferId}`];
             console.log(`[background][OFFSCREEN RESPONSE] ✅ Transfer completion function cleaned up for ${transferId}`);
           }
+          setTimeout(() => {
+            const duplicateKey2 = `html_assembled_processed_${transferId}`;
+            if (globalThis[duplicateKey2]) {
+              const age = Date.now() - globalThis[duplicateKey2].timestamp;
+              if (age > 3e4) {
+                delete globalThis[duplicateKey2];
+                console.log(`[background][OFFSCREEN RESPONSE] 🧹 Duplicate protection flag cleaned up for ${transferId} (${age}ms old)`);
+              } else {
+                console.log(`[background][OFFSCREEN RESPONSE] ⏳ Keeping duplicate protection flag for ${transferId} (${age}ms old)`);
+              }
+            }
+          }, 3e4);
+          console.log(`[background][OFFSCREEN RESPONSE] 📈 Processing summary for transfer ${transferId}:`, {
+            sequenceNumber,
+            totalProcessed: globalThis.assembledSequenceCounter,
+            timestamp: Date.now(),
+            transferCleaned: !activeTransfers.has(transferId)
+          });
           return true;
         } else if (msg.type === "WORKFLOW_LOG") {
           console.log("[background][OFFSCREEN RESPONSE] Relaying workflow log:", msg);
@@ -4044,7 +3886,7 @@ ${JSON.stringify(msg.data, null, 2)}
               console.log("[background][PYODIDE_SERVICE_WORKER] PYODIDE_MESSAGE relayed to side panel:", {
                 pluginId: msg.pluginId,
                 pageKey: msg.pageKey,
-                messageLength: (_b = pyodideMessage.content) == null ? void 0 : _b.length
+                messageLength: (_d = pyodideMessage.content) == null ? void 0 : _d.length
               });
               return true;
             } catch (saveError) {
@@ -4097,11 +3939,11 @@ const handleTestPyodideDirect = async (message) => {
           timestamp: Date.now()
         };
         console.log("[TEST_PYODIDE_DIRECT] Sending to offscreen:", testRequest);
-        const result = await chrome.runtime.sendMessage(testRequest);
+        const result2 = await chrome.runtime.sendMessage(testRequest);
         return {
-          success: (result == null ? void 0 : result.success) || false,
-          result: (result == null ? void 0 : result.result) || null,
-          error: (result == null ? void 0 : result.error) || null,
+          success: (result2 == null ? void 0 : result2.success) || false,
+          result: (result2 == null ? void 0 : result2.result) || null,
+          error: (result2 == null ? void 0 : result2.error) || null,
           timestamp: Date.now(),
           chromeVersion
         };

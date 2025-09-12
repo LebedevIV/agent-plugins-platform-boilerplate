@@ -18,6 +18,9 @@ from datetime import datetime
 from typing import Any, Dict, List, Protocol, runtime_checkable, Optional
 from re import Match
 
+# Импорт переменных из JavaScript globals через js мост
+from js import page_html_chunk_count, page_html_total_length
+
 # ==============================================================================
 # Менеджер памяти для оптимизации Pyodide
 # ==============================================================================
@@ -933,14 +936,13 @@ class FastDOMParser:
 # например, "python.analyze_ozon_product".
 # ==============================================================================
 
-async def analyze_ozon_product(input_data: Dict[str, Any]) -> Dict[str, Any]:
+async def analyze_ozon_product() -> Dict[str, Any]:
     """
     Главная точка входа для анализа страницы товара Ozon.
     Эта функция оркестрирует весь процесс: парсинг, анализ, поиск аналогов
     и формирование итогового отчета.
 
-    Args:
-        input_data: Словарь, содержащий `page_html` текущей страницы.
+    Данные считываются из JS globals, переданные JavaScript.
 
     Returns:
         Словарь с полным отчетом. Ключевые поля `description` и `composition`
@@ -948,69 +950,101 @@ async def analyze_ozon_product(input_data: Dict[str, Any]) -> Dict[str, Any]:
         шагов в `workflow.json` (например, для `perform_deep_analysis`).
     """
     try:
-        # Шаг 0: Валидация входных данных с offscreen compatibility support
-        if input_data is None:
-            raise ValueError("Входные данные не предоставлены (None).")
+        # === МАКСИМАЛЬНОЕ ЛОГИРОВАНИЕ НАЧАЛА АНАЛИЗА ===
+        js.sendMessageToChat({"content": "Python: 🔍 ===== НАЧАЛО АНАЛИЗА ТОВАРА OZON ====="})
+        js.sendMessageToChat({"content": f"Python: 🔍 Timestamp: {datetime.now().isoformat()}"})
+        js.sendMessageToChat({"content": "Python: 📊 Чтение данных из pyodide.globals..."})
 
-        if not isinstance(input_data, dict):
-            try:
-                # Попытка преобразования из других типов в offscreen контексте
-                input_data = dict(input_data) if hasattr(input_data, '__iter__') else {"page_html": str(input_data)}
-            except (TypeError, AttributeError):
-                raise ValueError("Входные данные должны быть словарем или конвертируемым в словарь.")
+        # Шаг 1: Чтение метаданных из JS globals
+        js.sendMessageToChat({"content": "Python: 🔧 Шаг 1: Чтение метаданных из JS globals"})
+        try:
+            chunk_count = page_html_chunk_count
+            total_length = page_html_total_length
+            js.sendMessageToChat({"content": f"Python: ✅ Метаданные прочитаны: chunk_count={chunk_count}, total_length={total_length}"})
+        except Exception as e:
+            js.sendMessageToChat({"content": f"Python: ❌ Ошибка чтения метаданных из JS globals: {e}"})
+            raise ValueError(f"Не удалось прочитать метаданные из JS globals: {e}")
 
-        # Шаг X: Сборка больших строк из чанков (если разделены из-за Pyodide ограничений)
-        reconstructed_data = _reconstruct_chunked_strings(input_data)
-
-        # Безопасное извлечение HTML с фоллбеком
-        page_html = None
-
-        # DEBUG: Логируем все входные данные
-        js.sendMessageToChat({"content": f"Python: DEBUG - Входные данные: keys={list(reconstructed_data.keys())}"})
-        for key, value in reconstructed_data.items():
-            if isinstance(value, str):
-                js.sendMessageToChat({"content": f"Python: DEBUG - {key}: {len(value)} символов"})
-            else:
-                js.sendMessageToChat({"content": f"Python: DEBUG - {key}: {type(value)}"})
+        # Валидация метаданных
+        if page_html_chunk_count is None or page_html_total_length is None:
+            raise ValueError("Метаданные page_html_chunk_count или page_html_total_length отсутствуют в pyodide.globals")
 
         try:
-            # Попытка различных способов доступа к данным
-            if 'page_html' in reconstructed_data:
-                page_html = reconstructed_data['page_html']
-                js.sendMessageToChat({"content": f"Python: DEBUG - Извлечен page_html: {len(page_html)} символов"})
-            elif 'html' in reconstructed_data:
-                page_html = reconstructed_data['html']
-                js.sendMessageToChat({"content": f"Python: DEBUG - Извлечен html: {len(page_html)} символов"})
-            elif 'content' in reconstructed_data:
-                page_html = reconstructed_data['content']
-                js.sendMessageToChat({"content": f"Python: DEBUG - Извлечен content: {len(page_html)} символов"})
-            else:
-                # Сбор всех возможных HTML-подобных данных
-                for key, value in reconstructed_data.items():
-                    if isinstance(value, str) and len(value) > 100 and '<' in value and '>' in value:
-                        page_html = value
-                        js.sendMessageToChat({"content": f"Python: DEBUG - Извлечен из {key}: {len(page_html)} символов"})
-                        break
-        except (KeyError, TypeError, AttributeError):
-            pass
+            chunk_count = int(page_html_chunk_count)
+            total_length = int(page_html_total_length)
+            js.sendMessageToChat({"content": f"Python: ✅ Метаданные валидны: chunk_count={chunk_count}, total_length={total_length}"})
+        except (ValueError, TypeError) as e:
+            js.sendMessageToChat({"content": f"Python: ❌ Ошибка преобразования метаданных: {e}"})
+            raise ValueError(f"Метаданные должны быть числами: {e}")
 
-        # Финальная проверка извлеченных данных
-        if page_html is None:
-            raise ValueError("HTML страницы не найден во входных данных.")
+        # Шаг 2: Чтение всех чанков из JS globals
+        js.sendMessageToChat({"content": f"Python: 🔧 Шаг 2: Чтение {chunk_count} чанков из JS globals"})
+        chunks = []
+        total_chunks_size = 0
 
+        for i in range(chunk_count):
+            chunk_key = f'page_html_chunk_{i}'
+            try:
+                chunk = getattr(js, chunk_key)
+                if chunk is None:
+                    raise ValueError(f"Чанк {chunk_key} отсутствует в JS globals")
+                chunk_str = str(chunk)
+                chunks.append(chunk_str)
+                total_chunks_size += len(chunk_str)
+                js.sendMessageToChat({"content": f"Python: ✅ Чанк {i}: длина={len(chunk_str)}, накоплено={total_chunks_size} символов"})
+            except Exception as e:
+                js.sendMessageToChat({"content": f"Python: ❌ Ошибка чтения чанка {chunk_key}: {e}"})
+                raise ValueError(f"Не удалось прочитать чанк {chunk_key}: {e}")
+
+        # Шаг 3: Сборка полного HTML из чанков
+        js.sendMessageToChat({"content": "Python: 🔧 Шаг 3: Сборка полного HTML из чанков"})
+        page_html = ''.join(chunks)
+        assembled_length = len(page_html)
+        js.sendMessageToChat({"content": f"Python: ✅ HTML собран: длина={assembled_length} символов"})
+
+        # Шаг 4: Проверка целостности собранного HTML
+        js.sendMessageToChat({"content": "Python: 🔧 Шаг 4: Проверка целостности собранного HTML"})
+
+        # Проверка соответствия ожидаемой длине
+        if assembled_length != total_length:
+            js.sendMessageToChat({"content": f"Python: ⚠️ Несоответствие длины: ожидалось {total_length}, собрано {assembled_length}"})
+            if assembled_length < total_length:
+                js.sendMessageToChat({"content": "Python: ⚠️ СТРОКА ОБРЕЗАНА! Возможно потеря данных."})
+
+        # Проверка базовой структуры HTML
+        has_html_tag = '<html' in page_html.lower()
+        has_body_tag = '<body' in page_html.lower()
+        has_div_tag = '<div' in page_html.lower()
+
+        structure_check = {
+            '<html>': has_html_tag,
+            '<body>': has_body_tag,
+            '<div>': has_div_tag
+        }
+        js.sendMessageToChat({"content": f"Python: 📊 Структура HTML: {structure_check}"})
+
+        # Проверка на незакрытые теги (упрощенная)
+        open_tags = page_html.count('<') - page_html.count('</') - page_html.count('<')  # Примерная оценка
+        if abs(open_tags) > 10:
+            js.sendMessageToChat({"content": f"Python: ⚠️ Возможен дисбаланс тегов: {open_tags}"})
+
+        # Финальная валидация HTML
         if not isinstance(page_html, str):
-            # Попытка преобразования в строку для offscreen контекста
             try:
                 page_html = str(page_html)
-            except Exception:
-                raise ValueError("HTML страницы должен быть строкой или конвертируемым в строку.")
+            except Exception as e:
+                raise ValueError(f"HTML должен быть строкой: {e}")
 
-        if len(page_html.strip()) < 50:  # Минимальная длина для валидного HTML
+        if len(page_html.strip()) < 50:
             raise ValueError(f"HTML страницы слишком короткий ({len(page_html)} символов). Минимум 50 символов.")
 
-        # Дополнительные проверки для offscreen контекста
-        if '<html' not in page_html.lower() and '<body' not in page_html.lower() and '<div' not in page_html.lower():
+        if not (has_html_tag or has_body_tag or has_div_tag):
             js.sendMessageToChat({"content": "Python: ⚠️ HTML не содержит типичных тегов. Возможно, это не полноценная страница."})
+
+        # Шаг 5: Финальное логирование перед анализом
+        js.sendMessageToChat({"content": "Python: ✅ Данные из JS globals успешно прочитаны и собраны"})
+        js.sendMessageToChat({"content": f"Python: 📊 Финальная длина HTML: {len(page_html)} символов"})
+        js.sendMessageToChat({"content": "Python: 🚀 Начинаем анализ страницы товара..."})
 
         # First status message - confirm function execution started
 
@@ -1219,66 +1253,213 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
 # Они инкапсулируют внутреннюю логику плагина.
 # ==============================================================================
 
+def _check_html_integrity(html_content: str, source_name: str) -> None:
+    """
+    Проверяет целостность HTML контента для выявления возможного обрезания данных.
+    """
+    try:
+        js.sendMessageToChat({"content": f"Python: 🔍 Проверка целостности HTML ({source_name})"})
+
+        if not html_content or not isinstance(html_content, str):
+            js.sendMessageToChat({"content": f"Python: ❌ HTML контент пустой или не является строкой"})
+            return
+
+        content_length = len(html_content)
+        js.sendMessageToChat({"content": f"Python: 📊 Длина контента: {content_length} символов"})
+
+        # Проверка на незакрытые HTML теги
+        open_tags = len(re.findall(r'<[^/][^>]*>', html_content))
+        close_tags = len(re.findall(r'</[^>]+>', html_content))
+        self_closing_tags = len(re.findall(r'<[^>]+/>', html_content))
+
+        tag_balance = open_tags - close_tags
+        js.sendMessageToChat({"content": f"Python: 📊 HTML теги: открытых={open_tags}, закрытых={close_tags}, самозакрывающихся={self_closing_tags}"})
+
+        if abs(tag_balance) > 3:  # Допускаем небольшую погрешность
+            js.sendMessageToChat({"content": f"Python: ⚠️ ОБНАРУЖЕН ДИСБАЛАНС ТЕГОВ: {tag_balance}"})
+            if tag_balance > 0:
+                js.sendMessageToChat({"content": "Python: ⚠️ Больше открытых тегов - возможна обрезка в конце"})
+            else:
+                js.sendMessageToChat({"content": "Python: ⚠️ Больше закрытых тегов - возможна обрезка в начале"})
+
+        # Проверка на наличие основных HTML структур
+        has_html = '<html' in html_content.lower()
+        has_body = '<body' in html_content.lower()
+        has_head = '<head' in html_content.lower()
+        has_doctype = '<!doctype' in html_content.lower() or '<!DOCTYPE' in html_content
+
+        structure_check = {
+            'DOCTYPE': has_doctype,
+            '<html>': has_html,
+            '<head>': has_head,
+            '<body>': has_body
+        }
+
+        js.sendMessageToChat({"content": f"Python: 📊 HTML структура: {structure_check}"})
+
+        # Проверка на незавершенные атрибуты
+        incomplete_attrs = len(re.findall(r'<[^>]*\w+="[^"]*$', html_content))  # незавершенные атрибуты
+        if incomplete_attrs > 0:
+            js.sendMessageToChat({"content": f"Python: ⚠️ Найдено {incomplete_attrs} незавершенных атрибутов - возможна обрезка"})
+
+        # Проверка на незавершенные комментарии
+        incomplete_comments = len(re.findall(r'<!--[^>]*$', html_content))  # незавершенные комментарии
+        if incomplete_comments > 0:
+            js.sendMessageToChat({"content": f"Python: ⚠️ Найдено {incomplete_comments} незавершенных комментариев - возможна обрезка"})
+
+        # Проверка на незавершенные скрипты/стили
+        incomplete_scripts = len(re.findall(r'<script[^>]*>[^<]*$', html_content)) - len(re.findall(r'<script[^>]*>[\s\S]*?</script>', html_content))
+        incomplete_styles = len(re.findall(r'<style[^>]*>[^<]*$', html_content)) - len(re.findall(r'<style[^>]*>[\s\S]*?</style>', html_content))
+
+        if incomplete_scripts > 0:
+            js.sendMessageToChat({"content": f"Python: ⚠️ Найдено {incomplete_scripts} незавершенных <script> тегов"})
+        if incomplete_styles > 0:
+            js.sendMessageToChat({"content": f"Python: ⚠️ Найдено {incomplete_styles} незавершенных <style> тегов"})
+
+        # Проверка на неожиданное окончание
+        last_chars = html_content[-50:] if len(html_content) > 50 else html_content
+        if not last_chars.strip().endswith(('>', '</html>', '</body>', '</div>', '</span>', '</p>', '"', "'", '}', ']', ')', ';')):
+            js.sendMessageToChat({"content": f"Python: ⚠️ ПОДОЗРИТЕЛЬНОЕ ОКОНЧАНИЕ: '{last_chars[-20:]}'"})
+            js.sendMessageToChat({"content": "Python: ⚠️ Возможно, данные были обрезаны в конце строки"})
+
+        # Общая оценка целостности
+        integrity_score = 100
+        issues = []
+
+        if abs(tag_balance) > 3:
+            integrity_score -= 30
+            issues.append("дисбаланс тегов")
+        if not has_body and not has_html:
+            integrity_score -= 20
+            issues.append("отсутствие базовой HTML структуры")
+        if incomplete_attrs > 0:
+            integrity_score -= 15
+            issues.append("незавершенные атрибуты")
+        if incomplete_scripts > 0 or incomplete_styles > 0:
+            integrity_score -= 10
+            issues.append("незавершенные скрипты/стили")
+
+        if integrity_score < 100:
+            js.sendMessageToChat({"content": f"Python: ⚠️ ЦЕЛОСТНОСТЬ HTML: {integrity_score}% ({', '.join(issues)})"})
+        else:
+            js.sendMessageToChat({"content": f"Python: ✅ ЦЕЛОСТНОСТЬ HTML: {integrity_score}% - контент выглядит полным"})
+
+    except Exception as e:
+        js.sendMessageToChat({"content": f"Python: ❌ Ошибка при проверке целостности HTML: {e}"})
+
 def _reconstruct_chunked_strings(input_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Восстанавливает большие строки, которые были разделены на чанки в PyodideManager.
     Возвращает копию данных с восстановленными строками.
     """
     try:
+        js.sendMessageToChat({"content": "Python: 🔧 ===== РЕКОНСТРУКЦИЯ ЧАНКОВАННЫХ СТРОК ====="})
+
         reconstructed = input_data.copy()
         processed_keys = set()  # Ключи, которые уже обработали
+        chunked_strings_found = 0
+
+        # Сначала анализируем все входные данные для поиска чанков и метаданных
+        js.sendMessageToChat({"content": f"Python: 🔍 Анализ входных данных: {len(input_data)} ключей"})
+
+        # Используем регулярное выражение для поиска чанков: ключи содержащие '_chunk_' и заканчивающиеся цифрой
+        chunk_pattern = re.compile(r'(.+)_chunk_(\d+)$')
+        chunk_groups = {}  # base_key -> [(chunk_num, value), ...]
+        metadata_keys = []
 
         for key, value in input_data.items():
-            # Проверяем, является ли значение метаданными большого чанка
-            if isinstance(value, dict) and value.get('__isChunkedString', False):
-                chunk_count = value.get('chunkCount', 0)
-                original_key = value.get('originalKey', key)
-                total_length = value.get('totalLength', 0)
+            # Ищем чанки по шаблону *_chunk_*
+            match = chunk_pattern.match(key)
+            if match:
+                base_key = match.group(1)
+                chunk_num = int(match.group(2))
+                if base_key not in chunk_groups:
+                    chunk_groups[base_key] = []
+                chunk_groups[base_key].append((chunk_num, value))
+            # Ищем метаданные
+            elif isinstance(value, dict) and value.get('__isChunkedString', False):
+                metadata_keys.append(key)
 
-                # Собираем все чанки
-                chunks = []
-                for i in range(chunk_count):
-                    chunk_key = f"{original_key}_chunk_{i}"
-                    if chunk_key in input_data:
-                        chunks.append(input_data[chunk_key])
+        js.sendMessageToChat({"content": f"Python: 📊 Найдено: {len(chunk_groups)} групп чанков, {len(metadata_keys)} метаданных"})
 
-                # Собираем строку из чанков
-                if len(chunks) == chunk_count:
-                    reconstructed[original_key] = ''.join(chunks)
+        # Обрабатываем найденные группы чанков
+        for base_key, chunks_list in chunk_groups.items():
+            js.sendMessageToChat({"content": f"Python: 🔧 Обработка группы чанков: {base_key}"})
+            js.sendMessageToChat({"content": f"Python: 🔧   - Найдено чанков: {len(chunks_list)}"})
 
-                    # Проверяем целостность
-                    if len(reconstructed[original_key]) == total_length:
-                        js.sendMessageToChat({
-                            "content": f"Python: ✅ Восстановлена строка {original_key} из {chunk_count} чанков ({total_length} символов)"
-                        })
+            # Сортируем чанки по номеру
+            chunks_list.sort(key=lambda x: x[0])
+            chunk_nums = [num for num, _ in chunks_list]
+            expected_nums = list(range(len(chunks_list)))
 
-                        # Удаляем метаданные и чанки
-                        if key in reconstructed:
-                            del reconstructed[key]
-                        for i in range(chunk_count):
-                            chunk_key = f"{original_key}_chunk_{i}"
-                            if chunk_key in reconstructed:
-                                del reconstructed[chunk_key]
-                    else:
-                        js.sendMessageToChat({
-                            "content": f"Python: ❌ Ошибка сборки строки {original_key}: ожидалось {total_length}, получено {len(reconstructed[original_key])}"
-                        })
-                        return input_data  # Возвращаем исходные данные при ошибке
+            # Проверяем последовательность номеров чанков
+            if chunk_nums != expected_nums:
+                js.sendMessageToChat({"content": f"Python: ⚠️ Несоответствие номеров чанков: ожидаемо {expected_nums}, найдено {chunk_nums}"})
+                # Продолжаем, но логируем проблему
 
-                processed_keys.add(key)
+            # Собираем строку из чанков
+            chunks_data = [data for _, data in chunks_list]
+            assembled_string = ''.join(chunks_data)
+            actual_length = len(assembled_string)
 
-        # Удаляем обработанные метаданные
-        for key in processed_keys:
-            if key in reconstructed and isinstance(reconstructed[key], dict) and reconstructed[key].get('__isChunkedString'):
-                del reconstructed[key]
+            js.sendMessageToChat({"content": f"Python: 🔧 Сборка строки: длина={actual_length}"})
+
+            # Проверяем метаданные если они есть
+            metadata_key = base_key
+            if metadata_key in input_data and isinstance(input_data[metadata_key], dict) and input_data[metadata_key].get('__isChunkedString', False):
+                metadata = input_data[metadata_key]
+                expected_count = metadata.get('chunkCount', 0)
+                expected_length = metadata.get('totalLength', 0)
+                js.sendMessageToChat({"content": f"Python: 🔧   - Метаданные: count={expected_count}, total_length={expected_length}"})
+
+                # Проверяем соответствие метаданным
+                if len(chunks_list) != expected_count:
+                    js.sendMessageToChat({"content": f"Python: ⚠️ Несоответствие количества чанков: ожидалось {expected_count}, собрано {len(chunks_list)}"})
+
+                if actual_length != expected_length:
+                    js.sendMessageToChat({"content": f"Python: ⚠️ Несоответствие длины: ожидалось {expected_length}, собрано {actual_length}"})
+                    if actual_length < expected_length:
+                        js.sendMessageToChat({"content": "Python: ⚠️ СТРОКА ОБРЕЗАНА! Возможно потеря данных."})
+            else:
+                js.sendMessageToChat({"content": "Python: ℹ️ Метаданные не найдены - сборка без проверки"})
+
+            # Сохраняем собранную строку
+            reconstructed[base_key] = assembled_string
+            js.sendMessageToChat({"content": f"Python: ✅ УСПЕШНО восстановлена строка {base_key}"})
+
+            # Проверка HTML структуры собранной строки
+            _check_html_integrity(assembled_string, f"reconstructed_{base_key}")
+
+            # Удаляем метаданные и чанки из reconstructed
+            if metadata_key in reconstructed and isinstance(reconstructed[metadata_key], dict) and reconstructed[metadata_key].get('__isChunkedString', False):
+                del reconstructed[metadata_key]
+
+            for chunk_num, _ in chunks_list:
+                chunk_key = f"{base_key}_chunk_{chunk_num}"
+                if chunk_key in reconstructed:
+                    del reconstructed[chunk_key]
+
+            # Статистика размеров чанков
+            chunk_sizes = [len(data) if isinstance(data, str) else 0 for _, data in chunks_list]
+            if chunk_sizes:
+                js.sendMessageToChat({"content": f"Python: 📊 Размеры чанков: {chunk_sizes}"})
+                js.sendMessageToChat({"content": f"Python: 📊 Средний размер чанка: {sum(chunk_sizes)/len(chunk_sizes):.0f} chars"})
+
+            processed_keys.add(base_key)
 
         if processed_keys:
-            js.sendMessageToChat({"content": f"Python: 🔧 Восстановлено {len(processed_keys)} больших строк из чанков"})
+            js.sendMessageToChat({"content": f"Python: ✅ Восстановлено {len(processed_keys)} больших строк из чанков"})
+        else:
+            js.sendMessageToChat({"content": "Python: ℹ️ Чанкованные строки не найдены"})
+
+        js.sendMessageToChat({"content": "Python: 🔧 ===== КОНЕЦ РЕКОНСТРУКЦИИ ЧАНКОВ ====="})
 
         return reconstructed
 
     except Exception as e:
-        js.sendMessageToChat({"content": f"Python: ❌ Ошибка при сборке чанков: {e}"})
+        js.sendMessageToChat({"content": f"Python: ❌ КРИТИЧЕСКАЯ ошибка при сборке чанков: {e}"})
+        import traceback
+        js.sendMessageToChat({"content": f"Python: ❌ Traceback: {traceback.format_exc()}"})
         return input_data  # Возвращаем исходные данные при ошибке
 
 async def _analyze_composition_vs_description(description: str, composition: str) -> Dict[str, Any]:

@@ -2261,8 +2261,10 @@ chrome.runtime.onMessage.addListener(
         console.log('[background][DEBUG] - msg.pluginId exists:', !!msg.pluginId);
         console.log('[background][DEBUG] - msg.pageKey exists:', !!msg.pageKey);
 
-        (async () => {
+        try {
           console.log('[background][DEBUG] Starting async handler for RUN_WORKFLOW');
+
+          (async () => {
             console.log('[background][DEBUG] Inside async block, checking required fields...');
             console.log('[background][DEBUG] msg.pluginId:', msg.pluginId, 'msg.pageKey:', msg.pageKey);
 
@@ -2582,13 +2584,13 @@ chrome.runtime.onMessage.addListener(
               }
               console.log('[background][OFFSCREEN DELEGATION] ===== OFFSCREEN EXECUTION COMPLETED =====');
               console.log('[background][OFFSCREEN DELEGATION] Result received:', result);
-          
+
               // Проверяем перед вызовом sendResponse
               if (typeof sendResponse !== 'function') {
                 console.warn('[background][OFFSCREEN DELEGATION] sendResponse is not a function - response channel may be closed');
                 return;
               }
-          
+
               // Ретрансмитровать результат в UI
               if (result && result.success) {
                 console.log('[background][OFFSCREEN DELEGATION] Sending success response');
@@ -2606,26 +2608,9 @@ chrome.runtime.onMessage.addListener(
                 sendResponse(errorResponseObj);
                 console.log('[background][DEBUG] Error sendResponse called - no more execution expected after this');
               }
-          
-              return true;
-          
-            } catch (error) {
-              console.error('[background][OFFSCREEN DELEGATION] Critical error in async handler:', error);
-              sendResponse({ error: (error as Error).message });
-              return true;
-            }
 
-            return true;
-
-          } catch (error) {
-            console.error('[background][OFFSCREEN DELEGATION] Critical error in async handler:', error);
-            sendResponse({ error: (error as Error).message });
-            return true;
-          }
-        })(); // Close the async IIFE
-
-      return true;
-    }
+        return true;
+      }
 
       if (
         msg.type === 'UPDATE_PLUGIN_SETTING' &&
@@ -3048,11 +3033,17 @@ chrome.runtime.onMessage.addListener(
         }
         return true;
       }
+    }
 
     console.log('[background][DEBUG] Main handler finished processing, checking final return...');
     // ГАРАНТИРОВАННО возвращаем true, чтобы канал не закрывался преждевременно
     console.log('[background] Returning true to keep channel open, timestamp:', new Date().toISOString());
     return true;
+  } catch (error) {
+    console.error('[background] Critical error in RUN_WORKFLOW handler:', error);
+    sendResponse({ error: (error as Error).message });
+    return true;
+  }
 }
 
 const handleHostApiMessage = async (
@@ -3793,4 +3784,3 @@ console.log('[background][OFFSCREEN DIAGNOSTIC]   window:', typeof window);
 console.log('[background][OFFSCREEN DIAGNOSTIC]   self:', typeof self);
 console.log('[background][OFFSCREEN DIAGNOSTIC]   globalThis:', typeof globalThis);
 console.log('[background] Edit chrome-extension/src/background/index.ts and save to reload.');
-});

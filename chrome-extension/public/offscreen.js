@@ -16,6 +16,10 @@ const htmlTransfers = new Map();
 
 let pyodide = null;
 
+// Глобальные переменные для хранения текущих pluginId и pageKey
+let currentPluginId = 'ozon-analyzer';
+let currentPageKey = 'unknown_page';
+
 // Initialize Pyodide when the offscreen document loads
 async function initializePyodide() {
   if (pyodide) {
@@ -52,8 +56,8 @@ async function initializePyodide() {
         const jsMessage = message.toJs ? message.toJs({ dict_converter: Object.fromEntries }) : message;
         chrome.runtime.sendMessage({
           type: 'PYODIDE_MESSAGE',
-          pluginId: 'ozon-analyzer',
-          pageKey: 'direct_offscreen_execution',
+          pluginId: currentPluginId,
+          pageKey: currentPageKey,
           message: {
             role: 'plugin',
             content: `📨 Execute result: ${typeof jsMessage === 'string' ? jsMessage : JSON.stringify(jsMessage)}`,
@@ -379,12 +383,151 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
       throw new Error('Main workflow function analyze_ozon_product not found in Python script');
     }
 
-    // Python will handle chunk reconstruction if needed, or use ready HTML
-    const resultProxy = await workflowFunction(workflowPayload);
-    const result = resultProxy.toJs({ dict_converter: Object.fromEntries });
-    resultProxy.destroy();
+    // Execute the workflow with detailed logging
+    console.log('[offscreen][EXECUTE_WORKFLOW] Calling Python workflow function...');
+    console.log('[offscreen][EXECUTE_WORKFLOW] workflowPayload type:', typeof workflowPayload);
+    console.log('[offscreen][EXECUTE_WORKFLOW] workflowPayload keys:', Object.keys(workflowPayload));
 
-    console.log('[offscreen] Workflow-engine executed successfully:', result);
+    // === НОВАЯ СИСТЕМА ПЕРЕДАЧИ ДАННЫХ ЧЕРЕЗ PYODIDE.GLOBALS ===
+    console.log('[offscreen][PYODIDE][GLOBALS] ===== НАЧАЛО ПЕРЕДАЧИ ДАННЫХ В PYODIDE GLOBALS =====');
+
+    // Проверить, есть ли page_html в workflowPayload
+    if (workflowPayload.page_html && typeof workflowPayload.page_html === 'object' && workflowPayload.page_html.__isChunkedString) {
+      console.log('[offscreen][PYODIDE][GLOBALS] Обнаружены chunk данные для передачи');
+
+      // Извлечь метаданные из chunk структуры
+      const chunkMetadata = workflowPayload.page_html;
+      const chunkCount = chunkMetadata.chunkCount;
+      const totalLength = chunkMetadata.totalLength;
+
+      console.log('[offscreen][PYODIDE][GLOBALS] Метаданные chunks:');
+      console.log('[offscreen][PYODIDE][GLOBALS] - chunkCount:', chunkCount);
+      console.log('[offscreen][PYODIDE][GLOBALS] - totalLength:', totalLength);
+
+      // Установить метаданные в Pyodide globals
+      console.log('[offscreen][PYODIDE][GLOBALS] Устанавливаю метаданные в globals...');
+      pyodide.globals.set('page_html_chunk_count', chunkCount);
+      pyodide.globals.set('page_html_total_length', totalLength);
+      console.log('[offscreen][PYODIDE][GLOBALS] ✅ Метаданные установлены: page_html_chunk_count =', chunkCount, ', page_html_total_length =', totalLength);
+
+      // Установить все чанки в Pyodide globals
+      console.log('[offscreen][PYODIDE][GLOBALS] Устанавливаю чанки в globals...');
+      for (let i = 0; i < chunkCount; i++) {
+        const chunkKey = `page_html_chunk_${i}`;
+        const chunkValue = workflowPayload[chunkKey] || '';
+
+        console.log(`[offscreen][PYODIDE][GLOBALS] Устанавливаю ${chunkKey}: длина = ${chunkValue.length} символов`);
+        pyodide.globals.set(chunkKey, chunkValue);
+
+        // Дополнительная проверка что chunk установлен правильно
+        const verifyChunk = pyodide.globals.get(chunkKey);
+        if (verifyChunk && verifyChunk.length === chunkValue.length) {
+          console.log(`[offscreen][PYODIDE][GLOBALS] ✅ ${chunkKey} успешно установлен`);
+        } else {
+          console.warn(`[offscreen][PYODIDE][GLOBALS] ⚠️ Возможная проблема с установкой ${chunkKey}`);
+        }
+      }
+      console.log('[offscreen][PYODIDE][GLOBALS] ✅ Все чанки установлены в globals');
+
+      // Логировать общее состояние globals перед вызовом функции
+      console.log('[offscreen][PYODIDE][GLOBALS] Состояние globals перед вызовом функции:');
+      console.log('[offscreen][PYODIDE][GLOBALS] - page_html_chunk_count:', pyodide.globals.get('page_html_chunk_count'));
+      console.log('[offscreen][PYODIDE][GLOBALS] - page_html_total_length:', pyodide.globals.get('page_html_total_length'));
+
+      console.log('[offscreen][PYODIDE][GLOBALS] ===== ПЕРЕДАЧА ДАННЫХ ЗАВЕРШЕНА =====');
+
+    } else {
+      console.log('[offscreen][PYODIDE][GLOBALS] Chunk данные не найдены, использую прямую передачу');
+
+      // Fallback: установить page_html напрямую если нет chunks
+      if (workflowPayload.page_html && typeof workflowPayload.page_html === 'string') {
+        pyodide.globals.set('page_html', workflowPayload.page_html);
+        console.log('[offscreen][PYODIDE][GLOBALS] ✅ page_html установлен напрямую, длина:', workflowPayload.page_html.length);
+      } else {
+        console.warn('[offscreen][PYODIDE][GLOBALS] ⚠️ page_html не найден или имеет неправильный тип');
+      }
+    }
+
+    // Вызвать Python функцию БЕЗ аргументов - данные уже в globals
+    console.log('[offscreen][PYODIDE][GLOBALS] Вызываю Python функцию analyze_ozon_product() без аргументов...');
+    const resultProxy = await pyodide.runPythonAsync('analyze_ozon_product()');
+    console.log('[offscreen][PYODIDE][GLOBALS] ✅ Python функция вызвана успешно');
+
+    // === PYODIDE toPy() CONVERSION LOGGING ===
+    console.log('[offscreen][PYODIDE] ===== PYODIDE RESULT CONVERSION =====');
+    console.log('[offscreen][PYODIDE] Result proxy type:', typeof resultProxy);
+    console.log('[offscreen][PYODIDE] Result proxy available:', resultProxy !== null && resultProxy !== undefined);
+
+    let result;
+    if (resultProxy) {
+      // Логируем методы доступные у прокси
+      const proxyMethods = Object.getOwnPropertyNames(resultProxy).filter(name =>
+        typeof resultProxy[name] === 'function'
+      );
+      console.log('[offscreen][PYODIDE] Available proxy methods:', proxyMethods);
+
+      // Проверяем, есть ли метод toJs
+      const hasToJs = typeof resultProxy.toJs === 'function';
+      console.log('[offscreen][PYODIDE] toJs method available:', hasToJs);
+
+      if (hasToJs) {
+        try {
+          console.log('[offscreen][PYODIDE] Calling toJs() conversion...');
+          result = resultProxy.toJs({ dict_converter: Object.fromEntries });
+          console.log('[offscreen][PYODIDE] toJs() conversion successful');
+          console.log('[offscreen][PYODIDE] Result type:', typeof result);
+          console.log('[offscreen][PYODIDE] Result is object:', typeof result === 'object');
+          console.log('[offscreen][PYODIDE] Result keys:', result && typeof result === 'object' ? Object.keys(result) : 'N/A');
+
+          // Проверяем результат на наличие ошибок
+          if (result && typeof result === 'object') {
+            if (result.error || result.status === 'error') {
+              console.error('[offscreen][PYODIDE] Python function returned error:', result);
+            } else {
+              console.log('[offscreen][PYODIDE] Python function completed successfully');
+            }
+          }
+
+          // Проверяем на утечки памяти
+          if (typeof resultProxy.destroy === 'function') {
+            console.log('[offscreen][PYODIDE] Destroying result proxy to prevent memory leaks...');
+            resultProxy.destroy();
+            console.log('[offscreen][PYODIDE] Result proxy destroyed');
+          } else {
+            console.warn('[offscreen][PYODIDE] No destroy method found on result proxy - potential memory leak!');
+          }
+
+          console.log('[offscreen][PYODIDE] ===== CONVERSION COMPLETE =====');
+
+        } catch (conversionError) {
+          console.error('[offscreen][PYODIDE] toJs() conversion failed:', conversionError);
+          console.error('[offscreen][PYODIDE] Conversion error details:', {
+            name: conversionError.name,
+            message: conversionError.message,
+            stack: conversionError.stack
+          });
+
+          // Попытка альтернативной конвертации
+          try {
+            console.log('[offscreen][PYODIDE] Attempting fallback conversion...');
+            result = resultProxy.toJs();
+            console.log('[offscreen][PYODIDE] Fallback conversion successful:', typeof result);
+            resultProxy.destroy();
+          } catch (fallbackError) {
+            console.error('[offscreen][PYODIDE] Fallback conversion also failed:', fallbackError);
+            throw conversionError; // Пробрасываем оригинальную ошибку
+          }
+        }
+      } else {
+        console.error('[offscreen][PYODIDE] toJs method not available on result proxy!');
+        throw new Error('Pyodide result proxy does not have toJs method');
+      }
+    } else {
+      console.error('[offscreen][PYODIDE] Result proxy is null or undefined!');
+      throw new Error('Pyodide workflow function returned null/undefined result');
+    }
+
+    console.log('[offscreen][EXECUTE_WORKFLOW] Workflow-engine executed successfully:', result);
 
     // Send success message to chat
     chrome.runtime.sendMessage({
@@ -625,36 +768,90 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     return true;
   }
 
- // === EXECUTE_WORKFLOW HANDLER FOR DIRECT WORKFLOW EXECUTION ===
+ // === EXECUTE_WORKFLOW HANDLER FOR ENHANCED CHUNKING EXECUTION ===
  if (message.type === 'EXECUTE_WORKFLOW') {
-   console.log('[offscreen][EXECUTE_WORKFLOW] ===== EXECUTE_WORKFLOW MESSAGE RECEIVED =====');
-   console.log('[offscreen][EXECUTE_WORKFLOW] Получено сообщение от background:', message);
-   console.log('[offscreen][EXECUTE_WORKFLOW] Sender info:', sender);
-   console.log('[offscreen][EXECUTE_WORKFLOW] Message timestamp:', new Date().toISOString());
-   console.log('[offscreen][EXECUTE_WORKFLOW] Message type:', message.type);
-   console.log('[offscreen][EXECUTE_WORKFLOW] Message pluginId:', message.pluginId);
-   console.log('[offscreen][EXECUTE_WORKFLOW] Message pageKey:', message.pageKey);
+  console.log('[offscreen][EXECUTE_WORKFLOW] ===== EXECUTE_WORKFLOW MESSAGE RECEIVED =====');
+  console.log('[offscreen][EXECUTE_WORKFLOW] Получено сообщение от background:', message);
+  console.log('[offscreen][EXECUTE_WORKFLOW] Sender info:', sender);
+  console.log('[offscreen][EXECUTE_WORKFLOW] Message timestamp:', new Date().toISOString());
+  console.log('[offscreen][EXECUTE_WORKFLOW] Message type:', message.type);
+  console.log('[offscreen][EXECUTE_WORKFLOW] Message pluginId:', message.pluginId);
+  console.log('[offscreen][EXECUTE_WORKFLOW] Message pageKey:', message.pageKey);
 
-   try {
-     // Initialize Pyodide if needed
-     if (!pyodide) {
-       console.log('[offscreen][EXECUTE_WORKFLOW] Initializing Pyodide...');
-       await initializePyodide();
-     }
+  try {
+    // Initialize Pyodide if needed
+    if (!pyodide) {
+      console.log('[offscreen][EXECUTE_WORKFLOW] Initializing Pyodide...');
+      await initializePyodide();
+    }
 
-     // Extract workflow parameters
-     const pluginId = message.pluginId || 'ozon-analyzer';
-     const pageKey = message.pageKey || 'unknown_page';
-     const pageHtml = message.pageHtml || '';
-     const requestId = message.requestId || `workflow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Extract workflow parameters
+    const pluginId = message.pluginId || 'ozon-analyzer';
+    const pageKey = message.pageKey || 'unknown_page';
+    const requestId = message.requestId || `workflow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const transferId = message.transferId;
+    const useChunks = message.useChunks || false;
 
-     // DEBUG: Проверяем размер полученных данных
-     console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] Полученные данные:');
-     console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - pageHtml length:', pageHtml.length);
-     console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - pageHtml preview:', pageHtml.substring(0, 100) + '...');
-     console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - message keys:', Object.keys(message));
-     console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - message.pageHtml type:', typeof message.pageHtml);
-     console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - message.pageHtml length:', message.pageHtml ? message.pageHtml.length : 'undefined');
+    // ОБНОВИТЬ ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ JS BRIDGE - ИСПРАВЛЕНИЕ HARDCODED PAGEKEY
+    currentPluginId = pluginId;
+    currentPageKey = pageKey;
+
+    // ПОЛУЧАЕМ HTML ДАННЫЕ ИЗ CHUNKS ИЛИ НАПРЯМУЮ
+    let workflowPayload;
+    if (useChunks && transferId) {
+      console.log('[offscreen][EXECUTE_WORKFLOW] Using enhanced chunking - preparing chunk metadata for Python assembly...');
+
+      // ЖДЕМ ДОСТУПНОСТИ CHUNKS И ПОДГОТАВЛИВАЕМ METADATA ДЛЯ PYTHON
+      const maxWaitTime = 30000; // 30 секунд максимум
+      const startWaitTime = Date.now();
+
+      while (Date.now() - startWaitTime < maxWaitTime) {
+        const transfer = htmlTransfers.get(transferId);
+        if (transfer && transfer.completed && transfer.chunks.every(chunk => chunk !== undefined)) {
+          console.log('[offscreen][EXECUTE_WORKFLOW][CHUNKING] ===== PREPARING CHUNKS FOR PYTHON ASSEMBLY =====');
+          console.log('[offscreen][EXECUTE_WORKFLOW][CHUNKING] Total chunks to send:', transfer.chunks.length);
+
+          // Prepare chunk metadata for Python reconstruction instead of assembling here
+          const chunkMetadata = {
+            __isChunkedString: true,
+            originalKey: 'page_html',
+            chunkCount: transfer.chunks.length,
+            totalLength: transfer.chunks.reduce((sum, chunk) => sum + (chunk ? chunk.length : 0), 0)
+          };
+
+          // Create input data with chunk metadata + all chunks
+          workflowPayload = { page_html: chunkMetadata };
+
+          // Add all chunks to payload
+          for (let i = 0; i < transfer.chunks.length; i++) {
+            workflowPayload[`page_html_chunk_${i}`] = transfer.chunks[i] || '';
+          }
+
+          // Log chunk details for debugging
+          console.log(`[offscreen][EXECUTE_WORKFLOW][CHUNKING] Preparing ${transfer.chunks.length} chunks for Python:`);
+          transfer.chunks.forEach((chunk, idx) => {
+            console.log(`[offscreen][EXECUTE_WORKFLOW][CHUNKING] Chunk ${idx}: ${chunk ? chunk.length : 0} characters`);
+          });
+          console.log(`[offscreen][EXECUTE_WORKFLOW][CHUNKING] Total expected length: ${workflowPayload.page_html.totalLength}`);
+
+          console.log('[offscreen][EXECUTE_WORKFLOW][CHUNKING] ===== CHUNK PREPARATION COMPLETE =====');
+          break;
+        }
+
+        // ЖДЕМ НЕМНОГО ПЕРЕД СЛЕДУЮЩЕЙ ПРОВЕРКОЙ
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      if (!workflowPayload) {
+        throw new Error(`Timeout waiting for chunk data preparation (transferId: ${transferId})`);
+      }
+    } else if (message.pageHtml) {
+      // ПРЯМАЯ ПЕРЕДАЧА HTML ДАННЫХ (FALLBACK)
+      workflowPayload = { page_html: message.pageHtml };
+      console.log('[offscreen][EXECUTE_WORKFLOW] Using direct pageHtml from message:', message.pageHtml.length, 'chars');
+    } else {
+      throw new Error('No HTML data provided - neither chunks nor direct pageHtml available');
+    }
 
      console.log('[offscreen][EXECUTE_WORKFLOW] Запускаю workflow-engine с pluginId:', pluginId);
 
@@ -665,96 +862,96 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
        pageKey: pageKey,
        message: {
          role: 'plugin',
-         content: '🔄 Запуск выполнения workflow...',
+         content: '🔄 Запуск выполнения workflow с chunk данными...',
          timestamp: Date.now()
        }
      });
 
-     // Load and execute workflow
-     const workflowPayload = { page_html: pageHtml };
-     
-     // DEBUG: Проверяем workflowPayload
-     console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] WorkflowPayload:');
-     console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - workflowPayload keys:', Object.keys(workflowPayload));
-     console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - workflowPayload.page_html type:', typeof workflowPayload.page_html);
-     if (typeof workflowPayload.page_html === 'string') {
-       console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - workflowPayload.page_html length:', workflowPayload.page_html.length);
-       console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - workflowPayload.page_html preview:', workflowPayload.page_html.substring(0, 100) + '...');
-     } else if (workflowPayload.page_html && typeof workflowPayload.page_html === 'object') {
-       console.log('[offscreen][EXECUTE_WORKFLOW][DEBUG] - chunk metadata:', workflowPayload.page_html);
-     }
+     // === МАКСИМАЛЬНОЕ ЛОГИРОВАНИЕ WORKFLOW PAYLOAD ===
+     console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING] ===== ПОДРОБНЫЙ АНАЛИЗ WORKFLOW PAYLOAD =====');
+     console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING] Timestamp:', new Date().toISOString());
+     console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING] PluginId:', pluginId);
+     console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING] PageKey:', pageKey);
+     console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING] RequestId:', requestId);
 
-     // Load the Python script URL
-     const pyScriptUrl = chrome.runtime.getURL(`/plugins/${pluginId}/mcp_server.py`);
+     // Детальный анализ workflowPayload
+     console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING] WorkflowPayload structure:');
+     console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING] - Keys:', Object.keys(workflowPayload));
+     console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING] - Total keys:', Object.keys(workflowPayload).length);
 
-     const response = await fetch(pyScriptUrl);
-     if (!response.ok) {
-       throw new Error(`Failed to load Python script: ${response.status}`);
-     }
+     // Анализ page_html
+     if (workflowPayload.page_html !== undefined) {
+       const pageHtmlValue = workflowPayload.page_html;
+       console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING] - page_html type:', typeof pageHtmlValue);
 
-     const pythonCode = await response.text();
+       if (typeof pageHtmlValue === 'string') {
+         console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING] - page_html length (chars):', pageHtmlValue.length);
+         console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING] - page_html size (bytes):', new Blob([pageHtmlValue]).size);
+         console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING] - page_html first 200 chars:', pageHtmlValue.substring(0, 200));
+         console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING] - page_html last 200 chars:', pageHtmlValue.substring(Math.max(0, pageHtmlValue.length - 200)));
 
-     // Execute the Python code
-     await pyodide.runPythonAsync(pythonCode);
+         // Проверка на обрезание (ищем незакрытые теги в конце)
+         const openTags = (pageHtmlValue.match(/<[^\/][^>]*>/g) || []).length;
+         const closeTags = (pageHtmlValue.match(/<\/[^>]+>/g) || []).length;
+         console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING] - HTML integrity check:');
+         console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING]   - Open tags:', openTags);
+         console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING]   - Close tags:', closeTags);
+         console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING]   - Tag balance:', openTags - closeTags);
 
-     // Get the main workflow function
-     const workflowFunction = pyodide.globals.get('analyze_ozon_product');
-     if (!workflowFunction) {
-       throw new Error('Main workflow function analyze_ozon_product not found in Python script');
-     }
+         if (Math.abs(openTags - closeTags) > 5) {
+           console.warn('[offscreen][EXECUTE_WORKFLOW][LOGGING] ⚠️ POTENTIAL HTML TRUNCATION DETECTED! Tag imbalance:', openTags - closeTags);
+         }
 
-     // Execute the workflow
-     const resultProxy = await workflowFunction(workflowPayload);
-     const result = resultProxy.toJs({ dict_converter: Object.fromEntries });
-     resultProxy.destroy();
+         // Проверка на наличие основных HTML структур
+         const hasHtmlTag = pageHtmlValue.includes('<html');
+         const hasBodyTag = pageHtmlValue.includes('<body');
+         const hasHeadTag = pageHtmlValue.includes('<head');
+         console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING] - HTML structure check:');
+         console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING]   - Has <html> tag:', hasHtmlTag);
+         console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING]   - Has <body> tag:', hasBodyTag);
+         console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING]   - Has <head> tag:', hasHeadTag);
 
-     console.log('[offscreen][EXECUTE_WORKFLOW] Workflow-engine завершился с результатом:', result);
-     console.log('[offscreen][EXECUTE_WORKFLOW] Отправляю результат обратно в background:', {
-       success: true,
-       result: result
-     });
+         if (!hasBodyTag && !hasHtmlTag) {
+           console.warn('[offscreen][EXECUTE_WORKFLOW][LOGGING] ⚠️ POTENTIAL HTML FRAGMENT DETECTED! Missing basic HTML structure');
+         }
 
-     // Send success message to chat
-     chrome.runtime.sendMessage({
-       type: 'PYODIDE_MESSAGE',
-       pluginId: pluginId,
-       pageKey: pageKey,
-       message: {
-         role: 'plugin',
-         content: `✅ Workflow выполнена успешно. Результат: ${JSON.stringify(result, null, 2)}`,
-         timestamp: Date.now()
+       } else if (pageHtmlValue && typeof pageHtmlValue === 'object') {
+         console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING] - page_html is object (chunk metadata):', JSON.stringify(pageHtmlValue, null, 2));
+         if (pageHtmlValue.__isChunkedString) {
+           console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING] - Detected chunked string metadata');
+           console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING]   - Original key:', pageHtmlValue.originalKey);
+           console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING]   - Chunk count:', pageHtmlValue.chunkCount);
+           console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING]   - Total length:', pageHtmlValue.totalLength);
+         }
+       } else {
+         console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING] - page_html value:', pageHtmlValue);
        }
-     });
+     } else {
+       console.error('[offscreen][EXECUTE_WORKFLOW][LOGGING] ❌ page_html is undefined!');
+     }
 
-     // Send response back
-     sendResponse({
-       success: true,
-       result: result,
-       pluginId: pluginId,
-       requestId: requestId,
-       timestamp: Date.now()
-     });
+     // Проверка на chunk ключи
+     const chunkKeys = Object.keys(workflowPayload).filter(key => key.includes('_chunk_'));
+     if (chunkKeys.length > 0) {
+       console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING] - Found chunk keys:', chunkKeys.length);
+       chunkKeys.forEach(key => {
+         const chunkValue = workflowPayload[key];
+         console.log(`[offscreen][EXECUTE_WORKFLOW][LOGGING]   - ${key}: ${typeof chunkValue}, length: ${chunkValue ? chunkValue.length : 'N/A'}`);
+       });
+     }
+
+     // Общий размер payload
+     const payloadSize = JSON.stringify(workflowPayload).length;
+     console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING] - Total payload size (JSON):', payloadSize, 'characters');
+     console.log('[offscreen][EXECUTE_WORKFLOW][LOGGING] ===== КОНЕЦ АНАЛИЗА WORKFLOW PAYLOAD =====');
+
+     // Execute workflow with chunks
+     const result = await executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, requestId, sendResponse);
+
+     console.log('[offscreen][EXECUTE_WORKFLOW] Workflow execution completed');
 
    } catch (error) {
      console.error('[offscreen][EXECUTE_WORKFLOW] КРИТИЧЕСКАЯ ОШИБКА:', error);
-     console.error('[offscreen][EXECUTE_WORKFLOW] Отправляю error message обратно в background:', {
-       success: false,
-       error: error.message
-     });
-
-     // Send error message to chat
-     chrome.runtime.sendMessage({
-       type: 'PYODIDE_MESSAGE',
-       pluginId: message.pluginId,
-       pageKey: message.pageKey,
-       message: {
-         role: 'plugin',
-         content: `❌ Ошибка выполнения workflow: ${error.message}`,
-         timestamp: Date.now()
-       }
-     });
-
-     // Send error response back
      sendResponse({
        success: false,
        error: error.message,
