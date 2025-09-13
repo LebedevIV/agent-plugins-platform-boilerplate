@@ -20,6 +20,12 @@ let pyodide = null;
 let currentPluginId = 'ozon-analyzer';
 let currentPageKey = 'unknown_page';
 
+// Глобальная функция trackSendResponse для использования вне обработчика сообщений
+function trackSendResponse(response) {
+  logDebug('RESPONSE', `Sending response: ${JSON.stringify(response)}`);
+  return true;
+}
+
 // === WORKFLOW EXECUTION SYSTEM ===
 // Убрана логика предотвращения дублирования для гарантированного выполнения каждого workflow
 
@@ -496,13 +502,19 @@ function handleHtmlChunk(chunkMessage) {
 
   logDebug('CHUNKING', `Stored chunk ${chunkIndex + 1}/${totalChunks} for transfer ${transferId}`);
 
-  // Send acknowledgment
-  safeSendMessageSync({
-    type: 'HTML_CHUNK_ACK',
-    transferId,
-    chunkIndex,
-    received: true
-  }, true); // Тихий режим для ACK сообщений
+  // Send acknowledgment - SYNCHRONOUS to prevent channel closure errors
+  try {
+    chrome.runtime.sendMessage({
+      type: 'HTML_CHUNK_ACK',
+      transferId,
+      chunkIndex,
+      received: true,
+      messageId: `ack_${Date.now()}_${transferId}_${chunkIndex}`
+    });
+    logDebug('CHUNKING', `HTML_CHUNK_ACK sent synchronously for chunk ${chunkIndex}`);
+  } catch (error) {
+    logError('CHUNKING', `Failed to send HTML_CHUNK_ACK for chunk ${chunkIndex}:`, error);
+  }
 
   // Check if transfer is complete
   if (transfer.receivedChunks === totalChunks) {
@@ -567,7 +579,9 @@ async function handleStartWorkflowAfterChunks(message, sendResponse) {
 
   if (!selectedTransfer) {
     logError('CHUNKING', 'No completed HTML transfers found for workflow');
-    sendResponse({ error: 'No completed HTML transfers found' });
+    const errorResponse = { error: 'No completed HTML transfers found' };
+    logInfo('CHUNKING', `Sending error response: ${JSON.stringify(errorResponse)}`);
+    trackSendResponse(errorResponse);
     return;
   }
 
@@ -610,11 +624,13 @@ async function handleStartWorkflowAfterChunks(message, sendResponse) {
 
     logError('CHUNKING', `Workflow завершен с ошибкой для pluginId: ${pluginId}, requestId: ${requestId}`);
 
-    sendResponse({
+    const errorResponse = {
       error: error.message,
       pluginId,
       requestId
-    });
+    };
+    logInfo('CHUNKING', `Sending error response for workflow: ${JSON.stringify(errorResponse)}`);
+    trackSendResponse(errorResponse);
   }
 }
 
@@ -786,13 +802,16 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
     logInfo('EXECUTION', `Workflow успешно завершен за ${endTime - startTime}мс в ${new Date(endTime).toISOString()}`);
 
     // Send response back
-    sendResponse({
+    const successResponse = {
       success: true,
       result: result,
       pluginId: pluginId,
       requestId: requestId,
       timestamp: Date.now()
-    });
+    };
+    logInfo('EXECUTION', `Sending success response for workflow: pluginId=${pluginId}, requestId=${requestId}`);
+    logDebug('EXECUTION', `Response payload: ${JSON.stringify(successResponse).substring(0, 200)}...`);
+    trackSendResponse(successResponse);
 
   } catch (error) {
     logError('EXECUTION', 'Workflow execution failed:', error);
@@ -815,23 +834,35 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
     logError('EXECUTION', `Error сообщение отправлено immediate с ID: ${errorMessageId}`);
 
     // Send error response back
-    sendResponse({
+    const errorResponse = {
       success: false,
       error: error.message,
       pluginId: pluginId,
       requestId: requestId,
       timestamp: Date.now()
-    });
+    };
+    logInfo('EXECUTION', `Sending error response for workflow: pluginId=${pluginId}, requestId=${requestId}, error=${error.message}`);
+    logDebug('EXECUTION', `Error response payload: ${JSON.stringify(errorResponse)}`);
+    trackSendResponse(errorResponse);
   }
 }
 
 // Handle messages from background script
 chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
-  // console.log('[offscreen] ===== OFFSCREEN MESSAGE RECEIVED =====');
-  // console.log('[offscreen] Received message:', message);
-  // console.log('[offscreen] Sender info:', sender);
-  // console.log('[offscreen] Message type:', message.type);
-  // console.log('[offscreen] Message timestamp:', new Date().toISOString());
+  const messageId = message.messageId || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  logInfo('CHANNEL', `📨 OFFSCREEN MESSAGE RECEIVED: type=${message.type}, messageId=${messageId}, timestamp=${new Date().toISOString()}`);
+
+  // Track response status
+  let responseSent = false;
+  const trackSendResponse = (response) => {
+    if (responseSent) {
+      logWarn('CHANNEL', `DUPLICATE sendResponse call for messageId=${messageId}, type=${message.type}`);
+      return;
+    }
+    responseSent = true;
+    logInfo('CHANNEL', `📤 OFFSCREEN RESPONSE SENT: type=${message.type}, messageId=${messageId}, success=${response?.success !== false}`);
+    sendResponse(response);
+  };
 
   // Handle HTML_ASSEMBLED confirmation from background to cleanup transfer
   if (message.type === 'HTML_ASSEMBLED_CONFIRMED') {
@@ -877,6 +908,14 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     };
   }
 
+  // Handle PING messages for health checks
+  if (message.type === 'PING') {
+    const pingResponse = { pong: true, timestamp: Date.now() };
+    logDebug('CHANNEL', `PING received, sending PONG response`);
+    trackSendResponse(pingResponse);
+    return true;
+  }
+
   // Handle chunked messages first
   if (message.type === 'HTML_CHUNK' || message.type === 'HTML_CHUNK_COMPLETE' || message.type === 'START_WORKFLOW_AFTER_CHUNKS') {
     return handleChunkedMessage(message, sendResponse);
@@ -901,18 +940,21 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
         executionTime: Date.now() - message.timestamp
       };
 
-      sendResponse(response);
+      logInfo('EXECUTION', `Sending success response for EXECUTE_PYTHON_CODE: testName=${message.testName}, requestId=${message.requestId}`);
+      trackSendResponse(response);
 
     } catch (error) {
       logError('EXECUTION', 'Test execution failed:', error);
 
-      sendResponse({
+      const errorResponse = {
         success: false,
         error: error.message,
         requestId: message.requestId,
         timestamp: Date.now(),
         executionTime: Date.now() - message.timestamp
-      });
+      };
+      logInfo('EXECUTION', `Sending error response for TEST_PYODIDE_DIRECT_EXEC: requestId=${message.requestId}, error=${error.message}`);
+      trackSendResponse(errorResponse);
     }
 
     return true; // Keep channel open for async response
@@ -931,20 +973,24 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
 
       logInfo('PYODIDE', 'Pyodide ready for manual testing');
 
-      sendResponse({
+      const response = {
         success: true,
         result: 'Pyodide initialized successfully',
         timestamp: Date.now()
-      });
+      };
+      logInfo('PYODIDE', `Sending success response for INITIALIZE_PYODIDE`);
+      trackSendResponse(response);
 
     } catch (error) {
       logError('PYODIDE', 'Initialization failed:', error);
 
-      sendResponse({
+      const errorResponse = {
         success: false,
         error: error.message,
         timestamp: Date.now()
-      });
+      };
+      logInfo('PYODIDE', `Sending error response for INITIALIZE_PYODIDE: error=${error.message}`);
+      trackSendResponse(errorResponse);
     }
 
     return true;
@@ -990,19 +1036,21 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
         executionTime: Date.now() - (message.timestamp || 0)
       };
 
-      sendResponse(response);
+      trackSendResponse(response);
 
     } catch (error) {
       logError('EXECUTION', 'Execution failed:', error);
 
-      sendResponse({
+      const errorResponse = {
         success: false,
         error: error.message,
         testName: message.testName,
         requestId: message.requestId,
         timestamp: Date.now(),
         executionTime: Date.now() - (message.timestamp || 0)
-      });
+      };
+      logInfo('EXECUTION', `Sending error response for EXECUTE_PYTHON_CODE: testName=${message.testName}, requestId=${message.requestId}, error=${error.message}`);
+      trackSendResponse(errorResponse);
     }
 
     return true;
@@ -1124,13 +1172,15 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     const errorTime = Date.now();
     logError('EXECUTION', `Workflow завершен с ошибкой за ${errorTime - workflowStartTime}мс в ${new Date(errorTime).toISOString()}`);
 
-    sendResponse({
+    const errorResponse = {
       success: false,
       error: error.message,
       pluginId: message.pluginId,
       requestId: message.requestId,
       timestamp: Date.now()
-    });
+    };
+    logInfo('EXECUTION', `Sending error response for EXECUTE_WORKFLOW: ${JSON.stringify(errorResponse)}`);
+    trackSendResponse(errorResponse);
   }
 
    return true; // Keep channel open for async response

@@ -2556,13 +2556,13 @@ setInterval(() => {
       if (!isValid) {
         invalidCount++;
         console.warn(`[TRANSFER_HEALTH] ❌ Invalid transfer: ${transferId}`);
-      } else if (age > 3e4) {
+      } else if (age > 3e5) {
         staleCount++;
         console.warn(`[TRANSFER_HEALTH] ⚠️ Stale transfer: ${transferId} (${Math.round(age / 1e3)}s old)`);
       } else {
         healthyCount++;
       }
-      if (lastAccessAge > 1e4 && !transfer.isRecovery) {
+      if (lastAccessAge > 3e5 && !transfer.isRecovery) {
         console.warn(`[TRANSFER_HEALTH] 🚨 Potentially stuck transfer: ${transferId} (${Math.round(lastAccessAge / 1e3)}s since last access)`);
       }
     }
@@ -2570,7 +2570,7 @@ setInterval(() => {
     let cleanedCount = 0;
     for (const [transferId, transfer] of activeTransfers.entries()) {
       const age = now - transfer.createdAt;
-      if (age > 6e4) {
+      if (age > 6e5) {
         activeTransfers.delete(transferId);
         cleanedCount++;
         console.log(`[TRANSFER_HEALTH] 🧹 Auto-cleaned stale transfer: ${transferId}`);
@@ -2580,7 +2580,7 @@ setInterval(() => {
       console.log(`[TRANSFER_HEALTH] 🧹 Cleaned ${cleanedCount} stale transfers`);
     }
   }
-}, 1e4);
+}, 3e5);
 console.log("[background] Transfer storage health monitoring initialized");
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
 const hasOffscreenDocument = async () => {

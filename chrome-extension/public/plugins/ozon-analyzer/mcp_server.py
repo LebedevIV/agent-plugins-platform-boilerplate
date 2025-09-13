@@ -3098,8 +3098,30 @@ def _find_similar_products(categories: List[str], composition: str) -> List[Dict
 
         except json.JSONDecodeError as je:
             js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка парсинга JSON в _find_similar_products: {str(je)}"})
-            console_log(f"JSON парсинг ошибка: {str(je)}")
+            console_log(f"JSON парсинг ошибка в _find_similar_products: {str(je)}")
             console_log(f"Необработанный ответ AI: {response[:500]}...")  # Логируем первые 500 символов для диагностики
+
+            # Попытка исправить распространенные проблемы с JSON
+            try:
+                # Убираем возможные лишние символы в начале и конце
+                fixed_json = response.strip()
+                if not fixed_json.startswith('{'):
+                    start_idx = fixed_json.find('{')
+                    if start_idx != -1:
+                        fixed_json = fixed_json[start_idx:]
+                if not fixed_json.endswith('}'):
+                    end_idx = fixed_json.rfind('}')
+                    if end_idx != -1:
+                        fixed_json = fixed_json[:end_idx + 1]
+
+                parsed = json.loads(fixed_json)
+                console_log("JSON удалось исправить автоматически в _find_similar_products")
+                analogs = parsed.get('analogs', [])
+                if analogs:
+                    return analogs[:5]  # Ограничение до 5 результатов
+            except:
+                console_log("Автоматическое исправление JSON не удалось в _find_similar_products")
+
             # В случае ошибки парсинга возвращаем fallback
             return _generate_fallback_analogs(categories, product_type)
 
