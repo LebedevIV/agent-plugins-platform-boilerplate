@@ -1976,7 +1976,30 @@ const offscreenSupported = () => {
     return false;
   }
 };
+const TRANSFER_TIMEOUT = 300000; // 5 minutes (300000 ms)
+const CLEANUP_TIMEOUT = 600000; // 10 minutes (600000 ms) for stale transfer cleanup
+const RESPONSE_TIMEOUT = 30000; // 30 seconds (30000 ms) for offscreen response timeout
+
 const activeTransfers = /* @__PURE__ */ new Map();
+
+// Timeout wrapper for offscreen message responses
+async function sendOffscreenMessageWithTimeout(message, timeout = RESPONSE_TIMEOUT) {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error(`Offscreen response timeout after ${timeout}ms for message: ${message.type}`));
+    }, timeout);
+
+    chrome.runtime.sendMessage(message)
+      .then((result) => {
+        clearTimeout(timeoutId);
+        resolve(result);
+      })
+      .catch((error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
+}
 const DIRECT_DATA_KEY = "chrome_extension_direct_data";
 async function storeDataDirectly(data, transferId) {
   try {
@@ -2149,11 +2172,11 @@ async function multiLayerTransferCheck(transferId) {
   }
   try {
     console.log(`[MULTI_LAYER_CHECK] 🔄 Checking offscreen document for transfer ${transferId}`);
-    const offscreenCheck = await chrome.runtime.sendMessage({
+    const offscreenCheck = await sendOffscreenMessageWithTimeout({
       type: "CHECK_TRANSFER_STATUS",
       transferId,
       timestamp: Date.now()
-    }).catch(() => null);
+    }, 5000).catch(() => null); // Shorter timeout for status checks
     if (offscreenCheck == null ? void 0 : offscreenCheck.transferExists) {
       console.log(`[MULTI_LAYER_CHECK] ✅ Transfer ${transferId} exists in offscreen document`);
       const stubTransfer = {
@@ -2254,11 +2277,11 @@ async function fallbackTransferRecoveryForAssembled(msg) {
       return true;
     }
     console.log(`[FALLBACK_RECOVERY] 🔄 Requesting assembled data from offscreen document`);
-    const offscreenData = await chrome.runtime.sendMessage({
+    const offscreenData = await sendOffscreenMessageWithTimeout({
       type: "REQUEST_ASSEMBLED_DATA",
       transferId,
       timestamp: Date.now()
-    }).catch(() => null);
+    }, 10000).catch(() => null); // Longer timeout for data requests
     if (offscreenData == null ? void 0 : offscreenData.assembledData) {
       console.log(`[FALLBACK_RECOVERY] 📦 Received assembled data from offscreen`);
       const recoveryTransfer = {
@@ -2348,11 +2371,11 @@ async function processRecoveredAssembledTransfer(msg, transfer) {
       }
       if (!pluginId) {
         try {
-          const offscreenData = await chrome.runtime.sendMessage({
+          const offscreenData = await sendOffscreenMessageWithTimeout({
             type: "GET_TRANSFER_PLUGIN_INFO",
             transferId,
             timestamp: Date.now()
-          }).catch(() => null);
+          }, 5000).catch(() => null);
           if (offscreenData == null ? void 0 : offscreenData.pluginId) {
             pluginId = offscreenData.pluginId;
             console.log(`[RECOVERY_PROCESSING] ✅ Recovered pluginId from offscreen: ${pluginId}`);
@@ -2431,7 +2454,7 @@ async function processRecoveredAssembledTransfer(msg, transfer) {
       }
     }
     console.log(`[RECOVERY_PROCESSING] 🚀 Sending recovery EXECUTE_WORKFLOW for ${transferId} (${((_f = executeMessage2.assembledData) == null ? void 0 : _f.length) || 0} chars)`);
-    await chrome.runtime.sendMessage(executeMessage2);
+    await sendOffscreenMessageWithTimeout(executeMessage2, 45000); // Longer timeout for workflow execution
     console.log(`[RECOVERY_PROCESSING] ✅ Recovery EXECUTE_WORKFLOW sent successfully for ${transferId}`);
     console.log(`[RECOVERY_PROCESSING] 📊 Recovery summary for ${transferId}:`, {
       pluginId,
@@ -2556,13 +2579,13 @@ setInterval(() => {
       if (!isValid) {
         invalidCount++;
         console.warn(`[TRANSFER_HEALTH] ❌ Invalid transfer: ${transferId}`);
-      } else if (age > 3e5) {
+      } else if (age > TRANSFER_TIMEOUT) {
         staleCount++;
         console.warn(`[TRANSFER_HEALTH] ⚠️ Stale transfer: ${transferId} (${Math.round(age / 1e3)}s old)`);
       } else {
         healthyCount++;
       }
-      if (lastAccessAge > 3e5 && !transfer.isRecovery) {
+      if (lastAccessAge > TRANSFER_TIMEOUT && !transfer.isRecovery) {
         console.warn(`[TRANSFER_HEALTH] 🚨 Potentially stuck transfer: ${transferId} (${Math.round(lastAccessAge / 1e3)}s since last access)`);
       }
     }
@@ -2570,7 +2593,7 @@ setInterval(() => {
     let cleanedCount = 0;
     for (const [transferId, transfer] of activeTransfers.entries()) {
       const age = now - transfer.createdAt;
-      if (age > 6e5) {
+      if (age > CLEANUP_TIMEOUT) {
         activeTransfers.delete(transferId);
         cleanedCount++;
         console.log(`[TRANSFER_HEALTH] 🧹 Auto-cleaned stale transfer: ${transferId}`);
@@ -2800,11 +2823,11 @@ chrome.runtime.onMessage.addListener(
           (async () => {
             try {
               await ensureOffscreenDocument();
-              const response = await chrome.runtime.sendMessage({
+              const response = await sendOffscreenMessageWithTimeout({
                 type: "INITIALIZE_PYODIDE",
                 requestId: msg.requestId,
                 timestamp: msg.timestamp
-              });
+              }, 60000); // 60 seconds for Pyodide initialization
               sendResponse({
                 success: (response == null ? void 0 : response.success) || true,
                 result: "Pyodide initialized in offscreen document",
@@ -2836,13 +2859,13 @@ chrome.runtime.onMessage.addListener(
         try {
           (async () => {
             try {
-              const response = await chrome.runtime.sendMessage({
+              const response = await sendOffscreenMessageWithTimeout({
                 type: "EXECUTE_PYTHON_CODE",
                 code: msg.code,
                 testName: msg.testName,
                 requestId: msg.requestId,
                 timestamp: msg.timestamp
-              });
+              }, 120000); // 2 minutes for Python execution
               sendResponse({
                 success: (response == null ? void 0 : response.success) || false,
                 result: response == null ? void 0 : response.result,
@@ -2875,14 +2898,14 @@ chrome.runtime.onMessage.addListener(
         try {
           (async () => {
             try {
-              const response = await chrome.runtime.sendMessage({
+              const response = await sendOffscreenMessageWithTimeout({
                 type: "EXECUTE_PYTHON_CODE",
                 code: msg.code,
                 testName: msg.testName,
                 isErrorTest: true,
                 requestId: msg.requestId,
                 timestamp: msg.timestamp
-              });
+              }, 120000); // 2 minutes for Python error test execution
               sendResponse({
                 success: (response == null ? void 0 : response.success) || false,
                 result: response == null ? void 0 : response.result,
@@ -3119,7 +3142,7 @@ chrome.runtime.onMessage.addListener(
                   dataKey
                 });
                 console.log("[background][OFFSCREEN DELEGATION] Sending workflow request to offscreen...");
-                const result2 = await chrome.runtime.sendMessage(workflowPayload);
+                const result2 = await sendOffscreenMessageWithTimeout(workflowPayload);
                 console.log("[background][DEBUG] Direct data exchange completed, result:", result2);
                 if (result2 && result2.success) {
                   console.log("[background][OFFSCREEN DELEGATION] Direct workflow execution successful");
@@ -3760,7 +3783,7 @@ chrome.runtime.onMessage.addListener(
             };
             try {
               console.log("[background][OFFSCREEN RESPONSE] 🚀 Sending EXECUTE_WORKFLOW to offscreen...");
-              await chrome.runtime.sendMessage(executeMessage2);
+              await sendOffscreenMessageWithTimeout(executeMessage2, 45000); // Longer timeout for workflow execution
               console.log("[background][OFFSCREEN RESPONSE] ✅ EXECUTE_WORKFLOW sent successfully");
             } catch (sendError) {
               console.error("[background][OFFSCREEN RESPONSE] ❌ Failed to send EXECUTE_WORKFLOW:", sendError);
@@ -3939,7 +3962,7 @@ const handleTestPyodideDirect = async (message) => {
           timestamp: Date.now()
         };
         console.log("[TEST_PYODIDE_DIRECT] Sending to offscreen:", testRequest);
-        const result2 = await chrome.runtime.sendMessage(testRequest);
+        const result2 = await sendOffscreenMessageWithTimeout(testRequest, 60000); // 60 seconds for test execution
         return {
           success: (result2 == null ? void 0 : result2.success) || false,
           result: (result2 == null ? void 0 : result2.result) || null,

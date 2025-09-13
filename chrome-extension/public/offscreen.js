@@ -20,10 +20,66 @@ let pyodide = null;
 let currentPluginId = 'ozon-analyzer';
 let currentPageKey = 'unknown_page';
 
+// Глобальная переменная для хранения текущей функции отправки ответа
+let globalSendResponse = null;
+
+// Константы для улучшения стабильности ответов
+const RESPONSE_DELAY = 100; // 100мс задержка перед отправкой ответа
+const MAX_RESPONSE_RETRIES = 3; // Максимум попыток отправки ответа
+
 // Глобальная функция trackSendResponse для использования вне обработчика сообщений
-function trackSendResponse(response) {
-  logDebug('RESPONSE', `Sending response: ${JSON.stringify(response)}`);
-  return true;
+async function trackSendResponse(response, options = {}) {
+  const {
+    delay = RESPONSE_DELAY,
+    retries = MAX_RESPONSE_RETRIES,
+    silent = false
+  } = options;
+
+  logDebug('RESPONSE', `Sending response via global tracker: success=${response?.success}, delay=${delay}ms`);
+
+  if (!globalSendResponse || typeof globalSendResponse !== 'function') {
+    if (!silent) {
+      logWarn('RESPONSE', `⚠️ Global sendResponse not available, response not sent`);
+    }
+    return false;
+  }
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      // Небольшая задержка для стабильности
+      if (delay > 0 && attempt === 0) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+
+      // Проверяем что функция все еще доступна
+      if (!globalSendResponse || typeof globalSendResponse !== 'function') {
+        if (!silent) {
+          logWarn('RESPONSE', `⚠️ Global sendResponse became unavailable during retry ${attempt}`);
+        }
+        return false;
+      }
+
+      logInfo('RESPONSE', `✅ Global response sent successfully (attempt ${attempt + 1})`);
+      globalSendResponse(response);
+      return true;
+
+    } catch (error) {
+      if (!silent) {
+        logError('RESPONSE', `❌ Global response send failed (attempt ${attempt + 1}/${retries + 1}):`, error);
+      }
+
+      if (attempt < retries) {
+        // Ждем перед следующей попыткой
+        await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
+        continue;
+      }
+    }
+  }
+
+  if (!silent) {
+    logError('RESPONSE', `❌ All response send attempts failed after ${retries + 1} tries`);
+  }
+  return false;
 }
 
 // === WORKFLOW EXECUTION SYSTEM ===
@@ -581,7 +637,7 @@ async function handleStartWorkflowAfterChunks(message, sendResponse) {
     logError('CHUNKING', 'No completed HTML transfers found for workflow');
     const errorResponse = { error: 'No completed HTML transfers found' };
     logInfo('CHUNKING', `Sending error response: ${JSON.stringify(errorResponse)}`);
-    trackSendResponse(errorResponse);
+    sendResponse(errorResponse);
     return;
   }
 
@@ -630,7 +686,7 @@ async function handleStartWorkflowAfterChunks(message, sendResponse) {
       requestId
     };
     logInfo('CHUNKING', `Sending error response for workflow: ${JSON.stringify(errorResponse)}`);
-    trackSendResponse(errorResponse);
+    sendResponse(errorResponse);
   }
 }
 
@@ -811,7 +867,7 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
     };
     logInfo('EXECUTION', `Sending success response for workflow: pluginId=${pluginId}, requestId=${requestId}`);
     logDebug('EXECUTION', `Response payload: ${JSON.stringify(successResponse).substring(0, 200)}...`);
-    trackSendResponse(successResponse);
+    sendResponse(successResponse);
 
   } catch (error) {
     logError('EXECUTION', 'Workflow execution failed:', error);
@@ -843,7 +899,7 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
     };
     logInfo('EXECUTION', `Sending error response for workflow: pluginId=${pluginId}, requestId=${requestId}, error=${error.message}`);
     logDebug('EXECUTION', `Error response payload: ${JSON.stringify(errorResponse)}`);
-    trackSendResponse(errorResponse);
+    sendResponse(errorResponse);
   }
 }
 
@@ -854,6 +910,10 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
 
   // Track response status
   let responseSent = false;
+
+  // Установить глобальную функцию отправки ответа
+  globalSendResponse = sendResponse;
+
   const trackSendResponse = (response) => {
     if (responseSent) {
       logWarn('CHANNEL', `DUPLICATE sendResponse call for messageId=${messageId}, type=${message.type}`);
@@ -861,7 +921,16 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     }
     responseSent = true;
     logInfo('CHANNEL', `📤 OFFSCREEN RESPONSE SENT: type=${message.type}, messageId=${messageId}, success=${response?.success !== false}`);
-    sendResponse(response);
+    try {
+      sendResponse(response);
+    } catch (error) {
+      logError('CHANNEL', `❌ sendResponse failed for messageId=${messageId}:`, error);
+    }
+  };
+
+  // Функция очистки глобальной переменной при завершении
+  const cleanupGlobalSendResponse = () => {
+    globalSendResponse = null;
   };
 
   // Handle HTML_ASSEMBLED confirmation from background to cleanup transfer
@@ -1069,6 +1138,17 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
 
   logInfo('EXECUTION', `Запуск workflow гарантирован для ${pluginId}:${pageKey}:${requestId}`);
 
+  // Функция для отправки ответа background.js
+  const sendWorkflowResponse = (response) => {
+    logInfo('EXECUTION', `Отправка ответа background.js: success=${response?.success}, timestamp=${new Date().toISOString()}`);
+    try {
+      sendResponse(response);
+      logInfo('EXECUTION', `✅ Ответ успешно отправлен background.js`);
+    } catch (error) {
+      logError('EXECUTION', `❌ Ошибка отправки ответа background.js:`, error);
+    }
+  };
+
   try {
    // Initialize Pyodide if needed
    if (!pyodide) {
@@ -1163,7 +1243,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
 
      // Execute workflow with chunks
      logInfo('EXECUTION', `Шаг 8: Запуск executeWorkflowWithChunks - ${new Date(Date.now()).toISOString()}`);
-     const result = await executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, requestId, sendResponse);
+     const result = await executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, requestId, sendWorkflowResponse);
      logInfo('EXECUTION', `Шаг 9: executeWorkflowWithChunks завершен - ${new Date(Date.now()).toISOString()}`);
      logInfo('EXECUTION', 'Workflow execution completed');
 
@@ -1180,13 +1260,19 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       timestamp: Date.now()
     };
     logInfo('EXECUTION', `Sending error response for EXECUTE_WORKFLOW: ${JSON.stringify(errorResponse)}`);
-    trackSendResponse(errorResponse);
-  }
+    sendWorkflowResponse(errorResponse);
+   }
 
    return true; // Keep channel open for async response
  }
 
   return false;
+}).then(() => {
+  // Очистка глобальной переменной после завершения обработки сообщения
+  cleanupGlobalSendResponse();
+}).catch((error) => {
+  logError('SYSTEM', 'Error in message handler:', error);
+  cleanupGlobalSendResponse();
 });
 
 logInfo('SYSTEM', 'Offscreen document ready, waiting for messages...');
