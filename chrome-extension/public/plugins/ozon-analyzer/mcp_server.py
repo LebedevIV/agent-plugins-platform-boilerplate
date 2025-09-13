@@ -148,9 +148,10 @@ class MemoryManager:
 # ==============================================================================
 # Безопасные wrapper функции для offscreen compatibility
 # ==============================================================================
-async def safe_js_get_setting(setting_name: str, default: Any = False) -> Any:
+def safe_js_get_setting(setting_name: str, default: Any = False) -> Any:
     try:
-        result_proxy = await js.get_setting(setting_name)
+        # Синхронный вызов для совместимости с Pyodide
+        result_proxy = js.get_setting(setting_name)
         if result_proxy is None:
             return default
         return result_proxy.to_py()
@@ -164,6 +165,41 @@ def safe_dict_get(data: Any, key: str, default: Any = None) -> Any:
         return default
     except AttributeError:
         return default
+
+# ==============================================================================
+# Оптимизированная система логирования для уменьшения повторяющихся сообщений
+# ==============================================================================
+class OptimizedLogger:
+    """Оптимизированный логгер для уменьшения повторяющихся сообщений."""
+
+    def __init__(self, max_similar_messages: int = 3):
+        self.message_count = {}
+        self.max_similar = max_similar_messages
+        self.last_message_type = None
+
+    def log(self, message: str, message_type: str = None, force: bool = False):
+        """Логирование с контролем повторяющихся сообщений."""
+        key = message_type or message[:50]  # Используем первые 50 символов как ключ
+
+        if not force:
+            self.message_count[key] = self.message_count.get(key, 0) + 1
+
+            # Не логируем слишком похожие сообщения подряд
+            if (self.last_message_type == message_type and
+                self.message_count[key] > self.max_similar and
+                message_type != 'error'):
+                return
+
+        self.last_message_type = message_type
+        js.sendMessageToChat({"content": message})
+
+    def reset(self):
+        """Сброс счетчиков сообщений."""
+        self.message_count.clear()
+        self.last_message_type = None
+
+# Глобальный оптимизированный логгер
+logger = OptimizedLogger(max_similar_messages=2)
 
 # ==============================================================================
 # Batch Processor для группировки AI запросов
@@ -618,65 +654,75 @@ class FastDOMParser:
             return "Название товара не найдено"
 
     def _extract_description(self) -> str:
-        """Извлечение описания товара с кешированными паттернами."""
-        js.sendMessageToChat({"content": "Python: 🔍 Извлекаю описание товара..."})
+        """Извлечение описания товара с новыми селекторами."""
 
-        original_html_len = len(self.html)
+        # Паттерн для селектора: #section-description > div:nth-child(2) > div > div > div
+        # Ищем в section-description второй дочерний div, затем вложенные div'ы
+        desc_pattern = r'id="section-description"[^>]*>(.*?)<div[^>]*>(.*?)<div[^>]*>(.*?)<div[^>]*>(.*?)</div>.*?</div>.*?</div>.*?</div>'
 
-        # Оптимизированные паттерны для описания товара
-        desc_patterns = [
+        match = re.search(desc_pattern, self.html, re.IGNORECASE | re.DOTALL)
+        if match:
+            # Извлекаем содержимое из соответствующей группы (обычно 4-я группа для указанного селектора)
+            content_groups = match.groups()
+            if len(content_groups) >= 4:
+                content = content_groups[3]  # 4-я группа соответствует последнему div в селекторе
+                clean_pattern = self._get_cached_pattern(r'<[^>]+>', re.I)
+                cleaned_content = clean_pattern.sub('', content).strip()
+
+                if len(cleaned_content) > 20:
+                    return cleaned_content
+
+        # Fallback: поиск по старым паттернам
+        desc_fallback_patterns = [
             r'<div[^>]*class="[^"]*description[^"]*"[^>]*>([^<]*(?:<[^/][^>]*>[^<]*</[^>]+>[^<]*)*)</div>',
             r'<meta[^>]+name="description"[^>]+content="([^"]+)"',
             r'<p[^>]*class="[^"]*description[^"]*"[^>]*>([^<]+)</p>'
         ]
 
-        match = self._search_with_pattern(desc_patterns, re.IGNORECASE | re.DOTALL)
+        match = self._search_with_pattern(desc_fallback_patterns, re.IGNORECASE | re.DOTALL)
         if match:
-            # Кешируем regex для очистки HTML тегов
             clean_pattern = self._get_cached_pattern(r'<[^>]+>', re.I)
             cleaned_content = clean_pattern.sub('', match.group(1)).strip()
-
-            # Логируем потери данных при извлечении
-            raw_content_len = len(match.group(1))
-            cleaned_len = len(cleaned_content)
-            data_loss = raw_content_len - cleaned_len
-
-            js.sendMessageToChat({"content": f"Python: 📊 Извлечено описание: {cleaned_len} символов (потеряно {data_loss} при очистке HTML)"})
 
             if len(cleaned_content) > 20:
                 return cleaned_content
 
-        js.sendMessageToChat({"content": "Python: ⚠️ Описание товара не найдено"})
         return "Описание товара не найдено"
 
     def _extract_composition(self) -> str:
-        """Извлечение состава товара с кешированными паттернами."""
-        js.sendMessageToChat({"content": "Python: 🔍 Извлекаю состав товара..."})
+        """Извлечение состава товара с новыми селекторами."""
 
-        # Оптимизированные паттерны для состава товара
-        comp_patterns = [
+        # Ищем заголовок h3 с текстом "Состав" в section-description
+        comp_pattern = r'<div[^>]*id="section-description"[^>]*>.*?<div[^>]*>.*?<div[^>]*>.*?<div[^>]*>.*?<h3[^>]*>([^<]*(?:состав|ингредиенты|состав:|ingredients)[^<]*)</h3>.*?(.*?)(?=<h\d|$)'
+
+        match = re.search(comp_pattern, self.html, re.IGNORECASE | re.DOTALL)
+        if match:
+            header_text = match.group(1).strip()
+            content = match.group(2).strip()
+
+            # Проверяем, что нашли правильный заголовок
+            if any(word in header_text.lower() for word in ['состав', 'ингредиенты', 'ingredients']):
+                clean_pattern = self._get_cached_pattern(r'<[^>]+>', re.I)
+                cleaned_content = clean_pattern.sub('', content).strip()
+
+                if len(cleaned_content) > 10:
+                    return cleaned_content
+
+        # Fallback: поиск по старым паттернам
+        comp_fallback_patterns = [
             r'<div[^>]*class="[^"]*composition[^"]*">([^<]*(?:<[^/][^>]*>[^<]*</[^>]+>[^<]*)*)</div>',
             r'<div[^>]*class="[^"]*ingredients[^"]*">([^<]*(?:<[^/][^>]*>[^<]*</[^>]+>[^<]*)*)</div>',
             r'<span[^>]*class="[^"]*composition[^"]*">([^<]+)</span>'
         ]
 
-        match = self._search_with_pattern(comp_patterns, re.IGNORECASE | re.DOTALL)
+        match = self._search_with_pattern(comp_fallback_patterns, re.IGNORECASE | re.DOTALL)
         if match:
-            # Кешируем regex для очистки HTML тегов
             clean_pattern = self._get_cached_pattern(r'<[^>]+>', re.I)
             cleaned_content = clean_pattern.sub('', match.group(1)).strip()
-
-            # Логируем потери данных при извлечении
-            raw_content_len = len(match.group(1))
-            cleaned_len = len(cleaned_content)
-            data_loss = raw_content_len - cleaned_len
-
-            js.sendMessageToChat({"content": f"Python: 📊 Извлечён состав: {cleaned_len} символов (потеряно {data_loss} при очистке HTML)"})
 
             if len(cleaned_content) > 10:
                 return cleaned_content
 
-        js.sendMessageToChat({"content": "Python: ⚠️ Состав товара не найден"})
         return "Состав не указан"
 
     def _extract_categories(self) -> List[str]:
@@ -712,20 +758,32 @@ class FastDOMParser:
         return categories[:5] if categories else ["Категория не определена"]
 
     def _extract_categories_from_breadcrumbs(self) -> List[str]:
-        """Извлечение категорий из хлебных крошек с улучшенной обработкой."""
-        breadcrumb_pattern = r'<[^>]*class="[^"]*breadcrumb[^"]*"[^>]*>(.*?)</[^>]+>'
-        breadcrumb = self._get_cached_pattern(breadcrumb_pattern, re.IGNORECASE | re.DOTALL)
+        """Извлечение категорий из хлебных крошек с новыми селекторами."""
+
+        # Ищем первый элемент хлебных крошек: #layoutPage div[data-widget="breadCrumbs"] ol li:nth-child(1) a
+        breadcrumb_pattern = r'<div[^>]*id="layoutPage"[^>]*>.*?<div[^>]*data-widget="breadCrumbs"[^>]*>.*?<ol[^>]*>.*?<li[^>]*>.*?<a[^>]*href="([^"]*)"[^>]*>([^<]+)</a>.*?</li>'
+
+        match = re.search(breadcrumb_pattern, self.html, re.IGNORECASE | re.DOTALL)
+        if match:
+            href = match.group(1)
+            text = match.group(2).strip()
+
+            # Проверяем href на соответствие категории красоты и здоровья
+            if href and 'category/krasota-i-zdorove' in href and len(text) > 1:
+                return [text]
+
+        # Fallback: поиск по старым паттернам
+        old_breadcrumb_pattern = r'<[^>]*class="[^"]*breadcrumb[^"]*"[^>]*>(.*?)</[^>]+>'
+        breadcrumb = self._get_cached_pattern(old_breadcrumb_pattern, re.IGNORECASE | re.DOTALL)
         breadcrumb_match = breadcrumb.search(self.html)
 
         if breadcrumb_match:
-            # Извлечение текста из хлебных крошек с обработкой вложенности
             breadcrumb_html = breadcrumb_match.group(1)
 
-            # Более гибкие паттерны для извлечения ссылок
             link_patterns = [
                 r'<a[^>]*>([^<]+)</a>',
                 r'<span[^>]*>([^<]+)</span>',
-                r'([^>]+?)'  # Fallback: просто текст без HTML
+                r'([^>]+?)'
             ]
 
             categories = []
@@ -734,14 +792,14 @@ class FastDOMParser:
                     link_pattern = self._get_cached_pattern(pattern_str, re.IGNORECASE)
                     matches = link_pattern.findall(breadcrumb_html)
 
-                    for match in matches[:8]:  # Ограничение для предотвращения спама
+                    for match in matches[:8]:
                         text = match.strip()
                         if len(text) > 1 and not any(word in text.lower() for word in ['home', 'главная', 'каталог']):
                             categories.append(text)
                 except Exception:
-                    continue  # Пропускаем проблемный паттерн, пробуем следующий
+                    continue
 
-            return categories[:5]  # Ограничение количества категорий
+            return categories[:5]
 
         return []
 
@@ -1040,7 +1098,7 @@ def _diagnose_variable_access(variable_name: str) -> Dict[str, Any]:
         'timestamp': datetime.now().isoformat()
     }
 
-async def analyze_ozon_product() -> Dict[str, Any]:
+def analyze_ozon_product() -> Dict[str, Any]:
     """
     Главная точка входа для анализа страницы товара Ozon.
     Эта функция оркестрирует весь процесс: парсинг, анализ, поиск аналогов
@@ -1054,14 +1112,12 @@ async def analyze_ozon_product() -> Dict[str, Any]:
         шагов в `workflow.json` (например, для `perform_deep_analysis`).
     """
     try:
-        # === МАКСИМАЛЬНОЕ ЛОГИРОВАНИЕ НАЧАЛА АНАЛИЗА ===
-        js.sendMessageToChat({"content": "Python: 🔍 ===== НАЧАЛО АНАЛИЗА ТОВАРА OZON ====="})
-        js.sendMessageToChat({"content": f"Python: 🔍 Timestamp: {datetime.now().isoformat()}"})
-        js.sendMessageToChat({"content": "Python: 📊 Чтение данных из pyodide.globals..."})
+        # === ОПТИМИЗИРОВАННОЕ ЛОГИРОВАНИЕ ===
+        logger.log("Python: 🔍 ===== НАЧАЛО АНАЛИЗА ТОВАРА OZON =====", "analysis_start", force=True)
+        logger.log(f"Python: 📊 Timestamp: {datetime.now().isoformat()}", "timestamp")
 
         # Шаг 1: Чтение метаданных из Pyodide globals
-        js.sendMessageToChat({"content": "Python: 🔧 Шаг 1: Чтение метаданных из Python globals"})
-        js.sendMessageToChat({"content": "Python: 🔍 Проверка доступности переменных в globals..."})
+        logger.log("Python: 🔧 Шаг 1: Чтение метаданных из Python globals", "step_1")
 
         # Начало измерения времени чтения данных
         read_start_time = datetime.now()
@@ -1075,28 +1131,25 @@ async def analyze_ozon_product() -> Dict[str, Any]:
         except Exception as e:
             js.sendMessageToChat({"content": f"Python: ⚠️ Не удалось получить список всех переменных: {e}"})
 
-        # Чтение page_html_chunk_count через globals()
-        js.sendMessageToChat({"content": "Python: 🔍 ===== ЧТЕНИЕ page_html_chunk_count ====="})
+        # Чтение метаданных с оптимизированным логированием
         try:
             chunk_count = globals()['page_html_chunk_count']
-            js.sendMessageToChat({"content": f"Python: ✅ page_html_chunk_count = {chunk_count} (тип: {type(chunk_count).__name__}, длина: {len(str(chunk_count))} символов)"})
+            logger.log(f"Python: ✅ page_html_chunk_count = {chunk_count}", "metadata_chunk_count")
         except KeyError as e:
-            js.sendMessageToChat({"content": f"Python: ❌ page_html_chunk_count отсутствует в globals(): {e}"})
+            logger.log(f"Python: ❌ page_html_chunk_count отсутствует в globals(): {e}", "error", force=True)
             raise ValueError(f"page_html_chunk_count отсутствует в globals(): {e}")
         except Exception as e:
-            js.sendMessageToChat({"content": f"Python: ❌ Ошибка чтения page_html_chunk_count: {e}"})
+            logger.log(f"Python: ❌ Ошибка чтения page_html_chunk_count: {e}", "error", force=True)
             raise ValueError(f"Ошибка чтения page_html_chunk_count: {e}")
 
-        # Чтение page_html_total_length через globals()
-        js.sendMessageToChat({"content": "Python: 🔍 ===== ЧТЕНИЕ page_html_total_length ====="})
         try:
             total_length = globals()['page_html_total_length']
-            js.sendMessageToChat({"content": f"Python: ✅ page_html_total_length = {total_length} (тип: {type(total_length).__name__}, длина: {len(str(total_length))} символов)"})
+            logger.log(f"Python: ✅ page_html_total_length = {total_length}", "metadata_total_length")
         except KeyError as e:
-            js.sendMessageToChat({"content": f"Python: ❌ page_html_total_length отсутствует в globals(): {e}"})
+            logger.log(f"Python: ❌ page_html_total_length отсутствует в globals(): {e}", "error", force=True)
             raise ValueError(f"page_html_total_length отсутствует в globals(): {e}")
         except Exception as e:
-            js.sendMessageToChat({"content": f"Python: ❌ Ошибка чтения page_html_total_length: {e}"})
+            logger.log(f"Python: ❌ Ошибка чтения page_html_total_length: {e}", "error", force=True)
             raise ValueError(f"Ошибка чтения page_html_total_length: {e}")
 
         # Финальное логирование результатов диагностики
@@ -1382,40 +1435,35 @@ async def analyze_ozon_product() -> Dict[str, Any]:
         parsing_metrics = fast_parser.get_parsing_metrics()
         js.sendMessageToChat({"content": f"Python: ✅ Парсинг завершен за {parsing_metrics['parsing_time_ms']}ms"})
 
-        # Шаг 2: ПАРАЛЛЕЛЬНОЕ ВЫПОЛНЕНИЕ AI вызовов для значительного ускорения
-        js.sendMessageToChat({"content": f"Python: 🚀 Запускаю параллельный AI анализ..."})
+        # Шаг 2: ПОСЛЕДОВАТЕЛЬНОЕ ВЫПОЛНЕНИЕ AI вызовов (синхронный режим)
+        js.sendMessageToChat({"content": f"Python: 🚀 Запускаю последовательный AI анализ..."})
 
-        # Создаем задачи для параллельного выполнения
-        analysis_task = _analyze_composition_vs_description(description, composition)
-        analogs_task = _find_similar_products(categories, composition)
+        # Выполняем AI вызовы последовательно для совместимости с Pyodide
+        try:
+            analysis_result = _analyze_composition_vs_description(description, composition)
+            js.sendMessageToChat({"content": f"Python: ✅ Анализ соответствия завершен"})
+        except Exception as e:
+            js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка анализа соответствия: {e}"})
+            analysis_result = {"score": 5, "reasoning": f"Ошибка AI анализа: {str(e)}"}
 
-        # Выполняем оба AI вызова параллельно
-        analysis_result, analogs = await asyncio.gather(
-            analysis_task,
-            analogs_task,
-            return_exceptions=True
-        )
+        try:
+            analogs = _find_similar_products(categories, composition)
+            js.sendMessageToChat({"content": f"Python: ✅ Поиск аналогов завершен"})
+        except Exception as e:
+            js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка поиска аналогов: {e}"})
+            analogs = [{"name": "Ошибка поиска аналогов", "error": str(e)}]
 
-        # Обработка исключений в параллельных задачах
-        if isinstance(analysis_result, Exception):
-            js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка анализа соответствия: {analysis_result}"})
-            analysis_result = {"score": 5, "reasoning": f"Ошибка AI анализа: {str(analysis_result)}"}
-
-        if isinstance(analogs, Exception):
-            js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка поиска аналогов: {analogs}"})
-            analogs = [{"name": "Ошибка поиска аналогов", "error": str(analogs)}]
-
-        js.sendMessageToChat({"content": f"Python: ✅ Параллельный анализ завершен!"})
+        js.sendMessageToChat({"content": f"Python: ✅ Последовательный анализ завершен!"})
         
         # Шаг 4: Проверяем настройки плагина, заданные пользователем в UI
-        enable_deep_analysis = await safe_js_get_setting("enable_deep_analysis", False)
+        enable_deep_analysis = safe_js_get_setting("enable_deep_analysis", False)
         
         # Шаг 5: Формируем условное предложение для глубокого анализа
         # Это поле будет использоваться в `workflow.json` в условии `run_if`.
         offer_deep_analysis = enable_deep_analysis and analysis_result.get('score', 10) < 7
         
         # Шаг 6: Завершаем все pending батчи и получаем финальные метрики
-        await batch_processor.flush_remaining()  # Завершаем все оставшиеся батчи
+        # В синхронном режиме flush_remaining не используется
 
         cache_metrics = ai_cache.get_metrics()
         memory_stats = memory_manager.get_memory_stats()
@@ -1760,7 +1808,7 @@ def _reconstruct_chunked_strings(input_data: Dict[str, Any]) -> Dict[str, Any]:
         js.sendMessageToChat({"content": f"Python: ❌ Traceback: {traceback.format_exc()}"})
         return input_data  # Возвращаем исходные данные при ошибке
 
-async def _analyze_composition_vs_description(description: str, composition: str) -> Dict[str, Any]:
+def _analyze_composition_vs_description(description: str, composition: str) -> Dict[str, Any]:
     """
     Оптимизированный анализ соответствия описания и состава с предобработкой.
     Использует преданализ для сокращения размера промпта и cache busting.
@@ -1798,7 +1846,7 @@ async def _analyze_composition_vs_description(description: str, composition: str
     try:
         # Используем псевдоним "basic_analysis", который в манифесте
         # сопоставлен с быстрой и дешевой моделью типа `gemini-flash`.
-        result_str = await _call_ai_model("basic_analysis", prompt)
+        result_str = _call_ai_model("basic_analysis", prompt)
         
         # Очистка и парсинг ответа от AI. Модели часто "оборачивают"
         # JSON в Markdown, который нужно удалить.
@@ -1818,39 +1866,64 @@ async def _analyze_composition_vs_description(description: str, composition: str
     except Exception as e:
         return { "score": 0, "reasoning": f"Ошибка анализа AI: {str(e)}" }
 
-async def _call_ai_model(model_alias: str, prompt: str, context: Optional[str] = None) -> str:
+def _call_ai_model(model_alias: str, prompt: str, context: Optional[str] = None) -> str:
     """
-    Централизованная обертка для всех вызовов LLM с поддержкой кеширования и batch processing.
-    Использует advanced caching для повторяющихся запросов.
+    Централизованная обертка для всех вызовов LLM с поддержкой кеширования.
+    Синхронная версия для совместимости с Pyodide.
     Делегирует всю сложную работу (управление ключами, лимитами, разрешениями)
     платформе через `js.llm_call`.
     """
-    # Проверяем кеш сначала
-    cached_response = await ai_cache.get(model_alias, prompt, context)
-    if cached_response:
-        js.sendMessageToChat({"content": f"Python: 📋 Кеш hit для {model_alias}"})
-        return cached_response
+    # Проверяем кеш сначала (синхронная версия кеша)
+    try:
+        import asyncio
+        # Для кеша используем run_until_complete для совместимости
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        cached_response = loop.run_until_complete(ai_cache.get(model_alias, prompt, context))
+        loop.close()
 
-    js.sendMessageToChat({"content": f"Python: 🤖 Вызов AI модели {model_alias}..."})
+        if cached_response:
+            js.sendMessageToChat({"content": f"Python: 📋 Кеш hit для {model_alias}"})
+            return cached_response
+    except Exception as e:
+        js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка доступа к кешу: {e}"})
+
+    js.sendMessageToChat({"content": f"Python: 🤖 Синхронный вызов AI модели {model_alias}..."})
 
     start_time = datetime.now()
 
     try:
-        # Используем batch processor для группировки запросов
-        future = batch_processor.add_request(model_alias, prompt, context)
+        # Синхронный вызов без batch processor для совместимости с Pyodide
+        response_proxy = js.llm_call(model_alias, {"prompt": prompt})
+        if response_proxy is None:
+            raise Exception("js.llm_call return None response proxy")
 
-        # Ждем ответа от батча
-        response_text = await future
+        # Блокирующее ожидание результата Promise
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(response_proxy)
+        loop.close()
 
-        # Вычисляем время ответа (включая время ожидания в батче)
+        if result is None or safe_dict_get(result, "error"):
+            error_msg = safe_dict_get(result, "error_message", "Неизвестная ошибка") if result else "Пустой ответ от хоста"
+            raise Exception(f"Ошибка вызова API: {error_msg}")
+
+        response_text = safe_dict_get(result, "response", "Нет ответа от модели.")
         response_time = int((datetime.now() - start_time).total_seconds() * 1000)
 
-        js.sendMessageToChat({"content": f"Python: ✅ Получен ответ через батч (~{response_time}ms)"})
+        js.sendMessageToChat({"content": f"Python: ✅ Получен ответ напрямую (~{response_time}ms)"})
 
-        # Кешируем успешный ответ
+        # Кешируем успешный ответ (синхронно)
         if response_text and not response_text.startswith("Ошибка"):
-            await ai_cache.set(model_alias, prompt, response_text, response_time, context)
-            js.sendMessageToChat({"content": f"Python: 💾 Ответ закэширован в батче (~{response_time}ms)"})
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(ai_cache.set(model_alias, prompt, response_text, response_time, context))
+                loop.close()
+                js.sendMessageToChat({"content": f"Python: 💾 Ответ закэширован (~{response_time}ms)"})
+            except Exception as e:
+                js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка кеширования: {e}"})
 
         return response_text
 
@@ -1974,7 +2047,7 @@ def _extract_description_and_composition(soup: 'SimpleHTMLParser') -> tuple:
     """Заглушка для извлечения описания и состава."""
     return "Пример описания", "Пример состава"
 
-async def _find_similar_products(categories: List[str], composition: str) -> List[Dict[str, Any]]:
+def _find_similar_products(categories: List[str], composition: str) -> List[Dict[str, Any]]:
     """
     Оптимизированный поиск аналогичных продуктов на основе категорий и состава.
     Использует параллельные AI запросы для поиска аналогичных товаров в разных категориях.
@@ -2001,8 +2074,8 @@ async def _find_similar_products(categories: List[str], composition: str) -> Lis
     """
 
     try:
-        # Используем batch processor для группировки с другими запросами
-        response = await _call_ai_model("basic_analysis", search_prompt)
+        # Используем синхронный вызов AI модели
+        response = _call_ai_model("basic_analysis", search_prompt)
 
         # Парсим ответ
         try:

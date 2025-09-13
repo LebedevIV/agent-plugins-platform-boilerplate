@@ -357,13 +357,19 @@ async function handleExecuteWorkflow(data: ExecuteWorkflowMessage['data']) {
     // console.log(`[offscreen] - Success: ${result.success}`);
     // console.log(`[offscreen] - Result:`, result.result);
 
-    // Send result back to background
-    await chrome.runtime.sendMessage({
-      type: 'WORKFLOW_COMPLETED',
-      requestId: data.requestId,
-      result,
-      success: true
-    });
+    // Send result back to background with error handling
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'WORKFLOW_COMPLETED',
+        requestId: data.requestId,
+        result,
+        success: true
+      });
+      console.log(`[offscreen] ✅ Successfully sent WORKFLOW_COMPLETED for ${data.requestId}`);
+    } catch (sendError) {
+      console.error(`[offscreen] ❌ Failed to send WORKFLOW_COMPLETED for ${data.requestId}:`, sendError);
+      throw new Error(`Failed to send workflow result: ${(sendError as Error).message}`);
+    }
 
     // console.log(`[offscreen] === WORKFLOW EXECUTION COMPLETED SUCCESSFULLY ===`);
 
@@ -371,13 +377,19 @@ async function handleExecuteWorkflow(data: ExecuteWorkflowMessage['data']) {
     console.error(`[offscreen] 💥 Workflow execution failed:`, error);
     // console.error(`[offscreen] Stack trace:`, error.stack);
 
-    // Send error back to background
-    await chrome.runtime.sendMessage({
-      type: 'WORKFLOW_COMPLETED',
-      requestId: data.requestId,
-      error: error.message,
-      success: false
-    });
+    // Send error back to background with error handling
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'WORKFLOW_COMPLETED',
+        requestId: data.requestId,
+        error: error.message,
+        success: false
+      });
+      console.log(`[offscreen] ✅ Successfully sent WORKFLOW_COMPLETED error for ${data.requestId}`);
+    } catch (sendError) {
+      console.error(`[offscreen] ❌ Failed to send WORKFLOW_COMPLETED error for ${data.requestId}:`, sendError);
+      throw new Error(`Failed to send workflow error: ${(sendError as Error).message}`);
+    }
 
     // console.log(`[offscreen] === WORKFLOW EXECUTION FAILED ===`);
   }
@@ -402,8 +414,13 @@ async function handleHeartbeatCheck(message: HeartbeatMessage) {
     const latency = Date.now() - message.timestamp;
     console.log(`[offscreen][HEARTBEAT] 📤 Sending heartbeat response ${message.heartbeatId} (${latency}ms latency)`);
 
-    await chrome.runtime.sendMessage(response);
-    console.log(`[offscreen][HEARTBEAT] ✅ Heartbeat response sent successfully`);
+    try {
+      await chrome.runtime.sendMessage(response);
+      console.log(`[offscreen][HEARTBEAT] ✅ Heartbeat response sent successfully`);
+    } catch (sendError) {
+      console.error(`[offscreen][HEARTBEAT] ❌ Failed to send heartbeat response:`, sendError);
+      throw new Error(`Failed to send heartbeat response: ${(sendError as Error).message}`);
+    }
 
   } catch (error) {
     console.error(`[offscreen][HEARTBEAT] ❌ Failed to send heartbeat response:`, error);
@@ -463,26 +480,35 @@ async function handleHtmlChunk(message: HtmlChunkMessage) {
       const assembledHtml = chunkManager.getAssembledData(message.transferId);
       console.log(`[offscreen][CHUNKING] 🔄 ASSEMBLED HTML ready for transfer ${message.transferId} (${assembledHtml.length} chars)`);
 
-      await chrome.runtime.sendMessage({
-        type: 'HTML_ASSEMBLED',
-        transferId: message.transferId,
-        html: assembledHtml
-      });
-      console.log(`[offscreen][CHUNKING] 📤 SENT HTML_ASSEMBLED message for transfer ${message.transferId}`);
+      try {
+        await chrome.runtime.sendMessage({
+          type: 'HTML_ASSEMBLED',
+          transferId: message.transferId,
+          html: assembledHtml
+        });
+        console.log(`[offscreen][CHUNKING] 📤 SENT HTML_ASSEMBLED message for transfer ${message.transferId}`);
+      } catch (sendError) {
+        console.error(`[offscreen][CHUNKING] ❌ Failed to send HTML_ASSEMBLED for ${message.transferId}:`, sendError);
+        throw new Error(`Failed to send HTML_ASSEMBLED: ${(sendError as Error).message}`);
+      }
     } catch (assemblyError) {
       console.error(`[offscreen][CHUNKING] ❌ FAILED to assemble HTML for transfer ${message.transferId}:`, assemblyError);
     }
   }
 
-  // Send acknowledgment back
+  // Send acknowledgment back with enhanced error handling
   console.log(`[offscreen][CHUNKING] 📤 Sending ACK for chunk ${message.chunkIndex} of ${message.transferId}`);
-  chrome.runtime.sendMessage({
-    type: 'HTML_CHUNK_ACK',
-    transferId: message.transferId,
-    chunkIndex: message.chunkIndex
-  }).catch(err => {
-    console.error(`[offscreen][CHUNKING] Failed to send chunk acknowledgment:`, err);
-  });
+  try {
+    await chrome.runtime.sendMessage({
+      type: 'HTML_CHUNK_ACK',
+      transferId: message.transferId,
+      chunkIndex: message.chunkIndex
+    });
+    console.log(`[offscreen][CHUNKING] ✅ ACK sent successfully for chunk ${message.chunkIndex}`);
+  } catch (sendError) {
+    console.error(`[offscreen][CHUNKING] ❌ Failed to send chunk acknowledgment for ${message.chunkIndex}:`, sendError);
+    // Don't throw here as it would break the chunk processing flow
+  }
 }
 
 // ==============================================================================

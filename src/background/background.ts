@@ -316,6 +316,68 @@ class CircuitBreaker {
 }
 
 // ===============================================================================
+// SAFE MESSAGE SENDING UTILITIES - Prevent channel closure errors
+// ===============================================================================
+
+/**
+ * Safely send message to offscreen with timeout and error handling
+ */
+async function safeSendMessage(message: any, timeoutMs: number = 5000): Promise<any> {
+  return new Promise(async (resolve, reject) => {
+    try {
+      // Check if offscreen document exists
+      if (!chrome.offscreen?.hasDocument?.()) {
+        console.warn('[SafeSendMessage] ⚠️ Offscreen document not available, skipping message:', message.type);
+        reject(new Error('Offscreen document not available'));
+        return;
+      }
+
+      // Create timeout promise
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error(`Message send timeout after ${timeoutMs}ms`)), timeoutMs);
+      });
+
+      // Send message with race condition protection
+      const sendPromise = new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage(message, (response) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(`Send failed: ${chrome.runtime.lastError.message}`));
+            return;
+          }
+
+          if (!response) {
+            reject(new Error('No response from receiver'));
+            return;
+          }
+
+          resolve(response);
+        });
+      });
+
+      // Race between send and timeout
+      const result = await Promise.race([sendPromise, timeoutPromise]);
+      resolve(result);
+
+    } catch (error) {
+      console.error('[SafeSendMessage] ❌ Message send failed:', error);
+      reject(error);
+    }
+  });
+}
+
+/**
+ * Check if offscreen document is available
+ */
+async function isOffscreenAvailable(): Promise<boolean> {
+  try {
+    return chrome.offscreen?.hasDocument?.() ?? false;
+  } catch (error) {
+    console.warn('[isOffscreenAvailable] Error checking offscreen availability:', error);
+    return false;
+  }
+}
+
+// ===============================================================================
 // HEARTBEAT MONITORING SYSTEM - Connection health monitoring
 // ===============================================================================
 
@@ -521,30 +583,19 @@ class HeartbeatMonitor {
   private async sendHeartbeatCheck(heartbeatId: string): Promise<HeartbeatResponseMessage> {
     const backgroundHealth = this.collectBackgroundHealthData();
 
-    return new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage({
-        type: 'HEARTBEAT_CHECK',
-        heartbeatId,
-        timestamp: Date.now(),
-        backgroundHealth
-      }, (response) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(`Heartbeat send failed: ${chrome.runtime.lastError.message}`));
-          return;
-        }
+    const response = await safeSendMessage({
+      type: 'HEARTBEAT_CHECK',
+      heartbeatId,
+      timestamp: Date.now(),
+      backgroundHealth
+    }, this.HEARTBEAT_TIMEOUT);
 
-        if (!response) {
-          reject(new Error('No response from offscreen'));
-          return;
-        }
-
-        if (response.type === 'HEARTBEAT_RESPONSE' && response.heartbeatId === heartbeatId) {
-          resolve(response);
-        } else {
-          reject(new Error(`Invalid heartbeat response: ${response?.type || 'unknown'}`));
-        }
-      });
-    });
+    // Validate response
+    if (response.type === 'HEARTBEAT_RESPONSE' && response.heartbeatId === heartbeatId) {
+      return response;
+    } else {
+      throw new Error(`Invalid heartbeat response: ${response?.type || 'unknown'}`);
+    }
   }
 
   private collectBackgroundHealthData() {
@@ -1111,15 +1162,10 @@ class TransferRecoveryManager {
     try {
       console.log(`[TransferRecovery] 📡 Querying offscreen for transfer ${transferId}`);
 
-      const offscreenStatus = await Promise.race([
-        chrome.runtime.sendMessage({
-          type: 'CHECK_TRANSFER_STATUS',
-          transferId
-        }),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Offscreen query timeout')), 1000)
-        )
-      ]) as any;
+      const offscreenStatus = await safeSendMessage({
+        type: 'CHECK_TRANSFER_STATUS',
+        transferId
+      }, 2000) as any; // 2 second timeout for status checks
 
       if (offscreenStatus?.transferExists && offscreenStatus?.html) {
         console.log(`[TransferRecovery] ✅ Offscreen has HTML for transfer ${transferId}`);
@@ -1399,8 +1445,8 @@ class EnhancedChunkManager {
       
       await Promise.all(chunkPromises);
       
-      // Signal completion
-      await chrome.runtime.sendMessage({
+      // Signal completion with safe message sending
+      await safeSendMessage({
         type: 'HTML_CHUNK_COMPLETE',
         transferId,
         totalChunks: chunks.length
@@ -2726,11 +2772,11 @@ class BackgroundController {
              } else {
                console.error(`[Background][ASSEMBLY][VALIDATION] ❌ EMERGENCY RECOVERY failed: ${emergencyRecovery.error}`);
                // Send rejection confirmation to offscreen
-               chrome.runtime.sendMessage({
-                 type: 'HTML_ASSEMBLED_REJECTED',
-                 transferId: message.transferId,
-                 reason: `Transfer lost in background: ${emergencyRecovery.error}`
-               });
+                 await safeSendMessage({
+                   type: 'HTML_ASSEMBLED_REJECTED',
+                   transferId: message.transferId,
+                   reason: `Transfer lost in background: ${emergencyRecovery.error}`
+                 }).catch(err => console.error('[HTML_ASSEMBLED] Failed to send rejection:', err));
                return;
              }
            }
@@ -2746,11 +2792,11 @@ class BackgroundController {
              if (!offscreenStatus.transferExists) {
                console.error(`[Background][ASSEMBLY][VALIDATION] ❌ Transfer ${message.transferId} does not exist in offscreen, rejecting HTML_ASSEMBLED`);
                // Send rejection confirmation to offscreen
-               chrome.runtime.sendMessage({
+               await safeSendMessage({
                  type: 'HTML_ASSEMBLED_REJECTED',
                  transferId: message.transferId,
                  reason: 'Transfer does not exist in offscreen'
-               });
+               }).catch(err => console.error('[HTML_ASSEMBLED] Failed to send rejection:', err));
                return;
              }
 
@@ -2879,7 +2925,7 @@ class BackgroundController {
               console.log(`[Background][ASSEMBLY] 🔧 Using recovered metadata for EXECUTE_WORKFLOW: pluginId=${workflowPluginId}, pageKey=${workflowPageKey}`);
             }
 
-            await chrome.runtime.sendMessage({
+            await safeSendMessage({
               type: 'EXECUTE_WORKFLOW',
               pluginId: workflowPluginId,
               requestId: workflowRequestId,
@@ -2907,10 +2953,10 @@ class BackgroundController {
             }
 
             // Send confirmation back to offscreen that HTML_ASSEMBLED was received
-            chrome.runtime.sendMessage({
+            await safeSendMessage({
               type: 'HTML_ASSEMBLED_CONFIRMED',
               transferId: message.transferId
-            });
+            }).catch(err => console.error('[HTML_ASSEMBLED] Failed to send confirmation:', err));
             console.log(`[Background][ASSEMBLY] ✅ Sent confirmation for HTML_ASSEMBLED receipt to offscreen for transfer ${message.transferId}`);
             break;
         }
@@ -3065,6 +3111,13 @@ class BackgroundController {
       const errorMessage = message.error || 'Unknown workflow error';
       this.promiseManager.reject(message.requestId, new Error(errorMessage));
     }
+
+    // Send acknowledgment back to offscreen
+    await safeSendMessage({
+      type: 'WORKFLOW_COMPLETED_ACK',
+      requestId: message.requestId,
+      timestamp: Date.now()
+    }).catch(err => console.warn('[WORKFLOW_COMPLETED] Failed to send ack to offscreen:', err));
   }
   
   private async handleHostCall(
@@ -3077,16 +3130,24 @@ class BackgroundController {
         message.payload.args
       );
 
-      sendResponse({
+      // Send response safely
+      await safeSendMessage({
         type: 'HOST_CALL_RESPONSE',
         callId: message.payload.callId,
         result
+      }).catch(err => {
+        console.error('[HOST_CALL] Failed to send response to offscreen:', err);
+        sendResponse({ success: false, error: 'Failed to send response' });
       });
     } catch (error) {
-      sendResponse({
+      // Send error response safely
+      await safeSendMessage({
         type: 'HOST_CALL_RESPONSE',
         callId: message.payload.callId,
         error: (error as Error).message
+      }).catch(err => {
+        console.error('[HOST_CALL] Failed to send error response to offscreen:', err);
+        sendResponse({ success: false, error: 'Failed to send error response' });
       });
     }
   }
