@@ -758,7 +758,7 @@ class FastDOMParser:
         return categories[:5] if categories else ["Категория не определена"]
 
     def _extract_categories_from_breadcrumbs(self) -> List[str]:
-        """Извлечение категорий из хлебных крошек с новыми селекторами."""
+        """Извлечение ID категорий из хлебных крошек с проверкой на целевую категорию."""
 
         # Ищем первый элемент хлебных крошек: #layoutPage div[data-widget="breadCrumbs"] ol li:nth-child(1) a
         breadcrumb_pattern = r'<div[^>]*id="layoutPage"[^>]*>.*?<div[^>]*data-widget="breadCrumbs"[^>]*>.*?<ol[^>]*>.*?<li[^>]*>.*?<a[^>]*href="([^"]*)"[^>]*>([^<]+)</a>.*?</li>'
@@ -768,11 +768,18 @@ class FastDOMParser:
             href = match.group(1)
             text = match.group(2).strip()
 
-            # Проверяем href на соответствие категории красоты и здоровья
-            if href and 'category/krasota-i-zdorove' in href and len(text) > 1:
-                return [text]
+            # Извлекаем ID категории из href="/category/{category_id}/"
+            category_id_pattern = r'/category/([^/]+)'
+            category_match = re.search(category_id_pattern, href)
 
-        # Fallback: поиск по старым паттернам
+            if category_match:
+                category_id = category_match.group(1)
+
+                # Проверяем соответствие целевой категории "krasota-i-zdorove-6500"
+                if category_id == "krasota-i-zdorove-6500":
+                    return [category_id]
+
+        # Fallback: поиск по старым паттернам с извлечением ID
         old_breadcrumb_pattern = r'<[^>]*class="[^"]*breadcrumb[^"]*"[^>]*>(.*?)</[^>]+>'
         breadcrumb = self._get_cached_pattern(old_breadcrumb_pattern, re.IGNORECASE | re.DOTALL)
         breadcrumb_match = breadcrumb.search(self.html)
@@ -781,7 +788,7 @@ class FastDOMParser:
             breadcrumb_html = breadcrumb_match.group(1)
 
             link_patterns = [
-                r'<a[^>]*>([^<]+)</a>',
+                r'<a[^>]*href="([^"]*)"[^>]*>([^<]+)</a>',
                 r'<span[^>]*>([^<]+)</span>',
                 r'([^>]+?)'
             ]
@@ -792,16 +799,38 @@ class FastDOMParser:
                     link_pattern = self._get_cached_pattern(pattern_str, re.IGNORECASE)
                     matches = link_pattern.findall(breadcrumb_html)
 
-                    for match in matches[:8]:
-                        text = match.strip()
-                        if len(text) > 1 and not any(word in text.lower() for word in ['home', 'главная', 'каталог']):
-                            categories.append(text)
+                    for match_tuple in matches[:8]:
+                        # Обработка кортежей из нескольких групп
+                        if isinstance(match_tuple, tuple):
+                            href_match = match_tuple[0] if len(match_tuple) > 0 else ""
+                            text_match = match_tuple[1] if len(match_tuple) > 1 else str(match_tuple[0])
+                        else:
+                            href_match = ""
+                            text_match = str(match_tuple)
+
+                        # Извлекаем ID из href если есть
+                        if href_match:
+                            category_match = re.search(r'/category/([^/]+)', href_match)
+                            if category_match:
+                                category_id = category_match.group(1)
+                                if category_id == "krasota-i-zdorove-6500":
+                                    categories.append(category_id)
+                        elif len(text_match.strip()) > 1 and not any(word in text_match.lower() for word in ['home', 'главная', 'каталог']):
+                            categories.append(text_match.strip())
                 except Exception:
                     continue
 
             return categories[:5]
 
         return []
+
+    def is_product_in_target_category(self, categories: List[str]) -> bool:
+        """
+        Проверяет принадлежность товара к целевой категории "krasota-i-zdorove-6500".
+        Возвращает True если категория найдена в списке.
+        """
+        target_category = "krasota-i-zdorove-6500"
+        return target_category in categories
 
     def _extract_categories_from_selectors(self) -> List[str]:
         """Извлечение категорий из стандартных HTML селекторов."""
@@ -1435,25 +1464,53 @@ def analyze_ozon_product() -> Dict[str, Any]:
         parsing_metrics = fast_parser.get_parsing_metrics()
         js.sendMessageToChat({"content": f"Python: ✅ Парсинг завершен за {parsing_metrics['parsing_time_ms']}ms"})
 
-        # Шаг 2: ПОСЛЕДОВАТЕЛЬНОЕ ВЫПОЛНЕНИЕ AI вызовов (синхронный режим)
-        js.sendMessageToChat({"content": f"Python: 🚀 Запускаю последовательный AI анализ..."})
+        # Шаг 2: ОПТИМИЗИРОВАННОЕ ВЫПОЛНЕНИЕ AI вызовов с кешированием и группировкой
+        js.sendMessageToChat({"content": f"Python: 🚀 Запускаю оптимизированный AI анализ..."})
 
-        # Выполняем AI вызовы последовательно для совместимости с Pyodide
-        try:
-            analysis_result = _analyze_composition_vs_description(description, composition)
-            js.sendMessageToChat({"content": f"Python: ✅ Анализ соответствия завершен"})
-        except Exception as e:
-            js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка анализа соответствия: {e}"})
-            analysis_result = {"score": 5, "reasoning": f"Ошибка AI анализа: {str(e)}"}
+        # Проверяем кеш перед выполнением AI вызовов
+        cache_key_analysis = f"analysis:{hash(description[:100] + composition[:100])}"
+        cached_analysis = memory_manager.get_cached_lru(cache_key_analysis)
 
-        try:
-            analogs = _find_similar_products(categories, composition)
-            js.sendMessageToChat({"content": f"Python: ✅ Поиск аналогов завершен"})
-        except Exception as e:
-            js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка поиска аналогов: {e}"})
-            analogs = [{"name": "Ошибка поиска аналогов", "error": str(e)}]
+        if cached_analysis:
+            js.sendMessageToChat({"content": f"Python: 📋 Найден кеш для анализа соответствия"})
+            analysis_result = cached_analysis
+        else:
+            # Выполняем AI вызовы с улучшенной обработкой ошибок
+            try:
+                analysis_result = _analyze_composition_vs_description(description, composition)
+                js.sendMessageToChat({"content": f"Python: ✅ Анализ соответствия завершен"})
 
-        js.sendMessageToChat({"content": f"Python: ✅ Последовательный анализ завершен!"})
+                # Кешируем успешный результат
+                if analysis_result and isinstance(analysis_result, dict) and 'score' in analysis_result:
+                    memory_manager.cache_lru(cache_key_analysis, analysis_result, max_age_seconds=1800)  # 30 мин
+                    js.sendMessageToChat({"content": f"Python: 💾 Результат анализа закэширован"})
+
+            except Exception as e:
+                js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка анализа соответствия: {e}"})
+                analysis_result = {"score": 5, "reasoning": f"Ошибка AI анализа: {str(e)}"}
+
+        # Аналогично для поиска аналогов
+        cache_key_analogs = f"analogs:{hash(str(categories) + composition[:100])}"
+        cached_analogs = memory_manager.get_cached_lru(cache_key_analogs)
+
+        if cached_analogs:
+            js.sendMessageToChat({"content": f"Python: 📋 Найден кеш для поиска аналогов"})
+            analogs = cached_analogs
+        else:
+            try:
+                analogs = _find_similar_products(categories, composition)
+                js.sendMessageToChat({"content": f"Python: ✅ Поиск аналогов завершен"})
+
+                # Кешируем успешный результат
+                if analogs and isinstance(analogs, list) and len(analogs) > 0:
+                    memory_manager.cache_lru(cache_key_analogs, analogs, max_age_seconds=3600)  # 1 час
+                    js.sendMessageToChat({"content": f"Python: 💾 Результат поиска аналогов закэширован"})
+
+            except Exception as e:
+                js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка поиска аналогов: {e}"})
+                analogs = [{"name": "Ошибка поиска аналогов", "error": str(e)}]
+
+        js.sendMessageToChat({"content": f"Python: ✅ Оптимизированный анализ завершен!"})
         
         # Шаг 4: Проверяем настройки плагина, заданные пользователем в UI
         enable_deep_analysis = safe_js_get_setting("enable_deep_analysis", False)
@@ -1588,8 +1645,18 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
         # Платформа сама определит, какую реальную модель (например, gemini-pro)
         # использовать, и подставит соответствующий API-ключ.
         result = await _call_ai_model("deep_analysis", prompt)
+
+        # Проверка типа данных от AI в perform_deep_analysis
+        if not isinstance(result, str):
+            js.sendMessageToChat({"content": f"Python: 🔄 Deep analysis AI вернул {type(result)} вместо строки, конвертируем"})
+            result = str(result)
+        elif result is None:
+            js.sendMessageToChat({"content": f"Python: ⚠️ Deep analysis AI вернул None"})
+            result = "Отчет не сформирован"
+
         return { "deep_analysis_report": result }
     except Exception as e:
+        js.sendMessageToChat({"content": f"Python: ❌ Ошибка в perform_deep_analysis: {str(e)}"})
         return { "status": "error", "message": f"Ошибка глубокого анализа: {str(e)}" }
 
 # ==============================================================================
@@ -1847,23 +1914,34 @@ def _analyze_composition_vs_description(description: str, composition: str) -> D
         # Используем псевдоним "basic_analysis", который в манифесте
         # сопоставлен с быстрой и дешевой моделью типа `gemini-flash`.
         result_str = _call_ai_model("basic_analysis", prompt)
-        
+
+        # Проверка типа данных от AI и конвертация при необходимости
+        if not isinstance(result_str, str):
+            js.sendMessageToChat({"content": f"Python: 🔄 AI вернул {type(result_str)} вместо строки, конвертируем"})
+            result_str = str(result_str)
+
         # Очистка и парсинг ответа от AI. Модели часто "оборачивают"
         # JSON в Markdown, который нужно удалить.
-        cleaned_str = result_str.strip().replace('```json', '').replace('```', '')
-        
-        # Используем стандартный и безопасный `json.loads` для парсинга.
-        try:
-            parsed = json.loads(cleaned_str)
-            # Простая валидация формата ответа
-            if isinstance(parsed, dict) and 'score' in parsed:
-                return parsed
-            else:
-                return {"score": 5, "reasoning": "Неверный формат ответа от AI (отсутствует 'score')."}
-        except json.JSONDecodeError:
-            return {"score": 5, "reasoning": f"Не удалось распарсить JSON от AI: {cleaned_str[:100]}..."}
+        if isinstance(result_str, str) and len(result_str.strip()) > 0:
+            cleaned_str = result_str.strip().replace('```json', '').replace('```', '')
+
+            # Используем стандартный и безопасный `json.loads` для парсинга.
+            try:
+                parsed = json.loads(cleaned_str)
+                # Простая валидация формата ответа
+                if isinstance(parsed, dict) and 'score' in parsed:
+                    return parsed
+                else:
+                    return {"score": 5, "reasoning": "Неверный формат ответа от AI (отсутствует 'score')."}
+            except json.JSONDecodeError as je:
+                js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка парсинга JSON: {str(je)}"})
+                return {"score": 5, "reasoning": f"Не удалось распарсить JSON от AI: {cleaned_str[:100]}..."}
+        else:
+            js.sendMessageToChat({"content": f"Python: ⚠️ AI вернул пустой или некорректный ответ: {type(result_str)}"})
+            return {"score": 5, "reasoning": f"AI вернул некорректный тип данных: {type(result_str)}"}
 
     except Exception as e:
+        js.sendMessageToChat({"content": f"Python: ❌ Критическая ошибка в _analyze_composition_vs_description: {str(e)}"})
         return { "score": 0, "reasoning": f"Ошибка анализа AI: {str(e)}" }
 
 def _call_ai_model(model_alias: str, prompt: str, context: Optional[str] = None) -> str:
@@ -1914,14 +1992,32 @@ def _call_ai_model(model_alias: str, prompt: str, context: Optional[str] = None)
 
         js.sendMessageToChat({"content": f"Python: ✅ Получен ответ напрямую (~{response_time}ms)"})
 
+        # Проверка типа данных от AI и конвертация при необходимости
+        if not isinstance(response_text, str):
+            js.sendMessageToChat({"content": f"Python: 🔄 AI вернул {type(response_text)} вместо строки, конвертируем в строку"})
+            response_text = str(response_text)
+        elif response_text is None:
+            js.sendMessageToChat({"content": f"Python: ⚠️ AI вернул None, устанавливаем fallback"})
+            response_text = "Нет ответа от модели."
+
+        # Дополнительная проверка на пустую строку
+        if isinstance(response_text, str) and len(response_text.strip()) == 0:
+            js.sendMessageToChat({"content": f"Python: ⚠️ AI вернул пустую строку, устанавливаем fallback"})
+            response_text = "Пустой ответ от модели."
+
         # Кешируем успешный ответ (синхронно)
-        if response_text and not response_text.startswith("Ошибка"):
+        if response_text and isinstance(response_text, str) and not response_text.startswith("Ошибка"):
             try:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 loop.run_until_complete(ai_cache.set(model_alias, prompt, response_text, response_time, context))
                 loop.close()
                 js.sendMessageToChat({"content": f"Python: 💾 Ответ закэширован (~{response_time}ms)"})
+
+                # Логируем статистику кеша для оптимизации
+                cache_stats = ai_cache.get_metrics()
+                if cache_stats['hit_rate_percent'] > 80:
+                    js.sendMessageToChat({"content": f"Python: 📈 Высокий hit rate кеша: {cache_stats['hit_rate_percent']}%"})
             except Exception as e:
                 js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка кеширования: {e}"})
 
@@ -2077,22 +2173,35 @@ def _find_similar_products(categories: List[str], composition: str) -> List[Dict
         # Используем синхронный вызов AI модели
         response = _call_ai_model("basic_analysis", search_prompt)
 
+        # Проверка типа данных от AI
+        if not isinstance(response, str):
+            js.sendMessageToChat({"content": f"Python: 🔄 AI (_find_similar_products) вернул {type(response)} вместо строки, конвертируем"})
+            response = str(response)
+
         # Парсим ответ
         try:
-            parsed = json.loads(response.replace('```json', '').replace('```', '').strip())
-            analogs = parsed.get('analogs', [])
+            if isinstance(response, str) and len(response.strip()) > 0:
+                cleaned_response = response.replace('```json', '').replace('```', '').strip()
+                parsed = json.loads(cleaned_response)
+                analogs = parsed.get('analogs', [])
 
-            if analogs:
-                return analogs[:5]  # Ограничение до 5 результатов
+                if analogs:
+                    return analogs[:5]  # Ограничение до 5 результатов
+                else:
+                    # Fallback - генерируем на основе состава
+                    js.sendMessageToChat({"content": "Python: ⚠️ AI не вернул аналоги, используем fallback"})
+                    return _generate_fallback_analogs(categories, product_type)
             else:
-                # Fallback - генерируем на основе состава
+                js.sendMessageToChat({"content": f"Python: ⚠️ AI вернул пустой ответ в _find_similar_products: {type(response)}"})
                 return _generate_fallback_analogs(categories, product_type)
 
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as je:
+            js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка парсинга JSON в _find_similar_products: {str(je)}"})
             # В случае ошибки парсинга возвращаем fallback
             return _generate_fallback_analogs(categories, product_type)
 
     except Exception as e:
+        js.sendMessageToChat({"content": f"Python: ❌ Критическая ошибка в _find_similar_products: {str(e)}"})
         return [{"name": f"Ошибка поиска аналогов: {str(e)}", "error": True}]
 
 def _categorize_product_by_composition(composition: str) -> str:

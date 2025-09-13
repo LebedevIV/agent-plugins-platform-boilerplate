@@ -230,6 +230,41 @@ class SimpleWorkflowEngine {
 }
 
 // ==============================================================================
+// SAFE MESSAGE SENDING
+// ==============================================================================
+
+/**
+ * Safely sends a message from offscreen context with timeout and error handling
+ * @param message The message to send
+ * @param timeout Timeout in milliseconds (default: 5000)
+ * @returns Promise that resolves when message is sent or rejects on error/timeout
+ */
+async function safeSendMessageOffscreen(message: any, timeout = 5000): Promise<void> {
+  // Check if chrome runtime is available
+  if (!chrome?.runtime?.sendMessage) {
+    throw new Error('Chrome runtime sendMessage not available');
+  }
+
+  // Check if extension context is valid
+  if (!chrome.runtime.id) {
+    throw new Error('Extension context invalidated - background may not be available');
+  }
+
+  // Check for last error before sending
+  if (chrome.runtime.lastError) {
+    console.warn('[offscreen][SAFE_SEND] Previous runtime error detected:', chrome.runtime.lastError.message);
+  }
+
+  // Send with timeout
+  return Promise.race([
+    chrome.runtime.sendMessage(message),
+    new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error(`Message send timeout after ${timeout}ms`)), timeout);
+    })
+  ]);
+}
+
+// ==============================================================================
 // MESSAGE HANDLERS
 // ==============================================================================
 
@@ -359,7 +394,7 @@ async function handleExecuteWorkflow(data: ExecuteWorkflowMessage['data']) {
 
     // Send result back to background with error handling
     try {
-      await chrome.runtime.sendMessage({
+      await safeSendMessageOffscreen({
         type: 'WORKFLOW_COMPLETED',
         requestId: data.requestId,
         result,
@@ -379,7 +414,7 @@ async function handleExecuteWorkflow(data: ExecuteWorkflowMessage['data']) {
 
     // Send error back to background with error handling
     try {
-      await chrome.runtime.sendMessage({
+      await safeSendMessageOffscreen({
         type: 'WORKFLOW_COMPLETED',
         requestId: data.requestId,
         error: error.message,
@@ -415,7 +450,7 @@ async function handleHeartbeatCheck(message: HeartbeatMessage) {
     console.log(`[offscreen][HEARTBEAT] 📤 Sending heartbeat response ${message.heartbeatId} (${latency}ms latency)`);
 
     try {
-      await chrome.runtime.sendMessage(response);
+      await safeSendMessageOffscreen(response);
       console.log(`[offscreen][HEARTBEAT] ✅ Heartbeat response sent successfully`);
     } catch (sendError) {
       console.error(`[offscreen][HEARTBEAT] ❌ Failed to send heartbeat response:`, sendError);
@@ -481,7 +516,7 @@ async function handleHtmlChunk(message: HtmlChunkMessage) {
       console.log(`[offscreen][CHUNKING] 🔄 ASSEMBLED HTML ready for transfer ${message.transferId} (${assembledHtml.length} chars)`);
 
       try {
-        await chrome.runtime.sendMessage({
+        await safeSendMessageOffscreen({
           type: 'HTML_ASSEMBLED',
           transferId: message.transferId,
           html: assembledHtml
@@ -499,7 +534,7 @@ async function handleHtmlChunk(message: HtmlChunkMessage) {
   // Send acknowledgment back with enhanced error handling
   console.log(`[offscreen][CHUNKING] 📤 Sending ACK for chunk ${message.chunkIndex} of ${message.transferId}`);
   try {
-    await chrome.runtime.sendMessage({
+    await safeSendMessageOffscreen({
       type: 'HTML_CHUNK_ACK',
       transferId: message.transferId,
       chunkIndex: message.chunkIndex
