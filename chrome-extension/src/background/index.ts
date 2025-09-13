@@ -1938,7 +1938,7 @@ chrome.runtime.onMessage.addListener(
         console.log('[background] TEST_SYNC timestamp:', new Date().toISOString());
         const response = { success: true, message: 'Test sync response', timestamp: Date.now() };
         console.log('[background] TEST_SYNC sending response:', response);
-        sendResponse(response);
+        trackSendResponse(response);
         console.log('[background] TEST_SYNC response sent');
         return true;
       }
@@ -2020,7 +2020,7 @@ chrome.runtime.onMessage.addListener(
                 timestamp: msg.timestamp
               });
 
-              sendResponse({
+              trackSendResponse({
                 success: response?.success || true,
                 result: 'Pyodide initialized in offscreen document',
                 timestamp: Date.now()
@@ -2028,7 +2028,7 @@ chrome.runtime.onMessage.addListener(
 
             } catch (error) {
               console.error('[background][INITIALIZE_PYODIDE_MANUAL_TEST] Initialization failed:', error);
-              sendResponse({
+              trackSendResponse({
                 success: false,
                 error: (error as Error).message,
                 timestamp: Date.now()
@@ -2037,7 +2037,7 @@ chrome.runtime.onMessage.addListener(
           })();
         } catch (error) {
           console.error('[background][INITIALIZE_PYODIDE_MANUAL_TEST] Critical error in async handler setup:', error);
-          sendResponse({
+          trackSendResponse({
             success: false,
             error: (error as Error).message,
             timestamp: Date.now()
@@ -2064,7 +2064,7 @@ chrome.runtime.onMessage.addListener(
                 timestamp: msg.timestamp
               });
 
-              sendResponse({
+              trackSendResponse({
                 success: response?.success || false,
                 result: response?.result,
                 error: response?.error,
@@ -2074,7 +2074,7 @@ chrome.runtime.onMessage.addListener(
 
             } catch (error) {
               console.error('[background][EXECUTE_PYTHON_TEST_CODE] Execution failed:', error);
-              sendResponse({
+              trackSendResponse({
                 success: false,
                 error: (error as Error).message,
                 timestamp: Date.now()
@@ -2083,7 +2083,7 @@ chrome.runtime.onMessage.addListener(
           })();
         } catch (error) {
           console.error('[background][EXECUTE_PYTHON_TEST_CODE] Critical error in async handler setup:', error);
-          sendResponse({
+          trackSendResponse({
             success: false,
             error: (error as Error).message,
             timestamp: Date.now()
@@ -2111,7 +2111,7 @@ chrome.runtime.onMessage.addListener(
               });
 
               // Ожидаем ошибку от Python кода, так что success=false это нормально
-              sendResponse({
+              trackSendResponse({
                 success: response?.success || false,
                 result: response?.result,
                 error: response?.error,
@@ -2120,7 +2120,7 @@ chrome.runtime.onMessage.addListener(
 
             } catch (error) {
               console.error('[background][EXECUTE_PYTHON_ERROR_TEST] Error test failed:', error);
-              sendResponse({
+              trackSendResponse({
                 success: false,
                 error: (error as Error).message,
                 timestamp: Date.now()
@@ -2129,7 +2129,7 @@ chrome.runtime.onMessage.addListener(
           })();
         } catch (error) {
           console.error('[background][EXECUTE_PYTHON_ERROR_TEST] Critical error in async handler setup:', error);
-          sendResponse({
+          trackSendResponse({
             success: false,
             error: (error as Error).message,
             timestamp: Date.now()
@@ -2180,7 +2180,7 @@ chrome.runtime.onMessage.addListener(
                   error: 'Invalid plugins data from getAvailablePlugins',
                   requestId: msg.requestId
                 });
-                sendResponse({ success: false, timestamp: Date.now() });
+                trackSendResponse({ success: false, timestamp: Date.now() });
                 return;
               }
 
@@ -2215,7 +2215,7 @@ chrome.runtime.onMessage.addListener(
 
               console.log('[background] Successfully sent plugins response, timestamp:', new Date().toISOString());
               // Отправляем подтверждение обработки для самого запроса
-              sendResponse({ success: true, timestamp: Date.now() });
+              trackSendResponse({ success: true, timestamp: Date.now() });
 
             } catch (error) {
               console.error('[background] Error processing GET_PLUGINS:', error);
@@ -2232,12 +2232,12 @@ chrome.runtime.onMessage.addListener(
                 requestId: msg.requestId
               });
               console.log('[background] Sent error response broadcast');
-              sendResponse({ success: false, timestamp: Date.now() });
+              trackSendResponse({ success: false, timestamp: Date.now() });
             }
           })();
         } catch (error) {
           console.error('[background][GET_PLUGINS] Critical error in async handler setup:', error);
-          sendResponse({
+          trackSendResponse({
             error: (error as Error).message,
             requestId: msg.requestId
           });
@@ -2276,7 +2276,7 @@ chrome.runtime.onMessage.addListener(
               // Проверка обязательных полей (только pluginId, pageKey определяем сами)
               if (!msg.pluginId) {
                 console.error('[background][OFFSCREEN DELEGATION] Missing required field: pluginId');
-                sendResponse({ error: 'Отсутствует обязательное поле: pluginId' });
+                trackSendResponse({ error: 'Отсутствует обязательное поле: pluginId' });
                 return;
               }
 
@@ -2287,7 +2287,7 @@ chrome.runtime.onMessage.addListener(
 
               if (!activeTab || !activeTab.id) {
                 console.log('[background][OFFSCREEN DELEGATION][ERROR] No active tab found');
-                sendResponse({ error: 'Не найдена активная вкладка' });
+                trackSendResponse({ error: 'Не найдена активная вкладка' });
                 return;
               }
 
@@ -2326,12 +2326,12 @@ chrome.runtime.onMessage.addListener(
                     hasResultProp: !!(results && results[0] && 'result' in results[0]),
                     resultType: results && results[0] ? typeof results[0].result : 'no result'
                   });
-                  sendResponse({ error: 'Не удалось получить содержимое страницы или получен пустой результат' });
+                  trackSendResponse({ error: 'Не удалось получить содержимое страницы или получен пустой результат' });
                   return;
                 }
               } catch (error) {
                 console.error('[background][OFFSCREEN DELEGATION][ERROR] HTML extraction failed:', error);
-                sendResponse({ error: `Не удалось получить HTML страницы: ${(error as Error).message}` });
+                trackSendResponse({ error: `Не удалось получить HTML страницы: ${(error as Error).message}` });
                 return;
               }
 
@@ -2342,7 +2342,7 @@ chrome.runtime.onMessage.addListener(
 
             if (!settings.enabled) {
               console.log('[background][OFFSCREEN DELEGATION][INFO] Plugin disabled, aborting');
-              sendResponse({ error: 'Плагин отключен' });
+              trackSendResponse({ error: 'Плагин отключен' });
               return;
             }
 
@@ -2370,7 +2370,7 @@ chrome.runtime.onMessage.addListener(
               await handleLegacyChrome(fallbackMessage);
 
               // Отправляем сигнал успешного завершения (хотя это просто предупреждение)
-              sendResponse({ success: true });
+              trackSendResponse({ success: true });
               return;
             }
 
@@ -2575,15 +2575,15 @@ chrome.runtime.onMessage.addListener(
                 // Обработка результата
                 if (result && result.success) {
                   console.log('[background][OFFSCREEN DELEGATION] Direct workflow execution successful');
-                  sendResponse({ success: true });
+                  trackSendResponse({ success: true });
                 } else {
                   console.error('[background][OFFSCREEN DELEGATION] Direct workflow execution failed:', result?.error);
-                  sendResponse({ error: result?.error || 'Workflow execution failed' });
+                  trackSendResponse({ error: result?.error || 'Workflow execution failed' });
                 }
 
               } catch (directExchangeError) {
                 console.error('[background][OFFSCREEN DELEGATION] Direct data exchange failed:', directExchangeError);
-                sendResponse({ error: `Direct data exchange failed: ${(directExchangeError as Error).message}` });
+                trackSendResponse({ error: `Direct data exchange failed: ${(directExchangeError as Error).message}` });
                 return;
               }
               console.log('[background][OFFSCREEN DELEGATION] ===== OFFSCREEN EXECUTION COMPLETED =====');
@@ -2598,18 +2598,18 @@ chrome.runtime.onMessage.addListener(
               // Ретрансмитровать результат в UI
               if (result && result.success) {
                 console.log('[background][OFFSCREEN DELEGATION] Sending success response');
-                console.log('[background][DEBUG] sendResponse function before call:', typeof sendResponse);
+                console.log('[background][DEBUG] sendResponse function before call:', typeof trackSendResponse);
                 const successResponseObj = { success: true };
                 console.log('[background][DEBUG] Success response object:', successResponseObj);
-                sendResponse(successResponseObj);
+                trackSendResponse(successResponseObj);
                 console.log('[background][DEBUG] Success sendResponse called - no more execution expected after this');
               } else {
                 const errorMsg = result?.error || 'Unknown execution error';
                 console.log('[background][OFFSCREEN DELEGATION] Sending error response:', errorMsg);
-                console.log('[background][DEBUG] sendResponse function before call:', typeof sendResponse);
+                console.log('[background][DEBUG] sendResponse function before call:', typeof trackSendResponse);
                 const errorResponseObj = { error: errorMsg };
                 console.log('[background][DEBUG] Error response object:', errorResponseObj);
-                sendResponse(errorResponseObj);
+                trackSendResponse(errorResponseObj);
                 console.log('[background][DEBUG] Error sendResponse called - no more execution expected after this');
               }
           
@@ -2617,7 +2617,7 @@ chrome.runtime.onMessage.addListener(
           
             } catch (error) {
               console.error('[background][OFFSCREEN DELEGATION] Critical error in async handler:', error);
-              sendResponse({ error: (error as Error).message });
+              trackSendResponse({ error: (error as Error).message });
               return true;
             }
 
@@ -2625,7 +2625,7 @@ chrome.runtime.onMessage.addListener(
 
           } catch (error) {
             console.error('[background][OFFSCREEN DELEGATION] Critical error in async handler:', error);
-            sendResponse({ error: (error as Error).message });
+            trackSendResponse({ error: (error as Error).message });
             return true;
           }
         })(); // Close the async IIFE
@@ -2644,10 +2644,10 @@ chrome.runtime.onMessage.addListener(
         (async () => {
           try {
             await updatePluginSetting(pluginId, setting, value);
-            sendResponse({ success: true });
+            trackSendResponse({ success: true });
           } catch (error: unknown) {
             console.error('[background] Error in UPDATE_PLUGIN_SETTING:', error);
-            sendResponse({ error: (error as Error).message });
+            trackSendResponse({ error: (error as Error).message });
           }
         })();
         return true;
@@ -2661,10 +2661,10 @@ chrome.runtime.onMessage.addListener(
           try {
             const settings = await pluginSettingsStorage.get();
             console.log('[background] Plugin settings:', settings);
-            sendResponse(settings);
+            trackSendResponse(settings);
           } catch (error: unknown) {
             console.error('[background] Error getting plugin settings:', error);
-            sendResponse({ error: (error as Error).message });
+            trackSendResponse({ error: (error as Error).message });
           }
         })();
 
@@ -2802,12 +2802,12 @@ chrome.runtime.onMessage.addListener(
         (async () => {
           try {
             const chat = await pluginChatApi.createChatIfNotExists(pluginId, normPageKey);
-            console.log('[background] sendResponse(CREATE_PLUGIN_CHAT):', chat);
-            sendResponse(chat);
+            console.log('[background] trackSendResponse(CREATE_PLUGIN_CHAT):', chat);
+            trackSendResponse(chat);
             broadcastChatUpdate(pluginId, normPageKey);
           } catch (error) {
             console.error('[background] Error creating plugin chat:', error);
-            sendResponse({ error: String(error) });
+            trackSendResponse({ error: String(error) });
           }
         })();
 
@@ -2980,10 +2980,10 @@ chrome.runtime.onMessage.addListener(
           try {
             const chats = await pluginChatApi.listChatsForPlugin(pluginId);
             console.log('[background] Chats found:', chats);
-            sendResponse(chats);
+            trackSendResponse(chats);
           } catch (error) {
             console.error('[background] Error listing chats:', error);
-            sendResponse([]);
+            trackSendResponse([]);
           }
         })();
 
@@ -3000,10 +3000,10 @@ chrome.runtime.onMessage.addListener(
           try {
             const drafts = await pluginChatApi.listDraftsForPlugin(pluginId);
             console.log('[background] Drafts found:', drafts);
-            sendResponse(drafts);
+            trackSendResponse(drafts);
           } catch (error) {
             console.error('[background] Error listing drafts:', error);
-            sendResponse([]);
+            trackSendResponse([]);
           }
         })();
 
@@ -3026,17 +3026,17 @@ chrome.runtime.onMessage.addListener(
           pluginId: msg.pluginId,
           pageKey: msg.pageKey,
         });
-        sendResponse({ success: true });
+        trackSendResponse({ success: true });
         return true;
       }
       // Получение логов по плагину
       if (msg.type === 'LIST_PLUGIN_LOGS' && msg.pluginId) {
-        sendResponse(pluginLogs[msg.pluginId] || []);
+        trackSendResponse(pluginLogs[msg.pluginId] || []);
         return true;
       }
       // Получение всех логов (админ)
       if (msg.type === 'LIST_ALL_PLUGIN_LOGS') {
-        sendResponse(pluginLogs);
+        trackSendResponse(pluginLogs);
         return true;
       }
 
@@ -3045,12 +3045,12 @@ chrome.runtime.onMessage.addListener(
         try {
           const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
           if (tabs[0]?.url) {
-            sendResponse({ url: tabs[0].url });
+            trackSendResponse({ url: tabs[0].url });
           } else {
-            sendResponse({ error: 'Active tab not found' });
+            trackSendResponse({ error: 'Active tab not found' });
           }
         } catch (error: unknown) {
-          sendResponse({ error: (error as Error).message });
+          trackSendResponse({ error: (error as Error).message });
         }
         return true;
       }
@@ -3083,7 +3083,7 @@ const handleHostApiMessage = async (
             }),
           args: [selectors],
         });
-        sendResponse({ elements: elements[0].result });
+        trackSendResponse({ elements: elements[0].result });
         break;
       }
       case 'getActivePageContent': {
@@ -3101,14 +3101,14 @@ const handleHostApiMessage = async (
               .join('\n'),
           args: [selectors],
         });
-        sendResponse({ html: content[0].result });
+        trackSendResponse({ html: content[0].result });
         break;
       }
       case 'host_fetch': {
         const url = message.data as string;
         const response = await fetch(url);
         const data = await response.text();
-        sendResponse({ data });
+        trackSendResponse({ data });
         break;
       }
       case 'llm_call': {
@@ -3133,7 +3133,7 @@ const handleHostApiMessage = async (
             }
           } catch (error) {
             console.error('[HOST API] Error loading manifest:', error);
-            sendResponse({
+            trackSendResponse({
               error: true,
               error_message: `Не удалось загрузить настройки плагина ${currentPlugin}: ${(error as Error).message}`
             });
@@ -3146,7 +3146,7 @@ const handleHostApiMessage = async (
           // Определяем реальную модель на основе алиаса
           const actualModel = aiModels[modelAlias];
           if (!actualModel) {
-            sendResponse({
+            trackSendResponse({
               error: true,
               error_message: `Модель с алиасом '${modelAlias}' не найдена в манифесте плагина`
             });
@@ -3158,7 +3158,7 @@ const handleHostApiMessage = async (
           // Получаем API ключ для модели
           const apiKey = await getApiKeyForModel(actualModel);
           if (!apiKey) {
-            sendResponse({
+            trackSendResponse({
               error: true,
               error_message: `API ключ для модели ${actualModel} не найден`
             });
@@ -3168,19 +3168,19 @@ const handleHostApiMessage = async (
           // Выполняем запрос к AI API
           try {
             const aiResponse = await callAiModel(actualModel, apiKey, options.prompt || '');
-            sendResponse({
+            trackSendResponse({
               response: aiResponse
             });
           } catch (aiError) {
             console.error('[HOST API] AI API error:', aiError);
-            sendResponse({
+            trackSendResponse({
               error: true,
               error_message: `Ошибка вызова AI API: ${(aiError as Error).message}`
             });
           }
         } catch (error) {
           console.error('[HOST API] llm_call error:', error);
-          sendResponse({
+          trackSendResponse({
             error: true,
             error_message: (error as Error).message
           });
@@ -3210,7 +3210,7 @@ const handleHostApiMessage = async (
             }
           } catch (error) {
             console.error('[HOST API] Error loading manifest:', error);
-            sendResponse({
+            trackSendResponse({
               error: true,
               error_message: `Не удалось загрузить настройки плагина ${currentPlugin}: ${(error as Error).message}`
             });
@@ -3230,11 +3230,11 @@ const handleHostApiMessage = async (
           }
 
           console.log(`[HOST API] Returning setting '${settingName}':`, settingValue);
-          sendResponse({ value: settingValue });
+          trackSendResponse({ value: settingValue });
 
         } catch (error) {
           console.error('[HOST API] get_setting error:', error);
-          sendResponse({
+          trackSendResponse({
             error: true,
             error_message: (error as Error).message
           });
@@ -3242,10 +3242,10 @@ const handleHostApiMessage = async (
         break;
       }
       default:
-        sendResponse({ error: `Unknown command: ${message.command}` });
+        trackSendResponse({ error: `Unknown command: ${message.command}` });
     }
   } catch (error: unknown) {
-    sendResponse({ error: (error as Error).message });
+    trackSendResponse({ error: (error as Error).message });
   }
 
   // Возвращаем true для поддержки асинхронных ответов

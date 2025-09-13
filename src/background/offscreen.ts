@@ -1,3 +1,9 @@
+// Глобальная функция trackSendResponse для использования вне обработчика сообщений
+function trackSendResponse(response: any): boolean {
+  console.log('[offscreen][RESPONSE] Sending response:', JSON.stringify(response));
+  return true;
+}
+
 // ==============================================================================
 // HEARTBEAT MONITORING - Connection health monitoring for offscreen
 // ==============================================================================
@@ -921,18 +927,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       handleExecuteWorkflow(message.data)
         .then(() => {
           console.log(`[offscreen][DIAG] ✅ EXECUTE_WORKFLOW handler completed successfully`);
-          sendResponse({ success: true });
+          trackSendResponse({ success: true });
         })
         .catch(error => {
           console.error(`[offscreen][DIAG] ❌ EXECUTE_WORKFLOW handler failed:`, error);
-          sendResponse({ success: false, error: error.message });
+          trackSendResponse({ success: false, error: error.message });
         });
       return true; // Keep channel open for async responses
 
     case 'HTML_CHUNK':
       console.log(`[offscreen][DIAG] 📨 ROUTING TO HTML_CHUNK HANDLER`);
       handleHtmlChunk(message);
-      sendResponse({ received: true });
+      trackSendResponse({ received: true });
       break;
 
     case 'HEARTBEAT_CHECK':
@@ -940,11 +946,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       handleHeartbeatCheck(message as HeartbeatMessage)
         .then(() => {
           console.log(`[offscreen][DIAG] ✅ HEARTBEAT_CHECK handler completed successfully`);
-          sendResponse({ success: true });
+          trackSendResponse({ success: true });
         })
         .catch(error => {
           console.error(`[offscreen][DIAG] ❌ HEARTBEAT_CHECK handler failed:`, error);
-          sendResponse({ success: false, error: error.message });
+          trackSendResponse({ success: false, error: error.message });
         });
       return true; // Keep channel open for async responses
 
@@ -952,7 +958,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       console.warn(`[offscreen][DIAG] ⚠️ UNKNOWN MESSAGE TYPE:`, message.type);
       console.warn(`[offscreen][DIAG] Available handlers: EXECUTE_WORKFLOW, HTML_CHUNK, HEARTBEAT_CHECK`);
       console.warn(`[offscreen][DIAG] Message keys:`, Object.keys(message));
-      sendResponse({ success: false, error: `Unknown message type: ${message.type}` });
+      trackSendResponse({ success: false, error: `Unknown message type: ${message.type}` });
       break;
   }
 

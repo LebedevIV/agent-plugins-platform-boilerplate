@@ -5,6 +5,18 @@ import { ensureOffscreenDocument } from './offscreen-manager';
 import { TransferMetadataManager } from './transfer-metadata-manager';
 
 // ===============================================================================
+// TRACK RESPONSE UTILITY - Enhanced response logging
+// ===============================================================================
+
+/**
+ * Enhanced response tracking with JSON logging
+ */
+function trackSendResponse(response: any): boolean {
+  console.log('[background][RESPONSE] Sending response:', JSON.stringify(response));
+  return true;
+}
+
+// ===============================================================================
 // CIRCUIT BREAKER PATTERN - Prevents cascading failures and race conditions
 // ===============================================================================
 
@@ -3052,7 +3064,7 @@ class BackgroundController {
       }
     } catch (error) {
       console.error('[Background] Error handling message:', error);
-      sendResponse({ success: false, error: (error as Error).message });
+      trackSendResponse({ success: false, error: (error as Error).message });
     }
   }
   
@@ -3116,17 +3128,17 @@ class BackgroundController {
           console.warn('[Background] ⚠️ WARNING: resultPromise returned undefined, using null fallback');
         }
 
-        sendResponse({ success: true, result: safeResult, requestId });
+        trackSendResponse({ success: true, result: safeResult, requestId });
       } catch (resultError) {
         console.error('[Background] Error awaiting resultPromise:', resultError);
         // If resultPromise fails, ensure we handle the error gracefully
         const errorMessage = resultError instanceof Error ? resultError.message : 'Unknown result error';
-        sendResponse({ success: false, error: errorMessage, requestId });
+        trackSendResponse({ success: false, error: errorMessage, requestId });
       }
       
     } catch (error) {
       console.error('[Background] Workflow execution failed:', error);
-      sendResponse({ success: false, error: (error as Error).message });
+      trackSendResponse({ success: false, error: (error as Error).message });
     }
   }
   
@@ -3204,9 +3216,9 @@ class BackgroundController {
         callId: message.payload.callId,
         result
       }).catch(err => {
-        console.error('[HOST_CALL] Failed to send response to offscreen:', err);
-        sendResponse({ success: false, error: 'Failed to send response' });
-      });
+       console.error('[HOST_CALL] Failed to send response to offscreen:', err);
+       trackSendResponse({ success: false, error: 'Failed to send response' });
+     });
     } catch (error) {
       // Send error response safely
       await safeSendMessage({
@@ -3215,7 +3227,7 @@ class BackgroundController {
         error: (error as Error).message
       }).catch(err => {
         console.error('[HOST_CALL] Failed to send error response to offscreen:', err);
-        sendResponse({ success: false, error: 'Failed to send error response' });
+        trackSendResponse({ success: false, error: 'Failed to send error response' });
       });
     }
   }
@@ -3246,10 +3258,10 @@ class BackgroundController {
       };
 
       console.log(`[BackgroundController] 📊 Transfer status check for ${transferId}:`, response);
-      sendResponse(response);
+      trackSendResponse(response);
     } catch (error) {
       console.error(`[BackgroundController] ❌ Error checking transfer status:`, error);
-      sendResponse({
+      trackSendResponse({
         transferExists: false,
         assembledNotified: false,
         error: (error as Error).message
