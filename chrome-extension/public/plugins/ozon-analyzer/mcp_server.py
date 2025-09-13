@@ -21,6 +21,24 @@ from re import Match
 # Импорт для доступа к Pyodide globals
 import pyodide
 
+# Импорт парсеров HTML для fallback (html.parser встроен в Python)
+try:
+    from html.parser import HTMLParser
+    html_parser_available = True
+except ImportError:
+    html_parser_available = False
+
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    BeautifulSoup = None
+
+try:
+    import lxml.html
+    lxml_available = True
+except ImportError:
+    lxml_available = False
+
 # ==============================================================================
 # Менеджер памяти для оптимизации Pyodide
 # ==============================================================================
@@ -169,6 +187,20 @@ def safe_dict_get(data: Any, key: str, default: Any = None) -> Any:
 # ==============================================================================
 # Оптимизированная система логирования для уменьшения повторяющихся сообщений
 # ==============================================================================
+def console_log(message: str, force: bool = False):
+    """Логирование в консоль offscreen.html для отладочной информации."""
+    try:
+        js.console.log(f"[background] {message}")
+    except Exception:
+        pass  # Игнорируем ошибки логирования
+
+def chat_message(message: str, message_type: str = None):
+    """Отправка сообщения в чат (только для финальных результатов и ошибок)."""
+    try:
+        js.sendMessageToChat({"content": message})
+    except Exception:
+        console_log(f"Ошибка отправки в чат: {message}")
+
 class OptimizedLogger:
     """Оптимизированный логгер для уменьшения повторяющихся сообщений."""
 
@@ -191,7 +223,8 @@ class OptimizedLogger:
                 return
 
         self.last_message_type = message_type
-        js.sendMessageToChat({"content": message})
+        # Перенаправляем в консоль вместо чата
+        console_log(message)
 
     def reset(self):
         """Сброс счетчиков сообщений."""
@@ -274,7 +307,7 @@ class BatchProcessor:
     async def _process_single_request(self, request: Dict[str, Any]) -> None:
         """Обработать одиночный запрос."""
         try:
-            response = await _call_ai_model(
+            response = ozon_analyzer_server._call_ai_model(
                 request['model_alias'],
                 request['prompt'],
                 request['context']
@@ -294,7 +327,7 @@ class BatchProcessor:
                 )
                 combined_prompt += "\n\nОтветь на каждый запрос отдельно, разделяя ---REQUEST_SEPARATOR---"
 
-                combined_response = await _call_ai_model(model_alias, combined_prompt)
+                combined_response = ozon_analyzer_server._call_ai_model(model_alias, combined_prompt)
 
                 # Разделяем ответы
                 response_parts = combined_response.split("---REQUEST_SEPARATOR---")
@@ -419,8 +452,180 @@ class AICache:
         self.cache.clear()
         self.metrics = {k: 0 for k in self.metrics.keys()}
 
-# Глобальный экземпляр AI кеша
+# ==============================================================================
+# Класс OzonAnalyzerServer с кешированием AI вызовов
+# ==============================================================================
+class OzonAnalyzerServer:
+    """
+    Сервер анализатора Ozon с оптимизированным кешированием AI вызовов.
+    """
+
+    def __init__(self, cache_max_size: int = 200, cache_ttl_seconds: int = 7200):
+        self.cache_max_size = cache_max_size
+        self.cache_ttl_seconds = cache_ttl_seconds
+
+        # Внутренний кеш для AI вызовов
+        self.ai_cache = {}
+
+        # Метрики кеша
+        self.cache_metrics = {
+            'hits': 0,
+            'misses': 0,
+            'expired': 0,
+            'evicted': 0,
+            'total_requests': 0
+        }
+
+        # Время последней очистки
+        self.last_cleanup = datetime.now()
+
+    def _compute_cache_key(self, model_alias: str, prompt: str) -> str:
+        """Вычисляет ключ кеша на основе model_alias и prompt."""
+        content = f"{model_alias}:{prompt}"
+        return hashlib.md5(content.encode()).hexdigest()
+
+    def _cleanup_expired_cache(self) -> None:
+        """Очищает просроченные записи из кеша."""
+        current_time = datetime.now().timestamp()
+        expired_keys = []
+
+        for key, entry in self.ai_cache.items():
+            if current_time > entry['expires_at']:
+                expired_keys.append(key)
+                self.cache_metrics['expired'] += 1
+
+        for key in expired_keys:
+            del self.ai_cache[key]
+
+        # Ограничение размера кеша
+        if len(self.ai_cache) > self.cache_max_size:
+            # Удаляем самые старые записи
+            sorted_entries = sorted(self.ai_cache.items(),
+                                  key=lambda x: x[1]['created_at'])
+            to_remove = len(sorted_entries) - self.cache_max_size
+            for i in range(to_remove):
+                key = sorted_entries[i][0]
+                del self.ai_cache[key]
+                self.cache_metrics['evicted'] += 1
+
+    def _get_cache_metrics(self) -> Dict[str, Any]:
+        """Получить метрики эффективности кеширования."""
+        total_requests = self.cache_metrics['hits'] + self.cache_metrics['misses']
+        hit_rate = (self.cache_metrics['hits'] / total_requests * 100) if total_requests > 0 else 0
+
+        return {
+            'cache_size': len(self.ai_cache),
+            'max_size': self.cache_max_size,
+            'hits': self.cache_metrics['hits'],
+            'misses': self.cache_metrics['misses'],
+            'expired': self.cache_metrics['expired'],
+            'evicted': self.cache_metrics['evicted'],
+            'hit_rate_percent': round(hit_rate, 2),
+            'total_requests': total_requests
+        }
+
+    def _call_ai_model(self, model_alias: str, prompt: str, context: Optional[str] = None) -> str:
+        """
+        Вызов AI модели с кешированием.
+        Ключ кеша формируется на основе model_alias и prompt.
+        """
+        self.cache_metrics['total_requests'] += 1
+
+        # Очистка кеша при необходимости
+        self._cleanup_expired_cache()
+
+        # Формируем ключ кеша
+        cache_key = self._compute_cache_key(model_alias, prompt)
+
+        # Проверяем кеш
+        if cache_key in self.ai_cache:
+            entry = self.ai_cache[cache_key]
+            current_time = datetime.now().timestamp()
+
+            # Проверяем TTL
+            if current_time <= entry['expires_at']:
+                self.cache_metrics['hits'] += 1
+                console_log(f"Кеш HIT для {model_alias} (ключ: {cache_key[:8]}...)")
+                console_log(f"Кеш статистика: {self._get_cache_metrics()['hit_rate_percent']}% hit rate")
+
+                # Обновляем время последнего доступа
+                entry['last_accessed'] = current_time
+                return entry['response']
+            else:
+                # Запись просрочена
+                del self.ai_cache[cache_key]
+                self.cache_metrics['expired'] += 1
+
+        # Кеш miss - выполняем реальный вызов
+        self.cache_metrics['misses'] += 1
+        console_log(f"Кеш MISS для {model_alias} - выполняем AI вызов")
+
+        start_time = datetime.now()
+
+        try:
+            # Синхронный вызов AI модели
+            response_proxy = js.llm_call(model_alias, {"prompt": prompt})
+            if response_proxy is None:
+                raise Exception("js.llm_call вернул None")
+
+            # Ожидаем результат
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(response_proxy)
+            loop.close()
+
+            if result is None or safe_dict_get(result, "error"):
+                error_msg = safe_dict_get(result, "error_message", "Неизвестная ошибка") if result else "Пустой ответ от хоста"
+                raise Exception(f"Ошибка вызова API: {error_msg}")
+
+            response_text = safe_dict_get(result, "response", "Нет ответа от модели.")
+            response_time = int((datetime.now() - start_time).total_seconds() * 1000)
+
+            # Проверяем тип ответа
+            if not isinstance(response_text, str):
+                console_log(f"AI вернул {type(response_text)} вместо строки, конвертируем")
+                response_text = str(response_text)
+            elif response_text is None:
+                console_log("AI вернул None, устанавливаем fallback")
+                response_text = "Нет ответа от модели."
+
+            # Проверяем на пустой ответ
+            if isinstance(response_text, str) and len(response_text.strip()) == 0:
+                console_log("AI вернул пустую строку, устанавливаем fallback")
+                response_text = "Пустой ответ от модели."
+
+            # Кешируем успешный строковый ответ
+            if response_text and isinstance(response_text, str) and not response_text.startswith("Ошибка"):
+                current_time = datetime.now().timestamp()
+                self.ai_cache[cache_key] = {
+                    'response': response_text,
+                    'model_alias': model_alias,
+                    'created_at': current_time,
+                    'last_accessed': current_time,
+                    'expires_at': current_time + self.cache_ttl_seconds,
+                    'response_time_ms': response_time
+                }
+
+                console_log(f"Ответ закэширован (TTL: {self.cache_ttl_seconds}s, размер кеша: {len(self.ai_cache)}/{self.cache_max_size})")
+
+                # Логируем статистику при достижении определенных порогов
+                if len(self.ai_cache) % 10 == 0:  # Каждые 10 записей
+                    metrics = self._get_cache_metrics()
+                    console_log(f"Кеш метрики обновлены: {metrics['cache_size']}/{metrics['max_size']} записей, {metrics['hit_rate_percent']}% hit rate")
+
+            console_log(f"AI вызов завершен (~{response_time}ms)")
+            return response_text
+
+        except Exception as e:
+            chat_message(f"Ошибка при вызове модели '{model_alias}': {e}")
+            raise RuntimeError(f"Ошибка при вызове модели '{model_alias}': {e}") from e
+
+# Глобальный экземпляр AI кеша (сохраняем для обратной совместимости)
 ai_cache = AICache(max_size=200, default_ttl=7200)  # 2 часа TTL, до 200 записей
+
+# Глобальный экземпляр OzonAnalyzerServer
+ozon_analyzer_server = OzonAnalyzerServer(cache_max_size=200, cache_ttl_seconds=7200)
 
 # --- "Контракт" с JavaScript: Объявление типов для `js` моста ---
 # Этот блок кода критически важен для статических анализаторов (Pyright, MyPy)
@@ -480,7 +685,7 @@ class FastDOMParser:
 
         try:
             # Логируем перед нормализацией
-            js.sendMessageToChat({"content": f"Python: 📊 До нормализации: {original_size} символов"})
+            console_log(f"📊 До нормализации: {original_size} символов")
 
             # Смягченная нормализация - удаляем только лишние пробелы и переносы
             # Сохраняем пробелы между словами, но убираем множественные переносы строк
@@ -493,7 +698,7 @@ class FastDOMParser:
             data_loss = original_size - new_size
 
             # Логируем результаты нормализации
-            js.sendMessageToChat({"content": f"Python: ✅ После нормализации: {new_size} символов (потеряно: {data_loss}, {data_loss/original_size*100:.1f}%)"})
+            console_log(f"✅ После нормализации: {new_size} символов (потеряно: {data_loss}, {data_loss/original_size*100:.1f}%)")
 
             # Добавляем статистику в объект
             self.normalization_stats = {
@@ -504,7 +709,7 @@ class FastDOMParser:
             }
 
         except Exception as e:
-            js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка нормализации: {e}"})
+            console_log(f"⚠️ Ошибка нормализации: {e}")
             # В случае ошибки возвращаем оригинал
             self.normalization_stats = {'error': str(e)}
 
@@ -570,10 +775,10 @@ class FastDOMParser:
                 if extracted_value is not None:
                     info[field_name] = extracted_value
                 else:
-                    js.sendMessageToChat({"content": f"Python: ⚠️ {field_name} вернул None, использую fallback"})
+                    console_log(f"⚠️ {field_name} вернул None, использую fallback")
                     info[field_name] = fallback_value
             except Exception as e:
-                js.sendMessageToChat({"content": f"Python: ❌ Ошибка извлечения {field_name}: {e}"})
+                console_log(f"❌ Ошибка извлечения {field_name}: {e}")
                 info[field_name] = fallback_value
 
         # Вычисляем время парсинга
@@ -581,11 +786,11 @@ class FastDOMParser:
 
         # Добавляем статистику успешного извлечения
         success_count = sum(1 for k, v in info.items()
-                           if (isinstance(v, str) and v != info[k] if k in ['title', 'description', 'composition'] else True) and
-                           (isinstance(v, list) and len(v) > 0 and v[0] != 'Категория не определена' if k == 'categories' else True) and
-                           (isinstance(v, dict) and v.get('amount', 0) > 0 if k in ['price', 'rating'] else True))
+                            if (isinstance(v, str) and v != info[k] if k in ['title', 'description', 'composition'] else True) and
+                            (isinstance(v, list) and len(v) > 0 and v[0] != 'Категория не определена' if k == 'categories' else True) and
+                            (isinstance(v, dict) and v.get('amount', 0) > 0 if k in ['price', 'rating'] else True))
 
-        js.sendMessageToChat({"content": f"Python: 📊 Извлечено полей: {success_count}/6 (успех: {success_count*100//6}%)"})
+        console_log(f"📊 Извлечено полей: {success_count}/6 (успех: {success_count*100//6}%)")
 
         # Возвращаем стандартизированный ответ
         return {
@@ -608,7 +813,7 @@ class FastDOMParser:
         try:
             return self._extract_price()
         except Exception as e:
-            js.sendMessageToChat({"content": f"Python: ❌ Ошибка извлечения цены: {e}"})
+            console_log(f"❌ Ошибка извлечения цены: {e}")
             return {'text': 'Цена не найдена', 'amount': 0, 'currency': 'unknown'}
 
     def _extract_rating_safe(self) -> Dict[str, Any]:
@@ -616,12 +821,93 @@ class FastDOMParser:
         try:
             return self._extract_rating()
         except Exception as e:
-            js.sendMessageToChat({"content": f"Python: ❌ Ошибка извлечения рейтинга: {e}"})
+            console_log(f"❌ Ошибка извлечения рейтинга: {e}")
             return {'text': 'Рейтинг не найден', 'value': 0, 'max_value': 5.0}
 
     def _extract_title(self) -> str:
-        """Извлечение заголовка товара с использованием кешированных паттернов."""
-        # Оптимизированные паттерны с флагами для title
+        """Извлечение заголовка товара с многоуровневым fallback: lxml > html.parser > regex."""
+
+        # Попытка 1: lxml (если доступен)
+        if lxml_available:
+            try:
+                tree = lxml.html.fromstring(self.html)
+                # Ищем h1 с классом title
+                title_elem = tree.xpath('//h1[contains(@class, "title")]')
+                if title_elem:
+                    title = title_elem[0].text_content().strip()
+                    if len(title) > 10:
+                        return title
+
+                # Ищем мета тег og:title
+                og_title = tree.xpath('//meta[@property="og:title"]/@content')
+                if og_title:
+                    title = og_title[0].strip()
+                    if len(title) > 10:
+                        return title
+
+                # Ищем любой h1
+                h1_elem = tree.xpath('//h1')
+                if h1_elem:
+                    title = h1_elem[0].text_content().strip()
+                    if len(title) > 10:
+                        return title
+
+                # Ищем title в head
+                title_elem = tree.xpath('//title')
+                if title_elem:
+                    title = title_elem[0].text_content().strip()
+                    if len(title) > 10:
+                        return title
+            except Exception as e:
+                pass
+
+        # Попытка 2: html.parser
+        try:
+            from html.parser import HTMLParser
+            class TitleParser(HTMLParser):
+                def __init__(self):
+                    super().__init__()
+                    self.title = None
+                    self.in_title_tag = False
+                    self.in_h1 = False
+                    self.current_data = []
+
+                def handle_starttag(self, tag, attrs):
+                    if tag == 'title':
+                        self.in_title_tag = True
+                    elif tag == 'h1':
+                        self.in_h1 = True
+                    elif tag == 'meta':
+                        attrs_dict = dict(attrs)
+                        if attrs_dict.get('property') == 'og:title':
+                            content = attrs_dict.get('content', '').strip()
+                            if content and len(content) > 10:
+                                self.title = content
+
+                def handle_endtag(self, tag):
+                    if tag == 'title':
+                        self.in_title_tag = False
+                    elif tag == 'h1':
+                        self.in_h1 = False
+
+                def handle_data(self, data):
+                    if self.in_title_tag and not self.title:
+                        self.title = data.strip()
+                    elif self.in_h1 and not self.title:
+                        content = data.strip()
+                        if len(content) > 10:
+                            self.title = content
+
+            parser = TitleParser()
+            parser.feed(self.html)
+
+            if parser.title and len(parser.title) > 10:
+                return parser.title
+
+        except Exception as e:
+            pass
+
+        # Попытка 3: regex (текущая реализация)
         title_patterns = [
             r'<h1[^>]*class="[^"]*title[^"]*"[^>]*>([^<]+)</h1>',
             r'<title>([^<]+)</title>',
@@ -632,47 +918,143 @@ class FastDOMParser:
         match = self._search_with_pattern(title_patterns, re.IGNORECASE)
         if match:
             title = match.group(1).strip()
-            if len(title) > 10:  # Фильтр слишком коротких заголовков
-                js.sendMessageToChat({"content": f"Python: ✅ Найден заголовок: {title[:50]}..."})
+            if len(title) > 10:
                 return title
-    
-            # Fallback: Пробуем более простые паттерны
-            fallback_patterns = [
-                r'<title[^>]*>([^<]+)</title>',
-                r'<h1[^>]*>([^<]+)</h1>',
-                r'>([^<]{15,100})</'  # Любой текст 15-100 символов в угловых скобках
-            ]
-    
-            fallback_match = self._search_with_pattern(fallback_patterns, re.IGNORECASE)
-            if fallback_match:
-                title = fallback_match.group(1).strip()
-                if len(title) > 10:
-                    js.sendMessageToChat({"content": f"Python: ✅ Найден заголовок (fallback): {title[:50]}..."})
-                    return title
-    
-            js.sendMessageToChat({"content": "Python: ⚠️ Заголовок товара не найден"})
-            return "Название товара не найдено"
+
+        # Fallback regex
+        fallback_patterns = [
+            r'<title[^>]*>([^<]+)</title>',
+            r'<h1[^>]*>([^<]+)</h1>',
+            r'>([^<]{15,100})</'
+        ]
+
+        fallback_match = self._search_with_pattern(fallback_patterns, re.IGNORECASE)
+        if fallback_match:
+            title = fallback_match.group(1).strip()
+            if len(title) > 10:
+                return title
+
+        return "Название товара не найдено"
 
     def _extract_description(self) -> str:
-        """Извлечение описания товара с новыми селекторами."""
+        """Извлечение описания товара с многоуровневым fallback: lxml > html.parser > regex."""
 
+        # Попытка 1: lxml
+        if lxml_available:
+            try:
+                tree = lxml.html.fromstring(self.html)
+
+                # Ищем #section-description > div:nth-child(2) > div > div > div
+                section_desc = tree.xpath('//*[@id="section-description"]')
+                if section_desc:
+                    # Ищем вложенные div'ы по селектору
+                    nested_divs = section_desc[0].xpath('.//div//div//div//div')
+                    for div in nested_divs:
+                        content = div.text_content().strip()
+                        if len(content) > 20:
+                            return content
+
+                # Ищем div с классом description
+                desc_divs = tree.xpath('//div[contains(@class, "description")]')
+                for div in desc_divs:
+                    content = div.text_content().strip()
+                    if len(content) > 20:
+                        return content
+
+                # Ищем мета description
+                meta_desc = tree.xpath('//meta[@name="description"]/@content')
+                if meta_desc:
+                    content = meta_desc[0].strip()
+                    if len(content) > 20:
+                        return content
+
+                # Ищем параграфы с описанием
+                desc_paragraphs = tree.xpath('//p[contains(@class, "description")]')
+                for p in desc_paragraphs:
+                    content = p.text_content().strip()
+                    if len(content) > 20:
+                        return content
+
+            except Exception as e:
+                pass
+
+        # Попытка 2: html.parser
+        try:
+            from html.parser import HTMLParser
+            class DescriptionParser(HTMLParser):
+                def __init__(self):
+                    super().__init__()
+                    self.description = None
+                    self.in_description_div = False
+                    self.in_description_p = False
+                    self.in_section_description = False
+                    self.section_depth = 0
+                    self.current_data = []
+
+                def handle_starttag(self, tag, attrs):
+                    attrs_dict = dict(attrs)
+
+                    if tag == 'div':
+                        if attrs_dict.get('id') == 'section-description':
+                            self.in_section_description = True
+                            self.section_depth = 0
+                        elif self.in_section_description:
+                            self.section_depth += 1
+                        elif 'description' in attrs_dict.get('class', ''):
+                            self.in_description_div = True
+
+                    elif tag == 'p' and 'description' in attrs_dict.get('class', ''):
+                        self.in_description_p = True
+
+                    elif tag == 'meta' and attrs_dict.get('name') == 'description':
+                        content = attrs_dict.get('content', '').strip()
+                        if content and len(content) > 20 and not self.description:
+                            self.description = content
+
+                def handle_endtag(self, tag):
+                    if tag == 'div':
+                        if self.in_section_description:
+                            self.section_depth -= 1
+                            if self.section_depth < 0:
+                                self.in_section_description = False
+                        elif self.in_description_div:
+                            self.in_description_div = False
+
+                    elif tag == 'p' and self.in_description_p:
+                        self.in_description_p = False
+
+                def handle_data(self, data):
+                    if (self.in_description_div or self.in_description_p or
+                        (self.in_section_description and self.section_depth >= 3)):
+                        content = data.strip()
+                        if len(content) > 20 and not self.description:
+                            self.description = content
+
+            parser = DescriptionParser()
+            parser.feed(self.html)
+
+            if parser.description and len(parser.description) > 20:
+                return parser.description
+
+        except Exception as e:
+            pass
+
+        # Попытка 3: regex
         # Паттерн для селектора: #section-description > div:nth-child(2) > div > div > div
-        # Ищем в section-description второй дочерний div, затем вложенные div'ы
         desc_pattern = r'id="section-description"[^>]*>(.*?)<div[^>]*>(.*?)<div[^>]*>(.*?)<div[^>]*>(.*?)</div>.*?</div>.*?</div>.*?</div>'
 
         match = re.search(desc_pattern, self.html, re.IGNORECASE | re.DOTALL)
         if match:
-            # Извлекаем содержимое из соответствующей группы (обычно 4-я группа для указанного селектора)
             content_groups = match.groups()
             if len(content_groups) >= 4:
-                content = content_groups[3]  # 4-я группа соответствует последнему div в селекторе
+                content = content_groups[3]
                 clean_pattern = self._get_cached_pattern(r'<[^>]+>', re.I)
                 cleaned_content = clean_pattern.sub('', content).strip()
 
                 if len(cleaned_content) > 20:
                     return cleaned_content
 
-        # Fallback: поиск по старым паттернам
+        # Fallback regex
         desc_fallback_patterns = [
             r'<div[^>]*class="[^"]*description[^"]*"[^>]*>([^<]*(?:<[^/][^>]*>[^<]*</[^>]+>[^<]*)*)</div>',
             r'<meta[^>]+name="description"[^>]+content="([^"]+)"',
@@ -690,9 +1072,123 @@ class FastDOMParser:
         return "Описание товара не найдено"
 
     def _extract_composition(self) -> str:
-        """Извлечение состава товара с новыми селекторами."""
+        """Извлечение состава товара с многоуровневым fallback: lxml > html.parser > regex."""
 
-        # Ищем заголовок h3 с текстом "Состав" в section-description
+        # Попытка 1: lxml
+        if lxml_available:
+            try:
+                tree = lxml.html.fromstring(self.html)
+
+                # Ищем h3 с текстом "Состав" или "Ингредиенты" в section-description
+                section_desc = tree.xpath('//*[@id="section-description"]')
+                if section_desc:
+                    h3_headers = section_desc[0].xpath('.//h3')
+                    for h3 in h3_headers:
+                        header_text = h3.text_content().strip().lower()
+                        if any(word in header_text for word in ['состав', 'ингредиенты', 'ingredients', 'состав:']):
+                            # Ищем следующий за h3 контент
+                            next_sibling = h3.getnext()
+                            if next_sibling is not None:
+                                content = next_sibling.text_content().strip()
+                                if len(content) > 10:
+                                    return content
+                            # Если нет следующего sibling, ищем родительский контейнер
+                            parent = h3.getparent()
+                            if parent is not None:
+                                siblings = parent.xpath('./*')
+                                h3_index = siblings.index(h3)
+                                if h3_index + 1 < len(siblings):
+                                    next_elem = siblings[h3_index + 1]
+                                    content = next_elem.text_content().strip()
+                                    if len(content) > 10:
+                                        return content
+
+                # Ищем div с классом composition или ingredients
+                comp_divs = tree.xpath('//div[contains(@class, "composition")] | //div[contains(@class, "ingredients")]')
+                for div in comp_divs:
+                    content = div.text_content().strip()
+                    if len(content) > 10:
+                        return content
+
+                # Ищем span с composition
+                comp_spans = tree.xpath('//span[contains(@class, "composition")] | //span[contains(@class, "ingredients")]')
+                for span in comp_spans:
+                    content = span.text_content().strip()
+                    if len(content) > 10:
+                        return content
+
+            except Exception as e:
+                pass
+
+        # Попытка 2: html.parser
+        try:
+            from html.parser import HTMLParser
+            class CompositionParser(HTMLParser):
+                def __init__(self):
+                    super().__init__()
+                    self.composition = None
+                    self.in_composition_div = False
+                    self.in_composition_span = False
+                    self.in_section_description = False
+                    self.found_composition_header = False
+                    self.section_depth = 0
+                    self.current_data = []
+
+                def handle_starttag(self, tag, attrs):
+                    attrs_dict = dict(attrs)
+
+                    if tag == 'div':
+                        if attrs_dict.get('id') == 'section-description':
+                            self.in_section_description = True
+                            self.section_depth = 0
+                        elif self.in_section_description:
+                            self.section_depth += 1
+                        elif 'composition' in attrs_dict.get('class', '') or 'ingredients' in attrs_dict.get('class', ''):
+                            self.in_composition_div = True
+
+                    elif tag == 'span' and ('composition' in attrs_dict.get('class', '') or 'ingredients' in attrs_dict.get('class', '')):
+                        self.in_composition_span = True
+
+                    elif tag == 'h3' and self.in_section_description:
+                        # Проверим в handle_data
+                        pass
+
+                def handle_endtag(self, tag):
+                    if tag == 'div':
+                        if self.in_section_description:
+                            self.section_depth -= 1
+                            if self.section_depth < 0:
+                                self.in_section_description = False
+                        elif self.in_composition_div:
+                            self.in_composition_div = False
+
+                    elif tag == 'span' and self.in_composition_span:
+                        self.in_composition_span = False
+
+                def handle_data(self, data):
+                    if self.in_composition_div or self.in_composition_span:
+                        content = data.strip()
+                        if len(content) > 10 and not self.composition:
+                            self.composition = content
+                    elif self.in_section_description and not self.composition:
+                        # Проверяем на заголовок состава
+                        data_lower = data.lower().strip()
+                        if any(word in data_lower for word in ['состав', 'ингредиенты', 'ingredients', 'состав:']):
+                            self.found_composition_header = True
+                        elif self.found_composition_header and len(data.strip()) > 10:
+                            self.composition = data.strip()
+                            self.found_composition_header = False
+
+            parser = CompositionParser()
+            parser.feed(self.html)
+
+            if parser.composition and len(parser.composition) > 10:
+                return parser.composition
+
+        except Exception as e:
+            pass
+
+        # Попытка 3: regex
         comp_pattern = r'<div[^>]*id="section-description"[^>]*>.*?<div[^>]*>.*?<div[^>]*>.*?<div[^>]*>.*?<h3[^>]*>([^<]*(?:состав|ингредиенты|состав:|ingredients)[^<]*)</h3>.*?(.*?)(?=<h\d|$)'
 
         match = re.search(comp_pattern, self.html, re.IGNORECASE | re.DOTALL)
@@ -700,7 +1196,6 @@ class FastDOMParser:
             header_text = match.group(1).strip()
             content = match.group(2).strip()
 
-            # Проверяем, что нашли правильный заголовок
             if any(word in header_text.lower() for word in ['состав', 'ингредиенты', 'ingredients']):
                 clean_pattern = self._get_cached_pattern(r'<[^>]+>', re.I)
                 cleaned_content = clean_pattern.sub('', content).strip()
@@ -708,7 +1203,7 @@ class FastDOMParser:
                 if len(cleaned_content) > 10:
                     return cleaned_content
 
-        # Fallback: поиск по старым паттернам
+        # Fallback regex
         comp_fallback_patterns = [
             r'<div[^>]*class="[^"]*composition[^"]*">([^<]*(?:<[^/][^>]*>[^<]*</[^>]+>[^<]*)*)</div>',
             r'<div[^>]*class="[^"]*ingredients[^"]*">([^<]*(?:<[^/][^>]*>[^<]*</[^>]+>[^<]*)*)</div>',
@@ -733,96 +1228,320 @@ class FastDOMParser:
             # Пробуем извлечь из хлебных крошек с fallback обработкой
             categories = self._extract_categories_from_breadcrumbs()
         except Exception as e:
-            js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка извлечения breadcrumb категорий: {e}"})
+            pass
 
         # Fallback 1: Поиск по альтернативным селекторам
         if not categories:
             try:
                 categories = self._extract_categories_from_selectors()
             except Exception as e:
-                js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка извлечения селекторных категорий: {e}"})
+                pass
 
         # Fallback 2: Прямой поиск текстовой информации
         if not categories:
             try:
                 categories = self._extract_categories_from_text()
             except Exception as e:
-                js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка извлечения текстовых категорий: {e}"})
+                pass
 
         # Логируем результат
         if categories:
-            js.sendMessageToChat({"content": f"Python: ✅ Найдено {len(categories)} категорий: {', '.join(categories[:3])}"})
+            pass
         else:
-            js.sendMessageToChat({"content": "Python: ⚠️ Категории не найдены, использую fallback"})
+            pass
 
         return categories[:5] if categories else ["Категория не определена"]
 
     def _extract_categories_from_breadcrumbs(self) -> List[str]:
-        """Извлечение ID категорий из хлебных крошек с проверкой на целевую категорию."""
+        """Извлечение ID категорий из хлебных крошек с многоуровневым fallback: lxml > html.parser > regex."""
 
-        # Ищем первый элемент хлебных крошек: #layoutPage div[data-widget="breadCrumbs"] ol li:nth-child(1) a
-        breadcrumb_pattern = r'<div[^>]*id="layoutPage"[^>]*>.*?<div[^>]*data-widget="breadCrumbs"[^>]*>.*?<ol[^>]*>.*?<li[^>]*>.*?<a[^>]*href="([^"]*)"[^>]*>([^<]+)</a>.*?</li>'
+        # Приоритет: lxml > html.parser > regex
+        parser_used = None
+        categories = []
 
-        match = re.search(breadcrumb_pattern, self.html, re.IGNORECASE | re.DOTALL)
-        if match:
-            href = match.group(1)
-            text = match.group(2).strip()
+        try:
+            if lxml_available:
+                parser_used = "lxml"
+                tree = lxml.html.fromstring(self.html)
+                categories = self._extract_with_lxml(tree)
+            else:
+                parser_used = "html.parser"
+                categories = self._extract_with_html_parser()
 
-            # Извлекаем ID категории из href="/category/{category_id}/"
-            category_id_pattern = r'/category/([^/]+)'
-            category_match = re.search(category_id_pattern, href)
+            if categories:
+                pass
+            else:
+                pass
+                # Fallback на regex
+                parser_used = "regex"
+                categories = self._extract_with_regex()
+                if categories:
+                    pass
 
-            if category_match:
-                category_id = category_match.group(1)
+            return categories
 
-                # Проверяем соответствие целевой категории "krasota-i-zdorove-6500"
-                if category_id == "krasota-i-zdorove-6500":
-                    return [category_id]
+        except Exception as e:
+            # Fallback на regex если основной парсер сломался
+            try:
+                categories = self._extract_with_regex()
+                if categories:
+                    pass
+                return categories
+            except Exception as fallback_e:
+                return []
 
-        # Fallback: поиск по старым паттернам с извлечением ID
-        old_breadcrumb_pattern = r'<[^>]*class="[^"]*breadcrumb[^"]*"[^>]*>(.*?)</[^>]+>'
-        breadcrumb = self._get_cached_pattern(old_breadcrumb_pattern, re.IGNORECASE | re.DOTALL)
-        breadcrumb_match = breadcrumb.search(self.html)
+    def _extract_with_html_parser(self) -> List[str]:
+        """Извлечение с html.parser вместо BeautifulSoup с улучшенными селекторами."""
+        try:
+            from html.parser import HTMLParser
+            class BreadcrumbParser(HTMLParser):
+                def __init__(self):
+                    super().__init__()
+                    self.in_breadcrumb_container = False
+                    self.in_ol = False
+                    self.in_first_li = False
+                    self.in_first_link = False
+                    self.first_link_href = None
+                    self.found_first_link = False
+                    # Новые селекторы для различных версий Ozon
+                    self.in_breadcrumb_nav = False
+                    self.in_breadcrumb_ul = False
+                    self.category_links = []
 
-        if breadcrumb_match:
-            breadcrumb_html = breadcrumb_match.group(1)
+                def handle_starttag(self, tag, attrs):
+                    attrs_dict = dict(attrs)
 
-            link_patterns = [
-                r'<a[^>]*href="([^"]*)"[^>]*>([^<]+)</a>',
-                r'<span[^>]*>([^<]+)</span>',
-                r'([^>]+?)'
+                    # Старый селектор
+                    if tag == 'div' and attrs_dict.get('data-widget') == 'breadCrumbs':
+                        self.in_breadcrumb_container = True
+
+                    # Новый селектор для навигации
+                    elif tag == 'nav' and ('breadcrumb' in attrs_dict.get('class', '').lower() or
+                                          'breadcrumbs' in attrs_dict.get('class', '').lower()):
+                        self.in_breadcrumb_nav = True
+
+                    # Альтернативный селектор для контейнера
+                    elif tag == 'div' and ('breadcrumb' in attrs_dict.get('class', '').lower() or
+                                          'breadcrumbs' in attrs_dict.get('class', '').lower()):
+                        self.in_breadcrumb_container = True
+
+                    elif tag == 'ol' and (self.in_breadcrumb_container or self.in_breadcrumb_nav):
+                        self.in_ol = True
+
+                    elif tag == 'ul' and (self.in_breadcrumb_container or self.in_breadcrumb_nav):
+                        self.in_breadcrumb_ul = True
+
+                    elif tag == 'li' and (self.in_ol or self.in_breadcrumb_ul) and not self.found_first_link:
+                        self.in_first_li = True
+
+                    elif tag == 'a' and self.in_first_li and not self.found_first_link:
+                        self.in_first_link = True
+                        href = attrs_dict.get('href', '')
+                        if href:
+                            self.category_links.append(href)
+                            self.first_link_href = href
+
+                def handle_endtag(self, tag):
+                    if tag == 'a' and self.in_first_link:
+                        self.in_first_link = False
+                        self.found_first_link = True
+                    elif tag == 'li' and self.in_first_li:
+                        self.in_first_li = False
+                    elif tag == 'ol' and self.in_ol:
+                        self.in_ol = False
+                    elif tag == 'ul' and self.in_breadcrumb_ul:
+                        self.in_breadcrumb_ul = False
+                    elif tag == 'div' and self.in_breadcrumb_container:
+                        self.in_breadcrumb_container = False
+                    elif tag == 'nav' and self.in_breadcrumb_nav:
+                        self.in_breadcrumb_nav = False
+
+            parser = BreadcrumbParser()
+            parser.feed(self.html)
+
+            console_log(f"Найдено {len(parser.category_links)} ссылок в хлебных крошках")
+
+            # Пробуем извлечь ID категории из первой ссылки
+            if parser.first_link_href:
+                # Разные паттерны для различных форматов URL Ozon
+                category_patterns = [
+                    r'/category/([^/]+)',  # /category/krasota-i-zdorove-6500
+                    r'/catalog/([^/]+)',   # /catalog/krasota-i-zdorove-6500
+                    r'/([^/]+)/[^/]*$'     # последний сегмент URL
+                ]
+
+                for pattern in category_patterns:
+                    category_match = re.search(pattern, parser.first_link_href)
+                    if category_match:
+                        category_id = category_match.group(1)
+                        console_log(f"Извлечена категория: {category_id} по паттерну {pattern}")
+                        return [category_id]
+
+            # Fallback: поиск по всем найденным ссылкам
+            for link in parser.category_links:
+                for pattern in category_patterns:
+                    category_match = re.search(pattern, link)
+                    if category_match:
+                        category_id = category_match.group(1)
+                        console_log(f"Извлечена категория из fallback: {category_id}")
+                        return [category_id]
+
+            return []
+
+        except Exception as e:
+            console_log(f"Ошибка в _extract_with_html_parser: {e}")
+            return []
+
+    def _extract_with_lxml(self, tree) -> List[str]:
+        """Извлечение с lxml с поддержкой новых селекторов Ozon."""
+        try:
+            # Разные селекторы для хлебных крошек в различных версиях Ozon
+            breadcrumb_selectors = [
+                '//div[@data-widget="breadCrumbs"]',  # Старый селектор
+                '//nav[contains(@class, "breadcrumb")]',  # Новый селектор nav
+                '//div[contains(@class, "breadcrumb")]',  # Альтернативный div
+                '//ol[contains(@class, "breadcrumb")]',   # Прямой ol селектор
+                '//ul[contains(@class, "breadcrumb")]'     # ul селектор
             ]
 
-            categories = []
-            for pattern_str in link_patterns:
-                try:
-                    link_pattern = self._get_cached_pattern(pattern_str, re.IGNORECASE)
-                    matches = link_pattern.findall(breadcrumb_html)
+            first_link = None
 
-                    for match_tuple in matches[:8]:
-                        # Обработка кортежей из нескольких групп
-                        if isinstance(match_tuple, tuple):
-                            href_match = match_tuple[0] if len(match_tuple) > 0 else ""
-                            text_match = match_tuple[1] if len(match_tuple) > 1 else str(match_tuple[0])
-                        else:
-                            href_match = ""
-                            text_match = str(match_tuple)
+            # Пробуем разные селекторы
+            for selector in breadcrumb_selectors:
+                breadcrumb_container = tree.xpath(selector)
+                if breadcrumb_container:
+                    console_log(f"Найден breadcrumb контейнер по селектору: {selector}")
 
-                        # Извлекаем ID из href если есть
-                        if href_match:
-                            category_match = re.search(r'/category/([^/]+)', href_match)
-                            if category_match:
-                                category_id = category_match.group(1)
-                                if category_id == "krasota-i-zdorove-6500":
-                                    categories.append(category_id)
-                        elif len(text_match.strip()) > 1 and not any(word in text_match.lower() for word in ['home', 'главная', 'каталог']):
-                            categories.append(text_match.strip())
-                except Exception:
-                    continue
+                    # Ищем первый li элемент
+                    first_li = breadcrumb_container[0].xpath('.//li[1]')
+                    if first_li:
+                        # Ищем ссылку в первом li
+                        first_link = first_li[0].xpath('.//a')[0] if first_li[0].xpath('.//a') else None
+                        if first_link:
+                            console_log("Найдена первая ссылка в breadcrumb")
+                            break
 
-            return categories[:5]
+                    # Если не нашли в li, ищем первую ссылку в контейнере
+                    all_links = breadcrumb_container[0].xpath('.//a')
+                    if all_links:
+                        first_link = all_links[0]
+                        console_log("Найдена первая ссылка в breadcrumb контейнере")
+                        break
 
-        return []
+            if not first_link:
+                console_log("Не найдена ни одна ссылка в breadcrumb")
+                return []
+
+            href = first_link.get('href', '')
+            if not href:
+                console_log("Ссылка не содержит href атрибут")
+                return []
+
+            console_log(f"Извлекаем категорию из URL: {href}")
+
+            # Разные паттерны для различных форматов URL Ozon
+            category_patterns = [
+                r'/category/([^/]+)',  # /category/krasota-i-zdorove-6500
+                r'/catalog/([^/]+)',   # /catalog/krasota-i-zdorove-6500
+                r'/([^/]+)/[^/]*$'     # последний сегмент URL
+            ]
+
+            for pattern in category_patterns:
+                category_match = re.search(pattern, href)
+                if category_match:
+                    category_id = category_match.group(1)
+                    console_log(f"Извлечена категория: {category_id} по паттерну {pattern}")
+                    return [category_id]
+
+            console_log("Не удалось извлечь категорию ни по одному паттерну")
+            return []
+
+        except Exception as e:
+            console_log(f"Ошибка в _extract_with_lxml: {e}")
+            return []
+
+    def _extract_with_regex(self) -> List[str]:
+        """Regex fallback для извлечения категорий из хлебных крошек с улучшенными паттернами."""
+        try:
+            # Разные паттерны для поиска breadcrumb контейнеров
+            breadcrumb_patterns = [
+                r'<div[^>]*data-widget="breadCrumbs"[^>]*>(.*?)</div>',  # Старый селектор
+                r'<nav[^>]*class="[^"]*breadcrumb[^"]*"[^>]*>(.*?)</nav>',  # nav breadcrumb
+                r'<div[^>]*class="[^"]*breadcrumb[^"]*"[^>]*>(.*?)</div>',  # div breadcrumb
+                r'<ol[^>]*class="[^"]*breadcrumb[^"]*"[^>]*>(.*?)</ol>',    # ol breadcrumb
+                r'<ul[^>]*class="[^"]*breadcrumb[^"]*"[^>]*>(.*?)</ul>'     # ul breadcrumb
+            ]
+
+            breadcrumbs_html = None
+
+            # Пробуем найти breadcrumb контейнер
+            for pattern in breadcrumb_patterns:
+                match = re.search(pattern, self.html, re.IGNORECASE | re.DOTALL)
+                if match:
+                    breadcrumbs_html = match.group(1)
+                    console_log(f"Найден breadcrumb по паттерну: {pattern[:50]}...")
+                    break
+
+            if not breadcrumbs_html:
+                console_log("Не найден breadcrumb контейнер ни по одному паттерну")
+                return []
+
+            # Ищем список элементов (ol, ul)
+            list_patterns = [
+                r'<ol[^>]*>(.*?)</ol>',
+                r'<ul[^>]*>(.*?)</ul>'
+            ]
+
+            list_html = None
+            for pattern in list_patterns:
+                match = re.search(pattern, breadcrumbs_html, re.IGNORECASE | re.DOTALL)
+                if match:
+                    list_html = match.group(1)
+                    break
+
+            if not list_html:
+                console_log("Не найден список в breadcrumb контейнере")
+                return []
+
+            # Ищем первый li элемент
+            li_pattern = r'<li[^>]*>(.*?)</li>'
+            li_match = re.search(li_pattern, list_html, re.IGNORECASE | re.DOTALL)
+            if not li_match:
+                console_log("Не найден первый li элемент")
+                return []
+
+            li_html = li_match.group(1)
+
+            # Ищем ссылку в li
+            link_pattern = r'<a[^>]*href="([^"]*)"[^>]*>'
+            link_match = re.search(link_pattern, li_html, re.IGNORECASE)
+            if not link_match:
+                console_log("Не найдена ссылка в первом li")
+                return []
+
+            href = link_match.group(1)
+            console_log(f"Найдена ссылка: {href}")
+
+            # Разные паттерны для извлечения ID категории
+            category_patterns = [
+                r'/category/([^/]+)',  # /category/krasota-i-zdorove-6500
+                r'/catalog/([^/]+)',   # /catalog/krasota-i-zdorove-6500
+                r'/([^/]+)/[^/]*$'     # последний сегмент URL
+            ]
+
+            for pattern in category_patterns:
+                category_match = re.search(pattern, href)
+                if category_match:
+                    category_id = category_match.group(1)
+                    console_log(f"Извлечена категория: {category_id} по паттерну {pattern}")
+                    return [category_id]
+
+            console_log("Не удалось извлечь категорию ни по одному паттерну")
+            return []
+
+        except Exception as e:
+            console_log(f"Ошибка в _extract_with_regex: {e}")
+            return []
 
     def is_product_in_target_category(self, categories: List[str]) -> bool:
         """
@@ -870,8 +1589,112 @@ class FastDOMParser:
         return categories[:5] if categories else []
 
     def _extract_price(self) -> Dict[str, Any]:
-        """Извлечение цены товара."""
-        # Поиск цены в различных форматах
+        """Извлечение цены товара с многоуровневым fallback: lxml > html.parser > regex."""
+
+        # Попытка 1: lxml
+        if lxml_available:
+            try:
+                tree = lxml.html.fromstring(self.html)
+
+                # Ищем мета тег с ценой
+                meta_price = tree.xpath('//meta[@property="product:price:amount"]/@content')
+                if meta_price:
+                    price_text = meta_price[0].strip()
+                    numeric_match = re.search(r'(\d+(?:[,.]\d+)?)', price_text)
+                    if numeric_match:
+                        amount = float(numeric_match.group(1).replace(',', '.'))
+                        return {
+                            'text': price_text,
+                            'amount': amount,
+                            'currency': 'RUB' if '₽' in price_text or 'руб' in price_text.lower() else 'unknown'
+                        }
+
+                # Ищем span с классом price
+                price_spans = tree.xpath('//span[contains(@class, "price")]')
+                for span in price_spans:
+                    price_text = span.text_content().strip()
+                    numeric_match = re.search(r'(\d+(?:[,.]\d+)?)', price_text)
+                    if numeric_match:
+                        amount = float(numeric_match.group(1).replace(',', '.'))
+                        return {
+                            'text': price_text,
+                            'amount': amount,
+                            'currency': 'RUB' if '₽' in price_text or 'руб' in price_text.lower() else 'unknown'
+                        }
+
+                # Ищем div с классом price
+                price_divs = tree.xpath('//div[contains(@class, "price")]')
+                for div in price_divs:
+                    price_text = div.text_content().strip()
+                    numeric_match = re.search(r'(\d+(?:[,.]\d+)?)', price_text)
+                    if numeric_match:
+                        amount = float(numeric_match.group(1).replace(',', '.'))
+                        return {
+                            'text': price_text,
+                            'amount': amount,
+                            'currency': 'RUB' if '₽' in price_text or 'руб' in price_text.lower() else 'unknown'
+                        }
+
+            except Exception as e:
+                pass
+
+        # Попытка 2: html.parser
+        try:
+            from html.parser import HTMLParser
+            class PriceParser(HTMLParser):
+                def __init__(self):
+                    super().__init__()
+                    self.price = None
+                    self.in_price_span = False
+                    self.in_price_div = False
+
+                def handle_starttag(self, tag, attrs):
+                    attrs_dict = dict(attrs)
+
+                    if tag == 'meta' and attrs_dict.get('property') == 'product:price:amount':
+                        content = attrs_dict.get('content', '').strip()
+                        if content:
+                            numeric_match = re.search(r'(\d+(?:[,.]\d+)?)', content)
+                            if numeric_match:
+                                self.price = {
+                                    'text': content,
+                                    'amount': float(numeric_match.group(1).replace(',', '.')),
+                                    'currency': 'RUB' if '₽' in content or 'руб' in content.lower() else 'unknown'
+                                }
+
+                    elif tag == 'span' and 'price' in attrs_dict.get('class', ''):
+                        self.in_price_span = True
+
+                    elif tag == 'div' and 'price' in attrs_dict.get('class', ''):
+                        self.in_price_div = True
+
+                def handle_endtag(self, tag):
+                    if tag == 'span' and self.in_price_span:
+                        self.in_price_span = False
+                    elif tag == 'div' and self.in_price_div:
+                        self.in_price_div = False
+
+                def handle_data(self, data):
+                    if (self.in_price_span or self.in_price_div) and not self.price:
+                        price_text = data.strip()
+                        numeric_match = re.search(r'(\d+(?:[,.]\d+)?)', price_text)
+                        if numeric_match:
+                            self.price = {
+                                'text': price_text,
+                                'amount': float(numeric_match.group(1).replace(',', '.')),
+                                'currency': 'RUB' if '₽' in price_text or 'руб' in price_text.lower() else 'unknown'
+                            }
+
+            parser = PriceParser()
+            parser.feed(self.html)
+
+            if parser.price:
+                return parser.price
+
+        except Exception as e:
+            pass
+
+        # Попытка 3: regex
         price_patterns = [
             r'<span[^>]*class="[^"]*price[^"]*"[^>]*>([^<]+)</span>',
             r'<div[^>]*class="[^"]*price[^"]*"[^>]*>([^<]+)</div>',
@@ -882,12 +1705,12 @@ class FastDOMParser:
             match = re.search(pattern, self.html, re.IGNORECASE)
             if match:
                 price_text = match.group(1).strip()
-                # Извлечение числового значения
                 numeric_match = re.search(r'(\d+(?:[,.]\d+)?)', price_text)
                 if numeric_match:
+                    amount = float(numeric_match.group(1).replace(',', '.'))
                     return {
                         'text': price_text,
-                        'amount': float(numeric_match.group(1).replace(',', '.')),
+                        'amount': amount,
                         'currency': 'RUB' if '₽' in price_text or 'руб' in price_text.lower() else 'unknown'
                     }
 
@@ -898,8 +1721,119 @@ class FastDOMParser:
         }
 
     def _extract_rating(self) -> Dict[str, Any]:
-        """Извлечение рейтинга товара."""
-        # Поиск рейтинга
+        """Извлечение рейтинга товара с многоуровневым fallback: lxml > html.parser > regex."""
+
+        # Попытка 1: lxml
+        if lxml_available:
+            try:
+                tree = lxml.html.fromstring(self.html)
+
+                # Ищем мета тег с рейтингом
+                meta_rating = tree.xpath('//meta[@property="ratingValue"]/@content')
+                if meta_rating:
+                    rating_text = meta_rating[0].strip()
+                    rating_match = re.search(r'(\d+(?:[.,]\d+)?)', rating_text)
+                    if rating_match:
+                        rating = float(rating_match.group(1).replace(',', '.'))
+                        if 0 <= rating <= 5:
+                            return {
+                                'text': rating_text,
+                                'value': rating,
+                                'max_value': 5.0
+                            }
+
+                # Ищем span с классом rating
+                rating_spans = tree.xpath('//span[contains(@class, "rating")]')
+                for span in rating_spans:
+                    rating_text = span.text_content().strip()
+                    rating_match = re.search(r'(\d+(?:[.,]\d+)?)', rating_text)
+                    if rating_match:
+                        rating = float(rating_match.group(1).replace(',', '.'))
+                        if 0 <= rating <= 5:
+                            return {
+                                'text': rating_text,
+                                'value': rating,
+                                'max_value': 5.0
+                            }
+
+                # Ищем div с классом rating
+                rating_divs = tree.xpath('//div[contains(@class, "rating")]')
+                for div in rating_divs:
+                    rating_text = div.text_content().strip()
+                    rating_match = re.search(r'(\d+(?:[.,]\d+)?)', rating_text)
+                    if rating_match:
+                        rating = float(rating_match.group(1).replace(',', '.'))
+                        if 0 <= rating <= 5:
+                            return {
+                                'text': rating_text,
+                                'value': rating,
+                                'max_value': 5.0
+                            }
+
+            except Exception as e:
+                pass
+
+        # Попытка 2: html.parser
+        try:
+            from html.parser import HTMLParser
+            class RatingParser(HTMLParser):
+                def __init__(self):
+                    super().__init__()
+                    self.rating = None
+                    self.in_rating_span = False
+                    self.in_rating_div = False
+
+                def handle_starttag(self, tag, attrs):
+                    attrs_dict = dict(attrs)
+
+                    if tag == 'meta' and attrs_dict.get('property') == 'ratingValue':
+                        content = attrs_dict.get('content', '').strip()
+                        if content:
+                            rating_match = re.search(r'(\d+(?:[.,]\d+)?)', content)
+                            if rating_match:
+                                rating = float(rating_match.group(1).replace(',', '.'))
+                                if 0 <= rating <= 5 and not self.rating:
+                                    self.rating = {
+                                        'text': content,
+                                        'value': rating,
+                                        'max_value': 5.0
+                                    }
+
+                    elif tag == 'span' and 'rating' in attrs_dict.get('class', ''):
+                        self.in_rating_span = True
+
+                    elif tag == 'div' and 'rating' in attrs_dict.get('class', ''):
+                        self.in_rating_div = True
+
+                def handle_endtag(self, tag):
+                    if tag == 'span' and self.in_rating_span:
+                        self.in_rating_span = False
+                    elif tag == 'div' and self.in_rating_div:
+                        self.in_rating_div = False
+
+                def handle_data(self, data):
+                    if (self.in_rating_span or self.in_rating_div) and not self.rating:
+                        rating_text = data.strip()
+                        rating_match = re.search(r'(\d+(?:[.,]\d+)?)', rating_text)
+                        if rating_match:
+                            rating = float(rating_match.group(1).replace(',', '.'))
+                            if 0 <= rating <= 5:
+                                self.rating = {
+                                    'text': rating_text,
+                                    'value': rating,
+                                    'max_value': 5.0
+                                }
+
+            parser = RatingParser()
+            parser.feed(self.html)
+
+            if parser.rating:
+                return parser.rating
+
+        except Exception as e:
+            pass
+
+        # Попытка 3: regex
         rating_patterns = [
             r'<span[^>]*class="[^"]*rating[^"]*"[^>]*>([^<]+)</span>',
             r'<div[^>]*class="[^"]*rating[^"]*"[^>]*>([^<]+)</div>',
@@ -910,11 +1844,10 @@ class FastDOMParser:
             match = re.search(pattern, self.html, re.IGNORECASE)
             if match:
                 rating_text = match.group(1).strip()
-                # Извлечение числового значения рейтинга
                 rating_match = re.search(r'(\d+(?:[.,]\d+)?)', rating_text)
                 if rating_match:
                     rating = float(rating_match.group(1).replace(',', '.'))
-                    if 0 <= rating <= 5:  # Проверка валидного диапазона
+                    if 0 <= rating <= 5:
                         return {
                             'text': rating_text,
                             'value': rating,
@@ -1028,7 +1961,7 @@ def _diagnose_variable_access(variable_name: str) -> Dict[str, Any]:
     Расширенная диагностика способов доступа к переменным.
     Тестирует разные методы доступа и логирует результаты.
     """
-    js.sendMessageToChat({"content": f"Python: 🔍 ===== ДИАГНОСТИКА ДОСТУПА К '{variable_name}' ====="})
+    console_log(f"🔍 ===== ДИАГНОСТИКА ДОСТУПА К '{variable_name}' =====")
 
     methods = {}
     result = None
@@ -1043,15 +1976,15 @@ def _diagnose_variable_access(variable_name: str) -> Dict[str, Any]:
             'type': type(result).__name__,
             'length': len(str(result)) if result is not None else 0
         }
-        js.sendMessageToChat({"content": f"Python: ✅ globals()['{variable_name}'] = {result} (тип: {type(result).__name__})"})
+        console_log(f"✅ globals()['{variable_name}'] = {result} (тип: {type(result).__name__})")
     except KeyError as e:
         methods['globals_direct'] = {'success': False, 'error': 'KeyError', 'details': str(e)}
         error_details['globals_direct'] = str(e)
-        js.sendMessageToChat({"content": f"Python: ❌ globals()['{variable_name}'] - KeyError: {e}"})
+        console_log(f"❌ globals()['{variable_name}'] - KeyError: {e}")
     except Exception as e:
         methods['globals_direct'] = {'success': False, 'error': type(e).__name__, 'details': str(e)}
         error_details['globals_direct'] = str(e)
-        js.sendMessageToChat({"content": f"Python: ❌ globals()['{variable_name}'] - {type(e).__name__}: {e}"})
+        console_log(f"❌ globals()['{variable_name}'] - {type(e).__name__}: {e}")
 
     # Метод 2: pyodide.globals.get()
     try:
@@ -1063,13 +1996,13 @@ def _diagnose_variable_access(variable_name: str) -> Dict[str, Any]:
             'length': len(str(pyodide_result)) if pyodide_result is not None else 0
         }
         if pyodide_result != result:
-            js.sendMessageToChat({"content": f"Python: ⚠️ pyodide.globals.get('{variable_name}') = {pyodide_result} (ОТЛИЧАЕТСЯ!)"})
+            console_log(f"⚠️ pyodide.globals.get('{variable_name}') = {pyodide_result} (ОТЛИЧАЕТСЯ!)")
         else:
-            js.sendMessageToChat({"content": f"Python: ✅ pyodide.globals.get('{variable_name}') = {pyodide_result} (совпадает)"})
+            console_log(f"✅ pyodide.globals.get('{variable_name}') = {pyodide_result} (совпадает)")
     except Exception as e:
         methods['pyodide_globals_get'] = {'success': False, 'error': type(e).__name__, 'details': str(e)}
         error_details['pyodide_globals_get'] = str(e)
-        js.sendMessageToChat({"content": f"Python: ❌ pyodide.globals.get('{variable_name}') - {type(e).__name__}: {e}"})
+        console_log(f"❌ pyodide.globals.get('{variable_name}') - {type(e).__name__}: {e}")
 
     # Метод 3: hasattr + getattr
     try:
@@ -1081,14 +2014,14 @@ def _diagnose_variable_access(variable_name: str) -> Dict[str, Any]:
                 'type': type(getattr_result).__name__,
                 'length': len(str(getattr_result)) if getattr_result is not None else 0
             }
-            js.sendMessageToChat({"content": f"Python: ✅ getattr(pyodide.globals, '{variable_name}') = {getattr_result}"})
+            console_log(f"✅ getattr(pyodide.globals, '{variable_name}') = {getattr_result}")
         else:
             methods['pyodide_getattr'] = {'success': False, 'error': 'AttributeError', 'details': f"hasattr вернул False"}
-            js.sendMessageToChat({"content": f"Python: ❌ hasattr(pyodide.globals, '{variable_name}') вернул False"})
+            console_log(f"❌ hasattr(pyodide.globals, '{variable_name}') вернул False")
     except Exception as e:
         methods['pyodide_getattr'] = {'success': False, 'error': type(e).__name__, 'details': str(e)}
         error_details['pyodide_getattr'] = str(e)
-        js.sendMessageToChat({"content": f"Python: ❌ getattr(pyodide.globals, '{variable_name}') - {type(e).__name__}: {e}"})
+        console_log(f"❌ getattr(pyodide.globals, '{variable_name}') - {type(e).__name__}: {e}")
 
     # Метод 4: Проверка через dir()
     try:
@@ -1100,23 +2033,23 @@ def _diagnose_variable_access(variable_name: str) -> Dict[str, Any]:
             'variable_in_globals': variable_name in globals_keys,
             'variable_in_pyodide': variable_name in pyodide_keys
         }
-        js.sendMessageToChat({"content": f"Python: 📊 Ключ '{variable_name}' в globals: {variable_name in globals_keys}"})
-        js.sendMessageToChat({"content": f"Python: 📊 Ключ '{variable_name}' в pyodide.globals: {variable_name in pyodide_keys}"})
+        console_log(f"📊 Ключ '{variable_name}' в globals: {variable_name in globals_keys}")
+        console_log(f"📊 Ключ '{variable_name}' в pyodide.globals: {variable_name in pyodide_keys}")
     except Exception as e:
         methods['globals_keys'] = {'success': False, 'error': type(e).__name__, 'details': str(e)}
-        js.sendMessageToChat({"content": f"Python: ❌ Ошибка проверки ключей: {e}"})
+        console_log(f"❌ Ошибка проверки ключей: {e}")
 
     # Рекомендация лучшего метода
     successful_methods = [k for k, v in methods.items() if isinstance(v, dict) and v.get('success', False)]
     if successful_methods:
         best_method = successful_methods[0]  # Первый успешный метод
-        js.sendMessageToChat({"content": f"Python: 🎯 РЕКОМЕНДУЕМЫЙ МЕТОД: {best_method}"})
+        console_log(f"🎯 РЕКОМЕНДУЕМЫЙ МЕТОД: {best_method}")
         if result is not None:
-            js.sendMessageToChat({"content": f"Python: 📋 ИСПОЛЬЗУЕМ ЗНАЧЕНИЕ: {result}"})
+            console_log(f"📋 ИСПОЛЬЗУЕМ ЗНАЧЕНИЕ: {result}")
     else:
-        js.sendMessageToChat({"content": "Python: ❌ НИ ОДИН МЕТОД НЕ СРАБОТАЛ!"})
+        console_log("❌ НИ ОДИН МЕТОД НЕ СРАБОТАЛ!")
 
-    js.sendMessageToChat({"content": f"Python: 🔍 ===== КОНЕЦ ДИАГНОСТИКИ '{variable_name}' ====="})
+    console_log(f"🔍 ===== КОНЕЦ ДИАГНОСТИКИ '{variable_name}' =====")
 
     return {
         'variable_name': variable_name,
@@ -1155,103 +2088,103 @@ def analyze_ozon_product() -> Dict[str, Any]:
         # Диагностика состояния globals
         try:
             all_globals = globals()
-            js.sendMessageToChat({"content": f"Python: 📊 Доступно переменных в globals: {len(all_globals)}"})
-            js.sendMessageToChat({"content": f"Python: 📋 Ключи в globals: {list(all_globals.keys())[:10]}..."})
+            console_log(f"Доступно переменных в globals: {len(all_globals)}")
+            console_log(f"Ключи в globals: {list(all_globals.keys())[:10]}...")
         except Exception as e:
-            js.sendMessageToChat({"content": f"Python: ⚠️ Не удалось получить список всех переменных: {e}"})
+            console_log(f"Не удалось получить список всех переменных: {e}")
 
         # Чтение метаданных с оптимизированным логированием
         try:
             chunk_count = globals()['page_html_chunk_count']
-            logger.log(f"Python: ✅ page_html_chunk_count = {chunk_count}", "metadata_chunk_count")
+            console_log(f"page_html_chunk_count = {chunk_count}")
         except KeyError as e:
-            logger.log(f"Python: ❌ page_html_chunk_count отсутствует в globals(): {e}", "error", force=True)
+            chat_message(f"page_html_chunk_count отсутствует в globals(): {e}")
             raise ValueError(f"page_html_chunk_count отсутствует в globals(): {e}")
         except Exception as e:
-            logger.log(f"Python: ❌ Ошибка чтения page_html_chunk_count: {e}", "error", force=True)
+            chat_message(f"Ошибка чтения page_html_chunk_count: {e}")
             raise ValueError(f"Ошибка чтения page_html_chunk_count: {e}")
 
         try:
             total_length = globals()['page_html_total_length']
-            logger.log(f"Python: ✅ page_html_total_length = {total_length}", "metadata_total_length")
+            console_log(f"page_html_total_length = {total_length}")
         except KeyError as e:
-            logger.log(f"Python: ❌ page_html_total_length отсутствует в globals(): {e}", "error", force=True)
+            chat_message(f"page_html_total_length отсутствует в globals(): {e}")
             raise ValueError(f"page_html_total_length отсутствует в globals(): {e}")
         except Exception as e:
-            logger.log(f"Python: ❌ Ошибка чтения page_html_total_length: {e}", "error", force=True)
+            chat_message(f"Ошибка чтения page_html_total_length: {e}")
             raise ValueError(f"Ошибка чтения page_html_total_length: {e}")
 
         # Финальное логирование результатов диагностики
-        js.sendMessageToChat({"content": f"Python: ✅ Метаданные прочитаны: chunk_count={chunk_count}, total_length={total_length}"})
-        js.sendMessageToChat({"content": "Python: 📊 Метод доступа: globals()"})
+        console_log(f"Метаданные прочитаны: chunk_count={chunk_count}, total_length={total_length}")
+        console_log("Метод доступа: globals()")
 
         # Валидация метаданных
         if chunk_count is None:
-            js.sendMessageToChat({"content": "Python: ❌ page_html_chunk_count отсутствует в pyodide.globals"})
+            chat_message("page_html_chunk_count отсутствует в pyodide.globals")
             raise ValueError("Метаданные page_html_chunk_count отсутствует в pyodide.globals")
 
         if total_length is None:
-            js.sendMessageToChat({"content": "Python: ❌ page_html_total_length отсутствует в pyodide.globals"})
+            chat_message("page_html_total_length отсутствует в pyodide.globals")
             raise ValueError("Метаданные page_html_total_length отсутствует в pyodide.globals")
 
-        js.sendMessageToChat({"content": "Python: ✅ Все метаданные найдены и не равны None"})
+        console_log("Все метаданные найдены и не равны None")
 
         try:
             chunk_count = int(chunk_count)
             total_length = int(total_length)
-            js.sendMessageToChat({"content": f"Python: ✅ Метаданные валидны: chunk_count={chunk_count}, total_length={total_length}"})
+            console_log(f"Метаданные валидны: chunk_count={chunk_count}, total_length={total_length}")
         except (ValueError, TypeError) as e:
-            js.sendMessageToChat({"content": f"Python: ❌ Ошибка преобразования метаданных: {e}"})
+            chat_message(f"Ошибка преобразования метаданных: {e}")
             raise ValueError(f"Метаданные должны быть числами: {e}")
 
         # Шаг 2: Чтение всех чанков из Python globals
-        js.sendMessageToChat({"content": f"Python: 🔧 Шаг 2: Чтение {chunk_count} чанков из Python globals"})
+        console_log(f"Чтение {chunk_count} чанков из Python globals")
         chunks = []
         total_chunks_size = 0
         chunk_diagnostics = []  # Для сбора диагностики всех чанков
 
         for i in range(chunk_count):
             chunk_key = f'page_html_chunk_{i}'
-            js.sendMessageToChat({"content": f"Python: 🔍 ===== ЧТЕНИЕ ЧАНКА {i} ====="})
-            js.sendMessageToChat({"content": f"Python: 🔍 Ключ чанка: {chunk_key}"})
+            console_log(f"===== ЧТЕНИЕ ЧАНКА {i} =====")
+            console_log(f"Ключ чанка: {chunk_key}")
 
             # Чтение чанка через globals()
             try:
                 chunk = globals()[chunk_key]
-                js.sendMessageToChat({"content": f"Python: ✅ {chunk_key} прочитан: тип={type(chunk).__name__}, длина={len(str(chunk))} символов"})
+                console_log(f"{chunk_key} прочитан: тип={type(chunk).__name__}, длина={len(str(chunk))} символов")
             except KeyError as e:
-                js.sendMessageToChat({"content": f"Python: ❌ {chunk_key} отсутствует в globals(): {e}"})
+                chat_message(f"{chunk_key} отсутствует в globals(): {e}")
                 raise ValueError(f"{chunk_key} отсутствует в globals(): {e}")
             except Exception as e:
-                js.sendMessageToChat({"content": f"Python: ❌ Ошибка чтения {chunk_key}: {e}"})
+                chat_message(f"Ошибка чтения {chunk_key}: {e}")
                 raise ValueError(f"Ошибка чтения {chunk_key}: {e}")
 
             # Дополнительная валидация
             if chunk is None:
-                js.sendMessageToChat({"content": f"Python: ❌ Чанк {chunk_key} равен None"})
-                js.sendMessageToChat({"content": f"Python: 📊 Доступ через globals() завершен с ошибкой"})
+                chat_message(f"Чанк {chunk_key} равен None")
+                console_log("Доступ через globals() завершен с ошибкой")
                 raise ValueError(f"Чанк {chunk_key} отсутствует в globals")
 
             # Проверка типа и конвертация
             try:
                 if not isinstance(chunk, str):
-                    js.sendMessageToChat({"content": f"Python: 🔄 Конвертация чанка {i} из {type(chunk)} в строку"})
+                    console_log(f"Конвертация чанка {i} из {type(chunk)} в строку")
                     chunk_str = str(chunk)
                 else:
                     chunk_str = chunk
 
-                js.sendMessageToChat({"content": f"Python: ✅ Чанк {i} прочитан: тип={type(chunk).__name__}, длина={len(chunk_str)}"})
+                console_log(f"Чанк {i} прочитан: тип={type(chunk).__name__}, длина={len(chunk_str)}")
 
             except Exception as e:
-                js.sendMessageToChat({"content": f"Python: ❌ Ошибка конвертации чанка {chunk_key}: {e}"})
-                js.sendMessageToChat({"content": f"Python: 📊 Состояние на момент ошибки: прочитано {len(chunks)} чанков"})
+                chat_message(f"Ошибка конвертации чанка {chunk_key}: {e}")
+                console_log(f"Состояние на момент ошибки: прочитано {len(chunks)} чанков")
                 raise ValueError(f"Не удалось конвертировать чанк {chunk_key}: {e}")
 
             # Проверка целостности чанка
             if len(chunk_str.strip()) == 0:
-                js.sendMessageToChat({"content": f"Python: ⚠️ Чанк {chunk_key} пустой после strip"})
+                console_log(f"Чанк {chunk_key} пустой после strip")
             elif len(chunk_str) < 10:
-                js.sendMessageToChat({"content": f"Python: ⚠️ Чанк {chunk_key} слишком короткий: {len(chunk_str)} символов"})
+                console_log(f"Чанк {chunk_key} слишком короткий: {len(chunk_str)} символов")
 
             # Сохранение диагностики
             chunk_diagnostics.append({
@@ -1265,51 +2198,51 @@ def analyze_ozon_product() -> Dict[str, Any]:
 
             chunks.append(chunk_str)
             total_chunks_size += len(chunk_str)
-            js.sendMessageToChat({"content": f"Python: 📊 Чанк {i} добавлен: накоплено {len(chunks)} чанков, размер={total_chunks_size} символов"})
+            console_log(f"Чанк {i} добавлен: накоплено {len(chunks)} чанков, размер={total_chunks_size} символов")
 
         # Итоговый отчет по чанкам
-        js.sendMessageToChat({"content": f"Python: 📊 ===== ОТЧЕТ ПО ЧАНКАМ ====="})
-        js.sendMessageToChat({"content": f"Python: ✅ Всего прочитано: {len(chunks)} чанков"})
-        js.sendMessageToChat({"content": f"Python: 📊 Общий размер: {total_chunks_size} символов"})
+        console_log("===== ОТЧЕТ ПО ЧАНКАМ =====")
+        console_log(f"Всего прочитано: {len(chunks)} чанков")
+        console_log(f"Общий размер: {total_chunks_size} символов")
 
         # Проверка на пустые чанки
         empty_chunks = [d for d in chunk_diagnostics if d['is_empty']]
         if empty_chunks:
-            js.sendMessageToChat({"content": f"Python: ⚠️ Найдено пустых чанков: {len(empty_chunks)}"})
+            console_log(f"Найдено пустых чанков: {len(empty_chunks)}")
             for ec in empty_chunks:
-                js.sendMessageToChat({"content": f"Python: ⚠️ Пустой чанк: {ec['chunk_key']}"})
+                console_log(f"Пустой чанк: {ec['chunk_key']}")
 
         # Проверка последовательности методов доступа
         methods_used = list(set(d['method_used'] for d in chunk_diagnostics if d['method_used']))
-        js.sendMessageToChat({"content": f"Python: 📊 Методы доступа к чанкам: {methods_used}"})
+        console_log(f"Методы доступа к чанкам: {methods_used}")
 
         # Шаг 3: Сборка полного HTML из чанков
-        js.sendMessageToChat({"content": "Python: 🔧 Шаг 3: Сборка полного HTML из чанков"})
+        console_log("Сборка полного HTML из чанков")
         page_html = ''.join(chunks)
         assembled_length = len(page_html)
-        js.sendMessageToChat({"content": f"Python: ✅ HTML собран: длина={assembled_length} символов"})
+        console_log(f"HTML собран: длина={assembled_length} символов")
 
         # Шаг 4: Расширенная проверка целостности собранного HTML
-        js.sendMessageToChat({"content": "Python: 🔧 Шаг 4: Расширенная проверка целостности собранного HTML"})
-        js.sendMessageToChat({"content": f"Python: 📊 Ожидаемая длина: {total_length} символов"})
-        js.sendMessageToChat({"content": f"Python: 📊 Собранная длина: {assembled_length} символов"})
+        console_log("Расширенная проверка целостности собранного HTML")
+        console_log(f"Ожидаемая длина: {total_length} символов")
+        console_log(f"Собранная длина: {assembled_length} символов")
 
         # Детальная проверка соответствия длины
         length_difference = assembled_length - total_length
         length_match_percent = (assembled_length / total_length * 100) if total_length > 0 else 0
 
-        js.sendMessageToChat({"content": f"Python: 📊 Разница в длине: {length_difference} символов ({length_match_percent:.1f}%)"})
+        console_log(f"Разница в длине: {length_difference} символов ({length_match_percent:.1f}%)")
 
         if assembled_length != total_length:
             if assembled_length < total_length:
-                js.sendMessageToChat({"content": "Python: ❌ СТРОКА ОБРЕЗАНА! Возможна потеря данных."})
-                js.sendMessageToChat({"content": f"Python: 📊 Потеряно: {total_length - assembled_length} символов"})
+                chat_message("СТРОКА ОБРЕЗАНА! Возможна потеря данных.")
+                console_log(f"Потеряно: {total_length - assembled_length} символов")
             else:
-                js.sendMessageToChat({"content": "Python: ⚠️ Строка длиннее ожидаемой. Возможно, добавлены лишние данные."})
-                js.sendMessageToChat({"content": f"Python: 📊 Лишние: {assembled_length - total_length} символов"})
+                console_log("Строка длиннее ожидаемой. Возможно, добавлены лишние данные.")
+                console_log(f"Лишние: {assembled_length - total_length} символов")
 
         # Расширенная проверка структуры HTML
-        js.sendMessageToChat({"content": "Python: 🔍 Анализ структуры HTML..."})
+        console_log("Анализ структуры HTML...")
 
         has_html_tag = '<html' in page_html.lower()
         has_body_tag = '<body' in page_html.lower()
@@ -1327,32 +2260,32 @@ def analyze_ozon_product() -> Dict[str, Any]:
             '<script>': has_script_tag
         }
 
-        js.sendMessageToChat({"content": f"Python: 📊 Структура HTML: {structure_check}"})
+        console_log(f"Структура HTML: {structure_check}")
 
         # Подсчет найденных структурных элементов
         structure_score = sum(structure_check.values())
         max_structure_score = len(structure_check)
-        js.sendMessageToChat({"content": f"Python: 📊 Оценка структуры: {structure_score}/{max_structure_score}"})
+        console_log(f"Оценка структуры: {structure_score}/{max_structure_score}")
 
         # Детальный анализ тегов
-        js.sendMessageToChat({"content": "Python: 🔍 Детальный анализ HTML тегов..."})
+        console_log("Детальный анализ HTML тегов...")
 
         total_open_tags = page_html.count('<')
         total_close_tags = page_html.count('</')
         self_closing_tags = page_html.count('/>')
 
-        js.sendMessageToChat({"content": f"Python: 📊 Теги - всего: {total_open_tags}, закрывающих: {total_close_tags}, самозакрывающихся: {self_closing_tags}"})
+        console_log(f"Теги - всего: {total_open_tags}, закрывающих: {total_close_tags}, самозакрывающихся: {self_closing_tags}")
 
         # Расчет баланса тегов
         tag_balance = total_open_tags - total_close_tags - self_closing_tags
-        js.sendMessageToChat({"content": f"Python: 📊 Баланс тегов: {tag_balance}"})
+        console_log(f"Баланс тегов: {tag_balance}")
 
         if abs(tag_balance) > 5:
-            js.sendMessageToChat({"content": f"Python: ⚠️ ОБНАРУЖЕН ДИСБАЛАНС ТЕГОВ: {tag_balance}"})
+            console_log(f"ОБНАРУЖЕН ДИСБАЛАНС ТЕГОВ: {tag_balance}")
             if tag_balance > 0:
-                js.sendMessageToChat({"content": "Python: ⚠️ Больше незакрытых тегов - возможна обрезка"})
+                console_log("Больше незакрытых тегов - возможна обрезка")
             else:
-                js.sendMessageToChat({"content": "Python: ⚠️ Больше закрывающих тегов - возможны лишние данные"})
+                console_log("Больше закрывающих тегов - возможны лишние данные")
 
         # Проверка на специальные символы и кодировку
         has_entities = '&' in page_html and ';' in page_html
@@ -1362,71 +2295,71 @@ def analyze_ozon_product() -> Dict[str, Any]:
             'HTML_entities': has_entities,
             'Unicode_chars': has_unicode
         }
-        js.sendMessageToChat({"content": f"Python: 📊 Кодировка: {encoding_check}"})
+        console_log(f"Кодировка: {encoding_check}")
 
         # Финальная валидация HTML с расширенными проверками
-        js.sendMessageToChat({"content": "Python: 🔍 Финальная валидация HTML..."})
+        console_log("Финальная валидация HTML...")
 
         validation_errors = []
 
         if not isinstance(page_html, str):
             try:
                 page_html = str(page_html)
-                js.sendMessageToChat({"content": f"Python: 🔄 Конвертация HTML в строку: {type(page_html)}"})
+                console_log(f"Конвертация HTML в строку: {type(page_html)}")
             except Exception as e:
                 validation_errors.append(f"Не удалось конвертировать в строку: {e}")
 
         stripped_length = len(page_html.strip())
-        js.sendMessageToChat({"content": f"Python: 📊 Длина после strip: {stripped_length} символов"})
+        console_log(f"Длина после strip: {stripped_length} символов")
 
         if stripped_length < 50:
             validation_errors.append(f"HTML слишком короткий ({stripped_length} символов). Минимум 50 символов.")
 
         if not (has_html_tag or has_body_tag or has_div_tag):
             validation_errors.append("HTML не содержит типичных тегов. Возможно, это не полноценная страница.")
-            js.sendMessageToChat({"content": "Python: ⚠️ HTML не содержит типичных тегов"})
+            console_log("HTML не содержит типичных тегов")
 
         # Проверка первых и последних символов
         first_chars = page_html[:100] if len(page_html) > 100 else page_html
         last_chars = page_html[-100:] if len(page_html) > 100 else page_html
 
-        js.sendMessageToChat({"content": f"Python: 📊 Первые 100 символов: '{first_chars[:50]}...'"})
-        js.sendMessageToChat({"content": f"Python: 📊 Последние 100 символов: '...{last_chars[-50:]}'"})
+        console_log(f"Первые 100 символов: '{first_chars[:50]}...'")
+        console_log(f"Последние 100 символов: '...{last_chars[-50:]}'")
 
         if validation_errors:
             for error in validation_errors:
-                js.sendMessageToChat({"content": f"Python: ❌ {error}"})
+                chat_message(f"{error}")
             raise ValueError(f"Валидация HTML не пройдена: {'; '.join(validation_errors)}")
 
-        js.sendMessageToChat({"content": "Python: ✅ HTML прошел все проверки валидации"})
-        js.sendMessageToChat({"content": f"Python: 📊 Финальная длина HTML: {len(page_html)} символов"})
+        console_log("HTML прошел все проверки валидации")
+        console_log(f"Финальная длина HTML: {len(page_html)} символов")
 
         # Шаг 5: Финальное логирование перед анализом
-        js.sendMessageToChat({"content": "Python: 🔧 Шаг 5: Финальная подготовка к анализу"})
-        js.sendMessageToChat({"content": "Python: ✅ Данные из Python globals успешно прочитаны и собраны"})
-        js.sendMessageToChat({"content": f"Python: 📊 Финальная длина HTML: {len(page_html)} символов"})
-        js.sendMessageToChat({"content": f"Python: 📊 Эффективность передачи: {(len(page_html) / total_length * 100):.1f}% от ожидаемого"})
+        console_log("Финальная подготовка к анализу")
+        console_log("Данные из Python globals успешно прочитаны и собраны")
+        console_log(f"Финальная длина HTML: {len(page_html)} символов")
+        console_log(f"Эффективность передачи: {(len(page_html) / total_length * 100):.1f}% от ожидаемого")
 
         # Детальный отчет о производительности чтения данных
         total_read_time = (datetime.now() - read_start_time).total_seconds() * 1000
-        js.sendMessageToChat({"content": f"Python: ⏱️ Время чтения данных: {total_read_time:.1f}ms"})
-        js.sendMessageToChat({"content": f"Python: 📊 Скорость чтения: {(total_chunks_size / total_read_time * 1000):.0f} символов/сек"})
+        console_log(f"Время чтения данных: {total_read_time:.1f}ms")
+        console_log(f"Скорость чтения: {(total_chunks_size / total_read_time * 1000):.0f} символов/сек")
 
         # Проверка готовности к анализу
         analysis_ready = len(page_html) > 100 and (has_html_tag or has_body_tag or has_div_tag)
-        js.sendMessageToChat({"content": f"Python: 🎯 Готовность к анализу: {'✅ ДА' if analysis_ready else '❌ НЕТ'}"})
+        console_log(f"Готовность к анализу: {'✅ ДА' if analysis_ready else '❌ НЕТ'}")
 
         if not analysis_ready:
-            js.sendMessageToChat({"content": "Python: ⚠️ HTML недостаточно качественный для анализа"})
+            console_log("HTML недостаточно качественный для анализа")
             if len(page_html) <= 100:
-                js.sendMessageToChat({"content": "Python: ⚠️ Причина: HTML слишком короткий"})
+                console_log("Причина: HTML слишком короткий")
             if not (has_html_tag or has_body_tag or has_div_tag):
-                js.sendMessageToChat({"content": "Python: ⚠️ Причина: Отсутствуют базовые HTML теги"})
+                console_log("Причина: Отсутствуют базовые HTML теги")
 
-        js.sendMessageToChat({"content": "Python: 🚀 ===== НАЧИНАЕМ АНАЛИЗ СТРАНИЦЫ ТОВАРА ====="})
+        console_log("===== НАЧИНАЕМ АНАЛИЗ СТРАНИЦЫ ТОВАРА =====")
 
         # Статус сообщения - подтверждение запуска функции
-        js.sendMessageToChat({"content": "Python: 🎯 Анализ товара Ozon запущен"})
+        console_log("Анализ товара Ozon запущен")
 
         # Временная заглушка для парсера. В будущем здесь будет использоваться
         # библиотека `beautifulsoup4`, которая будет установлена как зависимость
@@ -1442,17 +2375,17 @@ def analyze_ozon_product() -> Dict[str, Any]:
             }
         
         analysis_start = datetime.now()
-        js.sendMessageToChat({"content": "Python: Начинаю анализ страницы товара..."})
+        console_log("Начинаю анализ страницы товара...")
 
         # Шаг 1: Оптимизированное извлечение структурированных данных со страницы
-        js.sendMessageToChat({"content": "Python: 🚀 Быстрый DOM парсинг..."})
+        console_log("Быстрый DOM парсинг...")
 
         fast_parser = FastDOMParser(page_html)
 
         # Выбираем метод парсинга в зависимости от размера документа
         if len(page_html) > 50000:  # > 50KB - используем потоковый парсинг
             product_info = fast_parser.extract_product_info_streaming(chunk_size=16384)
-            js.sendMessageToChat({"content": f"Python: 📄 Использован потоковый парсинг ({product_info.get('parsed_chunks', 'N/A')} чанков)"})
+            console_log(f"Использован потоковый парсинг ({product_info.get('parsed_chunks', 'N/A')} чанков)")
         else:
             product_info = fast_parser.extract_product_info()
 
@@ -1461,32 +2394,45 @@ def analyze_ozon_product() -> Dict[str, Any]:
         description = product_info['description']
         composition = product_info['composition']
 
+        # Проверка категории товара - прерываем анализ если не косметика
+        if not fast_parser.is_product_in_target_category(categories):
+            chat_message("Анализ прерван: товар не из категории косметики")
+            console_log("Анализ прерван: товар не из категории косметики")
+            return {
+                "status": "category_error",
+                "message": "Товар не принадлежит к категории косметики и ухода за собой"
+            }
+
+        # Промежуточное сообщение о начале анализа косметического товара
+        chat_message("Начинаю анализ косметического товара...")
+        console_log("Начинаю анализ косметического товара...")
+
         parsing_metrics = fast_parser.get_parsing_metrics()
-        js.sendMessageToChat({"content": f"Python: ✅ Парсинг завершен за {parsing_metrics['parsing_time_ms']}ms"})
+        console_log(f"Парсинг завершен за {parsing_metrics['parsing_time_ms']}ms")
 
         # Шаг 2: ОПТИМИЗИРОВАННОЕ ВЫПОЛНЕНИЕ AI вызовов с кешированием и группировкой
-        js.sendMessageToChat({"content": f"Python: 🚀 Запускаю оптимизированный AI анализ..."})
+        console_log("Запускаю оптимизированный AI анализ...")
 
         # Проверяем кеш перед выполнением AI вызовов
         cache_key_analysis = f"analysis:{hash(description[:100] + composition[:100])}"
         cached_analysis = memory_manager.get_cached_lru(cache_key_analysis)
 
         if cached_analysis:
-            js.sendMessageToChat({"content": f"Python: 📋 Найден кеш для анализа соответствия"})
+            console_log("Найден кеш для анализа соответствия")
             analysis_result = cached_analysis
         else:
             # Выполняем AI вызовы с улучшенной обработкой ошибок
             try:
                 analysis_result = _analyze_composition_vs_description(description, composition)
-                js.sendMessageToChat({"content": f"Python: ✅ Анализ соответствия завершен"})
+                console_log("Анализ соответствия завершен")
 
                 # Кешируем успешный результат
                 if analysis_result and isinstance(analysis_result, dict) and 'score' in analysis_result:
                     memory_manager.cache_lru(cache_key_analysis, analysis_result, max_age_seconds=1800)  # 30 мин
-                    js.sendMessageToChat({"content": f"Python: 💾 Результат анализа закэширован"})
+                    console_log("Результат анализа закэширован")
 
             except Exception as e:
-                js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка анализа соответствия: {e}"})
+                console_log(f"Ошибка анализа соответствия: {e}")
                 analysis_result = {"score": 5, "reasoning": f"Ошибка AI анализа: {str(e)}"}
 
         # Аналогично для поиска аналогов
@@ -1494,23 +2440,23 @@ def analyze_ozon_product() -> Dict[str, Any]:
         cached_analogs = memory_manager.get_cached_lru(cache_key_analogs)
 
         if cached_analogs:
-            js.sendMessageToChat({"content": f"Python: 📋 Найден кеш для поиска аналогов"})
+            console_log("Найден кеш для поиска аналогов")
             analogs = cached_analogs
         else:
             try:
                 analogs = _find_similar_products(categories, composition)
-                js.sendMessageToChat({"content": f"Python: ✅ Поиск аналогов завершен"})
+                console_log("Поиск аналогов завершен")
 
                 # Кешируем успешный результат
                 if analogs and isinstance(analogs, list) and len(analogs) > 0:
                     memory_manager.cache_lru(cache_key_analogs, analogs, max_age_seconds=3600)  # 1 час
-                    js.sendMessageToChat({"content": f"Python: 💾 Результат поиска аналогов закэширован"})
+                    console_log("Результат поиска аналогов закэширован")
 
             except Exception as e:
-                js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка поиска аналогов: {e}"})
+                console_log(f"Ошибка поиска аналогов: {e}")
                 analogs = [{"name": "Ошибка поиска аналогов", "error": str(e)}]
 
-        js.sendMessageToChat({"content": f"Python: ✅ Оптимизированный анализ завершен!"})
+        console_log("Оптимизированный анализ завершен!")
         
         # Шаг 4: Проверяем настройки плагина, заданные пользователем в UI
         enable_deep_analysis = safe_js_get_setting("enable_deep_analysis", False)
@@ -1566,11 +2512,29 @@ def analyze_ozon_product() -> Dict[str, Any]:
                 "message": "Обнаружены несоответствия. Хотите провести более глубокий анализ?" if offer_deep_analysis else ""
             }
         }
-        
+
+        # Детальное логирование полных данных в консоль для разработчиков
+        console_log("=== ДЕТАЛЬНЫЕ ДАННЫЕ АНАЛИЗА ===")
+        console_log(f"Название товара: {product_info['title']}")
+        console_log(f"Полное описание ({len(description)} символов): {description}")
+        console_log(f"Полный состав ({len(composition)} символов): {composition}")
+        console_log(f"Категории: {categories}")
+        console_log(f"Цена: {product_info['price']}")
+        console_log(f"Рейтинг: {product_info['rating']}")
+        console_log("=== КОНЕЦ ДЕТАЛЬНЫХ ДАННЫХ ===")
+
+        # Расширенное финальное сообщение в чат с превью данных
+        title_preview = product_info['title'][:50] + "..." if len(product_info['title']) > 50 else product_info['title']
+        desc_length = len(description)
+        comp_length = len(composition)
+        category_info = categories[0] if categories else "не определена"
+
+        chat_message(f"Анализ завершен: '{title_preview}' | Описание: {desc_length} симв. | Состав: {comp_length} симв. | Категория: {category_info} | Оценка: {analysis_result.get('score', 'N/A')}/10")
+
         return result
         
     except Exception as e:
-        js.sendMessageToChat({"content": f"Python: Критическая ошибка при анализе - {e}"})
+        chat_message(f"Критическая ошибка при анализе - {e}")
         # Возвращаем стандартизированный объект ошибки
         return { "status": "error", "message": f"Ошибка анализа товара: {str(e)}" }
 
@@ -1580,7 +2544,7 @@ async def pre_warm_pyodide_engine() -> Dict[str, Any]:
     Это уменьшает cold start время с 25-35 секунд до менее 5 секунд.
     """
     try:
-        js.sendMessageToChat({"content": "Python: 🚀 Предварительный разогрев Pyodide..."})
+        console_log("🚀 Предварительный разогрев Pyodide...")
 
         # Вызываем функцию pre-warm из хоста
         warmResult = await js.preWarmPyodide()
@@ -1589,7 +2553,7 @@ async def pre_warm_pyodide_engine() -> Dict[str, Any]:
         if success:
             duration = safe_dict_get(warmResult, 'preWarmDuration', 0)
             message = safe_dict_get(warmResult, 'message', 'Pre-warm completed')
-            js.sendMessageToChat({"content": f"Python: ✅ Разогрев завершен! Время: {duration}ms"})
+            console_log(f"✅ Разогрев завершен! Время: {duration}ms")
 
             return {
                 "status": "success",
@@ -1599,7 +2563,7 @@ async def pre_warm_pyodide_engine() -> Dict[str, Any]:
             }
         else:
             errorMsg = warmResult.get('message', 'Unknown error')
-            js.sendMessageToChat({"content": f"Python: ⚠️ Разогрев не удался: {errorMsg}"})
+            console_log(f"⚠️ Разогрев не удался: {errorMsg}")
 
             return {
                 "status": "info",
@@ -1608,7 +2572,7 @@ async def pre_warm_pyodide_engine() -> Dict[str, Any]:
             }
 
     except Exception as e:
-        js.sendMessageToChat({"content": f"Python: ❌Ошибка разогрева Pyodide: {e}"})
+        console_log(f"❌Ошибка разогрева Pyodide: {e}")
         return {
             "status": "error",
             "message": f"Pre-warm failed: {str(e)}",
@@ -1626,8 +2590,8 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
     if not description or not composition:
         return { "status": "error", "message": "Описание или состав не были переданы для глубокого анализа."}
 
-    js.sendMessageToChat({"content": "Python: Запускаю глубокий анализ..."})
-    
+    console_log("Запускаю глубокий анализ...")
+
     # Промпт для "экспертного" анализа.
     prompt = f"""
     Проведи глубокий анализ товара с медицинской и научной точки зрения.
@@ -1639,24 +2603,24 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
     3. Эффективность по сравнению с аналогами.
     Верни детальный анализ в структурированном виде (используй Markdown).
     """
-    
+
     try:
         # "deep_analysis" - это псевдоним из `manifest.json` этого плагина.
         # Платформа сама определит, какую реальную модель (например, gemini-pro)
         # использовать, и подставит соответствующий API-ключ.
-        result = await _call_ai_model("deep_analysis", prompt)
+        result = ozon_analyzer_server._call_ai_model("deep_analysis", prompt)
 
         # Проверка типа данных от AI в perform_deep_analysis
         if not isinstance(result, str):
-            js.sendMessageToChat({"content": f"Python: 🔄 Deep analysis AI вернул {type(result)} вместо строки, конвертируем"})
+            console_log(f"🔄 Deep analysis AI вернул {type(result)} вместо строки, конвертируем")
             result = str(result)
         elif result is None:
-            js.sendMessageToChat({"content": f"Python: ⚠️ Deep analysis AI вернул None"})
+            console_log(f"⚠️ Deep analysis AI вернул None")
             result = "Отчет не сформирован"
 
         return { "deep_analysis_report": result }
     except Exception as e:
-        js.sendMessageToChat({"content": f"Python: ❌ Ошибка в perform_deep_analysis: {str(e)}"})
+        chat_message(f"Ошибка в perform_deep_analysis: {str(e)}")
         return { "status": "error", "message": f"Ошибка глубокого анализа: {str(e)}" }
 
 # ==============================================================================
@@ -1671,14 +2635,14 @@ def _check_html_integrity(html_content: str, source_name: str) -> None:
     Проверяет целостность HTML контента для выявления возможного обрезания данных.
     """
     try:
-        js.sendMessageToChat({"content": f"Python: 🔍 Проверка целостности HTML ({source_name})"})
+        console_log(f"🔍 Проверка целостности HTML ({source_name})")
 
         if not html_content or not isinstance(html_content, str):
-            js.sendMessageToChat({"content": f"Python: ❌ HTML контент пустой или не является строкой"})
+            console_log(f"❌ HTML контент пустой или не является строкой")
             return
 
         content_length = len(html_content)
-        js.sendMessageToChat({"content": f"Python: 📊 Длина контента: {content_length} символов"})
+        console_log(f"📊 Длина контента: {content_length} символов")
 
         # Проверка на незакрытые HTML теги
         open_tags = len(re.findall(r'<[^/][^>]*>', html_content))
@@ -1686,14 +2650,14 @@ def _check_html_integrity(html_content: str, source_name: str) -> None:
         self_closing_tags = len(re.findall(r'<[^>]+/>', html_content))
 
         tag_balance = open_tags - close_tags
-        js.sendMessageToChat({"content": f"Python: 📊 HTML теги: открытых={open_tags}, закрытых={close_tags}, самозакрывающихся={self_closing_tags}"})
+        console_log(f"📊 HTML теги: открытых={open_tags}, закрытых={close_tags}, самозакрывающихся={self_closing_tags}")
 
         if abs(tag_balance) > 3:  # Допускаем небольшую погрешность
-            js.sendMessageToChat({"content": f"Python: ⚠️ ОБНАРУЖЕН ДИСБАЛАНС ТЕГОВ: {tag_balance}"})
+            console_log(f"⚠️ ОБНАРУЖЕН ДИСБАЛАНС ТЕГОВ: {tag_balance}")
             if tag_balance > 0:
-                js.sendMessageToChat({"content": "Python: ⚠️ Больше открытых тегов - возможна обрезка в конце"})
+                console_log("⚠️ Больше открытых тегов - возможна обрезка в конце")
             else:
-                js.sendMessageToChat({"content": "Python: ⚠️ Больше закрытых тегов - возможна обрезка в начале"})
+                console_log("⚠️ Больше закрытых тегов - возможна обрезка в начале")
 
         # Проверка на наличие основных HTML структур
         has_html = '<html' in html_content.lower()
@@ -1708,32 +2672,32 @@ def _check_html_integrity(html_content: str, source_name: str) -> None:
             '<body>': has_body
         }
 
-        js.sendMessageToChat({"content": f"Python: 📊 HTML структура: {structure_check}"})
+        console_log(f"📊 HTML структура: {structure_check}")
 
         # Проверка на незавершенные атрибуты
         incomplete_attrs = len(re.findall(r'<[^>]*\w+="[^"]*$', html_content))  # незавершенные атрибуты
         if incomplete_attrs > 0:
-            js.sendMessageToChat({"content": f"Python: ⚠️ Найдено {incomplete_attrs} незавершенных атрибутов - возможна обрезка"})
+            console_log(f"⚠️ Найдено {incomplete_attrs} незавершенных атрибутов - возможна обрезка")
 
         # Проверка на незавершенные комментарии
         incomplete_comments = len(re.findall(r'<!--[^>]*$', html_content))  # незавершенные комментарии
         if incomplete_comments > 0:
-            js.sendMessageToChat({"content": f"Python: ⚠️ Найдено {incomplete_comments} незавершенных комментариев - возможна обрезка"})
+            console_log(f"⚠️ Найдено {incomplete_comments} незавершенных комментариев - возможна обрезка")
 
         # Проверка на незавершенные скрипты/стили
         incomplete_scripts = len(re.findall(r'<script[^>]*>[^<]*$', html_content)) - len(re.findall(r'<script[^>]*>[\s\S]*?</script>', html_content))
         incomplete_styles = len(re.findall(r'<style[^>]*>[^<]*$', html_content)) - len(re.findall(r'<style[^>]*>[\s\S]*?</style>', html_content))
 
         if incomplete_scripts > 0:
-            js.sendMessageToChat({"content": f"Python: ⚠️ Найдено {incomplete_scripts} незавершенных <script> тегов"})
+            console_log(f"⚠️ Найдено {incomplete_scripts} незавершенных <script> тегов")
         if incomplete_styles > 0:
-            js.sendMessageToChat({"content": f"Python: ⚠️ Найдено {incomplete_styles} незавершенных <style> тегов"})
+            console_log(f"⚠️ Найдено {incomplete_styles} незавершенных <style> тегов")
 
         # Проверка на неожиданное окончание
         last_chars = html_content[-50:] if len(html_content) > 50 else html_content
         if not last_chars.strip().endswith(('>', '</html>', '</body>', '</div>', '</span>', '</p>', '"', "'", '}', ']', ')', ';')):
-            js.sendMessageToChat({"content": f"Python: ⚠️ ПОДОЗРИТЕЛЬНОЕ ОКОНЧАНИЕ: '{last_chars[-20:]}'"})
-            js.sendMessageToChat({"content": "Python: ⚠️ Возможно, данные были обрезаны в конце строки"})
+            console_log(f"⚠️ ПОДОЗРИТЕЛЬНОЕ ОКОНЧАНИЕ: '{last_chars[-20:]}'")
+            console_log("⚠️ Возможно, данные были обрезаны в конце строки")
 
         # Общая оценка целостности
         integrity_score = 100
@@ -1753,12 +2717,12 @@ def _check_html_integrity(html_content: str, source_name: str) -> None:
             issues.append("незавершенные скрипты/стили")
 
         if integrity_score < 100:
-            js.sendMessageToChat({"content": f"Python: ⚠️ ЦЕЛОСТНОСТЬ HTML: {integrity_score}% ({', '.join(issues)})"})
+            console_log(f"⚠️ ЦЕЛОСТНОСТЬ HTML: {integrity_score}% ({', '.join(issues)})")
         else:
-            js.sendMessageToChat({"content": f"Python: ✅ ЦЕЛОСТНОСТЬ HTML: {integrity_score}% - контент выглядит полным"})
+            console_log(f"✅ ЦЕЛОСТНОСТЬ HTML: {integrity_score}% - контент выглядит полным")
 
     except Exception as e:
-        js.sendMessageToChat({"content": f"Python: ❌ Ошибка при проверке целостности HTML: {e}"})
+        console_log(f"❌ Ошибка при проверке целостности HTML: {e}")
 
 def _reconstruct_chunked_strings(input_data: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -1766,14 +2730,14 @@ def _reconstruct_chunked_strings(input_data: Dict[str, Any]) -> Dict[str, Any]:
     Возвращает копию данных с восстановленными строками.
     """
     try:
-        js.sendMessageToChat({"content": "Python: 🔧 ===== РЕКОНСТРУКЦИЯ ЧАНКОВАННЫХ СТРОК ====="})
+        console_log("🔧 ===== РЕКОНСТРУКЦИЯ ЧАНКОВАННЫХ СТРОК =====")
 
         reconstructed = input_data.copy()
         processed_keys = set()  # Ключи, которые уже обработали
         chunked_strings_found = 0
 
         # Сначала анализируем все входные данные для поиска чанков и метаданных
-        js.sendMessageToChat({"content": f"Python: 🔍 Анализ входных данных: {len(input_data)} ключей"})
+        console_log(f"🔍 Анализ входных данных: {len(input_data)} ключей")
 
         # Используем регулярное выражение для поиска чанков: ключи содержащие '_chunk_' и заканчивающиеся цифрой
         chunk_pattern = re.compile(r'(.+)_chunk_(\d+)$')
@@ -1793,12 +2757,12 @@ def _reconstruct_chunked_strings(input_data: Dict[str, Any]) -> Dict[str, Any]:
             elif isinstance(value, dict) and value.get('__isChunkedString', False):
                 metadata_keys.append(key)
 
-        js.sendMessageToChat({"content": f"Python: 📊 Найдено: {len(chunk_groups)} групп чанков, {len(metadata_keys)} метаданных"})
+        console_log(f"📊 Найдено: {len(chunk_groups)} групп чанков, {len(metadata_keys)} метаданных")
 
         # Обрабатываем найденные группы чанков
         for base_key, chunks_list in chunk_groups.items():
-            js.sendMessageToChat({"content": f"Python: 🔧 Обработка группы чанков: {base_key}"})
-            js.sendMessageToChat({"content": f"Python: 🔧   - Найдено чанков: {len(chunks_list)}"})
+            console_log(f"🔧 Обработка группы чанков: {base_key}")
+            console_log(f"🔧   - Найдено чанков: {len(chunks_list)}")
 
             # Сортируем чанки по номеру
             chunks_list.sort(key=lambda x: x[0])
@@ -1807,7 +2771,7 @@ def _reconstruct_chunked_strings(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
             # Проверяем последовательность номеров чанков
             if chunk_nums != expected_nums:
-                js.sendMessageToChat({"content": f"Python: ⚠️ Несоответствие номеров чанков: ожидаемо {expected_nums}, найдено {chunk_nums}"})
+                console_log(f"⚠️ Несоответствие номеров чанков: ожидаемо {expected_nums}, найдено {chunk_nums}")
                 # Продолжаем, но логируем проблему
 
             # Собираем строку из чанков
@@ -1815,7 +2779,7 @@ def _reconstruct_chunked_strings(input_data: Dict[str, Any]) -> Dict[str, Any]:
             assembled_string = ''.join(chunks_data)
             actual_length = len(assembled_string)
 
-            js.sendMessageToChat({"content": f"Python: 🔧 Сборка строки: длина={actual_length}"})
+            console_log(f"🔧 Сборка строки: длина={actual_length}")
 
             # Проверяем метаданные если они есть
             metadata_key = base_key
@@ -1823,22 +2787,22 @@ def _reconstruct_chunked_strings(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 metadata = input_data[metadata_key]
                 expected_count = metadata.get('chunkCount', 0)
                 expected_length = metadata.get('totalLength', 0)
-                js.sendMessageToChat({"content": f"Python: 🔧   - Метаданные: count={expected_count}, total_length={expected_length}"})
+                console_log(f"🔧   - Метаданные: count={expected_count}, total_length={expected_length}")
 
                 # Проверяем соответствие метаданным
                 if len(chunks_list) != expected_count:
-                    js.sendMessageToChat({"content": f"Python: ⚠️ Несоответствие количества чанков: ожидалось {expected_count}, собрано {len(chunks_list)}"})
+                    console_log(f"⚠️ Несоответствие количества чанков: ожидалось {expected_count}, собрано {len(chunks_list)}")
 
                 if actual_length != expected_length:
-                    js.sendMessageToChat({"content": f"Python: ⚠️ Несоответствие длины: ожидалось {expected_length}, собрано {actual_length}"})
+                    console_log(f"⚠️ Несоответствие длины: ожидалось {expected_length}, собрано {actual_length}")
                     if actual_length < expected_length:
-                        js.sendMessageToChat({"content": "Python: ⚠️ СТРОКА ОБРЕЗАНА! Возможно потеря данных."})
+                        console_log("⚠️ СТРОКА ОБРЕЗАНА! Возможно потеря данных.")
             else:
-                js.sendMessageToChat({"content": "Python: ℹ️ Метаданные не найдены - сборка без проверки"})
+                console_log("ℹ️ Метаданные не найдены - сборка без проверки")
 
             # Сохраняем собранную строку
             reconstructed[base_key] = assembled_string
-            js.sendMessageToChat({"content": f"Python: ✅ УСПЕШНО восстановлена строка {base_key}"})
+            console_log(f"✅ УСПЕШНО восстановлена строка {base_key}")
 
             # Проверка HTML структуры собранной строки
             _check_html_integrity(assembled_string, f"reconstructed_{base_key}")
@@ -1855,24 +2819,24 @@ def _reconstruct_chunked_strings(input_data: Dict[str, Any]) -> Dict[str, Any]:
             # Статистика размеров чанков
             chunk_sizes = [len(data) if isinstance(data, str) else 0 for _, data in chunks_list]
             if chunk_sizes:
-                js.sendMessageToChat({"content": f"Python: 📊 Размеры чанков: {chunk_sizes}"})
-                js.sendMessageToChat({"content": f"Python: 📊 Средний размер чанка: {sum(chunk_sizes)/len(chunk_sizes):.0f} chars"})
+                console_log(f"📊 Размеры чанков: {chunk_sizes}")
+                console_log(f"📊 Средний размер чанка: {sum(chunk_sizes)/len(chunk_sizes):.0f} chars")
 
             processed_keys.add(base_key)
 
         if processed_keys:
-            js.sendMessageToChat({"content": f"Python: ✅ Восстановлено {len(processed_keys)} больших строк из чанков"})
+            console_log(f"✅ Восстановлено {len(processed_keys)} больших строк из чанков")
         else:
-            js.sendMessageToChat({"content": "Python: ℹ️ Чанкованные строки не найдены"})
+            console_log("ℹ️ Чанкованные строки не найдены")
 
-        js.sendMessageToChat({"content": "Python: 🔧 ===== КОНЕЦ РЕКОНСТРУКЦИИ ЧАНКОВ ====="})
+        console_log("🔧 ===== КОНЕЦ РЕКОНСТРУКЦИИ ЧАНКОВ =====")
 
         return reconstructed
 
     except Exception as e:
-        js.sendMessageToChat({"content": f"Python: ❌ КРИТИЧЕСКАЯ ошибка при сборке чанков: {e}"})
+        chat_message(f"КРИТИЧЕСКАЯ ошибка при сборке чанков: {e}")
         import traceback
-        js.sendMessageToChat({"content": f"Python: ❌ Traceback: {traceback.format_exc()}"})
+        console_log(f"❌ Traceback: {traceback.format_exc()}")
         return input_data  # Возвращаем исходные данные при ошибке
 
 def _analyze_composition_vs_description(description: str, composition: str) -> Dict[str, Any]:
@@ -1913,7 +2877,7 @@ def _analyze_composition_vs_description(description: str, composition: str) -> D
     try:
         # Используем псевдоним "basic_analysis", который в манифесте
         # сопоставлен с быстрой и дешевой моделью типа `gemini-flash`.
-        result_str = _call_ai_model("basic_analysis", prompt)
+        result_str = ozon_analyzer_server._call_ai_model("basic_analysis", prompt)
 
         # Проверка типа данных от AI и конвертация при необходимости
         if not isinstance(result_str, str):
@@ -1935,7 +2899,27 @@ def _analyze_composition_vs_description(description: str, composition: str) -> D
                     return {"score": 5, "reasoning": "Неверный формат ответа от AI (отсутствует 'score')."}
             except json.JSONDecodeError as je:
                 js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка парсинга JSON: {str(je)}"})
-                return {"score": 5, "reasoning": f"Не удалось распарсить JSON от AI: {cleaned_str[:100]}..."}
+                console_log(f"JSON парсинг ошибка в _analyze_composition_vs_description: {str(je)}")
+                console_log(f"Необработанный ответ AI: {cleaned_str[:200]}...")  # Логируем первые 200 символов для диагностики
+                # Попытка исправить распространенные проблемы с JSON
+                try:
+                    # Убираем возможные лишние символы в начале и конце
+                    fixed_json = cleaned_str.strip()
+                    if not fixed_json.startswith('{'):
+                        start_idx = fixed_json.find('{')
+                        if start_idx != -1:
+                            fixed_json = fixed_json[start_idx:]
+                    if not fixed_json.endswith('}'):
+                        end_idx = fixed_json.rfind('}')
+                        if end_idx != -1:
+                            fixed_json = fixed_json[:end_idx + 1]
+    
+                    parsed = json.loads(fixed_json)
+                    console_log("JSON удалось исправить автоматически")
+                    return parsed
+                except:
+                    console_log("Автоматическое исправление JSON не удалось")
+                    return {"score": 5, "reasoning": f"Не удалось распарсить JSON от AI: {cleaned_str[:100]}..."}
         else:
             js.sendMessageToChat({"content": f"Python: ⚠️ AI вернул пустой или некорректный ответ: {type(result_str)}"})
             return {"score": 5, "reasoning": f"AI вернул некорректный тип данных: {type(result_str)}"}
@@ -1944,89 +2928,6 @@ def _analyze_composition_vs_description(description: str, composition: str) -> D
         js.sendMessageToChat({"content": f"Python: ❌ Критическая ошибка в _analyze_composition_vs_description: {str(e)}"})
         return { "score": 0, "reasoning": f"Ошибка анализа AI: {str(e)}" }
 
-def _call_ai_model(model_alias: str, prompt: str, context: Optional[str] = None) -> str:
-    """
-    Централизованная обертка для всех вызовов LLM с поддержкой кеширования.
-    Синхронная версия для совместимости с Pyodide.
-    Делегирует всю сложную работу (управление ключами, лимитами, разрешениями)
-    платформе через `js.llm_call`.
-    """
-    # Проверяем кеш сначала (синхронная версия кеша)
-    try:
-        import asyncio
-        # Для кеша используем run_until_complete для совместимости
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        cached_response = loop.run_until_complete(ai_cache.get(model_alias, prompt, context))
-        loop.close()
-
-        if cached_response:
-            js.sendMessageToChat({"content": f"Python: 📋 Кеш hit для {model_alias}"})
-            return cached_response
-    except Exception as e:
-        js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка доступа к кешу: {e}"})
-
-    js.sendMessageToChat({"content": f"Python: 🤖 Синхронный вызов AI модели {model_alias}..."})
-
-    start_time = datetime.now()
-
-    try:
-        # Синхронный вызов без batch processor для совместимости с Pyodide
-        response_proxy = js.llm_call(model_alias, {"prompt": prompt})
-        if response_proxy is None:
-            raise Exception("js.llm_call return None response proxy")
-
-        # Блокирующее ожидание результата Promise
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        result = loop.run_until_complete(response_proxy)
-        loop.close()
-
-        if result is None or safe_dict_get(result, "error"):
-            error_msg = safe_dict_get(result, "error_message", "Неизвестная ошибка") if result else "Пустой ответ от хоста"
-            raise Exception(f"Ошибка вызова API: {error_msg}")
-
-        response_text = safe_dict_get(result, "response", "Нет ответа от модели.")
-        response_time = int((datetime.now() - start_time).total_seconds() * 1000)
-
-        js.sendMessageToChat({"content": f"Python: ✅ Получен ответ напрямую (~{response_time}ms)"})
-
-        # Проверка типа данных от AI и конвертация при необходимости
-        if not isinstance(response_text, str):
-            js.sendMessageToChat({"content": f"Python: 🔄 AI вернул {type(response_text)} вместо строки, конвертируем в строку"})
-            response_text = str(response_text)
-        elif response_text is None:
-            js.sendMessageToChat({"content": f"Python: ⚠️ AI вернул None, устанавливаем fallback"})
-            response_text = "Нет ответа от модели."
-
-        # Дополнительная проверка на пустую строку
-        if isinstance(response_text, str) and len(response_text.strip()) == 0:
-            js.sendMessageToChat({"content": f"Python: ⚠️ AI вернул пустую строку, устанавливаем fallback"})
-            response_text = "Пустой ответ от модели."
-
-        # Кешируем успешный ответ (синхронно)
-        if response_text and isinstance(response_text, str) and not response_text.startswith("Ошибка"):
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop.run_until_complete(ai_cache.set(model_alias, prompt, response_text, response_time, context))
-                loop.close()
-                js.sendMessageToChat({"content": f"Python: 💾 Ответ закэширован (~{response_time}ms)"})
-
-                # Логируем статистику кеша для оптимизации
-                cache_stats = ai_cache.get_metrics()
-                if cache_stats['hit_rate_percent'] > 80:
-                    js.sendMessageToChat({"content": f"Python: 📈 Высокий hit rate кеша: {cache_stats['hit_rate_percent']}%"})
-            except Exception as e:
-                js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка кеширования: {e}"})
-
-        return response_text
-
-    except Exception as e:
-        # Пробрасываем ошибку выше, чтобы вызывающая функция могла ее перехватить
-        # и обработать в своей бизнес-логике.
-        raise RuntimeError(f"Ошибка при вызове модели '{model_alias}': {e}") from e
 
 # Лояльная функция batch processor с расширенной функциональностью
 async def _call_ai_model_with_fallback(model_alias: str, prompt: str, context: Optional[str] = None,
@@ -2038,7 +2939,7 @@ async def _call_ai_model_with_fallback(model_alias: str, prompt: str, context: O
     if not use_batch or len(prompt) > 10000:  # Очень длинные промпты не группируем
         return await _call_ai_model_immediate(model_alias, prompt, context)
 
-    return await _call_ai_model(model_alias, prompt, context)
+    return ozon_analyzer_server._call_ai_model(model_alias, prompt, context)
 
 async def _call_ai_model_immediate(model_alias: str, prompt: str, context: Optional[str] = None) -> str:
     """
@@ -2171,7 +3072,7 @@ def _find_similar_products(categories: List[str], composition: str) -> List[Dict
 
     try:
         # Используем синхронный вызов AI модели
-        response = _call_ai_model("basic_analysis", search_prompt)
+        response = ozon_analyzer_server._call_ai_model("basic_analysis", search_prompt)
 
         # Проверка типа данных от AI
         if not isinstance(response, str):
@@ -2197,6 +3098,8 @@ def _find_similar_products(categories: List[str], composition: str) -> List[Dict
 
         except json.JSONDecodeError as je:
             js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка парсинга JSON в _find_similar_products: {str(je)}"})
+            console_log(f"JSON парсинг ошибка: {str(je)}")
+            console_log(f"Необработанный ответ AI: {response[:500]}...")  # Логируем первые 500 символов для диагностики
             # В случае ошибки парсинга возвращаем fallback
             return _generate_fallback_analogs(categories, product_type)
 

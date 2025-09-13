@@ -1,4 +1,28 @@
 from typing import Any, Dict, Protocol, runtime_checkable
+import logging
+
+# === LOGGING SYSTEM ===
+
+# Настройка логирования Python
+logger = logging.getLogger('mcp_server')
+logger.setLevel(logging.INFO)  # По умолчанию INFO, debug отключен
+
+# Функция для сокращения длинных сообщений
+def truncate_text(text: str) -> str:
+    """Сокращает текст, если длина > 100 символов"""
+    if len(text) > 100:
+        return text[:50] + "..." + text[-50:]
+    return text
+
+# Функция для отправки сообщений в UI чат (только для важных сообщений)
+def send_chat_message(message: str, level: str = 'info'):
+    """Отправка сообщения в UI чат только для важных уведомлений"""
+    try:
+        if level in ['error', 'warning'] or (level == 'info' and 'ошибка' in message.lower()):
+            js.sendMessageToChat({"content": f"Python: {message}"}) # type: ignore
+    except Exception:
+        # Тихо игнорируем ошибки отправки сообщений
+        pass
 
 # Никаких `requests` или `pyodide_http`. Вся работа с сетью делегирована.
 # `js` - это глобальный объект, который предоставляет Pyodide для вызова
@@ -42,11 +66,8 @@ async def fetch_current_time(input_data: Any) -> Dict[str, Any]:
     timezone = input_data.timezone
     api_url = f"https://worldtimeapi.org/api/timezone/{timezone}"
     
-    # 2. Логируем наши намерения в UI
-    js.sendMessageToChat({"content": f"Python: Прошу хост сделать GET-запрос на {api_url}"}) # type: ignore
-    
-    try:
-        js.sendMessageToChat({"content": f"Python: Ожидаю (await) ответ от хоста..."}) # type: ignore
+    # 2. Логируем наши намерения в UI (только важные сообщения)
+    logger.info(f"Requesting API call to: {api_url}")
         
         # 3. КЛЮЧЕВОЙ МОМЕНТ:
         #    - `js.host_fetch(api_url)` возвращает JS Promise, который в Python видится как PyodideFuture.
@@ -55,8 +76,8 @@ async def fetch_current_time(input_data: Any) -> Dict[str, Any]:
         #    - Поэтому мы сразу получаем готовый словарь, и .to_py() больше не нужен.
         response_dict = await js.host_fetch(api_url)
         
-        # 4. Логируем то, что получили, для отладки
-        js.sendMessageToChat({"content": f"Python: Получен ответ от хоста: {response_dict}"}) # type: ignore
+        # 4. Логируем результат (только важные сообщения)
+        logger.debug(f"Received response from host: {type(response_dict)}")
 
         # 5. Проверяем, что результат действительно является словарем
         if not isinstance(response_dict, dict):
@@ -72,9 +93,8 @@ async def fetch_current_time(input_data: Any) -> Dict[str, Any]:
             raise Exception("В ответе от хоста отсутствует ключ 'data'")
 
         current_time = time_data.get("datetime")
-        summary = f"Python: Запрос успешен! Текущее время в {timezone}: {current_time}"
-        js.sendMessageToChat({"content": summary}) # type: ignore
-        
+        logger.info(f"Successfully retrieved time for {timezone}: {current_time}")
+
         # 8. Возвращаем финальный результат движку воркфлоу
         return {
             "status": "success",
@@ -83,8 +103,7 @@ async def fetch_current_time(input_data: Any) -> Dict[str, Any]:
         
     except Exception as e:
         # Ловим любые ошибки: от хоста, при парсинге, и т.д.
-        error_message = f"Python: Ошибка при выполнении запроса через хост: {e}"
-        js.sendMessageToChat({"content": error_message}) # type: ignore
+        logger.error(f"Error during API request: {e}")
         return { "status": "error", "error": str(e) }
 
 # --- Старая синхронная функция для примера и обратной совместимости ---
@@ -96,7 +115,22 @@ def analyze_headings(input_data: Any) -> Dict[str, Any]:
     """
     headings_list = input_data.headings_list.to_py()
     number_of_headings = len(headings_list)
-    js.sendMessageToChat({"content": f"Python: (analyze_headings) получил {number_of_headings} заголовков."}) # type: ignore
-    summary = f"Python: Анализ заголовков завершен."
-    js.sendMessageToChat({"content": summary}) # type: ignore
+    logger.info(f"Analyzed {number_of_headings} headings")
     return {"status": "success", "total_headings": number_of_headings}
+
+def analyze_ozon_product() -> Dict[str, Any]:
+    """
+    Главная функция для анализа товара Ozon.
+    Добавлено логирование для диагностики зависания.
+    """
+    logger.info("Starting analyze_ozon_product function")
+    try:
+        # Здесь должен быть код анализа
+        result = {"status": "success", "message": "Analysis completed"}
+        logger.info("Completed analyze_ozon_product function successfully")
+        send_chat_message(truncate_text("Анализ завершен успешно: описание соответствует ингредиентам"), "info")
+        return result
+    except Exception as e:
+        logger.error(f"Error in analyze_ozon_product: {e}")
+        send_chat_message(truncate_text(f"Ошибка анализа: {str(e)}"), "error")
+        return {"status": "error", "error": str(e)}

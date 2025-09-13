@@ -33,7 +33,7 @@ interface HeartbeatResponseMessage {
 class EnhancedChunkManager {
   private transfers = new Map<string, ChunkTransfer>();
   private readonly MAX_CHUNK_SIZE = 32768; // 32KB optimal for Chrome messaging
-  private readonly TRANSFER_TIMEOUT = 30000; // 30s timeout
+  private readonly TRANSFER_TIMEOUT = 60000; // 60s timeout (increased from 30s)
 
   constructor() {
     // Start cleanup interval
@@ -178,45 +178,148 @@ interface ChunkTransfer {
   startTime: number;
 }
 
+interface WorkflowState {
+  requestId: string;
+  startTime: number;
+  status: 'running' | 'completed' | 'failed' | 'timed_out';
+  pluginId: string;
+}
+
 // ==============================================================================
 // WORKFLOW ENGINE SIMPLIFIED FOR PYTHON EXECUTION
 // ==============================================================================
 
 class SimpleWorkflowEngine {
   private logger: Console;
+  private currentWorkflow: WorkflowState | null = null;
+  private readonly WORKFLOW_LOCK_TTL = 60000; // 60 seconds lock TTL
+  private pyodide: any = null;
+  private pyodideLoading = false;
 
   constructor(logger: Console = console) {
     this.logger = logger;
+
+    // Monitor for timed out workflows
+    setInterval(() => {
+      this.checkWorkflowTimeouts();
+    }, 10000); // Check every 10 seconds
   }
 
-  async executeWorkflow(pluginId: string, pageHtml: string) {
-    try {
-      // this.logger.log(`[WorkflowEngine] Starting workflow for plugin: ${pluginId}`);
-      // this.logger.log(`[WorkflowEngine] HTML length: ${pageHtml?.length || 0} characters`);
+  private checkWorkflowTimeouts() {
+    if (!this.currentWorkflow) return;
 
-      // Simple return object that matches expected interface
+    const elapsed = Date.now() - this.currentWorkflow.startTime;
+    if (this.currentWorkflow.status === 'running' && elapsed > this.WORKFLOW_LOCK_TTL) {
+      this.logger.warn(`[WorkflowEngine] Workflow ${this.currentWorkflow.requestId} timed out after ${elapsed}ms`);
+      this.currentWorkflow.status = 'timed_out';
+      // Clear timed out state immediately
+      setTimeout(() => {
+        if (this.currentWorkflow?.status === 'timed_out') {
+          this.currentWorkflow = null;
+        }
+      }, 1000);
+    }
+  }
+
+  private canExecuteWorkflow(requestId: string, pluginId: string): { allowed: boolean; reason?: string } {
+    const now = Date.now();
+
+    if (!this.currentWorkflow) {
+      return { allowed: true };
+    }
+
+    const elapsed = now - this.currentWorkflow.startTime;
+
+    // If current workflow is completed or failed, allow new execution
+    if (this.currentWorkflow.status === 'completed' || this.currentWorkflow.status === 'failed') {
+      this.logger.log(`[WorkflowEngine] Previous workflow ${this.currentWorkflow.status}, allowing new execution`);
+      return { allowed: true };
+    }
+
+    // If timed out, clear the state and allow
+    if (this.currentWorkflow.status === 'timed_out' || elapsed > this.WORKFLOW_LOCK_TTL) {
+      this.logger.log(`[WorkflowEngine] Previous workflow timed out or exceeded TTL (${elapsed}ms), clearing state`);
+      this.currentWorkflow = null;
+      return { allowed: true };
+    }
+
+    // If still running and within TTL, block
+    if (this.currentWorkflow.status === 'running' && elapsed <= this.WORKFLOW_LOCK_TTL) {
       return {
-        success: true,
+        allowed: false,
+        reason: `Workflow ${this.currentWorkflow.requestId} still running (${elapsed}ms elapsed, TTL: ${this.WORKFLOW_LOCK_TTL}ms)`
+      };
+    }
+
+    // Fallback: allow
+    return { allowed: true };
+  }
+
+  async executeWorkflow(pluginId: string, pageHtml: string, requestId?: string) {
+    const effectiveRequestId = requestId || `workflow-${Date.now()}`;
+
+    // Check if we can execute
+    const checkResult = this.canExecuteWorkflow(effectiveRequestId, pluginId);
+    if (!checkResult.allowed) {
+      throw new Error(`Workflow execution blocked: ${checkResult.reason}`);
+    }
+
+    // Set running state
+    this.currentWorkflow = {
+      requestId: effectiveRequestId,
+      startTime: Date.now(),
+      status: 'running',
+      pluginId
+    };
+
+    try {
+      this.logger.log(`[WorkflowEngine] Starting workflow for plugin: ${pluginId}, request: ${effectiveRequestId}`);
+
+      // Execute actual Python analysis
+      const pythonResult = await this.executePythonAnalysis(pageHtml);
+
+      // Set completed state
+      this.currentWorkflow.status = 'completed';
+
+      // Return result based on Python execution
+      const success = pythonResult.status === 'success';
+      return {
+        success,
         result: {
-          status: 'completed',
-          message: 'Workflow executed successfully',
+          status: success ? 'completed' : 'failed',
+          message: success ? 'Python analysis completed successfully' : pythonResult.error || 'Python analysis failed',
           pluginId: pluginId,
-          htmlSize: pageHtml?.length || 0
+          htmlSize: pageHtml?.length || 0,
+          requestId: effectiveRequestId,
+          pythonResult
         },
-        totalDuration: 1000,
-        stepResults: {},
-        errors: []
+        totalDuration: Date.now() - this.currentWorkflow.startTime,
+        stepResults: { python_execution: pythonResult },
+        errors: success ? [] : [{ stepId: 'python_analysis', error: pythonResult.error || 'Unknown error', timestamp: Date.now(), recoverable: false }]
       };
     } catch (error: any) {
       this.logger.error(`[WorkflowEngine] Workflow failed:`, error);
+
+      // Set failed state and clear after delay
+      if (this.currentWorkflow) {
+        this.currentWorkflow.status = 'failed';
+        // Clear failed state after short delay to allow new attempts
+        setTimeout(() => {
+          if (this.currentWorkflow?.status === 'failed') {
+            this.currentWorkflow = null;
+          }
+        }, 5000);
+      }
+
       return {
         success: false,
         result: {
           status: 'failed',
           message: error.message,
-          pluginId: pluginId
+          pluginId: pluginId,
+          requestId: effectiveRequestId
         },
-        totalDuration: 0,
+        totalDuration: this.currentWorkflow ? Date.now() - this.currentWorkflow.startTime : 0,
         stepResults: {},
         errors: [{
           stepId: 'global',
@@ -227,6 +330,110 @@ class SimpleWorkflowEngine {
       };
     }
   }
+
+  private async initializePyodide(): Promise<void> {
+    if (this.pyodide) return;
+    if (this.pyodideLoading) {
+      // Wait for loading to complete
+      while (this.pyodideLoading) {
+        await this.delay(100);
+      }
+      return;
+    }
+
+    this.pyodideLoading = true;
+    try {
+      this.logger.log('[WorkflowEngine] Initializing Pyodide...');
+
+      // Load Pyodide
+      const pyodideScript = document.createElement('script');
+      pyodideScript.src = chrome.runtime.getURL('pyodide/pyodide.js');
+      document.head.appendChild(pyodideScript);
+
+      await new Promise((resolve, reject) => {
+        pyodideScript.onload = resolve;
+        pyodideScript.onerror = reject;
+      });
+
+      // @ts-ignore
+      this.pyodide = await loadPyodide({
+        indexURL: chrome.runtime.getURL('pyodide/')
+      });
+
+      // Load packages
+      await this.pyodide.loadPackage(['micropip', 'beautifulsoup4', 'requests']);
+
+      // Set up js bridge for Python
+      this.pyodide.runPython(`
+import js
+import sys
+from typing import Any, Dict
+import json
+
+def sendMessageToChat(message):
+    js.sendMessageToChat(message)
+
+def host_fetch(url):
+    return js.hostFetch(url)
+
+js.sendMessageToChat = sendMessageToChat
+js.host_fetch = host_fetch
+`);
+
+      // Load the plugin code
+      const response = await fetch(chrome.runtime.getURL('plugins/ozon-analyzer/mcp_server.py'));
+      const pythonCode = await response.text();
+      this.pyodide.runPython(pythonCode);
+
+      this.logger.log('[WorkflowEngine] Pyodide initialized successfully');
+    } catch (error) {
+      this.logger.error('[WorkflowEngine] Failed to initialize Pyodide:', error);
+      throw error;
+    } finally {
+      this.pyodideLoading = false;
+    }
+  }
+
+  private async executePythonAnalysis(htmlContent: string): Promise<any> {
+    await this.initializePyodide();
+
+    try {
+      this.logger.log('[WorkflowEngine] Executing Python analysis...');
+
+      // Set the HTML content in Python
+      this.pyodide.globals.set('page_html', htmlContent);
+
+      // Execute the analysis function
+      const result = this.pyodide.runPython(`
+import logging
+logging.basicConfig(level=logging.INFO)
+
+# Mock js object for the Python code
+class MockJs:
+    def sendMessageToChat(self, message):
+        print(f"Chat message: {message}")
+
+js = MockJs()
+
+# Execute the analysis
+try:
+    result = analyze_ozon_product()
+    result
+except Exception as e:
+    {"status": "error", "error": str(e)}
+`);
+
+      this.logger.log('[WorkflowEngine] Python analysis completed:', result);
+      return result;
+    } catch (error) {
+      this.logger.error('[WorkflowEngine] Python execution failed:', error);
+      throw error;
+    }
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
 }
 
 // ==============================================================================
@@ -234,12 +441,14 @@ class SimpleWorkflowEngine {
 // ==============================================================================
 
 /**
- * Safely sends a message from offscreen context with timeout and error handling
- * @param message The message to send
- * @param timeout Timeout in milliseconds (default: 5000)
- * @returns Promise that resolves when message is sent or rejects on error/timeout
- */
-async function safeSendMessageOffscreen(message: any, timeout = 5000): Promise<void> {
+  * Safely sends a message from offscreen context with timeout, retry and error handling
+  * @param message The message to send
+  * @param timeout Timeout in milliseconds (default: 5000)
+  * @param waitForResponse Whether to wait for response (default: true). Set to false for fire-and-forget messages
+  * @param maxRetries Maximum retry attempts (default: 1 for messages requiring response, 0 for fire-and-forget)
+  * @returns Promise that resolves when message is sent (or response received if waitForResponse=true)
+  */
+async function safeSendMessageOffscreen(message: any, timeout = 5000, waitForResponse = true, maxRetries = 1): Promise<void> {
   // Check if chrome runtime is available
   if (!chrome?.runtime?.sendMessage) {
     throw new Error('Chrome runtime sendMessage not available');
@@ -255,13 +464,58 @@ async function safeSendMessageOffscreen(message: any, timeout = 5000): Promise<v
     console.warn('[offscreen][SAFE_SEND] Previous runtime error detected:', chrome.runtime.lastError.message);
   }
 
-  // Send with timeout
-  return Promise.race([
-    chrome.runtime.sendMessage(message),
-    new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error(`Message send timeout after ${timeout}ms`)), timeout);
-    })
-  ]);
+  // Adjust maxRetries for fire-and-forget messages (no retries)
+  const effectiveMaxRetries = waitForResponse ? maxRetries : 0;
+
+  // Send message with retry logic
+  for (let attempt = 0; attempt <= effectiveMaxRetries; attempt++) {
+    try {
+      if (attempt > 0) {
+        // Generate new messageId for retry attempts
+        const retryMessage = { ...message };
+        if (!retryMessage.messageId) {
+          retryMessage.messageId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        } else {
+          retryMessage.messageId = `${retryMessage.messageId}-retry-${attempt}`;
+        }
+
+        // Delay before retry (1-2 seconds)
+        const delay = 1000 + Math.random() * 1000; // 1-2 seconds
+        console.log(`[offscreen][SAFE_SEND] ⏳ Retrying message ${message.type} in ${delay}ms (attempt ${attempt}/${effectiveMaxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+
+        // Use the retry message
+        message = retryMessage;
+      }
+
+      if (!waitForResponse) {
+        // Fire-and-forget mode
+        chrome.runtime.sendMessage(message);
+        console.log(`[offscreen][SAFE_SEND] 🔥 Fire-and-forget message sent: ${message.type} (attempt ${attempt + 1}, messageId: ${message.messageId || 'none'})`);
+        return Promise.resolve();
+      }
+
+      // Wait for response with timeout
+      await Promise.race([
+        chrome.runtime.sendMessage(message),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error(`Message send timeout after ${timeout}ms`)), timeout);
+        })
+      ]);
+
+      console.log(`[offscreen][SAFE_SEND] ✅ Message sent successfully: ${message.type} (attempt ${attempt + 1})`);
+      return;
+
+    } catch (error) {
+      console.warn(`[offscreen][SAFE_SEND] ⚠️ Attempt ${attempt + 1} failed for ${message.type}:`, error);
+
+      // If this was the last attempt, throw the error
+      if (attempt === effectiveMaxRetries) {
+        console.error(`[offscreen][SAFE_SEND] ❌ All retry attempts failed for ${message.type}`);
+        throw error;
+      }
+    }
+  }
 }
 
 // ==============================================================================
@@ -304,7 +558,24 @@ async function handleExecuteWorkflow(data: ExecuteWorkflowMessage['data']) {
   console.log(`[offscreen][DIAG] Page HTML Length: ${data.pageHtml?.length || 0} characters`);
   console.log(`[offscreen][DIAG] Current time: ${new Date().toISOString()}`);
 
-  let pageHtml = data.pageHtml;
+  try {
+    // VALIDATE MESSAGE FORMAT
+    if (!data.pluginId || typeof data.pluginId !== 'string') {
+      throw new Error(`Invalid pluginId: expected string, got ${typeof data.pluginId}`);
+    }
+    if (!data.requestId || typeof data.requestId !== 'string') {
+      throw new Error(`Invalid requestId: expected string, got ${typeof data.requestId}`);
+    }
+    if (!data.transferId || typeof data.transferId !== 'string') {
+      throw new Error(`Invalid transferId: expected string, got ${typeof data.transferId}`);
+    }
+    if (typeof data.useChunks !== 'boolean') {
+      throw new Error(`Invalid useChunks: expected boolean, got ${typeof data.useChunks}`);
+    }
+
+    console.log(`[offscreen][DIAG] ✅ Message format validation passed`);
+
+    let pageHtml = data.pageHtml;
 
   // Use pre-assembled HTML if provided
   if (data.assembledHtml) {
@@ -382,51 +653,118 @@ async function handleExecuteWorkflow(data: ExecuteWorkflowMessage['data']) {
     }
 
     // Execute workflow
-    // console.log(`[offscreen] 🚀 Executing workflow for plugin: ${data.pluginId}`);
+    console.log(`[offscreen][DIAG] 🚀 Executing workflow for plugin: ${data.pluginId}, request: ${data.requestId}`);
     const workflowStartTime = Date.now();
 
-    const result = await workflowEngine.executeWorkflow(data.pluginId, pageHtml);
+    const result = await workflowEngine.executeWorkflow(data.pluginId, pageHtml, data.requestId);
 
     const workflowTime = Date.now() - workflowStartTime;
-    // console.log(`[offscreen] ✅ Workflow completed in ${workflowTime}ms`);
-    // console.log(`[offscreen] - Success: ${result.success}`);
-    // console.log(`[offscreen] - Result:`, result.result);
+    console.log(`[offscreen][DIAG] ✅ Workflow completed in ${workflowTime}ms`);
+    console.log(`[offscreen][DIAG] - Success: ${result.success}`);
+    console.log(`[offscreen][DIAG] - Result:`, result.result);
 
-    // Send result back to background with error handling
+    // Send result back to background with error handling (fire-and-forget for results)
     try {
       await safeSendMessageOffscreen({
         type: 'WORKFLOW_COMPLETED',
         requestId: data.requestId,
         result,
         success: true
-      });
-      console.log(`[offscreen] ✅ Successfully sent WORKFLOW_COMPLETED for ${data.requestId}`);
+      }, 0, false); // No timeout, fire-and-forget
+      console.log(`[offscreen] ✅ Successfully sent WORKFLOW_COMPLETED for ${data.requestId} (fire-and-forget)`);
     } catch (sendError) {
       console.error(`[offscreen] ❌ Failed to send WORKFLOW_COMPLETED for ${data.requestId}:`, sendError);
-      throw new Error(`Failed to send workflow result: ${(sendError as Error).message}`);
+      // Don't throw for fire-and-forget messages, just log
     }
 
-    // console.log(`[offscreen] === WORKFLOW EXECUTION COMPLETED SUCCESSFULLY ===`);
+    console.log(`[offscreen][DIAG] === WORKFLOW EXECUTION COMPLETED SUCCESSFULLY ===`);
 
   } catch (error: any) {
-    console.error(`[offscreen] 💥 Workflow execution failed:`, error);
-    // console.error(`[offscreen] Stack trace:`, error.stack);
+    console.error(`[offscreen][DIAG] 💥 WORKFLOW EXECUTION FAILED:`, error);
+    console.error(`[offscreen][DIAG] Error message:`, error.message);
+    console.error(`[offscreen][DIAG] Error stack:`, error.stack);
+    console.error(`[offscreen][DIAG] Error type:`, error.constructor.name);
+    console.error(`[offscreen][DIAG] Transfer state at error:`, {
+      transferExists: chunkManager['transfers'].has(data.transferId),
+      availableTransfers: Array.from(chunkManager['transfers'].keys()),
+      transferId: data.transferId
+    });
 
-    // Send error back to background with error handling
+    // DETERMINE ERROR TYPE AND PROVIDE SPECIFIC ERROR MESSAGES
+    let errorMessage = error.message || 'Unknown workflow execution error';
+    let errorDetails = '';
+
+    if (errorMessage.includes('Transfer') && errorMessage.includes('not found')) {
+      errorMessage = `Transfer data not found: ${data.transferId}. This indicates a race condition or timing issue.`;
+      errorDetails = 'Transfer may have been cleaned up or never received properly.';
+    } else if (errorMessage.includes('Invalid chunk')) {
+      errorMessage = `Data corruption detected in transfer ${data.transferId}`;
+      errorDetails = 'HTML chunks may have been corrupted during transmission.';
+    } else if (errorMessage.includes('timeout') || errorMessage.includes('Timeout')) {
+      errorMessage = `Workflow execution timed out for transfer ${data.transferId}`;
+      errorDetails = 'The workflow took too long to complete, possibly due to large HTML size.';
+    } else if (errorMessage.includes('Failed to send')) {
+      errorMessage = `Communication error: Unable to send workflow results back to background`;
+      errorDetails = 'Background script may not be available or message channel is broken.';
+    }
+
+    console.error(`[offscreen][DIAG] 🔍 ERROR ANALYSIS:`, {
+      originalError: error.message,
+      processedError: errorMessage,
+      errorDetails: errorDetails,
+      transferId: data.transferId,
+      pluginId: data.pluginId,
+      requestId: data.requestId
+    });
+
+    // Send detailed error back to background with enhanced error handling (fire-and-forget)
     try {
       await safeSendMessageOffscreen({
         type: 'WORKFLOW_COMPLETED',
         requestId: data.requestId,
-        error: error.message,
+        error: errorMessage,
+        errorDetails: errorDetails,
         success: false
-      });
-      console.log(`[offscreen] ✅ Successfully sent WORKFLOW_COMPLETED error for ${data.requestId}`);
+      }, 0, false); // No timeout, fire-and-forget
+      console.log(`[offscreen][DIAG] ✅ Successfully sent WORKFLOW_COMPLETED error for ${data.requestId} (fire-and-forget)`);
+      console.log(`[offscreen][DIAG] Error message sent: ${errorMessage}`);
     } catch (sendError) {
-      console.error(`[offscreen] ❌ Failed to send WORKFLOW_COMPLETED error for ${data.requestId}:`, sendError);
-      throw new Error(`Failed to send workflow error: ${(sendError as Error).message}`);
+      console.error(`[offscreen][DIAG] ❌ CRITICAL: Failed to send WORKFLOW_COMPLETED error for ${data.requestId}:`, sendError);
+      console.error(`[offscreen][DIAG] Original error:`, errorMessage);
+
+      // FALLBACK: Try to send a simplified error message
+      try {
+        await safeSendMessageOffscreen({
+          type: 'WORKFLOW_COMPLETED',
+          requestId: data.requestId,
+          error: 'Critical communication failure - workflow execution failed',
+          success: false
+        }, 0, false); // Fire-and-forget fallback
+        console.log(`[offscreen][DIAG] ✅ Fallback error message sent successfully (fire-and-forget)`);
+      } catch (fallbackError) {
+        console.error(`[offscreen][DIAG] 💥 COMPLETE FAILURE: Cannot send any error message to background`);
+        console.error(`[offscreen][DIAG] This indicates a complete breakdown in offscreen-background communication`);
+        // At this point, we cannot do anything more - the error is unrecoverable
+      }
     }
 
-    // console.log(`[offscreen] === WORKFLOW EXECUTION FAILED ===`);
+    console.log(`[offscreen][DIAG] === WORKFLOW EXECUTION FAILED ===`);
+  } finally {
+    // CHECK OFFSCREEN DOCUMENT STATUS AFTER WORKFLOW EXECUTION
+    console.log(`[offscreen][DIAG] 📊 Offscreen document status after workflow execution:`);
+    console.log(`[offscreen][DIAG] - Document still active: ${!!document}`);
+    console.log(`[offscreen][DIAG] - Runtime available: ${!!chrome?.runtime}`);
+    console.log(`[offscreen][DIAG] - Extension context valid: ${!!chrome?.runtime?.id}`);
+    console.log(`[offscreen][DIAG] - Transfer manager active: ${!!chunkManager}`);
+    console.log(`[offscreen][DIAG] - Workflow engine active: ${!!workflowEngine}`);
+    console.log(`[offscreen][DIAG] - Active transfer count: ${chunkManager['transfers'].size}`);
+    console.log(`[offscreen][DIAG] - Uptime: ${Date.now() - offscreenStartTime}ms`);
+
+    // RACE CONDITION PROTECTION: Ensure offscreen stays alive
+    if (!chrome?.runtime?.id) {
+      console.error(`[offscreen][DIAG] 🚨 CRITICAL: Extension context lost during workflow execution!`);
+      console.error(`[offscreen][DIAG] This indicates offscreen document was terminated unexpectedly`);
+    }
   }
 }
 
@@ -520,26 +858,26 @@ async function handleHtmlChunk(message: HtmlChunkMessage) {
           type: 'HTML_ASSEMBLED',
           transferId: message.transferId,
           html: assembledHtml
-        });
-        console.log(`[offscreen][CHUNKING] 📤 SENT HTML_ASSEMBLED message for transfer ${message.transferId}`);
+        }, 0, false); // Fire-and-forget
+        console.log(`[offscreen][CHUNKING] 📤 SENT HTML_ASSEMBLED message for transfer ${message.transferId} (fire-and-forget)`);
       } catch (sendError) {
         console.error(`[offscreen][CHUNKING] ❌ Failed to send HTML_ASSEMBLED for ${message.transferId}:`, sendError);
-        throw new Error(`Failed to send HTML_ASSEMBLED: ${(sendError as Error).message}`);
+        // Don't throw for fire-and-forget messages
       }
     } catch (assemblyError) {
       console.error(`[offscreen][CHUNKING] ❌ FAILED to assemble HTML for transfer ${message.transferId}:`, assemblyError);
     }
   }
 
-  // Send acknowledgment back with enhanced error handling
+  // Send acknowledgment back with enhanced error handling (fire-and-forget)
   console.log(`[offscreen][CHUNKING] 📤 Sending ACK for chunk ${message.chunkIndex} of ${message.transferId}`);
   try {
     await safeSendMessageOffscreen({
       type: 'HTML_CHUNK_ACK',
       transferId: message.transferId,
       chunkIndex: message.chunkIndex
-    });
-    console.log(`[offscreen][CHUNKING] ✅ ACK sent successfully for chunk ${message.chunkIndex}`);
+    }, 0, false); // Fire-and-forget
+    console.log(`[offscreen][CHUNKING] ✅ ACK sent successfully for chunk ${message.chunkIndex} (fire-and-forget)`);
   } catch (sendError) {
     console.error(`[offscreen][CHUNKING] ❌ Failed to send chunk acknowledgment for ${message.chunkIndex}:`, sendError);
     // Don't throw here as it would break the chunk processing flow
@@ -551,34 +889,74 @@ async function handleHtmlChunk(message: HtmlChunkMessage) {
 // ==============================================================================
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // console.log(`[offscreen] ===== OFFSCREEN MESSAGE RECEIVED =====`);
-  // console.log(`[offscreen] Type: ${message.type}`);
-  // console.log(`[offscreen] Sender:`, sender);
+  console.log(`[offscreen][DIAG] ===== OFFSCREEN MESSAGE RECEIVED =====`);
+  console.log(`[offscreen][DIAG] Type: ${message.type}`);
+  console.log(`[offscreen][DIAG] Sender:`, sender);
+  console.log(`[offscreen][DIAG] Timestamp: ${new Date().toISOString()}`);
+  console.log(`[offscreen][DIAG] Message keys: [${Object.keys(message).join(', ')}]`);
+  console.log(`[offscreen][DIAG] Offscreen uptime: ${Date.now() - offscreenStartTime}ms`);
+  console.log(`[offscreen][DIAG] Current transfers: [${Array.from(chunkManager['transfers'].keys()).join(', ')}]`);
+  console.log(`[offscreen][DIAG] Transfer count: ${chunkManager['transfers'].size}`);
+
+  // Check if this is the EXECUTE_WORKFLOW message we're waiting for
+  if (message.type === 'EXECUTE_WORKFLOW') {
+    console.log(`[offscreen][DIAG] 🚨 EXECUTE_WORKFLOW MESSAGE RECEIVED!`);
+    console.log(`[offscreen][DIAG] Transfer ID: ${message.transferId || 'undefined'}`);
+    console.log(`[offscreen][DIAG] Plugin ID: ${message.pluginId || 'undefined'}`);
+    console.log(`[offscreen][DIAG] Request ID: ${message.requestId || 'undefined'}`);
+    console.log(`[offscreen][DIAG] Use Chunks: ${message.useChunks}`);
+    console.log(`[offscreen][DIAG] Has pageHtml: ${!!message.pageHtml}`);
+    console.log(`[offscreen][DIAG] Has assembledHtml: ${!!message.assembledHtml}`);
+    if (message.pageHtml) {
+      console.log(`[offscreen][DIAG] Page HTML length: ${message.pageHtml.length} characters`);
+    }
+    if (message.assembledHtml) {
+      console.log(`[offscreen][DIAG] Assembled HTML length: ${message.assembledHtml.length} characters`);
+    }
+  }
 
   switch (message.type) {
     case 'EXECUTE_WORKFLOW':
+      console.log(`[offscreen][DIAG] 📨 ROUTING TO EXECUTE_WORKFLOW HANDLER`);
       handleExecuteWorkflow(message.data)
-        .then(() => sendResponse({ success: true }))
-        .catch(error => sendResponse({ success: false, error: error.message }));
+        .then(() => {
+          console.log(`[offscreen][DIAG] ✅ EXECUTE_WORKFLOW handler completed successfully`);
+          sendResponse({ success: true });
+        })
+        .catch(error => {
+          console.error(`[offscreen][DIAG] ❌ EXECUTE_WORKFLOW handler failed:`, error);
+          sendResponse({ success: false, error: error.message });
+        });
       return true; // Keep channel open for async responses
 
     case 'HTML_CHUNK':
+      console.log(`[offscreen][DIAG] 📨 ROUTING TO HTML_CHUNK HANDLER`);
       handleHtmlChunk(message);
       sendResponse({ received: true });
       break;
 
     case 'HEARTBEAT_CHECK':
+      console.log(`[offscreen][DIAG] 📨 ROUTING TO HEARTBEAT_CHECK HANDLER`);
       handleHeartbeatCheck(message as HeartbeatMessage)
-        .then(() => sendResponse({ success: true }))
-        .catch(error => sendResponse({ success: false, error: error.message }));
+        .then(() => {
+          console.log(`[offscreen][DIAG] ✅ HEARTBEAT_CHECK handler completed successfully`);
+          sendResponse({ success: true });
+        })
+        .catch(error => {
+          console.error(`[offscreen][DIAG] ❌ HEARTBEAT_CHECK handler failed:`, error);
+          sendResponse({ success: false, error: error.message });
+        });
       return true; // Keep channel open for async responses
 
     default:
-      console.warn(`[offscreen] Unknown message type:`, message.type);
-      sendResponse({ success: false, error: 'Unknown message type' });
+      console.warn(`[offscreen][DIAG] ⚠️ UNKNOWN MESSAGE TYPE:`, message.type);
+      console.warn(`[offscreen][DIAG] Available handlers: EXECUTE_WORKFLOW, HTML_CHUNK, HEARTBEAT_CHECK`);
+      console.warn(`[offscreen][DIAG] Message keys:`, Object.keys(message));
+      sendResponse({ success: false, error: `Unknown message type: ${message.type}` });
       break;
   }
 
+  console.log(`[offscreen][DIAG] ===== MESSAGE ROUTING COMPLETED =====`);
   return true; // Keep channel open for async responses
 });
 

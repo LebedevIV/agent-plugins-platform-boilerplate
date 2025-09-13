@@ -2925,16 +2925,84 @@ class BackgroundController {
               console.log(`[Background][ASSEMBLY] 🔧 Using recovered metadata for EXECUTE_WORKFLOW: pluginId=${workflowPluginId}, pageKey=${workflowPageKey}`);
             }
 
-            await safeSendMessage({
-              type: 'EXECUTE_WORKFLOW',
-              pluginId: workflowPluginId,
-              requestId: workflowRequestId,
-              transferId: message.transferId,
-              pageKey: workflowPageKey, // Use recovered pageKey if available
-              useChunks: false, // HTML is already assembled, no need to use chunks
-              pageHtml: pendingWorkflow.pageHtml, // Original HTML (fallback if needed)
-              assembledHtml: (message as any).html // Pre-assembled HTML from chunks
-            });
+            // WAIT FOR OFFSCREEN READINESS BEFORE SENDING EXECUTE_WORKFLOW
+            console.log(`[Background][EXECUTE_WORKFLOW] ⏳ Checking offscreen readiness before sending EXECUTE_WORKFLOW for ${message.transferId}`);
+            const offscreenReady = await isOffscreenAvailable();
+            console.log(`[Background][EXECUTE_WORKFLOW] Offscreen available: ${offscreenReady}`);
+
+            if (!offscreenReady) {
+              console.warn(`[Background][EXECUTE_WORKFLOW] ⚠️ Offscreen not available, waiting 2 seconds...`);
+              await new Promise(resolve => setTimeout(resolve, 2000));
+
+              // Check again
+              const offscreenReadyRetry = await isOffscreenAvailable();
+              if (!offscreenReadyRetry) {
+                console.error(`[Background][EXECUTE_WORKFLOW] ❌ Offscreen still not available after retry, aborting EXECUTE_WORKFLOW`);
+                throw new Error('Offscreen document not available for EXECUTE_WORKFLOW');
+              }
+              console.log(`[Background][EXECUTE_WORKFLOW] ✅ Offscreen became available after retry`);
+            }
+
+            // LOG OFFSCREEN STATUS BEFORE SENDING
+            console.log(`[Background][EXECUTE_WORKFLOW] 📊 Offscreen status before sending:`);
+            console.log(`[Background][EXECUTE_WORKFLOW] - Document available: ${offscreenReady}`);
+            console.log(`[Background][EXECUTE_WORKFLOW] - Transfer ID: ${message.transferId}`);
+            console.log(`[Background][EXECUTE_WORKFLOW] - Plugin ID: ${workflowPluginId}`);
+            console.log(`[Background][EXECUTE_WORKFLOW] - Request ID: ${workflowRequestId}`);
+            console.log(`[Background][EXECUTE_WORKFLOW] - HTML length: ${(message as any).html?.length || 0} chars`);
+            console.log(`[Background][EXECUTE_WORKFLOW] - Timestamp: ${new Date().toISOString()}`);
+
+            console.log(`[Background][EXECUTE_WORKFLOW] 🚀 SENDING EXECUTE_WORKFLOW to offscreen for transfer ${message.transferId}`);
+
+            // RETRY LOGIC WITH EXPONENTIAL BACKOFF FOR EXECUTE_WORKFLOW
+            let sendAttempts = 0;
+            const maxSendAttempts = 3;
+            let lastSendError: Error | null = null;
+
+            while (sendAttempts < maxSendAttempts) {
+              try {
+                console.log(`[Background][EXECUTE_WORKFLOW] 📤 Attempt ${sendAttempts + 1}/${maxSendAttempts} to send EXECUTE_WORKFLOW`);
+
+                await safeSendMessage({
+                  type: 'EXECUTE_WORKFLOW',
+                  pluginId: workflowPluginId,
+                  requestId: workflowRequestId,
+                  transferId: message.transferId,
+                  pageKey: workflowPageKey, // Use recovered pageKey if available
+                  useChunks: false, // HTML is already assembled, no need to use chunks
+                  pageHtml: pendingWorkflow.pageHtml, // Original HTML (fallback if needed)
+                  assembledHtml: (message as any).html // Pre-assembled HTML from chunks
+                }, 3000); // 3 second timeout for EXECUTE_WORKFLOW
+
+                console.log(`[Background][EXECUTE_WORKFLOW] ✅ EXECUTE_WORKFLOW message sent successfully to offscreen on attempt ${sendAttempts + 1}`);
+                break; // Success, exit retry loop
+
+              } catch (sendError) {
+                sendAttempts++;
+                lastSendError = sendError as Error;
+                console.warn(`[Background][EXECUTE_WORKFLOW] ⚠️ EXECUTE_WORKFLOW send attempt ${sendAttempts} failed:`, sendError);
+
+                if (sendAttempts < maxSendAttempts) {
+                  // CHECK OFFSCREEN AVAILABILITY BEFORE RETRY
+                  const stillAvailable = await isOffscreenAvailable();
+                  console.log(`[Background][EXECUTE_WORKFLOW] Offscreen still available before retry: ${stillAvailable}`);
+
+                  if (!stillAvailable) {
+                    console.error(`[Background][EXECUTE_WORKFLOW] ❌ Offscreen became unavailable, cannot retry EXECUTE_WORKFLOW`);
+                    throw new Error(`Offscreen document became unavailable during EXECUTE_WORKFLOW retry: ${(sendError as Error).message}`);
+                  }
+
+                  // EXPONENTIAL BACKOFF DELAY
+                  const delayMs = Math.min(1000 * Math.pow(2, sendAttempts - 1), 5000); // Max 5 seconds
+                  console.log(`[Background][EXECUTE_WORKFLOW] ⏳ Waiting ${delayMs}ms before retry ${sendAttempts + 1}`);
+                  await new Promise(resolve => setTimeout(resolve, delayMs));
+                } else {
+                  console.error(`[Background][EXECUTE_WORKFLOW] ❌ All ${maxSendAttempts} EXECUTE_WORKFLOW send attempts failed`);
+                  console.error(`[Background][EXECUTE_WORKFLOW] Final error:`, lastSendError);
+                  throw new Error(`Failed to send EXECUTE_WORKFLOW after ${maxSendAttempts} attempts: ${(lastSendError as Error).message}`);
+                }
+              }
+            }
 
             // Mark transfer as confirmed - offscreen has received HTML and started processing
             const transfer = this.chunkManager['transfers'].get(message.transferId);
