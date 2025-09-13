@@ -33,7 +33,7 @@ interface HeartbeatResponseMessage {
 class EnhancedChunkManager {
   private transfers = new Map<string, ChunkTransfer>();
   private readonly MAX_CHUNK_SIZE = 32768; // 32KB optimal for Chrome messaging
-  private readonly TRANSFER_TIMEOUT = 60000; // 60s timeout (increased from 30s)
+  private readonly TRANSFER_TIMEOUT = 300000; // 300s timeout (increased from 60s)
 
   constructor() {
     // Start cleanup interval

@@ -3074,56 +3074,93 @@ def _find_similar_products(categories: List[str], composition: str) -> List[Dict
         # Используем синхронный вызов AI модели
         response = ozon_analyzer_server._call_ai_model("basic_analysis", search_prompt)
 
+        # Детальная проверка ответа AI перед обработкой
+        if response is None:
+            js.sendMessageToChat({"content": "Python: ⚠️ AI вернул None в _find_similar_products, используем fallback"})
+            console_log("AI вернул None - переходим на fallback")
+            return _generate_fallback_analogs(categories, product_type)
+
         # Проверка типа данных от AI
         if not isinstance(response, str):
             js.sendMessageToChat({"content": f"Python: 🔄 AI (_find_similar_products) вернул {type(response)} вместо строки, конвертируем"})
             response = str(response)
 
+        # Проверяем, что ответ не пустой после конвертации
+        if not response or len(response.strip()) == 0:
+            js.sendMessageToChat({"content": f"Python: ⚠️ AI вернул пустой ответ в _find_similar_products: '{response}'"})
+            console_log(f"Пустой ответ от AI: '{response}' (длина: {len(response) if response else 0})")
+            return _generate_fallback_analogs(categories, product_type)
+
+        # Логируем начало обработки ответа
+        console_log(f"Начало обработки ответа AI: длина={len(response)}, первые 100 символов='{response[:100]}...'")
+
         # Парсим ответ
         try:
             if isinstance(response, str) and len(response.strip()) > 0:
                 cleaned_response = response.replace('```json', '').replace('```', '').strip()
+
+                # Дополнительная проверка очищенного ответа
+                if not cleaned_response or cleaned_response.isspace():
+                    js.sendMessageToChat({"content": "Python: ⚠️ После очистки ответ стал пустым, используем fallback"})
+                    return _generate_fallback_analogs(categories, product_type)
+
                 parsed = json.loads(cleaned_response)
                 analogs = parsed.get('analogs', [])
 
                 if analogs:
+                    console_log(f"Успешно распарсено {len(analogs)} аналогов от AI")
                     return analogs[:5]  # Ограничение до 5 результатов
                 else:
                     # Fallback - генерируем на основе состава
                     js.sendMessageToChat({"content": "Python: ⚠️ AI не вернул аналоги, используем fallback"})
                     return _generate_fallback_analogs(categories, product_type)
             else:
-                js.sendMessageToChat({"content": f"Python: ⚠️ AI вернул пустой ответ в _find_similar_products: {type(response)}"})
+                js.sendMessageToChat({"content": f"Python: ⚠️ AI вернул некорректный ответ в _find_similar_products: {type(response)}"})
                 return _generate_fallback_analogs(categories, product_type)
 
         except json.JSONDecodeError as je:
-            js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка парсинга JSON в _find_similar_products: {str(je)}"})
+            js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка парсинга JSON в _find_similar_products: Expecting value: line 1 column 1 (char 0)"})
             console_log(f"JSON парсинг ошибка в _find_similar_products: {str(je)}")
             console_log(f"Необработанный ответ AI: {response[:500]}...")  # Логируем первые 500 символов для диагностики
 
-            # Попытка исправить распространенные проблемы с JSON
+            # Расширенная попытка исправить распространенные проблемы с JSON
             try:
-                # Убираем возможные лишние символы в начале и конце
                 fixed_json = response.strip()
+
+                # Убираем возможные лишние символы в начале и конце
                 if not fixed_json.startswith('{'):
                     start_idx = fixed_json.find('{')
                     if start_idx != -1:
                         fixed_json = fixed_json[start_idx:]
+
                 if not fixed_json.endswith('}'):
                     end_idx = fixed_json.rfind('}')
                     if end_idx != -1:
                         fixed_json = fixed_json[:end_idx + 1]
+
+                # Убираем возможные Markdown обертки
+                fixed_json = fixed_json.replace('```json', '').replace('```', '').strip()
+
+                # Исправляем распространенные проблемы с кавычками
+                fixed_json = fixed_json.replace('"', '"').replace('"', '"')  # Убеждаемся в правильных кавычках
+                fixed_json = fixed_json.replace('\\n', ' ')  # Заменяем переносы строк на пробелы
+                fixed_json = fixed_json.replace('\\t', ' ')  # Заменяем табуляции на пробелы
+
+                # Исправляем отсутствующие кавычки в ключах
+                fixed_json = re.sub(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', fixed_json)
+
+                console_log(f"Исправленный JSON: {fixed_json[:200]}...")
 
                 parsed = json.loads(fixed_json)
                 console_log("JSON удалось исправить автоматически в _find_similar_products")
                 analogs = parsed.get('analogs', [])
                 if analogs:
                     return analogs[:5]  # Ограничение до 5 результатов
-            except:
-                console_log("Автоматическое исправление JSON не удалось в _find_similar_products")
-
-            # В случае ошибки парсинга возвращаем fallback
-            return _generate_fallback_analogs(categories, product_type)
+                else:
+                    return _generate_fallback_analogs(categories, product_type)
+            except Exception as fix_error:
+                console_log(f"Автоматическое исправление JSON не удалось: {str(fix_error)}")
+                return _generate_fallback_analogs(categories, product_type)
 
     except Exception as e:
         js.sendMessageToChat({"content": f"Python: ❌ Критическая ошибка в _find_similar_products: {str(e)}"})

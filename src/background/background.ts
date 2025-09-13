@@ -1260,7 +1260,7 @@ class EnhancedChunkManager {
   private transfers = new Map<string, ChunkTransfer>();
   private assembledHtmls = new Map<string, string>(); // Store assembled HTML from offscreen
   private readonly MAX_CHUNK_SIZE = 32768; // 32KB optimal for Chrome messaging
-  private readonly TRANSFER_TIMEOUT = 600000; // 600s = 10 minutes timeout (AGGRESSIVE increase)
+  private readonly TRANSFER_TIMEOUT = 300000; // 300s = 5 minutes timeout (REDUCED for faster health monitoring)
   private readonly CLEANUP_WARNING_THRESHOLD = 240000; // Show warning 4 minutes before cleanup (240s)
 
   // RACE CONDITION PROTECTION: Backup storage for completed transfers

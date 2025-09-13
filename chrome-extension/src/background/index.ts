@@ -1,6 +1,12 @@
 import 'webextension-polyfill';
 console.log('[background] Initializing background imports...');
 
+// Глобальная функция trackSendResponse для использования вне обработчика сообщений
+function trackSendResponse(response: any): boolean {
+  console.log('[background][RESPONSE] Sending response:', JSON.stringify(response));
+  return true;
+}
+
 import { pluginChatApi } from './plugin-chat-api';
 console.log('[background] Plugin chat API loaded');
 
@@ -1953,7 +1959,7 @@ chrome.runtime.onMessage.addListener(
       if (msg.type === 'PING') {
         // console.log('[background] Processing PING request');
         // console.log('[background] PING timestamp:', new Date().toISOString());
-        sendResponse({ pong: true, timestamp: Date.now() });
+        trackSendResponse({ pong: true, timestamp: Date.now() });
         // console.log('[background] PING response sent');
         return true;
       }
@@ -1968,17 +1974,17 @@ chrome.runtime.onMessage.addListener(
               const result = await handleTestPyodideDirect(msg);
               console.log('[background][TEST_PYODIDE_DIRECT] Test completed with result:', result);
               if (!result) {
-                sendResponse({
+                trackSendResponse({
                   success: false,
                   error: 'No response received from test execution',
                   timestamp: Date.now()
                 });
               } else {
-                sendResponse(result);
+                trackSendResponse(result);
               }
             } catch (error) {
               console.error('[background][TEST_PYODIDE_DIRECT] Test failed:', error);
-              sendResponse({
+              trackSendResponse({
                 success: false,
                 error: (error as Error).message,
                 timestamp: Date.now()
@@ -1987,7 +1993,7 @@ chrome.runtime.onMessage.addListener(
           })();
         } catch (error) {
           console.error('[background][TEST_PYODIDE_DIRECT] Critical error in async handler setup:', error);
-          sendResponse({
+          trackSendResponse({
             success: false,
             error: (error as Error).message,
             timestamp: Date.now()
@@ -2818,11 +2824,11 @@ chrome.runtime.onMessage.addListener(
         (async () => {
           try {
             await pluginChatApi.saveDraft(pluginId, normPageKey, draftText);
-            console.log('[background] sendResponse(SAVE_PLUGIN_CHAT_DRAFT):', { success: true });
-            sendResponse({ success: true });
+            console.log('[background] trackSendResponse(SAVE_PLUGIN_CHAT_DRAFT):', { success: true });
+            trackSendResponse({ success: true });
           } catch (error) {
             console.error('[background] Error saving plugin chat draft:', error);
-            sendResponse({ error: String(error) });
+            trackSendResponse({ error: String(error) });
           }
         })();
 
@@ -2839,11 +2845,11 @@ chrome.runtime.onMessage.addListener(
         (async () => {
           try {
             const draftText = await pluginChatApi.getDraft(pluginId, normPageKey);
-            console.log('[background] sendResponse(GET_PLUGIN_CHAT_DRAFT):', { draftText });
-            sendResponse({ draftText });
+            console.log('[background] trackSendResponse(GET_PLUGIN_CHAT_DRAFT):', { draftText });
+            trackSendResponse({ draftText });
           } catch (error) {
             console.error('[background] Error getting plugin chat draft:', error);
-            sendResponse({ error: String(error) });
+            trackSendResponse({ error: String(error) });
           }
         })();
 
