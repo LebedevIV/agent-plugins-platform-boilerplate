@@ -2535,16 +2535,15 @@ def analyze_ozon_product() -> Dict[str, Any]:
         score = analysis_result.get('score', 'N/A')
         reasoning = analysis_result.get('reasoning', 'Объяснение не доступно')
 
-        # Отправляем описание (обрезаем до 100 символов)
+        # Отправляем описание и состав в одном сообщении
         truncated_description = description[:100] + ('...' if len(description) > 100 else '')
-        chat_message(f"📝 Описание: {truncated_description}")
-
-        # Отправляем состав (обрезаем до 100 символов)
         truncated_composition = composition[:100] + ('...' if len(composition) > 100 else '')
-        chat_message(f"📝 Состав: {truncated_composition}")
+        chat_message(f"📝 Описание: {truncated_description}\n📝 Состав: {truncated_composition}")
 
         # Отправляем результаты AI анализа соответствия
-        chat_message(f"📊 Оценка соответствия: {score}/10\n{reasoning}")
+        score_str = str(score) if score is not None else 'N/A'
+        reasoning_str = str(reasoning) if reasoning is not None else 'Объяснение не доступно'
+        chat_message(f"📊 Оценка соответствия: {score_str}/10\n{reasoning_str}")
 
         # Логируем в консоль полную информацию для разработчиков
         title_preview = product_info['title'][:50] + "..." if len(product_info['title']) > 50 else product_info['title']
@@ -2949,7 +2948,9 @@ def _analyze_composition_vs_description(description: str, composition: str) -> D
 
     except Exception as e:
         chat_message(f"❌ Критическая ошибка в _analyze_composition_vs_description: {str(e)}. Причина: возможно проблемы с AI моделью или входными данными.")
-        return { "score": 0, "reasoning": f"Ошибка анализа AI: {str(e)}. Рекомендуется проверить доступность AI модели и корректность входных данных (описание: {len(description) if description else 0} символов, состав: {len(composition) if composition else 0} символов)." }
+        desc_len = len(str(description)) if description else 0
+        comp_len = len(str(composition)) if composition else 0
+        return { "score": 0, "reasoning": f"Ошибка анализа AI: {str(e)}. Рекомендуется проверить доступность AI модели и корректность входных данных (описание: {desc_len} символов, состав: {comp_len} символов)." }
 
 
 # Лояльная функция batch processor с расширенной функциональностью
