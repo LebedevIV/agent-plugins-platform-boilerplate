@@ -392,22 +392,42 @@ async function initializePyodide() {
             content = JSON.stringify(jsMessage);
           }
 
-          // Immediate отправка без await и таймаутов для PYODIDE_MESSAGE
+          // Асинхронная отправка с Promise и таймаутом для предотвращения ошибок каналов
           const messageId = `pyodide_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          chrome.runtime.sendMessage({
-            type: 'PYODIDE_MESSAGE',
-            messageId: messageId,
-            pluginId: currentPluginId,
-            pageKey: currentPageKey,
-            message: {
-              role: 'plugin',
-              content: content,
-              timestamp: Date.now()
+
+          return new Promise((resolve, reject) => {
+            const timeoutId = setTimeout(() => {
+              logWarn('PYODIDE', `sendMessageToChat timeout for messageId: ${messageId}`);
+              resolve({ success: false, error: 'timeout' });
+            }, 5000); // 5 секунд таймаут
+
+            try {
+              chrome.runtime.sendMessage({
+                type: 'PYODIDE_MESSAGE',
+                messageId: messageId,
+                pluginId: currentPluginId,
+                pageKey: currentPageKey,
+                message: {
+                  role: 'plugin',
+                  content: content,
+                  timestamp: Date.now()
+                }
+              }, (response) => {
+                clearTimeout(timeoutId);
+                if (chrome.runtime.lastError) {
+                  logError('PYODIDE', 'sendMessageToChat chrome.runtime error:', chrome.runtime.lastError);
+                  resolve({ success: false, error: chrome.runtime.lastError.message });
+                } else {
+                  logInfo('PYODIDE', `PYODIDE_MESSAGE отправлено successfully с ID: ${messageId}`);
+                  resolve({ success: true, response: response });
+                }
+              });
+            } catch (error) {
+              clearTimeout(timeoutId);
+              logError('PYODIDE', 'Unexpected error in sendMessageToChat:', error);
+              resolve({ success: false, error: error.message });
             }
           });
-          logInfo('PYODIDE', `PYODIDE_MESSAGE отправлено immediate с ID: ${messageId}`);
-
-          return Promise.resolve({ success: true });
         } catch (error) {
           logError('PYODIDE', 'Unexpected error in sendMessageToChat:', error);
           return Promise.resolve({ success: false, error: error.message });

@@ -1869,7 +1869,7 @@ class FastDOMParser:
         if len(self.html) <= chunk_size:
             return self.extract_product_info()  # Для небольших документов используем обычный парсинг
 
-        chat_message("📄 Потоковый парсинг большого HTML документа...")
+        logger.log("📄 Потоковый парсинг большого HTML документа...", "analysis_start")
 
         # Разбиваем документ на чанки с перекрытием для capture групп
         overlap = 500  # Перекрытие для правильной работы regex
@@ -2947,9 +2947,15 @@ def _analyze_composition_vs_description(description: str, composition: str) -> D
             return {"score": 5, "reasoning": f"AI вернул некорректный тип данных: {type(result_str)}"}
 
     except Exception as e:
-        chat_message(f"❌ Критическая ошибка в _analyze_composition_vs_description: {str(e)}. Причина: возможно проблемы с AI моделью или входными данными.")
-        desc_len = len(str(description)) if description else 0
-        comp_len = len(str(composition)) if composition else 0
+        console_log(f"Критическая ошибка в _analyze_composition_vs_description: {str(e)}")
+        # Безопасная конвертация типов данных для избежания ошибок len()
+        try:
+            desc_len = len(str(description or ""))
+            comp_len = len(str(composition or ""))
+        except Exception as len_error:
+            console_log(f"Ошибка при подсчете длины: {str(len_error)}")
+            desc_len = 0
+            comp_len = 0
         return { "score": 0, "reasoning": f"Ошибка анализа AI: {str(e)}. Рекомендуется проверить доступность AI модели и корректность входных данных (описание: {desc_len} символов, состав: {comp_len} символов)." }
 
 
@@ -3143,7 +3149,6 @@ def _find_similar_products(categories: List[str], composition: str) -> List[Dict
                 return _generate_fallback_analogs(categories, product_type)
 
         except json.JSONDecodeError as je:
-            chat_message(f"⚠️ Ошибка обработки ответа AI при поиске аналогов: некорректный JSON формат. Детали: {str(je)}. Ответ AI: '{response[:200]}...'")
             console_log(f"JSON парсинг ошибка в _find_similar_products: {str(je)}")
             console_log(f"Необработанный ответ AI: {response[:500]}...")  # Логируем первые 500 символов для диагностики
 
