@@ -197,6 +197,7 @@ def console_log(message: str, force: bool = False):
 def chat_message(message: str, message_type: str = None):
     """Отправка сообщения в чат (только для финальных результатов и ошибок)."""
     try:
+        # Отправляем чистое читаемое сообщение без префиксов
         js.sendMessageToChat({"content": message})
     except Exception:
         console_log(f"Ошибка отправки в чат: {message}")
@@ -1868,7 +1869,7 @@ class FastDOMParser:
         if len(self.html) <= chunk_size:
             return self.extract_product_info()  # Для небольших документов используем обычный парсинг
 
-        js.sendMessageToChat({"content": "Python: 📄 Потоковый парсинг большого HTML документа..."})
+        chat_message("📄 Потоковый парсинг большого HTML документа...")
 
         # Разбиваем документ на чанки с перекрытием для capture групп
         overlap = 500  # Перекрытие для правильной работы regex
@@ -2075,11 +2076,11 @@ def analyze_ozon_product() -> Dict[str, Any]:
     """
     try:
         # === ОПТИМИЗИРОВАННОЕ ЛОГИРОВАНИЕ ===
-        logger.log("Python: 🔍 ===== НАЧАЛО АНАЛИЗА ТОВАРА OZON =====", "analysis_start", force=True)
-        logger.log(f"Python: 📊 Timestamp: {datetime.now().isoformat()}", "timestamp")
+        logger.log("🔍 ===== НАЧАЛО АНАЛИЗА ТОВАРА OZON =====", "analysis_start", force=True)
+        logger.log(f"📊 Timestamp: {datetime.now().isoformat()}", "timestamp")
 
         # Шаг 1: Чтение метаданных из Pyodide globals
-        logger.log("Python: 🔧 Шаг 1: Чтение метаданных из Python globals", "step_1")
+        logger.log("🔧 Шаг 1: Чтение метаданных из Python globals", "step_1")
 
         # Начало измерения времени чтения данных
         read_start_time = datetime.now()
@@ -2350,6 +2351,14 @@ def analyze_ozon_product() -> Dict[str, Any]:
         console_log(f"Готовность к анализу: {'✅ ДА' if analysis_ready else '❌ НЕТ'}")
 
         if not analysis_ready:
+            chat_message("❌ Ошибка: HTML контент недостаточно качественный для анализа")
+            console_log("HTML недостаточно качественный для анализа")
+            return {
+                "status": "error",
+                "message": "HTML контент недостаточно качественный для анализа"
+            }
+
+        if not analysis_ready:
             console_log("HTML недостаточно качественный для анализа")
             if len(page_html) <= 100:
                 console_log("Причина: HTML слишком короткий")
@@ -2396,15 +2405,14 @@ def analyze_ozon_product() -> Dict[str, Any]:
 
         # Проверка категории товара - прерываем анализ если не косметика
         if not fast_parser.is_product_in_target_category(categories):
-            chat_message("Анализ прерван: товар не из категории косметики")
+            chat_message("❌ Анализ прерван: товар не из категории косметики и ухода за собой")
             console_log("Анализ прерван: товар не из категории косметики")
             return {
                 "status": "category_error",
                 "message": "Товар не принадлежит к категории косметики и ухода за собой"
             }
 
-        # Промежуточное сообщение о начале анализа косметического товара
-        chat_message("Начинаю анализ косметического товара...")
+        # Начинаем анализ косметического товара (убираем дублирующее сообщение в чат)
         console_log("Начинаю анализ косметического товара...")
 
         parsing_metrics = fast_parser.get_parsing_metrics()
@@ -2433,7 +2441,7 @@ def analyze_ozon_product() -> Dict[str, Any]:
 
             except Exception as e:
                 console_log(f"Ошибка анализа соответствия: {e}")
-                analysis_result = {"score": 5, "reasoning": f"Ошибка AI анализа: {str(e)}"}
+                analysis_result = {"score": 5, "reasoning": f"Ошибка AI анализа соответствия описания и состава: {str(e)}. Проверьте доступность AI модели и корректность входных данных."}
 
         # Аналогично для поиска аналогов
         cache_key_analogs = f"analogs:{hash(str(categories) + composition[:100])}"
@@ -2523,18 +2531,33 @@ def analyze_ozon_product() -> Dict[str, Any]:
         console_log(f"Рейтинг: {product_info['rating']}")
         console_log("=== КОНЕЦ ДЕТАЛЬНЫХ ДАННЫХ ===")
 
-        # Расширенное финальное сообщение в чат с превью данных
+        # Получаем оценку для логирования и отображения в чате
+        score = analysis_result.get('score', 'N/A')
+        reasoning = analysis_result.get('reasoning', 'Объяснение не доступно')
+
+        # Отправляем описание (обрезаем до 100 символов)
+        truncated_description = description[:100] + ('...' if len(description) > 100 else '')
+        chat_message(f"📝 Описание: {truncated_description}")
+
+        # Отправляем состав (обрезаем до 100 символов)
+        truncated_composition = composition[:100] + ('...' if len(composition) > 100 else '')
+        chat_message(f"📝 Состав: {truncated_composition}")
+
+        # Отправляем результаты AI анализа соответствия
+        chat_message(f"📊 Оценка соответствия: {score}/10\n{reasoning}")
+
+        # Логируем в консоль полную информацию для разработчиков
         title_preview = product_info['title'][:50] + "..." if len(product_info['title']) > 50 else product_info['title']
         desc_length = len(description)
         comp_length = len(composition)
         category_info = categories[0] if categories else "не определена"
-
-        chat_message(f"Анализ завершен: '{title_preview}' | Описание: {desc_length} симв. | Состав: {comp_length} симв. | Категория: {category_info} | Оценка: {analysis_result.get('score', 'N/A')}/10")
+        console_log(f"Анализ завершен: '{title_preview}' | Описание: {desc_length} симв. | Состав: {comp_length} симв. | Категория: {category_info} | Оценка: {score}/10")
 
         return result
         
     except Exception as e:
-        chat_message(f"Критическая ошибка при анализе - {e}")
+        chat_message(f"❌ Критическая ошибка при анализе товара: {str(e)}")
+        console_log(f"Критическая ошибка при анализе: {e}")
         # Возвращаем стандартизированный объект ошибки
         return { "status": "error", "message": f"Ошибка анализа товара: {str(e)}" }
 
@@ -2620,7 +2643,7 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
         return { "deep_analysis_report": result }
     except Exception as e:
-        chat_message(f"Ошибка в perform_deep_analysis: {str(e)}")
+        chat_message(f"❌ Ошибка глубокого анализа: {str(e)}")
         return { "status": "error", "message": f"Ошибка глубокого анализа: {str(e)}" }
 
 # ==============================================================================
@@ -2881,7 +2904,7 @@ def _analyze_composition_vs_description(description: str, composition: str) -> D
 
         # Проверка типа данных от AI и конвертация при необходимости
         if not isinstance(result_str, str):
-            js.sendMessageToChat({"content": f"Python: 🔄 AI вернул {type(result_str)} вместо строки, конвертируем"})
+            chat_message(f"🔄 AI вернул {type(result_str)} вместо строки, конвертируем")
             result_str = str(result_str)
 
         # Очистка и парсинг ответа от AI. Модели часто "оборачивают"
@@ -2898,7 +2921,7 @@ def _analyze_composition_vs_description(description: str, composition: str) -> D
                 else:
                     return {"score": 5, "reasoning": "Неверный формат ответа от AI (отсутствует 'score')."}
             except json.JSONDecodeError as je:
-                js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка парсинга JSON: {str(je)}"})
+                chat_message(f"⚠️ Ошибка парсинга JSON от AI анализа")
                 console_log(f"JSON парсинг ошибка в _analyze_composition_vs_description: {str(je)}")
                 console_log(f"Необработанный ответ AI: {cleaned_str[:200]}...")  # Логируем первые 200 символов для диагностики
                 # Попытка исправить распространенные проблемы с JSON
@@ -2921,12 +2944,12 @@ def _analyze_composition_vs_description(description: str, composition: str) -> D
                     console_log("Автоматическое исправление JSON не удалось")
                     return {"score": 5, "reasoning": f"Не удалось распарсить JSON от AI: {cleaned_str[:100]}..."}
         else:
-            js.sendMessageToChat({"content": f"Python: ⚠️ AI вернул пустой или некорректный ответ: {type(result_str)}"})
+            chat_message(f"⚠️ AI вернул пустой или некорректный ответ: {type(result_str)}")
             return {"score": 5, "reasoning": f"AI вернул некорректный тип данных: {type(result_str)}"}
 
     except Exception as e:
-        js.sendMessageToChat({"content": f"Python: ❌ Критическая ошибка в _analyze_composition_vs_description: {str(e)}"})
-        return { "score": 0, "reasoning": f"Ошибка анализа AI: {str(e)}" }
+        chat_message(f"❌ Критическая ошибка в _analyze_composition_vs_description: {str(e)}. Причина: возможно проблемы с AI моделью или входными данными.")
+        return { "score": 0, "reasoning": f"Ошибка анализа AI: {str(e)}. Рекомендуется проверить доступность AI модели и корректность входных данных (описание: {len(description) if description else 0} символов, состав: {len(composition) if composition else 0} символов)." }
 
 
 # Лояльная функция batch processor с расширенной функциональностью
@@ -2949,7 +2972,7 @@ async def _call_ai_model_immediate(model_alias: str, prompt: str, context: Optio
     # Проверяем кеш
     cached_response = await ai_cache.get(model_alias, prompt, context)
     if cached_response:
-        js.sendMessageToChat({"content": f"Python: 📋 Немедленный кеш hit для {model_alias}"})
+        chat_message(f"📋 Немедленный кеш hit для {model_alias}")
         return cached_response
 
     start_time = datetime.now()
@@ -3076,18 +3099,18 @@ def _find_similar_products(categories: List[str], composition: str) -> List[Dict
 
         # Детальная проверка ответа AI перед обработкой
         if response is None:
-            js.sendMessageToChat({"content": "Python: ⚠️ AI вернул None в _find_similar_products, используем fallback"})
+            chat_message("⚠️ AI вернул пустой ответ при поиске аналогов, используем резервные данные")
             console_log("AI вернул None - переходим на fallback")
             return _generate_fallback_analogs(categories, product_type)
 
         # Проверка типа данных от AI
         if not isinstance(response, str):
-            js.sendMessageToChat({"content": f"Python: 🔄 AI (_find_similar_products) вернул {type(response)} вместо строки, конвертируем"})
+            chat_message(f"🔄 AI вернул {type(response)} вместо строки при поиске аналогов, конвертируем")
             response = str(response)
 
         # Проверяем, что ответ не пустой после конвертации
         if not response or len(response.strip()) == 0:
-            js.sendMessageToChat({"content": f"Python: ⚠️ AI вернул пустой ответ в _find_similar_products: '{response}'"})
+            chat_message("⚠️ AI вернул пустой ответ при поиске аналогов, используем резервные данные")
             console_log(f"Пустой ответ от AI: '{response}' (длина: {len(response) if response else 0})")
             return _generate_fallback_analogs(categories, product_type)
 
@@ -3101,7 +3124,7 @@ def _find_similar_products(categories: List[str], composition: str) -> List[Dict
 
                 # Дополнительная проверка очищенного ответа
                 if not cleaned_response or cleaned_response.isspace():
-                    js.sendMessageToChat({"content": "Python: ⚠️ После очистки ответ стал пустым, используем fallback"})
+                    chat_message("⚠️ После очистки ответ AI стал пустым, используем резервные данные")
                     return _generate_fallback_analogs(categories, product_type)
 
                 parsed = json.loads(cleaned_response)
@@ -3112,14 +3135,14 @@ def _find_similar_products(categories: List[str], composition: str) -> List[Dict
                     return analogs[:5]  # Ограничение до 5 результатов
                 else:
                     # Fallback - генерируем на основе состава
-                    js.sendMessageToChat({"content": "Python: ⚠️ AI не вернул аналоги, используем fallback"})
+                    chat_message("⚠️ AI не вернул аналоги, используем резервные данные")
                     return _generate_fallback_analogs(categories, product_type)
             else:
-                js.sendMessageToChat({"content": f"Python: ⚠️ AI вернул некорректный ответ в _find_similar_products: {type(response)}"})
+                chat_message(f"⚠️ AI вернул некорректный ответ при поиске аналогов: {type(response)}")
                 return _generate_fallback_analogs(categories, product_type)
 
         except json.JSONDecodeError as je:
-            js.sendMessageToChat({"content": f"Python: ⚠️ Ошибка парсинга JSON в _find_similar_products: Expecting value: line 1 column 1 (char 0)"})
+            chat_message(f"⚠️ Ошибка обработки ответа AI при поиске аналогов: некорректный JSON формат. Детали: {str(je)}. Ответ AI: '{response[:200]}...'")
             console_log(f"JSON парсинг ошибка в _find_similar_products: {str(je)}")
             console_log(f"Необработанный ответ AI: {response[:500]}...")  # Логируем первые 500 символов для диагностики
 
@@ -3163,7 +3186,7 @@ def _find_similar_products(categories: List[str], composition: str) -> List[Dict
                 return _generate_fallback_analogs(categories, product_type)
 
     except Exception as e:
-        js.sendMessageToChat({"content": f"Python: ❌ Критическая ошибка в _find_similar_products: {str(e)}"})
+        chat_message(f"❌ Критическая ошибка при поиске аналогов: {str(e)}")
         return [{"name": f"Ошибка поиска аналогов: {str(e)}", "error": True}]
 
 def _categorize_product_by_composition(composition: str) -> str:

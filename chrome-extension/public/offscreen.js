@@ -382,6 +382,16 @@ async function initializePyodide() {
         logDebug('PYODIDE', 'JS bridge attempting to send message');
         try {
           const jsMessage = message.toJs ? message.toJs({ dict_converter: Object.fromEntries }) : message;
+          // Исправление: правильно обрабатываем объект с полем content
+          let content;
+          if (typeof jsMessage === 'string') {
+            content = jsMessage;
+          } else if (jsMessage && typeof jsMessage === 'object' && jsMessage.content) {
+            content = jsMessage.content;
+          } else {
+            content = JSON.stringify(jsMessage);
+          }
+
           // Immediate отправка без await и таймаутов для PYODIDE_MESSAGE
           const messageId = `pyodide_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           chrome.runtime.sendMessage({
@@ -391,7 +401,7 @@ async function initializePyodide() {
             pageKey: currentPageKey,
             message: {
               role: 'plugin',
-              content: `📨 Execute result: ${typeof jsMessage === 'string' ? jsMessage : JSON.stringify(jsMessage)}`,
+              content: content,
               timestamp: Date.now()
             }
           });
@@ -706,20 +716,7 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
       logInfo('EXECUTION', `Шаг 2: Pyodide уже инициализирован - ${new Date(Date.now()).toISOString()}`);
     }
 
-    // Send progress message to chat - immediate отправка
-    const progressMessageId = `pyodide_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    chrome.runtime.sendMessage({
-      type: 'PYODIDE_MESSAGE',
-      messageId: progressMessageId,
-      pluginId: pluginId,
-      pageKey: pageKey,
-      message: {
-        role: 'plugin',
-        content: '🔄 Запуск выполнения workflow с собранными данными...',
-        timestamp: Date.now()
-      }
-    });
-    logInfo('EXECUTION', `Прогресс сообщение отправлено immediate с ID: ${progressMessageId}`);
+    logInfo('EXECUTION', `Workflow запускается`);
 
     // Load the Python script URL
     logInfo('EXECUTION', `Шаг 4: Загрузка Python скрипта - ${new Date(Date.now()).toISOString()}`);
@@ -839,20 +836,7 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
     logInfo('EXECUTION', `Шаг 7: Python функция выполнена успешно - ${new Date(Date.now()).toISOString()}`);
     logInfo('EXECUTION', 'Workflow-engine executed successfully');
 
-    // Send success message to chat - immediate отправка
-    const successMessageId = `pyodide_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    chrome.runtime.sendMessage({
-      type: 'PYODIDE_MESSAGE',
-      messageId: successMessageId,
-      pluginId: pluginId,
-      pageKey: pageKey,
-      message: {
-        role: 'plugin',
-        content: `✅ Workflow выполнена успешно с собранными данными.`,
-        timestamp: Date.now()
-      }
-    });
-    logInfo('EXECUTION', `Success сообщение отправлено immediate с ID: ${successMessageId}`);
+    logInfo('EXECUTION', `Workflow успешно завершен`);
 
     const endTime = Date.now();
     logInfo('EXECUTION', `Workflow успешно завершен за ${endTime - startTime}мс в ${new Date(endTime).toISOString()}`);
@@ -874,20 +858,8 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
     const errorTime = Date.now();
     logError('EXECUTION', `Workflow завершен с ошибкой за ${errorTime - startTime}мс в ${new Date(errorTime).toISOString()}`);
 
-    // Send error message to chat - immediate отправка
-    const errorMessageId = `pyodide_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    chrome.runtime.sendMessage({
-      type: 'PYODIDE_MESSAGE',
-      messageId: errorMessageId,
-      pluginId: pluginId,
-      pageKey: pageKey,
-      message: {
-        role: 'plugin',
-        content: `❌ Ошибка выполнения workflow: ${error.message}`,
-        timestamp: Date.now()
-      }
-    });
-    logError('EXECUTION', `Error сообщение отправлено immediate с ID: ${errorMessageId}`);
+    // Сообщение об ошибке убрано согласно требованиям - только логирование
+    logError('EXECUTION', `Workflow завершился с ошибкой: ${error.message}`);
 
     // Send error response back
     const errorResponse = {
@@ -1216,20 +1188,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
 
      logInfo('EXECUTION', `Starting workflow-engine with pluginId: ${pluginId}`);
 
-     // Send progress message to chat - immediate отправка
-     const workflowProgressMessageId = `pyodide_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-     chrome.runtime.sendMessage({
-       type: 'PYODIDE_MESSAGE',
-       messageId: workflowProgressMessageId,
-       pluginId: pluginId,
-       pageKey: pageKey,
-       message: {
-         role: 'plugin',
-         content: '🔄 Запуск выполнения workflow с chunk данными...',
-         timestamp: Date.now()
-       }
-     });
-     logInfo('EXECUTION', `Workflow progress сообщение отправлено immediate с ID: ${workflowProgressMessageId}`);
+     logInfo('EXECUTION', `Workflow с chunk данными запускается`);
 
      // Debug logging for workflow payload
      logDebug('EXECUTION', `Workflow payload keys: ${Object.keys(workflowPayload).length}`);

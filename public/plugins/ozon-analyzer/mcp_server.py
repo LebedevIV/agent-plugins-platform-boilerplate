@@ -19,7 +19,7 @@ def send_chat_message(message: str, level: str = 'info'):
     """Отправка сообщения в UI чат только для важных уведомлений"""
     try:
         if level in ['error', 'warning'] or (level == 'info' and 'ошибка' in message.lower()):
-            js.sendMessageToChat({"content": f"Python: {message}"}) # type: ignore
+            js.sendMessageToChat({"content": message}) # type: ignore
     except Exception:
         # Тихо игнорируем ошибки отправки сообщений
         pass
