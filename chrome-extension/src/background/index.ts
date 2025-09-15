@@ -21,6 +21,43 @@ import { getApiKeyForModel, callAiModel } from './ai-api-client';
 import { exampleThemeStorage, pluginSettingsStorage, getPluginSettings } from '@extension/storage';
 console.log('[background] Storage modules loaded');
 
+// Глобальная очередь для последовательной обработки PYODIDE_MESSAGE
+const pyodideMessageQueue: any[] = [];
+let isProcessingPyodideMessage = false;
+
+async function processPyodideMessageQueue(): Promise<void> {
+  if (isProcessingPyodideMessage || pyodideMessageQueue.length === 0) {
+    return;
+  }
+
+  isProcessingPyodideMessage = true;
+  console.log('[background][PYODIDE_QUEUE] Starting sequential processing of', pyodideMessageQueue.length, 'messages');
+
+  while (pyodideMessageQueue.length > 0) {
+    const msg = pyodideMessageQueue.shift();
+    console.log('[background][PYODIDE_QUEUE] Processing message:', msg.messageId);
+
+    try {
+      console.log('[background][PYODIDE_QUEUE] Saving message to chat...');
+      await pluginChatApi.saveMessage(msg.pluginId, getPageKey(msg.pageKey), msg.message as ChatMessage);
+
+      console.log('[background][PYODIDE_QUEUE] Broadcasting chat update...');
+      broadcastChatUpdate(msg.pluginId, getPageKey(msg.pageKey));
+
+      console.log('[background][PYODIDE_QUEUE] Sending success response for:', msg.messageId);
+      trackSendResponse({ success: true, messageId: msg.messageId });
+
+      console.log('[background][PYODIDE_QUEUE] Message processed successfully:', msg.messageId);
+    } catch (error) {
+      console.error('[background][PYODIDE_QUEUE] Failed to process message:', msg.messageId, error);
+      trackSendResponse({ success: false, error: (error as Error).message, messageId: msg.messageId });
+    }
+  }
+
+  isProcessingPyodideMessage = false;
+  console.log('[background][PYODIDE_QUEUE] Queue processing completed');
+}
+
 console.log('[background] Starting Offscreen Document integration - REFACTORED BACKGROUND ARCHITECTURE');
 
 // === OFFSCREEN API FEATURE DETECTION ===
@@ -3516,6 +3553,17 @@ chrome.runtime.onMessage.addListener(
          // Обработка подтверждения получения чанка от offscreen
          console.log('[background][CHUNKING] Chunk acknowledgment received:', msg);
          handleChunkAcknowledgment(msg as HtmlChunkAckMessage);
+         return true;
+
+       } else if (msg.type === 'PYODIDE_MESSAGE') {
+         console.log('[background][PYODIDE_MESSAGE] Adding to queue:', msg.messageId);
+
+         // Добавляем сообщение в очередь вместо прямой обработки
+         pyodideMessageQueue.push(msg);
+
+         // Запускаем обработку очереди
+         processPyodideMessageQueue();
+
          return true;
 
        } else if (msg.type === 'PYODIDE_MESSAGE_SERVICE_WORKER') {

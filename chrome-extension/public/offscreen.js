@@ -394,12 +394,14 @@ async function initializePyodide() {
 
           // Асинхронная отправка с Promise и таймаутом для предотвращения ошибок каналов
           const messageId = `pyodide_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          logInfo('PYODIDE', `sendMessageToChat starting for messageId: ${messageId}, content length: ${content.length}`);
 
           return new Promise((resolve, reject) => {
             const timeoutId = setTimeout(() => {
-              logWarn('PYODIDE', `sendMessageToChat timeout for messageId: ${messageId}`);
+              logError('PYODIDE', `sendMessageToChat timeout after 10s for messageId: ${messageId}, pluginId: ${currentPluginId}, pageKey: ${currentPageKey}`);
+              logError('PYODIDE', `Timeout details: content length=${content.length}, type=${typeof content}`);
               resolve({ success: false, error: 'timeout' });
-            }, 5000); // 5 секунд таймаут
+            }, 10000); // 10 секунд таймаут (увеличен с 5 секунд)
 
             try {
               chrome.runtime.sendMessage({
