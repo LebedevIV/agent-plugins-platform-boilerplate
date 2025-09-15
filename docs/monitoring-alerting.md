@@ -663,7 +663,7 @@ const pluginHealth = {
 
     ai_connectivity: {
         primary_model: 'gemini-flash',
-        fallback_models: ['gemini-25', 'openai-gpt-4'],
+        fallback_models: ['gemini-pro', 'openai-gpt-4'],
         test_prompt: 'functional'
     },
 

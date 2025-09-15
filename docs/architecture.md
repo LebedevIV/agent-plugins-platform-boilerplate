@@ -234,7 +234,7 @@ class FastDOMParser:
 ```javascript
 const aiProviders = {
     google: {
-        fallbackChain: ["gemini-flash", "gemini-25", "gemini-pro"],
+        fallbackChain: ["gemini-flash", "gemini-pro"],
         rateLimits: { requestsPerMinute: 60, burstLimit: 20 }
     },
     openai: {

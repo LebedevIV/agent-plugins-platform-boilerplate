@@ -90,8 +90,7 @@ const GEMINI_CONFIG = {
   apiKey: process.env.GEMINI_API_KEY,
   models: {
     'gemini-flash': 'models/gemini-1.5-flash',
-    'gemini-pro': 'models/gemini-1.5-pro',
-    'gemini-25': 'models/gemini-pro-1.5'
+    'gemini-pro': 'models/gemini-1.5-pro'
   },
   retryPolicy: {
     maxAttempts: 3,

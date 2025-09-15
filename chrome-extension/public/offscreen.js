@@ -548,13 +548,19 @@ function handleChunkedMessage(message, sendResponse) {
       break;
 
     case 'START_WORKFLOW_AFTER_CHUNKS':
+      // handleStartWorkflowAfterChunks уже вызывает sendResponse() синхронно
+      // поэтому НЕ возвращаем true для избежания ошибок канала
+      logDebug('CHUNKING', 'Processing START_WORKFLOW_AFTER_CHUNKS synchronously');
       handleStartWorkflowAfterChunks(message, sendResponse);
-      return true; // Keep channel open for async response
+      break;
 
     default:
       logWarn('CHUNKING', 'Unknown chunk message type:', message.type);
   }
 
+  // Всегда возвращаем false - sendResponse уже вызван синхронно во всех обработчиках
+  // Это предотвращает ошибки "message channel closed before a response was received"
+  logDebug('CHUNKING', `handleChunkedMessage returning false for message type: ${message.type}`);
   return false;
 }
 
@@ -923,6 +929,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
   // Функция очистки глобальной переменной при завершении
   const cleanupGlobalSendResponse = () => {
     globalSendResponse = null;
+    logDebug('CHANNEL', 'Global sendResponse cleaned up');
   };
 
   // Handle HTML_ASSEMBLED confirmation from background to cleanup transfer
@@ -936,6 +943,8 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       logWarn('CHUNKING', `Transfer ${transferId} not found for cleanup confirmation`);
     }
 
+    // Send confirmation response and return true
+    trackSendResponse({ success: true, messageId: messageId });
     return true;
   }
 
@@ -954,6 +963,8 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       logWarn('CHUNKING', `Transfer ${transferId} not found to mark as failed`);
     }
 
+    // Send confirmation response and return true
+    trackSendResponse({ success: true, messageId: messageId });
     return true;
   }
 
@@ -962,11 +973,15 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     const { transferId } = message;
     const transfer = htmlTransfers.get(transferId);
 
-    return {
+    const statusResponse = {
       transferExists: !!transfer,
       assembledNotified: transfer?.assembledNotified || false,
-      completed: transfer?.completed || false
+      completed: transfer?.completed || false,
+      messageId: messageId
     };
+
+    trackSendResponse(statusResponse);
+    return true;
   }
 
   // Handle PING messages for health checks
@@ -1018,6 +1033,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       trackSendResponse(errorResponse);
     }
 
+    logInfo('EXECUTION', 'Processing TEST_PYODIDE_DIRECT_EXEC asynchronously - sendResponse will be called');
     return true; // Keep channel open for async response
   }
 
@@ -1113,7 +1129,8 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       logInfo('EXECUTION', `Sending error response for EXECUTE_PYTHON_CODE: testName=${message.testName}, requestId=${message.requestId}, error=${error.message}`);
       trackSendResponse(errorResponse);
     }
-
+  
+    logInfo('EXECUTION', 'Processing EXECUTE_PYTHON_CODE asynchronously - sendResponse will be called');
     return true;
   }
 
@@ -1242,16 +1259,40 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     sendWorkflowResponse(errorResponse);
    }
 
+   logInfo('EXECUTION', 'Processing EXECUTE_WORKFLOW asynchronously - sendResponse will be called');
    return true; // Keep channel open for async response
- }
+  }
 
-  return false;
-}).then(() => {
   // Очистка глобальной переменной после завершения обработки сообщения
   cleanupGlobalSendResponse();
-}).catch((error) => {
-  logError('SYSTEM', 'Error in message handler:', error);
-  cleanupGlobalSendResponse();
+
+  return false;
 });
+
+// ДОБАВИТЬ ЛОГИ ДЛЯ ДИАГНОСТИКИ ПРОБЛЕМЫ С .THEN()
+logInfo('SYSTEM', 'Message listener already registered above - checking result...');
+const listenerResultValue = undefined; // chrome.runtime.onMessage.addListener всегда возвращает undefined
+logInfo('SYSTEM', `chrome.runtime.onMessage.addListener result: ${listenerResultValue}`);
+logInfo('SYSTEM', `Type of result: ${typeof listenerResultValue}`);
+if (listenerResultValue === undefined) {
+  logWarn('SYSTEM', '⚠️ addListener returned undefined - this is expected, no .then() needed');
+} else {
+  logInfo('SYSTEM', '✅ addListener returned a value - checking if it has .then() method');
+  logInfo('SYSTEM', `Has .then method: ${typeof listenerResultValue.then === 'function'}`);
+}
+
+// ДОБАВИТЬ ОБРАБОТКУ БЕЗ .THEN() - ТОЛЬКО ЛОГИ
+if (listenerResultValue && typeof listenerResultValue.then === 'function') {
+  logInfo('SYSTEM', 'Result has .then() method - using Promise handling');
+  listenerResultValue.then(() => {
+    logDebug('SYSTEM', 'Message handler setup completed successfully');
+  }).catch((error) => {
+    logError('SYSTEM', 'Error in message handler setup:', error);
+    // cleanupGlobalSendResponse(); // Функция определена в обработчике выше
+  });
+} else {
+  logInfo('SYSTEM', 'Result does not have .then() method - no Promise handling needed');
+  logDebug('SYSTEM', 'Message handler setup completed (no Promise)');
+}
 
 logInfo('SYSTEM', 'Offscreen document ready, waiting for messages...');

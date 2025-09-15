@@ -5,6 +5,13 @@
  * для всех компонентов плагина: Workflow Engine, Pyodide Worker, AI Client, Network
  */
 
+import { MonitoringLogger } from './logger.js';
+import { MetricsCollector } from './metrics-collector.js';
+import { AlertManager } from './alert-manager.js';
+import { ErrorTracker } from './error-tracker.js';
+import { PerformanceMonitor } from './performance-monitor.js';
+import { NetworkTracker } from './network-tracker.js';
+
 export enum LogLevel {
   DEBUG = 'debug',
   INFO = 'info',
@@ -134,6 +141,7 @@ class MonitoringCore {
 
     this.initializeGlobalErrorHandlers();
     this.logger.addEvent({
+      timestamp: Date.now(),
       component: 'MonitoringCore',
       level: LogLevel.INFO,
       message: 'Monitoring system initialized',
@@ -192,13 +200,9 @@ class MonitoringCore {
     // Оповещение о критических ошибках
     if (errorData.component === 'pyodide' || errorData.component === 'workflow') {
       this.alertManager.createAlert({
-        id: `error_${Date.now()}`,
         severity: AlertSeverity.HIGH,
         component: errorData.component,
-        message: `Критическая ошибка в ${context}: ${error.message}`,
-        timestamp: Date.now(),
-        acknowledged: false,
-        resolved: false
+        message: `Критическая ошибка в ${context}: ${error.message}`
       });
     }
   }
@@ -269,7 +273,7 @@ class MonitoringCore {
       method,
       responseTime,
       statusCode,
-      success,
+      success: success ?? false,
       timestamp: Date.now()
     });
 
@@ -301,13 +305,9 @@ class MonitoringCore {
     // Проверка порога памяти
     if (usedMB > this.config.alertThresholds.maxPyodideMemory) {
       this.alertManager.createAlert({
-        id: `memory_${Date.now()}`,
         severity: AlertSeverity.MEDIUM,
         component: 'pyodide',
         message: `Высокое использование памяти Pyodide: ${usedMB.toFixed(2)}MB`,
-        timestamp: Date.now(),
-        acknowledged: false,
-        resolved: false,
         threshold: {
           metric: 'pyodide_memory_used_mb',
           operator: '>',
@@ -391,6 +391,7 @@ class MonitoringCore {
   // Метод для корректного завершения работы
   dispose(): void {
     this.logger.addEvent({
+      timestamp: Date.now(),
       component: 'MonitoringCore',
       level: LogLevel.INFO,
       message: 'Monitoring system disposed',

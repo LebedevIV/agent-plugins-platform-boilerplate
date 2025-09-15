@@ -4,7 +4,7 @@
  * Анализирует паттерны ошибок, отслеживает частоту и помогает в диагностике
  */
 
-import type { MonitoringConfig, AlertSeverity } from './monitoring-core.js';
+import { MonitoringConfig, AlertSeverity } from './monitoring-core.js';
 import type { MonitoringLogger } from './logger.js';
 import type { AlertManager } from './alert-manager.js';
 

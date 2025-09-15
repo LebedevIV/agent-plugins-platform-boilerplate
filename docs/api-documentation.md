@@ -238,7 +238,7 @@ interface WorkflowStep {
 const aiModelMapping = {
   "basic_analysis": "gemini-flash",
   "detailed_comparison": "gemini-pro",
-  "deep_analysis": "gemini-25",
+  "deep_analysis": "gemini-pro",
   "scraping_fallback": "gemini-flash"
 };
 ```
@@ -250,8 +250,7 @@ const aiProviders = {
     apiUrl: "https://generativelanguage.googleapis.com",
     models: {
       "gemini-flash": "models/gemini-1.5-flash",
-      "gemini-pro": "models/gemini-1.5-pro",
-      "gemini-25": "models/gemini-pro-1.5"
+      "gemini-pro": "models/gemini-1.5-pro"
     },
     rateLimits: {
       requestsPerMinute: 60,
@@ -327,7 +326,7 @@ const aiProviders = {
   },
   "ai_providers": {
     "google": {
-      "fallback_chain": ["gemini-flash", "gemini-25", "gemini-pro"],
+      "fallback_chain": ["gemini-flash", "gemini-pro"],
       "rate_limits": {
         "requests_per_minute": 60,
         "requests_per_hour": 1000

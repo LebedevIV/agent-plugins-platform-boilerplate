@@ -499,4 +499,4 @@ export class HTMLExtractionMonitor {
   }
 }
 
-export { HTMLExtractionMetrics, HTMLErrorPattern };
+export type { HTMLExtractionMetrics, HTMLErrorPattern };

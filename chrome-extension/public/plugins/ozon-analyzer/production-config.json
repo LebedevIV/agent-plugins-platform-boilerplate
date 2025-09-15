@@ -33,7 +33,7 @@
 
   "ai_providers": {
     "google": {
-      "fallback_chain": ["gemini-flash", "gemini-25", "gemini-pro"],
+      "fallback_chain": ["gemini-flash", "gemini-pro"],
       "rate_limits": {
         "requests_per_minute": 60,
         "requests_per_hour": 1000,

@@ -1569,12 +1569,6 @@ const MODEL_CONFIGS = {
     endpoint: "https://generativelanguage.googleapis.com/v1beta/models/",
     api_key_env: "GOOGLE_AI_API_KEY"
   },
-  "gemini-25": {
-    provider: "google",
-    model_name: "gemini-1.5-flash-8b-latest",
-    endpoint: "https://generativelanguage.googleapis.com/v1beta/models/",
-    api_key_env: "GOOGLE_AI_API_KEY"
-  },
   "gpt-3.5-turbo": {
     provider: "openai",
     model_name: "gpt-3.5-turbo",

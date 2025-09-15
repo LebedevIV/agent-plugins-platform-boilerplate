@@ -5,8 +5,8 @@
  * уведомляет о критических проблемах
  */
 
-import type { Alert, AlertSeverity, MonitoringConfig } from './monitoring-core.js';
-import type { MonitoringLogger } from './logger.js';
+import { Alert, AlertSeverity, MonitoringConfig } from './monitoring-core.js';
+import { MonitoringLogger } from './logger.js';
 
 export interface AlertRule {
   id: string;
@@ -239,7 +239,12 @@ export class AlertManager {
           severity: rule.severity,
           component: labels.component || 'unknown',
           message: this.generateAlertMessage(metricName, value, rule),
-          threshold: rule.condition
+          threshold: {
+            metric: rule.condition.metric,
+            operator: rule.condition.operator,
+            value: rule.condition.threshold,
+            duration: rule.condition.duration || 300
+          }
         });
       }
     });
@@ -461,7 +466,7 @@ export class AlertManager {
   private notifyCriticalAlert(alert: Alert): void {
     // В будущем можно добавить уведомления в UI, email, webhook и т.д.
     this.logger.error('AlertManager', 'CRITICAL ALERT TRIGGERED', {
-      id: alert.id,
+      alertId: alert.id,
       component: alert.component,
       message: alert.message,
       severity: alert.severity

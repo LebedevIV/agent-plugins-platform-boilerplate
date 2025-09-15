@@ -5,7 +5,7 @@
  * буфер сообщений и экспорт логов для диагностики
  */
 
-import type { MonitoringEvent, LogLevel, MonitoringConfig } from './monitoring-core.js';
+import { MonitoringEvent, LogLevel, MonitoringConfig } from './monitoring-core.js';
 
 export interface LogFilter {
   component?: string;
@@ -270,7 +270,7 @@ export class MonitoringLogger {
             component: 'console',
             level: method === 'warn' ? LogLevel.WARN :
                   method === 'error' ? LogLevel.ERROR : LogLevel.INFO,
-            message: `[${method.uppercase()}] ${message}`,
+            message: `[${method.toUpperCase()}] ${message}`,
             timestamp: Date.now()
           });
 

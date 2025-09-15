@@ -65,7 +65,7 @@ const PLUGIN_DIRS = [
   "ai_models": {
     "basic_analysis": "gpt-4o-mini",
     "detailed_comparison": "gemini-flash",
-    "deep_analysis": "gemini-25"
+    "deep_analysis": "gemini-pro"
   },
   "settings": {
     "enable_deep_analysis": {

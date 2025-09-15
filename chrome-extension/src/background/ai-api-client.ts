@@ -5,6 +5,7 @@
  */
 
 import type { getMonitoringCore } from './monitoring/index.js';
+import { LogLevel } from './monitoring/monitoring-core.js';
 
 export interface AiModelResponse {
   response: string;
@@ -24,7 +25,7 @@ export interface AiModelResponse {
 }
 
 // Доступные модели
-export type ModelAlias = 'gemini-flash' | 'gemini-pro' | 'gemini-25' | 'gpt-3.5-turbo' | 'gpt-4';
+export type ModelAlias = 'gemini-flash' | 'gemini-pro' | 'gpt-3.5-turbo' | 'gpt-4';
 
 // Конфигурация модели
 interface ModelConfig {
@@ -261,12 +262,6 @@ const MODEL_CONFIGS: Record<ModelAlias, ModelConfig> = {
     endpoint: 'https://generativelanguage.googleapis.com/v1beta/models/',
     api_key_env: 'GOOGLE_AI_API_KEY'
   },
-  'gemini-25': {
-    provider: 'google',
-    model_name: 'gemini-1.5-flash-8b-latest',
-    endpoint: 'https://generativelanguage.googleapis.com/v1beta/models/',
-    api_key_env: 'GOOGLE_AI_API_KEY'
-  },
   'gpt-3.5-turbo': {
     provider: 'openai',
     model_name: 'gpt-3.5-turbo',
@@ -354,7 +349,7 @@ export async function callAiModel(modelAlias: string, apiKey: string, prompt: st
 
     // Логирование начала запроса
     if (monitoringCore) {
-      monitoringCore.addLog('ai_client', 'info', `Starting AI API call`, {
+      monitoringCore.addLog('ai_client', LogLevel.INFO, `Starting AI API call`, {
         model: modelAlias,
         provider: config.provider,
         promptLength: prompt.length
@@ -365,10 +360,10 @@ export async function callAiModel(modelAlias: string, apiKey: string, prompt: st
 
     switch (config.provider) {
       case 'google':
-        result = await callGoogleGemini(config, apiKey, prompt, stats);
+        result = await callGoogleGemini(config, apiKey, prompt);
         break;
       case 'openai':
-        result = await callOpenAI(config, apiKey, prompt, stats);
+        result = await callOpenAI(config, apiKey, prompt);
         break;
       default:
         throw new Error(`Неподдерживаемый провайдер: ${config.provider}`);
@@ -412,11 +407,6 @@ export async function callAiModel(modelAlias: string, apiKey: string, prompt: st
 
     // Обновление статистики
     updateAiStats(stats);
-
-    // Пробуем fallback если возможно
-    if (!stats.fallbackAttempted && shouldAttemptFallback(modelAlias, error)) {
-      return await attemptFallbackCall(modelAlias, apiKey, prompt);
-    }
 
     console.error('[AI Client] Error calling AI model:', error);
     throw new Error(`Ошибка при вызове модели ${modelAlias}: ${error.message}`);

@@ -192,7 +192,7 @@ function diagnoseTransferState(transferId: string): {
   diagnostics: Record<string, any>;
 } {
   const transfer = activeTransfers.get(transferId);
-  const diagnostics = {
+  const diagnostics: any = {
     transferId,
     timestamp: Date.now(),
     exists: !!transfer,
@@ -1375,8 +1375,6 @@ async function emergencyTransferRecoveryDuringWait(transferId: string, originalT
   }
 }
 
-// DEPRECATED: THREAD-SAFE CHUNK ACKNOWLEDGMENT PROCESSING - replaced by direct data exchange
-/*
 function handleChunkAcknowledgment(ackMessage: HtmlChunkAckMessage): void {
   const transferId = ackMessage.transferId;
   const chunkIndex = ackMessage.chunkIndex;
@@ -1511,7 +1509,6 @@ function handleChunkAcknowledgment(ackMessage: HtmlChunkAckMessage): void {
     }
   }
 }
-*/
 
 const handleLegacyChrome = async (message: ExtensionMessage): Promise<void> => {
   console.warn('[background][LEGACY CHROME] ================= EXECUTING FALLBACK WORKFLOW =================');
@@ -3059,7 +3056,9 @@ chrome.runtime.onMessage.addListener(
     // ГАРАНТИРОВАННО возвращаем true, чтобы канал не закрывался преждевременно
     console.log('[background] Returning true to keep channel open, timestamp:', new Date().toISOString());
     return true;
-}
+    };
+  }
+  );
 
 const handleHostApiMessage = async (
   message: { command: string; data: unknown },
@@ -3357,9 +3356,12 @@ chrome.runtime.onMessage.addListener(
             };
           }
 
+          // Объявить executeMessage заранее для корректного доступа
+          let executeMessage: any = null;
+
           // Автоматически отправить EXECUTE_WORKFLOW после сборки HTML
           if (msg.pluginId && msg.pageKey) {
-            const executeMessage = {
+            executeMessage = {
               type: 'EXECUTE_WORKFLOW',
               pluginId: msg.pluginId,
               pageKey: msg.pageKey,
@@ -3799,4 +3801,3 @@ console.log('[background][OFFSCREEN DIAGNOSTIC]   window:', typeof window);
 console.log('[background][OFFSCREEN DIAGNOSTIC]   self:', typeof self);
 console.log('[background][OFFSCREEN DIAGNOSTIC]   globalThis:', typeof globalThis);
 console.log('[background] Edit chrome-extension/src/background/index.ts and save to reload.');
-});

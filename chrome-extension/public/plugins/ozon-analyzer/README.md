@@ -95,7 +95,7 @@ ozon-analyzer/
 #### Google Gemini модели
 - **`gemini-flash`** - Быстрый и качественный
 - **`gemini-pro`** - Продвинутый анализа
-- **`gemini-25`** - Максимальная глубина
+- **`gemini-pro`** - Максимальная глубина
 
 ### Метрики производительности
 
@@ -128,7 +128,7 @@ ozon-analyzer/
   "ai_models": {
     "basic_analysis": "gpt-4o-mini",
     "detailed_comparison": "gemini-flash",
-    "deep_analysis": "gemini-25"
+    "deep_analysis": "gemini-pro"
   }
 }
 ```

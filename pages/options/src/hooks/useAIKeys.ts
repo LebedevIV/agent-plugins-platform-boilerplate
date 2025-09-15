@@ -23,7 +23,7 @@ export const useAIKeys = () => {
       isFree: true,
     },
     {
-      id: 'gemini-25',
+      id: 'gemini-pro',
       name: 'Gemini 2.5 Pro - Глубокий анализ',
       key: '',
       status: 'not_configured',
@@ -55,7 +55,7 @@ export const useAIKeys = () => {
       console.log('[useAIKeys] Starting to load AI keys...');
 
       // Загружаем зашифрованные ключи
-      const fixedKeyIds = ['gemini-flash', 'gemini-25'];
+      const fixedKeyIds = ['gemini-flash', 'gemini-pro'];
       const fixedKeysPromises = fixedKeyIds.map(async (keyId) => {
         const decryptedKey = await APIKeyManager.getDecryptedKey(keyId);
         console.log(`[useAIKeys] Loaded key ${keyId}:`, decryptedKey ? 'present' : 'empty');
