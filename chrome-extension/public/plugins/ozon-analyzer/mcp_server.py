@@ -193,6 +193,17 @@ def console_log(message: str, force: bool = False):
         js.console.log(f"[background] {message}")
     except Exception:
         pass  # Игнорируем ошибки логирования
+def safe_len(text):
+    """Безопасное получение длины с защитой от ошибок типов"""
+    try:
+        return len(str(text or ""))
+    except Exception as e:
+        console_log(f"Ошибка при подсчете длины: {str(e)}")
+        return 0
+
+# ==============================================================================
+# Оптимизированная система логирования для уменьшения повторяющихся сообщений
+# ==============================================================================
 
 def chat_message(message: str, message_type: str = None):
     """Отправка сообщения в чат (только для финальных результатов и ошибок)."""
@@ -1866,6 +1877,7 @@ class FastDOMParser:
         Потоковое извлечение информации из больших HTML документов.
         Разбивает документ на чанки для предотвращения переполнения памяти.
         """
+        chat_message("🔍 Анализ продукта начат... Пожалуйста, подождите.")
         if len(self.html) <= chunk_size:
             return self.extract_product_info()  # Для небольших документов используем обычный парсинг
 
@@ -2524,8 +2536,8 @@ def analyze_ozon_product() -> Dict[str, Any]:
         # Детальное логирование полных данных в консоль для разработчиков
         console_log("=== ДЕТАЛЬНЫЕ ДАННЫЕ АНАЛИЗА ===")
         console_log(f"Название товара: {product_info['title']}")
-        console_log(f"Полное описание ({len(description)} символов): {description}")
-        console_log(f"Полный состав ({len(composition)} символов): {composition}")
+        console_log(f"Полное описание ({safe_len(description)} символов): {description}")
+        console_log(f"Полный состав ({safe_len(composition)} символов): {composition}")
         console_log(f"Категории: {categories}")
         console_log(f"Цена: {product_info['price']}")
         console_log(f"Рейтинг: {product_info['rating']}")
@@ -2540,15 +2552,18 @@ def analyze_ozon_product() -> Dict[str, Any]:
         truncated_composition = composition[:100] + ('...' if len(composition) > 100 else '')
         chat_message(f"📝 Описание: {truncated_description}\n📝 Состав: {truncated_composition}")
 
+        # Добавляем название нейросети перед оценкой
+        chat_message(f"🤖 Ответ нейросети (Gemini AI):")
+
         # Отправляем результаты AI анализа соответствия
         score_str = str(score) if score is not None else 'N/A'
         reasoning_str = str(reasoning) if reasoning is not None else 'Объяснение не доступно'
         chat_message(f"📊 Оценка соответствия: {score_str}/10\n{reasoning_str}")
 
         # Логируем в консоль полную информацию для разработчиков
-        title_preview = product_info['title'][:50] + "..." if len(product_info['title']) > 50 else product_info['title']
-        desc_length = len(description)
-        comp_length = len(composition)
+        title_preview = product_info['title'][:50] + "..." if safe_len(product_info['title']) > 50 else product_info['title']
+        desc_length = safe_len(description)
+        comp_length = safe_len(composition)
         category_info = categories[0] if categories else "не определена"
         console_log(f"Анализ завершен: '{title_preview}' | Описание: {desc_length} симв. | Состав: {comp_length} симв. | Категория: {category_info} | Оценка: {score}/10")
 
@@ -2870,6 +2885,8 @@ def _analyze_composition_vs_description(description: str, composition: str) -> D
     if not description or not composition:
         return { "score": 0, "reasoning": "Не удалось извлечь описание или состав товара." }
 
+    console_log(f"Анализ соответствия: desc='{description[:100]}...', comp='{composition[:100]}...'")
+
     # Предварительный анализ для сокращения размера промпта
     analysis_cache_key = f"pre_analysis:{hash(description[:100] + composition[:100])}"
     pre_analyzed = memory_manager.get_cached_lru(analysis_cache_key)
@@ -2897,6 +2914,7 @@ def _analyze_composition_vs_description(description: str, composition: str) -> D
     """
 
     try:
+        console_log(f"Отправка запроса к AI: {prompt[:200]}...")
         # Используем псевдоним "basic_analysis", который в манифесте
         # сопоставлен с быстрой и дешевой моделью типа `gemini-flash`.
         result_str = ozon_analyzer_server._call_ai_model("basic_analysis", prompt)
@@ -2916,6 +2934,12 @@ def _analyze_composition_vs_description(description: str, composition: str) -> D
                 parsed = json.loads(cleaned_str)
                 # Простая валидация формата ответа
                 if isinstance(parsed, dict) and 'score' in parsed:
+                    score = parsed.get('score')
+                    reasoning = parsed.get('reasoning')
+                    console_log(f"Получен ответ от AI: score={score}, reasoning_length={len(str(reasoning or ''))}")
+                    desc_len = safe_len(description)
+                    comp_len = safe_len(composition)
+                    console_log(f"Обработка результатов: description_len={desc_len}, composition_len={comp_len}")
                     return parsed
                 else:
                     return {"score": 5, "reasoning": "Неверный формат ответа от AI (отсутствует 'score')."}
@@ -2950,8 +2974,8 @@ def _analyze_composition_vs_description(description: str, composition: str) -> D
         console_log(f"Критическая ошибка в _analyze_composition_vs_description: {str(e)}")
         # Безопасная конвертация типов данных для избежания ошибок len()
         try:
-            desc_len = len(str(description or ""))
-            comp_len = len(str(composition or ""))
+            desc_len = safe_len(description)
+            comp_len = safe_len(composition)
         except Exception as len_error:
             console_log(f"Ошибка при подсчете длины: {str(len_error)}")
             desc_len = 0
