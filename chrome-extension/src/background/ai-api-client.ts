@@ -252,13 +252,13 @@ function handleAiError(error: any, context: any): never {
 const MODEL_CONFIGS: Record<ModelAlias, ModelConfig> = {
   'gemini-flash': {
     provider: 'google',
-    model_name: 'gemini-1.5-flash-latest',
+    model_name: 'gemini-2.5-flash-lite:generateContent',
     endpoint: 'https://generativelanguage.googleapis.com/v1beta/models/',
     api_key_env: 'GOOGLE_AI_API_KEY'
   },
   'gemini-pro': {
     provider: 'google',
-    model_name: 'gemini-1.5-pro-latest',
+    model_name: 'gemini-2.5-pro:generateContent',
     endpoint: 'https://generativelanguage.googleapis.com/v1beta/models/',
     api_key_env: 'GOOGLE_AI_API_KEY'
   },
