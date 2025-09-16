@@ -1560,13 +1560,20 @@ chrome.runtime.onMessage.addListener(
       (async () => {
         try {
           const result = await pluginChatApi.getOrLoadChat(msg.pluginId, msg.pageKey);
+          console.log('[background] GET_PLUGIN_CHAT: result obtained, sending response via sendResponse()', {
+            resultType: typeof result,
+            hasResult: !!result,
+            resultKeys: result ? Object.keys(result) : [],
+            timestamp: Date.now()
+          });
           sendResponse(result);
+          console.log('[background] GET_PLUGIN_CHAT: sendResponse() called successfully');
         } catch (error: unknown) {
-          console.error('[background] Error in GET_PLUGIN_CHAT:', error);
+          console.error('[background] GET_PLUGIN_CHAT: Error in processing:', error);
           sendResponse({ error: (error as Error).message });
         }
       })();
-      return true;
+      return true; // Асинхронный обработчик - канал остается открытым
     }
 
     if (msg.type === 'SAVE_PLUGIN_CHAT_MESSAGE') {

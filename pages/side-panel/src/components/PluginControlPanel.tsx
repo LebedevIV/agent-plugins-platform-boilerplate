@@ -597,6 +597,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
           </div>
           <div className="chat-input">
             <textarea
+              id="plugin-message-input"
               ref={textareaRef}
               className="message-textarea"
               value={message}

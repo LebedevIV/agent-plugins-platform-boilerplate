@@ -2664,7 +2664,7 @@ chrome.runtime.onMessage.addListener(
           timestamp: Date.now()
         });
 
-        // Используем синхронную обработку
+        // Используем синхронную обработку с sendResponse
         (async () => {
           try {
             const chat = await pluginChatApi.getOrLoadChat(chatKey);
@@ -2680,16 +2680,14 @@ chrome.runtime.onMessage.addListener(
             // Если чат не найден, возвращаем пустой объект с messages: []
             if (!chat) {
               console.log('[background] GET_PLUGIN_CHAT: чат не найден, возвращаем пустой массив сообщений');
-              chrome.runtime.sendMessage({
-                type: 'GET_PLUGIN_CHAT_RESPONSE',
-                messageId,
-                response: {
-                  messages: [],
-                  chatKey,
-                  pluginId,
-                  pageKey
-                }
-              });
+              const emptyResponse = {
+                messages: [],
+                chatKey,
+                pluginId,
+                pageKey
+              };
+              console.log('[background] GET_PLUGIN_CHAT: отправляем пустой ответ via sendResponse()');
+              sendResponse(emptyResponse);
               return;
             }
 
@@ -2721,7 +2719,7 @@ chrome.runtime.onMessage.addListener(
                 pluginId: serializable?.pluginId,
                 pageKey: serializable?.pageKey
               };
-              console.log('[background] GET_PLUGIN_CHAT: отправляем ответ', {
+              console.log('[background] GET_PLUGIN_CHAT: отправляем ответ via sendResponse()', {
                 response,
                 responseType: typeof response,
                 responseKeys: Object.keys(response),
@@ -2730,11 +2728,7 @@ chrome.runtime.onMessage.addListener(
                 timestamp: Date.now()
               });
 
-              chrome.runtime.sendMessage({
-                type: 'GET_PLUGIN_CHAT_RESPONSE',
-                messageId,
-                response
-              });
+              sendResponse(response);
 
             } catch (err) {
               console.error('[background] GET_PLUGIN_CHAT: Ошибка сериализации чата:', {
@@ -2744,11 +2738,7 @@ chrome.runtime.onMessage.addListener(
                 safeChatKeys: Object.keys(safeChat || {}),
                 timestamp: Date.now()
               });
-              chrome.runtime.sendMessage({
-                type: 'GET_PLUGIN_CHAT_RESPONSE',
-                messageId,
-                response: { error: 'serialization failed', details: String(err) }
-              });
+              sendResponse({ error: 'serialization failed', details: String(err) });
             }
           } catch (err) {
             console.error('[background] GET_PLUGIN_CHAT: Ошибка в getOrLoadChat:', {
@@ -2760,15 +2750,11 @@ chrome.runtime.onMessage.addListener(
               chatKey,
               timestamp: Date.now()
             });
-            chrome.runtime.sendMessage({
-              type: 'GET_PLUGIN_CHAT_RESPONSE',
-              messageId,
-              response: { error: String(err) }
-            });
+            sendResponse({ error: String(err) });
           }
         })();
 
-        return true;
+        return true; // Асинхронный обработчик - канал остается открытым
       }
 
       // Создание чата при начале ввода (ленивая инициализация)
