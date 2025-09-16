@@ -1481,6 +1481,7 @@ chrome.runtime.onMessage.addListener(
         timestamp: new Date().toISOString()
       });
 
+      // Асинхронная обработка без sendResponse - используем только chrome.runtime.sendMessage
       (async () => {
         try {
           console.log('[background][GET_PLUGINS] Starting async plugin retrieval...');
@@ -1503,13 +1504,9 @@ chrome.runtime.onMessage.addListener(
             hasPlugins: !!response.plugins
           });
 
-          // Отправляем ответ через sendMessage вместо sendResponse для совместимости с sidepanel слушателем
+          // Отправляем ответ только через chrome.runtime.sendMessage для совместимости с sidepanel
           await chrome.runtime.sendMessage(response);
-          console.log('[background][GET_PLUGINS] ✅ chrome.runtime.sendMessage() sent successfully');
-
-          // Вызываем sendResponse с undefined чтобы избежать ошибок в Chrome
-          sendResponse();
-          console.log('[background][GET_PLUGINS] ✅ sendResponse() called with undefined');
+          console.log('[background][GET_PLUGINS] ✅ Response sent successfully via chrome.runtime.sendMessage()');
 
         } catch (error: unknown) {
           console.error('[background][GET_PLUGINS] ❌ Error getting plugins:', error);
@@ -1522,11 +1519,90 @@ chrome.runtime.onMessage.addListener(
 
           console.log('[background][GET_PLUGINS] Sending error response via chrome.runtime.sendMessage()');
           await chrome.runtime.sendMessage(errorResponse);
-          console.log('[background][GET_PLUGINS] ❌ Error chrome.runtime.sendMessage() sent');
+          console.log('[background][GET_PLUGINS] ❌ Error response sent via chrome.runtime.sendMessage()');
+        }
+      })();
 
-          // Вызываем sendResponse с undefined чтобы избежать ошибок в Chrome
-          sendResponse();
-          console.log('[background][GET_PLUGINS] ✅ sendResponse() called with undefined after error');
+      // Возвращаем true чтобы указать асинхронную обработку, но не используем sendResponse
+      return true;
+    }
+
+    if (msg.type === 'SAVE_PLUGIN_CHAT_DRAFT') {
+      console.log('[background] Processing SAVE_PLUGIN_CHAT_DRAFT request for:', msg.pluginId, msg.pageKey);
+      (async () => {
+        try {
+          const result = await pluginChatApi.saveDraft(msg.pluginId, msg.pageKey, msg.draftText);
+          sendResponse(result);
+        } catch (error: unknown) {
+          console.error('[background] Error in SAVE_PLUGIN_CHAT_DRAFT:', error);
+          sendResponse({ error: (error as Error).message });
+        }
+      })();
+      return true;
+    }
+
+    if (msg.type === 'GET_PLUGIN_CHAT_DRAFT') {
+      console.log('[background] Processing GET_PLUGIN_CHAT_DRAFT request for:', msg.pluginId, msg.pageKey);
+      (async () => {
+        try {
+          const result = await pluginChatApi.getDraft(msg.pluginId, msg.pageKey);
+          sendResponse(result);
+        } catch (error: unknown) {
+          console.error('[background] Error in GET_PLUGIN_CHAT_DRAFT:', error);
+          sendResponse({ error: (error as Error).message });
+        }
+      })();
+      return true;
+    }
+
+    if (msg.type === 'GET_PLUGIN_CHAT') {
+      console.log('[background] Processing GET_PLUGIN_CHAT request for:', msg.pluginId, msg.pageKey);
+      (async () => {
+        try {
+          const result = await pluginChatApi.getOrLoadChat(msg.pluginId, msg.pageKey);
+          sendResponse(result);
+        } catch (error: unknown) {
+          console.error('[background] Error in GET_PLUGIN_CHAT:', error);
+          sendResponse({ error: (error as Error).message });
+        }
+      })();
+      return true;
+    }
+
+    if (msg.type === 'SAVE_PLUGIN_CHAT_MESSAGE') {
+      console.log('[background] Processing SAVE_PLUGIN_CHAT_MESSAGE request for:', msg.pluginId, msg.pageKey);
+      (async () => {
+        try {
+          // Сохраняем сообщение в чате
+          const result = await pluginChatApi.saveMessage(msg.pluginId, msg.pageKey, msg.message);
+          console.log('[background] SAVE_PLUGIN_CHAT_MESSAGE: message saved successfully', result);
+
+          // Очищаем черновик после успешного сохранения сообщения
+          await pluginChatApi.deleteDraft(msg.pluginId, msg.pageKey);
+          console.log('[background] SAVE_PLUGIN_CHAT_MESSAGE: draft cleared after message save');
+
+          // Отправляем событие обновления чата для всех слушателей
+          chrome.runtime.sendMessage({
+            type: 'PLUGIN_CHAT_UPDATED',
+            pluginId: msg.pluginId,
+            pageKey: msg.pageKey,
+            messageId: msg.messageId
+          });
+
+          // Отправляем ответ на сохранение сообщения
+          sendResponse({
+            success: true,
+            messageId: msg.messageId,
+            type: 'SAVE_PLUGIN_CHAT_MESSAGE_RESPONSE'
+          });
+
+        } catch (error: unknown) {
+          console.error('[background] Error in SAVE_PLUGIN_CHAT_MESSAGE:', error);
+          sendResponse({
+            error: (error as Error).message,
+            messageId: msg.messageId,
+            type: 'SAVE_PLUGIN_CHAT_MESSAGE_RESPONSE'
+          });
         }
       })();
       return true;
@@ -2026,7 +2102,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
     return await handleTestPyodideDirect(message);
   }
 
-  // Обработка GET_PLUGINS сообщений через порт
+  // Обработка GET_PLUGINS сообщений через порт - возвращаем ответ через порт
   if (message.type === 'GET_PLUGINS') {
     console.log('[background][PORT] Processing GET_PLUGINS request via port');
     console.log('[background][PORT][GET_PLUGINS] Request received:', {
@@ -2035,41 +2111,44 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
       timestamp: new Date().toISOString()
     });
 
-    try {
-      console.log('[background][PORT][GET_PLUGINS] Starting async plugin retrieval...');
-      const plugins = await getAvailablePlugins();
-      console.log('[background][PORT][GET_PLUGINS] Retrieved plugins:', plugins.length);
-      console.log('[background][PORT][GET_PLUGINS] Plugin details:', plugins.map(p => ({ id: p.id, name: p.name })));
+    // Асинхронная обработка с возвратом результата через порт
+    return (async () => {
+      try {
+        console.log('[background][PORT][GET_PLUGINS] Starting async plugin retrieval...');
+        const plugins = await getAvailablePlugins();
+        console.log('[background][PORT][GET_PLUGINS] Retrieved plugins:', plugins.length);
+        console.log('[background][PORT][GET_PLUGINS] Plugin details:', plugins.map(p => ({ id: p.id, name: p.name })));
 
-      const response = {
-        type: 'GET_PLUGINS_RESPONSE',
-        plugins: plugins,
-        requestId: message.requestId,
-        timestamp: new Date().toISOString()
-      };
+        const response = {
+          type: 'GET_PLUGINS_RESPONSE',
+          plugins: plugins,
+          requestId: message.requestId,
+          timestamp: new Date().toISOString()
+        };
 
-      console.log('[background][PORT][GET_PLUGINS] ✅ Sending response via port');
-      console.log('[background][PORT][GET_PLUGINS] Response payload:', {
-        type: response.type,
-        pluginsCount: response.plugins.length,
-        requestId: response.requestId,
-        hasPlugins: !!response.plugins
-      });
+        console.log('[background][PORT][GET_PLUGINS] Returning response for port delivery');
+        console.log('[background][PORT][GET_PLUGINS] Response payload:', {
+          type: response.type,
+          pluginsCount: response.plugins.length,
+          requestId: response.requestId,
+          hasPlugins: !!response.plugins
+        });
 
-      return response;
+        return response;
 
-    } catch (error: unknown) {
-      console.error('[background][PORT][GET_PLUGINS] ❌ Error getting plugins:', error);
-      const errorResponse = {
-        type: 'GET_PLUGINS_RESPONSE',
-        error: (error as Error).message,
-        requestId: message.requestId,
-        timestamp: new Date().toISOString()
-      };
+      } catch (error: unknown) {
+        console.error('[background][PORT][GET_PLUGINS] ❌ Error getting plugins:', error);
+        const errorResponse = {
+          type: 'GET_PLUGINS_RESPONSE',
+          error: (error as Error).message,
+          requestId: message.requestId,
+          timestamp: new Date().toISOString()
+        };
 
-      console.log('[background][PORT][GET_PLUGINS] ❌ Sending error response via port');
-      return errorResponse;
-    }
+        console.log('[background][PORT][GET_PLUGINS] Returning error response for port delivery');
+        return errorResponse;
+      }
+    })();
   }
 
   console.log('[background][PORT] Unknown message type:', message.type);
@@ -2180,5 +2259,21 @@ chrome.action.onClicked.addListener(async (tab) => {
 // Final initialization message
 console.log('[background] Background script fully initialized and ready for workflow requests');
 console.log('[background] HTML transmission mode selection is now functional');
+
+// Предварительная загрузка offscreen document при запуске расширения
+(async () => {
+  try {
+    console.log('[background] Starting lazy offscreen document preload...');
+    if (offscreenSupported()) {
+      await ensureOffscreenDocument();
+      console.log('[background] ✅ Offscreen document preloaded successfully');
+    } else {
+      console.log('[background] ⚠️ Offscreen API not supported, skipping preload');
+    }
+  } catch (error) {
+    console.error('[background] ❌ Failed to preload offscreen document:', error);
+  }
+})();
+
 console.log('[background] Action onClicked handler registered for sidepanel');
 console.log('[background] Extension ready for use');
