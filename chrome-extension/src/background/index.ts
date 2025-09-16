@@ -1559,7 +1559,7 @@ chrome.runtime.onMessage.addListener(
       console.log('[background] Processing GET_PLUGIN_CHAT request for:', msg.pluginId, msg.pageKey);
       (async () => {
         try {
-          const result = await pluginChatApi.getOrLoadChat(msg.pluginId, msg.pageKey);
+          const result = await pluginChatApi.getChat(msg.pluginId, msg.pageKey);
           console.log('[background] GET_PLUGIN_CHAT: result obtained, sending response via sendResponse()', {
             resultType: typeof result,
             hasResult: !!result,
@@ -2165,7 +2165,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
     // Асинхронная обработка с возвратом результата через порт
     return (async () => {
       try {
-        const result = await pluginChatApi.getOrLoadChat(message.pluginId, message.pageKey);
+        const result = await pluginChatApi.getChat(message.pluginId, message.pageKey);
         console.log('[background][PORT] GET_PLUGIN_CHAT: result obtained for port delivery', {
           resultType: typeof result,
           hasResult: !!result,

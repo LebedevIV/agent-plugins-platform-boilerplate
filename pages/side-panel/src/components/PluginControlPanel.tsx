@@ -1,3 +1,26 @@
+/**
+ * PluginControlPanel.tsx - Панель управления плагином с чатом
+ *
+ * ИСПРАВЛЕНИЕ ПРОБЛЕМЫ С ПОЛУЧЕНИЕМ ОТВЕТА GET_PLUGIN_CHAT:
+ * ========================================================
+ *
+ * Проблема: Background отправлял ответ через sendResponse() callback, но компонент
+ * ожидал ответ через chrome.runtime.sendMessage() с типом 'GET_PLUGIN_CHAT_RESPONSE'.
+ *
+ * Решение: Изменен механизм коммуникации на использование Promise-based подхода
+ * с помощью sendMessageToBackgroundAsync(), который правильно работает с sendResponse().
+ *
+ * Теперь:
+ * 1. Компонент отправляет GET_PLUGIN_CHAT через chrome.runtime.sendMessage()
+ * 2. Background получает сообщение и отвечает через sendResponse()
+ * 3. Компонент получает ответ через Promise и обрабатывает его
+ *
+ * Диагностика:
+ * - Логи sendMessageToBackgroundAsync покажут отправку и получение ответа
+ * - Логи loadChat покажут обработку ответа
+ * - Логи processChatResponse покажут разбор данных чата
+ */
+
 import { DraftStatus } from './DraftStatus';
 import { PluginDetails } from './PluginDetails';
 import { getPageKey } from '../../../../packages/shared/lib/utils/helpers';
@@ -94,17 +117,51 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   const pluginId = plugin.id;
   const pageKey = getPageKey(currentTabUrl);
 
-  // Вспомогательная функция для отправки сообщений в background без ожидания ответа
+  // Вспомогательная функция для отправки сообщений в background с ожиданием ответа
+  const sendMessageToBackgroundAsync = useCallback(async (message: any): Promise<any> => {
+    const messageId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+    const messageWithId = { ...message, messageId };
+
+    console.log('[PluginControlPanel] sendMessageToBackgroundAsync:', {
+      type: messageWithId.type,
+      pluginId: messageWithId.pluginId,
+      pageKey: messageWithId.pageKey,
+      messageId: messageWithId.messageId,
+      timestamp: new Date().toISOString()
+    });
+
+    try {
+      const response = await chrome.runtime.sendMessage(messageWithId);
+      console.log('[PluginControlPanel] sendMessageToBackgroundAsync - получен ответ:', {
+        response,
+        messageId,
+        timestamp: new Date().toISOString()
+      });
+      return response;
+    } catch (error) {
+      console.error('[PluginControlPanel] sendMessageToBackgroundAsync - ошибка:', error);
+      throw error;
+    }
+  }, []);
+
+  // Вспомогательная функция для отправки сообщений в background без ожидания ответа (для обратной совместимости)
   const sendMessageToBackground = useCallback((message: any): void => {
     const messageId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
     const messageWithId = { ...message, messageId };
 
-    console.log('[PluginControlPanel] sendMessageToBackground:', messageWithId);
+    console.log('[PluginControlPanel] sendMessageToBackground (legacy):', {
+      type: messageWithId.type,
+      pluginId: messageWithId.pluginId,
+      pageKey: messageWithId.pageKey,
+      messageId: messageWithId.messageId,
+      timestamp: new Date().toISOString()
+    });
     chrome.runtime.sendMessage(messageWithId);
   }, []);
 
   // Вспомогательная функция для обработки ответа чата
   const processChatResponse = useCallback((response: any) => {
+    console.log('[PluginControlPanel] ===== НАЧАЛО processChatResponse =====');
     console.log('[PluginControlPanel] Анализ chatData:', {
       response,
       hasMessages: response && 'messages' in response,
@@ -115,6 +172,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       isChatArray: Array.isArray(response?.chat),
       responseType: typeof response,
       responseKeys: response ? Object.keys(response) : 'response is null/undefined',
+      timestamp: new Date().toISOString()
     });
 
     // Обработка разных форматов ответа с дополнительной диагностикой
@@ -195,54 +253,108 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       console.log('[PluginControlPanel] ⚠️ messagesArray пустой или не массив, устанавливаем пустой массив');
       setMessages([]);
     }
+
+    console.log('[PluginControlPanel] ===== ЗАВЕРШЕНИЕ processChatResponse =====');
   }, []);
 
   // Загрузка истории чата при монтировании или смене плагина/страницы
-  const loadChat = useCallback(() => {
+  const loadChat = useCallback(async () => {
     setLoading(true);
     setError(null);
 
-    console.log('[PluginControlPanel] loadChat запрос:', { pluginId, pageKey });
-
-    sendMessageToBackground({
-      type: 'GET_PLUGIN_CHAT',
+    console.log('[PluginControlPanel] ===== НАЧАЛО loadChat =====', {
       pluginId,
       pageKey,
+      currentTabUrl,
+      timestamp: new Date().toISOString(),
+      isRunning,
+      isPaused
     });
-  }, [pluginId, pageKey, sendMessageToBackground]);
+
+    try {
+      const response = await sendMessageToBackgroundAsync({
+        type: 'GET_PLUGIN_CHAT',
+        pluginId,
+        pageKey,
+      });
+
+      console.log('[PluginControlPanel] loadChat - получен ответ от background:', response);
+
+      setLoading(false); // Останавливаем загрузку при получении ответа
+
+      if (response?.error) {
+        console.error('[PluginControlPanel] loadChat - ошибка в ответе:', response.error);
+        setError(`Ошибка загрузки чата: ${response.error}`);
+        setMessages([]);
+      } else {
+        console.log('[PluginControlPanel] loadChat - обрабатываем успешный ответ');
+        processChatResponse(response);
+        console.log('[PluginControlPanel] loadChat: чат успешно загружен');
+      }
+
+    } catch (error) {
+      console.error('[PluginControlPanel] loadChat - ошибка при получении ответа:', error);
+      setLoading(false);
+      setError(`Ошибка связи с background: ${error}`);
+      setMessages([]);
+    }
+
+    console.log('[PluginControlPanel] ===== loadChat ЗАВЕРШЕН =====');
+  }, [pluginId, pageKey, sendMessageToBackgroundAsync, currentTabUrl, isRunning, isPaused, processChatResponse]);
 
   // Добавить useEffect для вызова loadChat при монтировании и смене pluginId/pageKey
   useEffect(() => {
-    loadChat();
+    console.log('[PluginControlPanel] useEffect[loadChat] - триггер вызова loadChat', {
+      pluginId,
+      pageKey,
+      currentTabUrl,
+      timestamp: new Date().toISOString()
+    });
+
+    // Вызываем асинхронную функцию без await, так как useEffect не может быть async
+    loadChat().catch((error) => {
+      console.error('[PluginControlPanel] useEffect[loadChat] - ошибка при вызове loadChat:', error);
+    });
   }, [loadChat]);
 
   // Событийная синхронизация чата между вкладками и обработка результатов сохранения сообщений
   useEffect(() => {
+    console.log('[PluginControlPanel] useEffect[handleChatUpdate] - регистрация слушателя сообщений', {
+      pluginId,
+      pageKey,
+      timestamp: new Date().toISOString()
+    });
+
     const handleChatUpdate = (event: { type: string; pluginId: string; pageKey: string; messages?: ChatMessage[]; messageId?: string; response?: any }) => {
+      console.log('[PluginControlPanel] ===== handleChatUpdate - получено сообщение =====', {
+        type: event?.type,
+        pluginId: event?.pluginId,
+        pageKey: event?.pageKey,
+        messageId: event?.messageId,
+        hasResponse: !!event?.response,
+        responseType: event?.response ? typeof event.response : 'none',
+        timestamp: new Date().toISOString()
+      });
+
+      // Обработка обновлений чата от других компонентов/вкладок
       if (event?.type === 'PLUGIN_CHAT_UPDATED' && event.pluginId === pluginId && event.pageKey === pageKey) {
-        console.log('[PluginControlPanel] handleChatUpdate - обновление чата получено');
-        // Запрашиваем актуальные данные чата
-        sendMessageToBackground({
-          type: 'GET_PLUGIN_CHAT',
-          pluginId,
-          pageKey,
+        console.log('[PluginControlPanel] handleChatUpdate - обновление чата получено, запрашиваем актуальные данные');
+        // Запрашиваем актуальные данные чата асинхронно
+        loadChat().catch((error) => {
+          console.error('[PluginControlPanel] handleChatUpdate - ошибка при загрузке чата:', error);
         });
       }
 
-      // Обработка ответов на GET_PLUGIN_CHAT с messageId
-      if (event?.type === 'GET_PLUGIN_CHAT_RESPONSE' && event.messageId && event.response) {
-        console.log('[PluginControlPanel] handleChatUpdate - получен ответ на GET_PLUGIN_CHAT:', event.response);
+      // NOTE: GET_PLUGIN_CHAT_RESPONSE больше не обрабатывается здесь,
+      // поскольку ответы на GET_PLUGIN_CHAT теперь обрабатываются через Promise в loadChat()
 
-        setLoading(false); // Останавливаем загрузку при получении ответа
-
-        if (event.response.error) {
-          console.error('[PluginControlPanel] handleChatUpdate error:', event.response.error);
-          setError(`Ошибка загрузки чата: ${event.response.error}`);
-          setMessages([]);
-        } else {
-          processChatResponse(event.response);
-          console.log('[PluginControlPanel] handleChatUpdate: чат успешно обновлен');
-        }
+      // Логируем все сообщения, которые приходят, но не обрабатываются
+      if (event?.type !== 'PLUGIN_CHAT_UPDATED' && event?.type !== 'GET_PLUGIN_CHAT_RESPONSE') {
+        console.log('[PluginControlPanel] handleChatUpdate - получено необработанное сообщение:', {
+          type: event?.type,
+          fullEvent: event,
+          timestamp: new Date().toISOString()
+        });
       }
 
       // Обработка результатов сохранения сообщений
@@ -307,13 +419,16 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     };
 
     chrome.runtime.onMessage.addListener(handleChatUpdate);
-    chrome.runtime.onMessage.addListener(handleChatOperationResult);
+    chrome.runtime.onMessage.removeListener(handleChatOperationResult);
+
+    console.log('[PluginControlPanel] useEffect[handleChatUpdate] - слушатели сообщений зарегистрированы');
 
     return () => {
+      console.log('[PluginControlPanel] useEffect[handleChatUpdate] - удаление слушателей сообщений');
       chrome.runtime.onMessage.removeListener(handleChatUpdate);
       chrome.runtime.onMessage.removeListener(handleChatOperationResult);
     };
-  }, [pluginId, pageKey, processChatResponse, sendMessageToBackground]);
+  }, [pluginId, pageKey, processChatResponse, sendMessageToBackground, loadChat]);
 
   // Восстановление черновика при возврате на вкладку 'Чат'
   useEffect(() => {
@@ -456,7 +571,17 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   }, [messages]);
 
   useEffect(() => {
-    console.log('[PluginControlPanel] messages после setMessages:', messages);
+    console.log('[PluginControlPanel] useEffect[messages] - состояние messages обновлено:', {
+      messagesCount: messages.length,
+      firstMessage: messages[0] ? {
+        id: messages[0].id,
+        text: messages[0].text.substring(0, 50),
+        isUser: messages[0].isUser,
+        timestamp: messages[0].timestamp
+      } : null,
+      allMessages: messages.map(m => ({ id: m.id, text: m.text.substring(0, 30), isUser: m.isUser })),
+      timestamp: new Date().toISOString()
+    });
   }, [messages]);
 
   // Фокус на поле ввода при открытии чата
