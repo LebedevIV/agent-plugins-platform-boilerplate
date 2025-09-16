@@ -443,6 +443,184 @@ except Exception as e:
 }
 
 // ==============================================================================
+// MESSAGE QUEUE SYSTEM - Prevents race conditions and manages critical operations
+// ==============================================================================
+
+class MessageQueue {
+  private queue: Array<{ message: any; priority: number; resolve: Function; reject: Function }> = [];
+  private processing = false;
+  private readonly DELAY_BETWEEN_MESSAGES = 50; // 50ms delay between messages
+
+  enqueue(message: any, priority = 0): Promise<any> {
+    return new Promise((resolve, reject) => {
+      this.queue.push({ message, priority, resolve, reject });
+      this.queue.sort((a, b) => b.priority - a.priority); // Higher priority first
+      this.processQueue();
+    });
+  }
+
+  private async processQueue(): Promise<void> {
+    if (this.processing || this.queue.length === 0) return;
+
+    this.processing = true;
+
+    while (this.queue.length > 0) {
+      const { message, resolve, reject } = this.queue.shift()!;
+
+      try {
+        const result = await safeSendMessageOffscreen(message);
+        resolve(result);
+      } catch (error) {
+        reject(error);
+      }
+
+      // Delay between messages to prevent race conditions
+      if (this.queue.length > 0) {
+        await new Promise(resolve => setTimeout(resolve, this.DELAY_BETWEEN_MESSAGES));
+      }
+    }
+
+    this.processing = false;
+  }
+
+  getQueueLength(): number {
+    return this.queue.length;
+  }
+}
+
+// Global message queue instance
+const messageQueue = new MessageQueue();
+
+// ==============================================================================
+// CONNECTION MONITORING - Continuous connection health monitoring and auto-recovery
+// ==============================================================================
+
+class ConnectionMonitor {
+  private connectionStatus: 'healthy' | 'degraded' | 'disconnected' = 'healthy';
+  private lastHeartbeat = 0;
+  private recoveryAttempts = 0;
+  private readonly MAX_RECOVERY_ATTEMPTS = 5;
+  private readonly HEARTBEAT_INTERVAL = 30000; // 30 seconds
+  private readonly RECOVERY_DELAY = 5000; // 5 seconds between recovery attempts
+  private monitorInterval: NodeJS.Timeout | null = null;
+
+  startMonitoring(): void {
+    console.log('[ConnectionMonitor] Starting connection monitoring...');
+
+    this.monitorInterval = setInterval(async () => {
+      await this.checkConnection();
+    }, this.HEARTBEAT_INTERVAL);
+
+    // Initial check
+    this.checkConnection();
+  }
+
+  stopMonitoring(): void {
+    if (this.monitorInterval) {
+      clearInterval(this.monitorInterval);
+      this.monitorInterval = null;
+    }
+    console.log('[ConnectionMonitor] Stopped connection monitoring');
+  }
+
+  private async checkConnection(): Promise<void> {
+    try {
+      const startTime = Date.now();
+
+      // Test connection with a simple ping
+      const response = await safeSendMessageOffscreen({
+        type: 'CONNECTION_PING',
+        timestamp: startTime
+      }, 5000, true); // Wait for response with 5s timeout
+
+      const latency = Date.now() - startTime;
+      this.lastHeartbeat = Date.now();
+
+      if (response?.pong) {
+        this.updateConnectionStatus('healthy', latency);
+      } else {
+        throw new Error('Invalid ping response');
+      }
+
+    } catch (error) {
+      console.warn('[ConnectionMonitor] Connection check failed:', error);
+      this.handleConnectionFailure();
+    }
+  }
+
+  private updateConnectionStatus(status: 'healthy' | 'degraded' | 'disconnected', latency?: number): void {
+    const oldStatus = this.connectionStatus;
+    this.connectionStatus = status;
+
+    if (oldStatus !== status) {
+      console.log(`[ConnectionMonitor] Connection status changed: ${oldStatus} → ${status}`, {
+        latency,
+        recoveryAttempts: this.recoveryAttempts
+      });
+
+      // Reset recovery attempts on successful connection
+      if (status === 'healthy') {
+        this.recoveryAttempts = 0;
+      }
+    }
+  }
+
+  private async handleConnectionFailure(): Promise<void> {
+    if (this.connectionStatus === 'disconnected') {
+      // Already handling disconnection
+      return;
+    }
+
+    this.updateConnectionStatus('disconnected');
+
+    // Attempt auto-recovery
+    if (this.recoveryAttempts < this.MAX_RECOVERY_ATTEMPTS) {
+      this.recoveryAttempts++;
+      console.log(`[ConnectionMonitor] Attempting auto-recovery (${this.recoveryAttempts}/${this.MAX_RECOVERY_ATTEMPTS})`);
+
+      setTimeout(async () => {
+        try {
+          // Test recovery
+          const recoveryResponse = await safeSendMessageOffscreen({
+            type: 'CONNECTION_RECOVERY_PING',
+            attempt: this.recoveryAttempts,
+            timestamp: Date.now()
+          }, 3000, true);
+
+          if (recoveryResponse?.pong) {
+            console.log(`[ConnectionMonitor] ✅ Auto-recovery successful on attempt ${this.recoveryAttempts}`);
+            this.updateConnectionStatus('healthy');
+            return;
+          }
+        } catch (recoveryError) {
+          console.warn(`[ConnectionMonitor] Recovery attempt ${this.recoveryAttempts} failed:`, recoveryError);
+        }
+
+        // If all recovery attempts failed, stay in disconnected state
+        if (this.recoveryAttempts >= this.MAX_RECOVERY_ATTEMPTS) {
+          console.error(`[ConnectionMonitor] ❌ All auto-recovery attempts failed. Manual intervention required.`);
+          this.updateConnectionStatus('disconnected');
+        } else {
+          // Try again
+          this.handleConnectionFailure();
+        }
+      }, this.RECOVERY_DELAY);
+    }
+  }
+
+  getStatus(): { status: string; lastHeartbeat: number; recoveryAttempts: number } {
+    return {
+      status: this.connectionStatus,
+      lastHeartbeat: this.lastHeartbeat,
+      recoveryAttempts: this.recoveryAttempts
+    };
+  }
+}
+
+// Global connection monitor instance
+const connectionMonitor = new ConnectionMonitor();
+
+// ==============================================================================
 // SAFE MESSAGE SENDING
 // ==============================================================================
 
@@ -668,18 +846,18 @@ async function handleExecuteWorkflow(data: ExecuteWorkflowMessage['data']) {
     console.log(`[offscreen][DIAG] - Success: ${result.success}`);
     console.log(`[offscreen][DIAG] - Result:`, result.result);
 
-    // Send result back to background with error handling (fire-and-forget for results)
+    // Send result back to background with error handling (queued for critical results)
     try {
-      await safeSendMessageOffscreen({
+      await messageQueue.enqueue({
         type: 'WORKFLOW_COMPLETED',
         requestId: data.requestId,
         result,
         success: true
-      }, 0, false); // No timeout, fire-and-forget
-      console.log(`[offscreen] ✅ Successfully sent WORKFLOW_COMPLETED for ${data.requestId} (fire-and-forget)`);
+      }, 1); // High priority for workflow completion
+      console.log(`[offscreen] ✅ Successfully queued WORKFLOW_COMPLETED for ${data.requestId}`);
     } catch (sendError) {
-      console.error(`[offscreen] ❌ Failed to send WORKFLOW_COMPLETED for ${data.requestId}:`, sendError);
-      // Don't throw for fire-and-forget messages, just log
+      console.error(`[offscreen] ❌ Failed to queue WORKFLOW_COMPLETED for ${data.requestId}:`, sendError);
+      // Don't throw for queued messages, just log
     }
 
     console.log(`[offscreen][DIAG] === WORKFLOW EXECUTION COMPLETED SUCCESSFULLY ===`);
@@ -724,17 +902,17 @@ async function handleExecuteWorkflow(data: ExecuteWorkflowMessage['data']) {
 
     // Send detailed error back to background with enhanced error handling (fire-and-forget)
     try {
-      await safeSendMessageOffscreen({
+      await messageQueue.enqueue({
         type: 'WORKFLOW_COMPLETED',
         requestId: data.requestId,
         error: errorMessage,
         errorDetails: errorDetails,
         success: false
-      }, 0, false); // No timeout, fire-and-forget
-      console.log(`[offscreen][DIAG] ✅ Successfully sent WORKFLOW_COMPLETED error for ${data.requestId} (fire-and-forget)`);
-      console.log(`[offscreen][DIAG] Error message sent: ${errorMessage}`);
+      }, 1); // High priority for error messages
+      console.log(`[offscreen][DIAG] ✅ Successfully queued WORKFLOW_COMPLETED error for ${data.requestId}`);
+      console.log(`[offscreen][DIAG] Error message queued: ${errorMessage}`);
     } catch (sendError) {
-      console.error(`[offscreen][DIAG] ❌ CRITICAL: Failed to send WORKFLOW_COMPLETED error for ${data.requestId}:`, sendError);
+      console.error(`[offscreen][DIAG] ❌ CRITICAL: Failed to queue WORKFLOW_COMPLETED error for ${data.requestId}:`, sendError);
       console.error(`[offscreen][DIAG] Original error:`, errorMessage);
 
       // FALLBACK: Try to send a simplified error message
@@ -859,15 +1037,15 @@ async function handleHtmlChunk(message: HtmlChunkMessage) {
       console.log(`[offscreen][CHUNKING] 🔄 ASSEMBLED HTML ready for transfer ${message.transferId} (${assembledHtml.length} chars)`);
 
       try {
-        await safeSendMessageOffscreen({
+        await messageQueue.enqueue({
           type: 'HTML_ASSEMBLED',
           transferId: message.transferId,
           html: assembledHtml
-        }, 0, false); // Fire-and-forget
-        console.log(`[offscreen][CHUNKING] 📤 SENT HTML_ASSEMBLED message for transfer ${message.transferId} (fire-and-forget)`);
+        }, 2); // Very high priority for HTML assembly completion
+        console.log(`[offscreen][CHUNKING] 📤 QUEUED HTML_ASSEMBLED message for transfer ${message.transferId}`);
       } catch (sendError) {
-        console.error(`[offscreen][CHUNKING] ❌ Failed to send HTML_ASSEMBLED for ${message.transferId}:`, sendError);
-        // Don't throw for fire-and-forget messages
+        console.error(`[offscreen][CHUNKING] ❌ Failed to queue HTML_ASSEMBLED for ${message.transferId}:`, sendError);
+        // Don't throw for queued messages
       }
     } catch (assemblyError) {
       console.error(`[offscreen][CHUNKING] ❌ FAILED to assemble HTML for transfer ${message.transferId}:`, assemblyError);
@@ -953,9 +1131,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
       return true; // Keep channel open for async responses
 
+    case 'CONNECTION_PING':
+      console.log(`[offscreen][DIAG] 📨 Received CONNECTION_PING`);
+      trackSendResponse({ pong: true, timestamp: message.timestamp });
+      break;
+
+    case 'CONNECTION_RECOVERY_PING':
+      console.log(`[offscreen][DIAG] 📨 Received CONNECTION_RECOVERY_PING (attempt ${message.attempt})`);
+      trackSendResponse({ pong: true, attempt: message.attempt, timestamp: message.timestamp });
+      break;
+
     default:
       console.warn(`[offscreen][DIAG] ⚠️ UNKNOWN MESSAGE TYPE:`, message.type);
-      console.warn(`[offscreen][DIAG] Available handlers: EXECUTE_WORKFLOW, HTML_CHUNK, HEARTBEAT_CHECK`);
+      console.warn(`[offscreen][DIAG] Available handlers: EXECUTE_WORKFLOW, HTML_CHUNK, HEARTBEAT_CHECK, CONNECTION_PING, CONNECTION_RECOVERY_PING`);
       console.warn(`[offscreen][DIAG] Message keys:`, Object.keys(message));
       trackSendResponse({ success: false, error: `Unknown message type: ${message.type}` });
       break;
@@ -968,6 +1156,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // ==============================================================================
 // INITIALIZATION
 // ==============================================================================
+
+// Start connection monitoring when offscreen loads
+connectionMonitor.startMonitoring();
+
+// Cleanup on unload
+window.addEventListener('beforeunload', () => {
+  connectionMonitor.stopMonitoring();
+  console.log('[offscreen] Connection monitoring stopped on unload');
+});
 
 // console.log('[offscreen] Offscreen document loaded successfully');
 // console.log('[offscreen] Ready to handle EXECUTE_WORKFLOW messages');

@@ -95,31 +95,77 @@ const SidePanel = () => {
     getCurrentTabUrl();
   }, []);
 
-  // Heartbeat механизм для поддержания надежного соединения
+  // Heartbeat механизм для поддержания надежного соединения с retry логикой
+  const pingWithRetry = useCallback(async (retries = 3, delay = 1000): Promise<boolean> => {
+    console.log('[SidePanel][HEARTBEAT] Starting heartbeat ping with retry');
+    for (let i = 0; i < retries; i++) {
+      try {
+        const pingTime = Date.now();
+        console.log(`[SidePanel][HEARTBEAT] Attempt ${i + 1}/${retries} at ${new Date(pingTime).toISOString()}`);
+        const response = await chrome.runtime.sendMessage({ type: 'PING' });
+        const pongTime = Date.now();
+        const latency = pongTime - pingTime;
+
+        if (chrome.runtime.lastError) {
+          throw new Error(chrome.runtime.lastError.message);
+        }
+        if (response?.pong) {
+          console.log(`[SidePanel][HEARTBEAT] ✅ Success - latency: ${latency}ms, pong timestamp: ${response.timestamp}`);
+          setConnectionStatus('connected');
+          return true;
+        } else {
+          console.warn(`[SidePanel][HEARTBEAT] ⚠️ Invalid response - missing pong, response:`, response);
+        }
+      } catch (error) {
+        console.warn(`[SidePanel][HEARTBEAT] ❌ Attempt ${i + 1} failed:`, error);
+        if (i < retries - 1) {
+          console.log(`[SidePanel][HEARTBEAT] Waiting ${delay * (i + 1)}ms before retry`);
+          await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
+        }
+      }
+    }
+    console.error('[SidePanel][HEARTBEAT] 💥 All heartbeat attempts failed - connection lost');
+    setConnectionStatus('disconnected');
+    return false;
+  }, []);
+
+  // Функция отправки сообщений с retry логикой
+  const sendMessageWithRetry = useCallback(async (message: any, retries = 3): Promise<any> => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const response = await chrome.runtime.sendMessage(message);
+        if (chrome.runtime.lastError) {
+          throw new Error(chrome.runtime.lastError.message);
+        }
+        return response;
+      } catch (error) {
+        console.warn(`[SidePanel] Message send attempt ${i + 1} failed:`, error);
+        if (i < retries - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500 * (i + 1)));
+        }
+      }
+    }
+    throw new Error('Failed to send message after all retries');
+  }, []);
+
   const startHeartbeat = useCallback(() => {
     if (heartbeatIntervalRef.current) {
       clearInterval(heartbeatIntervalRef.current);
     }
 
+    console.log('[SidePanel][HEARTBEAT] 🚀 Starting heartbeat with 10s interval');
     heartbeatIntervalRef.current = setInterval(async () => {
-      try {
-        const response = await chrome.runtime.sendMessage({ type: 'PING' });
-        if (response?.pong) {
-          if (connectionStatus !== 'connected') {
-            console.log('[SidePanel] Соединение с background восстановлено');
-            setConnectionStatus('connected');
-          }
-        } else {
-          throw new Error('Invalid ping response');
-        }
-      } catch (error) {
-        if (connectionStatus !== 'disconnected') {
-          console.error('[SidePanel] Соединение с background потеряно:', error);
-          setConnectionStatus('disconnected');
-        }
+      const success = await pingWithRetry();
+      if (!success) {
+        console.warn('[SidePanel][HEARTBEAT] ⚠️ Heartbeat failed, attempting to reconnect...');
+        // Попытка переподключения через 5 секунд
+        setTimeout(() => {
+          console.log('[SidePanel][HEARTBEAT] 🔄 Attempting reconnection...');
+          pingWithRetry();
+        }, 5000);
       }
     }, 10000); // Проверка каждые 10 секунд
-  }, [connectionStatus]);
+  }, [pingWithRetry]);
 
   // Остановка heartbeat
   const stopHeartbeat = useCallback(() => {
@@ -139,43 +185,82 @@ const SidePanel = () => {
     };
   }, [startHeartbeat, stopHeartbeat]);
 
-  // Слушатель для ответов на GET_PLUGINS
+  // Слушатель для ответов на GET_PLUGINS с расширенным логированием
   useEffect(() => {
-    const handlePluginResponse = (message: any) => {
+    const handlePluginResponse = (message: any, sender: any, sendResponse: any) => {
+      console.log('[SidePanel][MESSAGE_LISTENER] 📨 Message received:', {
+        type: message?.type,
+        hasRequestId: !!message?.requestId,
+        hasPlugins: !!message?.plugins,
+        hasError: !!message?.error,
+        sender: sender,
+        timestamp: new Date().toISOString()
+      });
+
       if (message.type === 'GET_PLUGINS_RESPONSE') {
+        console.log('[SidePanel][GET_PLUGINS_RESPONSE] 🎯 GET_PLUGINS response received!');
+        console.log('[SidePanel][GET_PLUGINS_RESPONSE] Full message:', message);
+        console.log('[SidePanel][GET_PLUGINS_RESPONSE] Request ID:', message.requestId);
+        console.log('[SidePanel][GET_PLUGINS_RESPONSE] Timestamp:', new Date().toISOString());
+
         // Очищаем таймаут при получении ответа
         const timeoutId = (window as any).pluginsTimeoutId;
         if (timeoutId) {
           clearTimeout(timeoutId);
           (window as any).pluginsTimeoutId = null;
+          console.log('[SidePanel][GET_PLUGINS_RESPONSE] ✅ Timeout cleared');
+        } else {
+          console.warn('[SidePanel][GET_PLUGINS_RESPONSE] ⚠️ No timeout to clear');
         }
 
-        console.log('[SidePanel] Получен ответ GET_PLUGINS_RESPONSE:', message);
-        console.log('[SidePanel] Время получения ответа:', new Date().toISOString());
-
         if (message.error) {
-          console.error('[SidePanel] ❌ Ошибка от background:', message.error);
+          console.error('[SidePanel][GET_PLUGINS_RESPONSE] ❌ Error from background:', message.error);
+          console.error('[SidePanel][GET_PLUGINS_RESPONSE] Error details:', {
+            error: message.error,
+            requestId: message.requestId,
+            timestamp: message.timestamp
+          });
           addToastWithDeps('Ошибка загрузки плагинов: ' + message.error, 'error');
-          return;
+          return true;
         }
 
         if (message.plugins) {
-          console.log('[SidePanel] ✅ Успешный ответ получен');
-          console.log('[SidePanel] Устанавливаем плагины:', message.plugins.length, 'шт');
-          console.log('[SidePanel] Примеры плагинов:', message.plugins.slice(0, 2));
+          console.log('[SidePanel][GET_PLUGINS_RESPONSE] ✅ Successful response received');
+          console.log('[SidePanel][GET_PLUGINS_RESPONSE] Plugins count:', message.plugins.length);
+          console.log('[SidePanel][GET_PLUGINS_RESPONSE] Plugin details:', message.plugins.map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            version: p.version
+          })));
+
           setPlugins(message.plugins);
-          console.log('[SidePanel] ✅ Загрузка плагинов успешно завершена');
+          console.log('[SidePanel][GET_PLUGINS_RESPONSE] ✅ Plugins state updated successfully');
+          console.log('[SidePanel][GET_PLUGINS_RESPONSE] ✅ Plugin loading completed');
         } else {
-          console.error('[SidePanel] ❌ Пустой ответ от background:', message);
+          console.error('[SidePanel][GET_PLUGINS_RESPONSE] ❌ Empty response from background:', message);
+          console.error('[SidePanel][GET_PLUGINS_RESPONSE] Response structure:', Object.keys(message));
           addToastWithDeps('Получен некорректный ответ от background', 'error');
         }
+
+        return true; // Важно для асинхронных ответов
       }
+
+      // Логируем все другие типы сообщений
+      if (message.type && message.type !== 'PING') {
+        console.log('[SidePanel][MESSAGE_LISTENER] 📝 Other message type received:', message.type);
+      }
+
+      return false;
     };
 
+    console.log('[SidePanel][MESSAGE_LISTENER] 🚀 Registering message listener for GET_PLUGINS_RESPONSE');
     chrome.runtime.onMessage.addListener(handlePluginResponse);
+    console.log('[SidePanel][MESSAGE_LISTENER] ✅ Message listener registered');
 
     return () => {
+      console.log('[SidePanel][MESSAGE_LISTENER] 🧹 Removing message listener');
       chrome.runtime.onMessage.removeListener(handlePluginResponse);
+      console.log('[SidePanel][MESSAGE_LISTENER] ✅ Message listener removed');
     };
   }, []);
 
@@ -191,7 +276,13 @@ const SidePanel = () => {
 
         // Проверяем соединение с background перед отправкой
         try {
-          await chrome.runtime.sendMessage({ type: 'PING' });
+          const pingResponse = await chrome.runtime.sendMessage({ type: 'PING' });
+          if (chrome.runtime.lastError) {
+            throw new Error(chrome.runtime.lastError.message);
+          }
+          if (!pingResponse?.pong) {
+            throw new Error('Invalid ping response');
+          }
           console.log('[SidePanel] Background доступен');
         } catch (pingError) {
           console.warn('[SidePanel] Background недоступен:', pingError);
@@ -199,14 +290,19 @@ const SidePanel = () => {
         }
 
         // Отправляем запрос на получение плагинов
-        console.log('[SidePanel] Отправляем GET_PLUGINS сообщение в background');
-        console.log('[SidePanel] Время отправки:', new Date().toISOString());
+        console.log('[SidePanel][DEBUG] Отправляем GET_PLUGINS сообщение в background');
+        console.log('[SidePanel][DEBUG] Время отправки:', new Date().toISOString());
 
         const requestId = Date.now().toString();
+        console.log('[SidePanel][DEBUG] Request ID:', requestId);
+        console.log('[SidePanel][DEBUG] Отправка сообщения:', { type: 'GET_PLUGINS', requestId });
+
         await chrome.runtime.sendMessage({
           type: 'GET_PLUGINS',
           requestId
         });
+
+        console.log('[SidePanel][DEBUG] GET_PLUGINS сообщение отправлено, ожидаем ответ');
 
         console.log('[SidePanel] Сообщение GET_PLUGINS отправлено, ожидаем ответ через слушатель');
 
@@ -281,7 +377,7 @@ const SidePanel = () => {
       // Способ 3: через background script
       if (!activeTab) {
         try {
-          const response = await chrome.runtime.sendMessage({ type: 'GET_ACTIVE_TAB_URL' });
+          const response = await sendMessageWithRetry({ type: 'GET_ACTIVE_TAB_URL' });
           console.log('[SidePanel] Способ 3 - ответ от background:', response);
           if (response?.url) {
             setCurrentTabUrl(response.url);
@@ -377,7 +473,7 @@ const SidePanel = () => {
       const pluginName = selectedPlugin.name || selectedPlugin.manifest?.name || selectedPlugin.id;
       // const logger = createRunLogger(`workflow-${selectedPlugin.id}`, `Воркфлоу плагина: ${pluginName}`); // Удалено
 
-      await chrome.runtime.sendMessage({
+      await sendMessageWithRetry({
         type: 'RUN_WORKFLOW',
         pluginId: selectedPlugin.id,
       });
@@ -412,7 +508,7 @@ const SidePanel = () => {
     if (!selectedPlugin) return;
 
     try {
-      await chrome.runtime.sendMessage({
+      await sendMessageWithRetry({
         type: 'STOP_WORKFLOW',
         pluginId: selectedPlugin.id,
       });
@@ -436,7 +532,7 @@ const SidePanel = () => {
   const handleUpdatePluginSetting = async (pluginId: string, setting: string, value: boolean): Promise<void> => {
     try {
       // Отправляем сообщение в background script для обновления настроек
-      const response = await chrome.runtime.sendMessage({
+      const response = await sendMessageWithRetry({
         type: 'UPDATE_PLUGIN_SETTING',
         pluginId,
         setting,

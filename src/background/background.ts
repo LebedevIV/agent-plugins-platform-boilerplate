@@ -2813,10 +2813,19 @@ class BackgroundController {
   
   private setupPeriodicCleanup(): void {
     setInterval(async () => {
-      await this.chunkManager.cleanup();
+      try {
+        await this.chunkManager.cleanup();
+      } catch (error) {
+        console.error('[background] Cleanup error:', error);
+      }
+    }, this.CLEANUP_INTERVAL);
 
       // Очистка устаревших метаданных трансферов
-      await this.metadataManager.cleanupExpired();
+      try {
+        await this.metadataManager.cleanupExpired();
+      } catch (error) {
+        console.error('[background] Metadata cleanup error:', error);
+      }
 
       // Log recovery statistics periodically
       const recoveryStats = this.recoveryManager.getRecoveryStats();

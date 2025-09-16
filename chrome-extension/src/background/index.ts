@@ -1,46 +1,6 @@
 import 'webextension-polyfill';
 console.log('[background] Initializing background imports...');
 
-// === ОБРАБОТКА UNHANDLED PROMISE REJECTIONS ===
-if (typeof globalThis !== 'undefined') {
-  // Глобальный обработчик для unhandled promise rejections
-  globalThis.addEventListener?.('unhandledrejection', (event) => {
-    console.error('[background][UNHANDLED_REJECTION] Unhandled promise rejection:', event.reason);
-    console.error('[background][UNHANDLED_REJECTION] Stack:', event.reason?.stack || 'No stack available');
-    console.error('[background][UNHANDLED_REJECTION] Promise:', event.promise);
-
-    // Предотвращаем сбой всего расширения
-    event.preventDefault();
-
-    // Можно добавить дополнительную логику обработки ошибки
-    try {
-      // Логируем в консоль для отладки
-      console.error('[background][UNHANDLED_REJECTION] Attempting graceful error handling...');
-    } catch (logError) {
-      // Если даже логирование не работает, ничего не делаем
-    }
-  });
-
-  // Глобальный обработчик для необработанных ошибок
-  globalThis.addEventListener?.('error', (event) => {
-    console.error('[background][UNHANDLED_ERROR] Unhandled error:', event.error);
-    console.error('[background][UNHANDLED_ERROR] Message:', event.message);
-    console.error('[background][UNHANDLED_ERROR] Filename:', event.filename);
-    console.error('[background][UNHANDLED_ERROR] Line:', event.lineno);
-
-    // Предотвращаем сбой всего расширения
-    event.preventDefault();
-  });
-}
-
-console.log('[background] Error handlers initialized');
-
-// Глобальная функция trackSendResponse для использования вне обработчика сообщений
-function trackSendResponse(response: any): boolean {
-  console.log('[background][RESPONSE] Sending response:', JSON.stringify(response));
-  return true;
-}
-
 import { pluginChatApi } from './plugin-chat-api';
 console.log('[background] Plugin chat API loaded');
 
@@ -53,62 +13,8 @@ console.log('[background] Plugin manager loaded');
 import { getPageKey } from '../../../packages/shared/lib/utils/helpers';
 import { getApiKeyForModel, callAiModel } from './ai-api-client';
 import { exampleThemeStorage, pluginSettingsStorage, getPluginSettings } from '@extension/storage';
+import { ensureOffscreenDocument } from '../../../src/background/offscreen-manager';
 console.log('[background] Storage modules loaded');
-
-// Глобальная очередь для последовательной обработки PYODIDE_MESSAGE
-const pyodideMessageQueue: any[] = [];
-let isProcessingPyodideMessage = false;
-
-async function processPyodideMessageQueue(): Promise<void> {
-  if (isProcessingPyodideMessage || pyodideMessageQueue.length === 0) {
-    return;
-  }
-
-  isProcessingPyodideMessage = true;
-  console.log('[background][PYODIDE_QUEUE] Starting sequential processing of', pyodideMessageQueue.length, 'messages');
-
-  while (pyodideMessageQueue.length > 0) {
-    const msg = pyodideMessageQueue.shift();
-
-    // Проверка валидности сообщения
-    if (!msg || typeof msg !== 'object') {
-      console.error('[background][PYODIDE_QUEUE] Invalid message format, skipping');
-      continue;
-    }
-
-    console.log('[background][PYODIDE_QUEUE] Processing message:', msg.messageId);
-
-    try {
-      // Проверка обязательных полей
-      const pluginId = msg.pluginId;
-      const pageKey = msg.pageKey;
-      const message = msg.message;
-
-      if (!pluginId || !pageKey || !message) {
-        console.error('[background][PYODIDE_QUEUE] Missing required fields:', { pluginId: !!pluginId, pageKey: !!pageKey, message: !!message });
-        trackSendResponse({ success: false, error: 'Missing required fields', messageId: msg.messageId });
-        continue;
-      }
-
-      console.log('[background][PYODIDE_QUEUE] Saving message to chat...');
-      await pluginChatApi.saveMessage(pluginId, getPageKey(pageKey), message as ChatMessage);
-
-      console.log('[background][PYODIDE_QUEUE] Broadcasting chat update...');
-      broadcastChatUpdate(pluginId, getPageKey(pageKey));
-
-      console.log('[background][PYODIDE_QUEUE] Sending success response for:', msg.messageId);
-      trackSendResponse({ success: true, messageId: msg.messageId });
-
-      console.log('[background][PYODIDE_QUEUE] Message processed successfully:', msg.messageId);
-    } catch (error) {
-      console.error('[background][PYODIDE_QUEUE] Failed to process message:', msg.messageId, error);
-      trackSendResponse({ success: false, error: (error as Error).message, messageId: msg.messageId });
-    }
-  }
-
-  isProcessingPyodideMessage = false;
-  console.log('[background][PYODIDE_QUEUE] Queue processing completed');
-}
 
 console.log('[background] Starting Offscreen Document integration - REFACTORED BACKGROUND ARCHITECTURE');
 
@@ -216,15 +122,12 @@ function createChunks(html: string, chunkSize: number = CHUNK_SIZE): {
   totalSize: number;
   chunkSize: number;
 } {
-  console.log('[createChunks][DEBUG] 🔄 createChunks called with HTML length:', html.length, 'chunkSize:', chunkSize);
-
   const chunks: string[] = [];
   const totalSize = html.length;
 
   // Проверяем, не превышает ли общий размер лимиты
   const maxTotalSize = chunkSize * MAX_CHUNKS;
   if (totalSize > maxTotalSize) {
-    console.error('[createChunks][DEBUG] ❌ HTML too large:', totalSize, 'chars exceeds maximum', maxTotalSize, 'chars');
     throw new Error(`HTML data too large: ${totalSize} chars exceeds maximum ${maxTotalSize} chars (${MAX_CHUNKS} chunks × ${chunkSize} chars)`);
   }
 
@@ -234,8 +137,7 @@ function createChunks(html: string, chunkSize: number = CHUNK_SIZE): {
     chunks.push(chunk);
   }
 
-  console.log(`[createChunks][DEBUG] ✅ Created ${chunks.length} chunks from ${totalSize} chars (chunk size: ${chunkSize})`);
-  console.log(`[createChunks][DEBUG] 📊 HTML size: ${(totalSize / 1024 / 1024).toFixed(2)}MB, Max allowed: ${(maxTotalSize / 1024 / 1024).toFixed(2)}MB`);
+  console.log(`[IMPROVED_CHUNKING] Created ${chunks.length} chunks from ${totalSize} chars (chunk size: ${chunkSize})`);
 
   return {
     chunks,
@@ -244,6 +146,62 @@ function createChunks(html: string, chunkSize: number = CHUNK_SIZE): {
     chunkSize
   };
 }
+
+// Функция для отправки HTML в одном сообщении (прямая передача)
+const sendHtmlDirectly = async (
+  pluginId: string,
+  pageKey: string,
+  html: string,
+  requestId: string,
+  transferId: string
+): Promise<void> => {
+  console.log('[background][DIRECT_TRANSMISSION] Sending HTML directly to offscreen for transfer:', transferId);
+  console.log('[background][DIRECT_TRANSMISSION] HTML size:', html.length, 'chars');
+
+  try {
+    // Создаем сообщение для прямой передачи HTML
+    const directMessage = {
+      type: 'HTML_DIRECT',
+      transferId,
+      pluginId,
+      pageKey,
+      requestId,
+      htmlData: html,
+      totalSize: html.length,
+      timestamp: Date.now(),
+      metadata: {
+        pluginId,
+        pageKey,
+        requestId,
+        totalSize: html.length,
+        timestamp: Date.now(),
+        transmissionMethod: 'direct'
+      }
+    };
+
+    console.log('[background][DIRECT_TRANSMISSION] Sending direct HTML message to offscreen...');
+
+    // Отправляем HTML в одном сообщении с обработкой ошибок
+    const directResponse = await chrome.runtime.sendMessage(directMessage);
+    if (chrome.runtime.lastError) {
+      throw new Error(chrome.runtime.lastError.message);
+    }
+    console.log('[background][DIRECT_TRANSMISSION] Direct HTML transmission completed successfully');
+
+    // Запускаем workflow в offscreen document с прямой передачей
+    try {
+      await executeWorkflowInOffscreen(pluginId, pageKey, transferId, requestId);
+      console.log('[background][DIRECT_TRANSMISSION] Workflow execution initiated successfully');
+    } catch (workflowError) {
+      console.error('[background][DIRECT_TRANSMISSION] Failed to execute workflow:', workflowError);
+      throw workflowError;
+    }
+
+  } catch (error) {
+    console.error('[background][DIRECT_TRANSMISSION] Failed to send HTML directly:', error);
+    throw error;
+  }
+};
 
 // DEPRECATED: Interfaces for chunked HTML streaming - no longer used
 /*
@@ -260,15 +218,14 @@ interface HtmlChunkMessage {
     requestId: string;
   };
 }
-*/
 
-// Required interface for chunk acknowledgment
 interface HtmlChunkAckMessage {
   type: 'HTML_CHUNK_ACK';
   transferId: string;
   chunkIndex: number;
   received: boolean;
 }
+*/
 
 // DEPRECATED: Global state for managing chunk transfers - no longer used
 // Keeping minimal structure for backwards compatibility
@@ -286,7 +243,7 @@ function diagnoseTransferState(transferId: string): {
   diagnostics: Record<string, any>;
 } {
   const transfer = activeTransfers.get(transferId);
-  const diagnostics: any = {
+  const diagnostics = {
     transferId,
     timestamp: Date.now(),
     exists: !!transfer,
@@ -717,18 +674,12 @@ async function processRecoveredAssembledTransfer(msg: any, transfer: any): Promi
     let pluginId = msg.pluginId;
     let pageKey = msg.pageKey;
 
-    // Проверка валидности входного сообщения
-    if (!msg || typeof msg !== 'object') {
-      console.error(`[RECOVERY_PROCESSING] ❌ Invalid message format for recovery processing`);
-      throw new Error('Invalid message format');
-    }
-
     // ПОПЫТКА ВОССТАНОВЛЕНИЯ PLUGINID ИЗ РАЗЛИЧНЫХ ИСТОЧНИКОВ
     if (!pluginId) {
       console.log(`[RECOVERY_PROCESSING] 🔍 Attempting to recover pluginId for transfer ${transferId}`);
 
       // Источник 1: Метаданные transfer'а
-      if (transfer && transfer.metadata?.pluginId) {
+      if (transfer.metadata?.pluginId) {
         pluginId = transfer.metadata.pluginId;
         console.log(`[RECOVERY_PROCESSING] ✅ Recovered pluginId from transfer metadata: ${pluginId}`);
       }
@@ -761,7 +712,7 @@ async function processRecoveredAssembledTransfer(msg: any, transfer: any): Promi
       }
 
       // Источник 4: Fallback - извлечение из transferId
-      if (!pluginId && transferId && typeof transferId === 'string' && transferId.includes('_html')) {
+      if (!pluginId && transferId.includes('_html')) {
         const parts = transferId.split('_');
         if (parts.length >= 3) {
           pluginId = parts.slice(0, parts.length - 2).join('_');
@@ -775,7 +726,7 @@ async function processRecoveredAssembledTransfer(msg: any, transfer: any): Promi
       console.log(`[RECOVERY_PROCESSING] 🔍 Attempting to recover pageKey for transfer ${transferId}`);
 
       // Источник 1: Метаданные transfer'а
-      if (transfer && transfer.metadata?.pageKey) {
+      if (transfer.metadata?.pageKey) {
         pageKey = transfer.metadata.pageKey;
         console.log(`[RECOVERY_PROCESSING] ✅ Recovered pageKey from transfer metadata: ${pageKey}`);
       }
@@ -793,7 +744,7 @@ async function processRecoveredAssembledTransfer(msg: any, transfer: any): Promi
       if (!pageKey) {
         try {
           const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-          if (tabs && tabs[0]?.url) {
+          if (tabs[0]?.url) {
             const { getPageKey } = await import('../../../packages/shared/lib/utils/helpers');
             pageKey = getPageKey(tabs[0].url);
             console.log(`[RECOVERY_PROCESSING] ✅ Generated pageKey from active tab: ${pageKey}`);
@@ -811,14 +762,14 @@ async function processRecoveredAssembledTransfer(msg: any, transfer: any): Promi
     }
 
     // ВАЛИДАЦИЯ ВОССТАНОВЛЕННЫХ ДАННЫХ
-    if (!pluginId || typeof pluginId !== 'string') {
+    if (!pluginId) {
       console.error(`[RECOVERY_PROCESSING] ❌ CRITICAL: Cannot determine pluginId for recovered transfer ${transferId}`);
-      throw new Error(`Missing or invalid pluginId - recovery failed`);
+      throw new Error(`Missing pluginId - recovery failed`);
     }
 
-    if (!pageKey || typeof pageKey !== 'string') {
+    if (!pageKey) {
       console.error(`[RECOVERY_PROCESSING] ❌ CRITICAL: Cannot determine pageKey for recovered transfer ${transferId}`);
-      throw new Error(`Missing or invalid pageKey - recovery failed`);
+      throw new Error(`Missing pageKey - recovery failed`);
     }
 
     console.log(`[RECOVERY_PROCESSING] ✅ Recovery data validated - pluginId: ${pluginId}, pageKey: ${pageKey}`);
@@ -902,7 +853,80 @@ async function processRecoveredAssembledTransfer(msg: any, transfer: any): Promi
 }
 
 // DEPRECATED: Function to split HTML into chunks - replaced by direct data exchange
-/*
+console.log('[background] Background script initialization completed successfully');
+console.log('[background] Extension ID:', chrome.runtime.id);
+console.log('[background] Offscreen API supported:', offscreenSupported());
+console.log('[background] Ready to handle workflow requests with htmlTransmissionMode support');
+
+// Функция для обновления настроек плагина
+const updatePluginSetting = async (pluginId: string, setting: string, value: boolean) => {
+  const settings = await pluginSettingsStorage.get();
+  const pluginSettings = settings[pluginId] || { enabled: true, autorun: false };
+
+  // Обновляем настройку
+  pluginSettings[setting] = value;
+
+  // Если плагин отключен, то отключаем и автозапуск
+  if (setting === 'enabled' && !value) {
+    pluginSettings.autorun = false;
+  }
+
+  // Сохраняем обновленные настройки
+  await pluginSettingsStorage.set({
+    ...settings,
+    [pluginId]: pluginSettings,
+  });
+
+  console.log(`[background] Updated plugin setting for ${pluginId}:`, setting, '=', value);
+  return { success: true };
+};
+
+// Функция для проверки и запуска плагина с учетом настроек
+const runPluginIfEnabled = async (pluginId: string) => {
+  try {
+    // Получаем настройки плагина
+    const settings = await getPluginSettings(pluginId);
+
+    // Проверяем, включен ли плагин
+    if (!settings.enabled) {
+      console.log(`[background] Plugin ${pluginId} is disabled, not running`);
+      return { success: false, reason: 'Plugin is disabled' };
+    }
+
+    // Запускаем рабочий процесс плагина
+    return { success: true };
+  } catch (error) {
+    console.error(`[background] Error running plugin ${pluginId}:`, error);
+    return { error: (error as Error).message };
+  }
+};
+
+// Обработчик для автозапуска плагинов при загрузке страницы
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tab.url && (tab.url.startsWith('http') || tab.url.startsWith('https'))) {
+    try {
+      // Получаем все плагины и их настройки
+      const plugins = await getAvailablePlugins();
+      const allSettings = await pluginSettingsStorage.get();
+
+      console.log('[background] Tab updated, checking plugins for autorun:', tab.url);
+
+      // Проверяем каждый плагин на наличие автозапуска и соответствия URL
+      for (const plugin of plugins) {
+        const settings = allSettings[plugin.id] || { enabled: true, autorun: false };
+
+        // Если плагин включен и настроен на автозапуск
+        if (settings.enabled && settings.autorun) {
+          await runPluginIfEnabled(plugin.id);
+        }
+      }
+    } catch (error) {
+      console.error('[background] Error in autorun handler:', error);
+    }
+  }
+});
+
+console.log('[background] Background script fully loaded and ready');
 function splitHtmlIntoChunks(html: string, chunkSize: number = CHUNK_SIZE): string[] {
   const chunks: string[] = [];
   for (let i = 0; i < html.length; i += chunkSize) {
@@ -910,7 +934,6 @@ function splitHtmlIntoChunks(html: string, chunkSize: number = CHUNK_SIZE): stri
   }
   return chunks;
 }
-*/
 
 // DEPRECATED: Function to assemble HTML from chunks - replaced by direct data exchange
 /*
@@ -1067,7 +1090,6 @@ function emergencyTransferRecovery(transferId: string, originalTransfer: any): b
     chrome.runtime.sendMessage({
       type: 'EMERGENCY_TRANSFER_BACKUP',
       transferId,
-      transferData: originalTransfer,
       timestamp: Date.now()
     }).catch(() => {
       console.warn(`[EMERGENCY_RECOVERY] Offscreen backup notification failed`);
@@ -1082,2228 +1104,444 @@ function emergencyTransferRecovery(transferId: string, originalTransfer: any): b
   }
 }
 
-// DEPRECATED: Function to send chunks sequentially - replaced by direct data exchange
-/*
-async function sendChunksSequentially(transferId: string): Promise<void> {
-  const transfer = activeTransfers.get(transferId);
-  if (!transfer) {
-    console.error('[background][CHUNKING] Transfer not found:', transferId);
-
-    // Check if offscreen has already assembled HTML and notified us
-    const assembledCheck = await chrome.runtime.sendMessage({
-      type: 'CHECK_TRANSFER_STATUS',
-      transferId
-    }).catch(() => null);
-
-    if (assembledCheck?.assembledNotified) {
-      console.warn('[background][CHUNKING] Transfer was already assembled in offscreen:', transferId);
-      return;
-    }
-
-    throw new Error(`Transfer ${transferId} not found`);
-  }
-
-  // Дополнительные проверки на валидность transfer состояния
-  if (!Array.isArray(transfer.chunks) || transfer.chunks.length === 0) {
-    console.error('[background][CHUNKING] Invalid transfer chunks for:', transferId);
-    activeTransfers.delete(transferId); // Очистить невалидный transfer
-    throw new Error(`Invalid transfer chunks for ${transferId}`);
-  }
-
-  console.log(`[background][CHUNKING] Starting to send ${transfer.chunks.length} chunks (0-${transfer.chunks.length - 1})`);
+// Функция для отправки chunks в offscreen document
+async function sendChunksToOffscreen(
+  transferId: string,
+  chunks: string[],
+  metadata: any
+): Promise<void> {
+  console.log(`[CHUNK_TRANSMISSION] 🚀 Starting chunk transmission for transfer ${transferId}`);
+  console.log(`[CHUNK_TRANSMISSION] Total chunks: ${chunks.length}`);
 
   // Флаг для остановки передачи при получении HTML_ASSEMBLED
   let transferCompleted = false;
 
   // Храним функцию для обновления флага
   const setTransferCompleted = (completed: boolean) => {
-    console.log(`[background][CHUNKING] Transfer ${transferId} completion status set to:`, completed);
+    console.log(`[CHUNK_TRANSMISSION] Transfer ${transferId} completion status set to:`, completed);
     transferCompleted = completed;
   };
 
   // Export the setter to global scope for HTML_ASSEMBLED handler
   (globalThis as any)[`setTransferCompleted_${transferId}`] = setTransferCompleted;
 
-  for (let i = 0; i < transfer.chunks.length; i++) {
-    // Проверяем, что transfer все еще существует на каждой итерации
-    const currentTransfer = activeTransfers.get(transferId);
-    if (!currentTransfer) {
-      console.log('[background][CHUNKING] Transfer cancelled or completed');
-      // Transfer was cancelled or completed
-      return;
-    }
-
-    // Проверяем, не завершен ли transfer после HTML_ASSEMBLED
+  for (let i = 0; i < chunks.length; i++) {
+    // Проверяем, не завершен ли transfer
     if (transferCompleted) {
-      console.log('[background][CHUNKING] Transfer completed, skipping remaining chunks');
+      console.log(`[CHUNK_TRANSMISSION] Transfer completed, skipping remaining chunks`);
       return;
     }
 
+    const chunkMessage = {
+      type: 'HTML_CHUNK',
+      transferId,
+      chunkIndex: i,
+      totalChunks: chunks.length,
+      chunkData: chunks[i],
+      metadata,
+      timestamp: Date.now()
+    };
+
+    console.log(`[CHUNK_TRANSMISSION] Sending chunk ${i}/${chunks.length - 1} (${chunks[i].length} chars)`);
+
     try {
-      // Проверяем, не завершен ли transfer после HTML_ASSEMBLED перед отправкой чанка
-      if (transferCompleted) {
-        console.log(`[background][CHUNKING] Transfer ${transferId} completed, skipping sending chunk ${i}`);
-        return;
-      }
-
-      // Дополнительная проверка на существование чанка
-      if (!currentTransfer.chunks[i]) {
-        console.error(`[background][CHUNKING] Chunk ${i} does not exist in transfer ${transferId}. Total chunks: ${currentTransfer.chunks.length}`);
-        activeTransfers.delete(transferId); // Очистить transfer с ошибкой
-        throw new Error(`Chunk ${i} not found in transfer ${transferId}`);
-      }
-
-      const chunkMessage: HtmlChunkMessage = {
-        type: 'HTML_CHUNK',
-        transferId,
-        chunkIndex: i,
-        totalChunks: transfer.totalChunks,
-        chunkData: transfer.chunks[i],
-        metadata: transfer.metadata
-      };
-
-      console.log(`[background][CHUNKING] Sending chunk ${i}/${transfer.totalChunks - 1} (${transfer.chunks[i].length} chars)`);
-
       await chrome.runtime.sendMessage(chunkMessage);
 
-      // Проверить перед ожиданием acknowledgment'а, не завершен ли transfer
-      if (transferCompleted) {
-        console.log(`[background][CHUNKING] Transfer ${transferId} completed during chunk ${i} wait, skipping waitForChunkAck`);
-        return;
-      }
-
-      // Wait for chunk acknowledgment with timeout
-      await waitForChunkAck(transferId, i);
-
-      // Small delay between chunks
-      if (i < transfer.chunks.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, CHUNK_DELAY));
-      }
-
-    } catch (error) {
-      console.error(`[background][CHUNKING] Failed to send chunk ${i}:`, error);
-      // Не reject'им если transfer уже завершен
-      if (!transferCompleted) {
-        transfer.reject(error);
-      }
-      return;
-    }
-  }
-
-  // Send completion message
-  try {
-    await chrome.runtime.sendMessage({
-      type: 'HTML_CHUNK_COMPLETE',
-      transferId,
-      totalChunks: transfer.totalChunks
-    });
-
-    console.log('[background][CHUNKING] All chunks sent successfully');
-    transfer.resolve();
-
-  } catch (error) {
-    console.error('[background][CHUNKING] Failed to send completion message:', error);
-    transfer.reject(error);
-  }
-}
-*/
-
-// Function to wait for chunk acknowledgment with multi-layer recovery
-async function waitForChunkAck(transferId: string, chunkIndex: number): Promise<void> {
-  console.log(`[WAIT_ACK] 🔍 Starting waitForChunkAck for transfer ${transferId}, chunk ${chunkIndex}`);
-
-  // === МНОГОУРОВНЕВАЯ ПРОВЕРКА TRANSFER'А ===
-  let { found, transfer, recoveryAttempted, diagnostics } = await multiLayerTransferCheck(transferId);
-
-  if (!found || !transfer) {
-    console.error(`[WAIT_ACK] ❌ Transfer ${transferId} not found in any storage layer`);
-    console.error(`[WAIT_ACK] Multi-layer check diagnostics:`, diagnostics);
-
-    // Попытка создания заглушки transfer'а для продолжения работы
-    const stubTransfer = await createStubTransferForRecovery(transferId, chunkIndex);
-    if (stubTransfer) {
-      console.log(`[WAIT_ACK] ✅ Stub transfer created for ${transferId}, continuing with acknowledgment wait`);
-    } else {
-      throw new Error(`Transfer ${transferId} not found and recovery failed`);
-    }
-  } else {
-    if (recoveryAttempted) {
-      console.log(`[WAIT_ACK] ⚠️ Transfer ${transferId} recovered using ${diagnostics.source} method`);
-    }
-  }
-
-  // УЛУЧШЕННЫЕ ПРОВЕРКИ NULL/UNDEFINED С GRACEFUL HANDLING
-  if (!transfer) {
-    console.error(`[WAIT_ACK] ❌ CRITICAL: Transfer ${transferId} is null or undefined`);
-
-    // GRACEFUL FALLBACK: Попытка экстренного восстановления
-    console.log(`[WAIT_ACK] 🔄 Attempting emergency transfer recovery for ${transferId}`);
-    const emergencyTransfer = await createStubTransferForRecovery(transferId, chunkIndex);
-
-    if (emergencyTransfer) {
-      console.log(`[WAIT_ACK] ✅ Emergency recovery successful for transfer ${transferId}`);
-      transfer = emergencyTransfer;
-      activeTransfers.set(transferId, transfer);
-    } else {
-      console.error(`[WAIT_ACK] ❌ Emergency recovery failed for transfer ${transferId}`);
-      throw new Error(`Transfer ${transferId} lost and recovery failed - cannot proceed with chunk acknowledgment`);
-    }
-  }
-
-  // Обновляем время последнего доступа с дополнительными проверками
-  try {
-    transfer.lastAccessed = Date.now();
-    console.log(`[WAIT_ACK] ✅ Updated lastAccessed for transfer ${transferId}: ${transfer.lastAccessed}`);
-  } catch (updateError) {
-    console.error(`[WAIT_ACK] ❌ Failed to update lastAccessed for transfer ${transferId}:`, updateError);
-    // Не прерываем выполнение, продолжаем с предупреждением
-  }
-
-  // УЛУЧШЕННЫЕ ПРОВЕРКИ НА ВАЛИДНОСТЬ TRANSFER СОСТОЯНИЯ
-  if (!transfer.received) {
-    console.warn(`[WAIT_ACK] ⚠️ Transfer ${transferId} missing received Set, creating new one`);
-    transfer.received = new Set<number>();
-  }
-
-  if (typeof transfer.received.has !== 'function') {
-    console.error(`[WAIT_ACK] ❌ Transfer ${transferId} received is not a Set, recreating`);
-    transfer.received = new Set<number>();
-  }
-
-  // ДОПОЛНИТЕЛЬНАЯ ВАЛИДАЦИЯ: Проверка других свойств transfer
-  if (typeof transfer.totalChunks !== 'number' || transfer.totalChunks <= 0) {
-    console.error(`[WAIT_ACK] ❌ Invalid totalChunks for transfer ${transferId}:`, transfer.totalChunks);
-
-    // ПОПЫТКА ВОССТАНОВЛЕНИЯ: Запрос информации от offscreen
-    try {
-      const offscreenInfo = await chrome.runtime.sendMessage({
-        type: 'GET_TRANSFER_INFO',
-        transferId,
-        timestamp: Date.now()
-      }).catch(() => null);
-
-      if (offscreenInfo?.totalChunks) {
-        transfer.totalChunks = offscreenInfo.totalChunks;
-        console.log(`[WAIT_ACK] ✅ Recovered totalChunks from offscreen: ${transfer.totalChunks}`);
-      } else {
-        throw new Error('Cannot determine total chunks');
-      }
-    } catch (recoveryError) {
-      console.error(`[WAIT_ACK] ❌ Failed to recover totalChunks:`, recoveryError);
-      throw new Error(`Invalid transfer state for ${transferId} - cannot determine chunk count`);
-    }
-  }
-
-  // Проверяем, не был ли чанк уже подтвержден ранее
-  if (transfer.received.has(chunkIndex)) {
-    console.log(`[WAIT_ACK] ✅ Chunk ${chunkIndex} already acknowledged for transfer ${transferId}`);
-    return;
-  }
-
-  // Wait up to 5 seconds for acknowledgment с улучшенной диагностикой
-  const ackTimeout = 5000;
-  const startTime = Date.now();
-  let checkCount = 0;
-
-  console.log(`[WAIT_ACK] ⏳ Waiting for chunk ${chunkIndex} acknowledgment (timeout: ${ackTimeout}ms)`);
-
-  while (!transfer.received.has(chunkIndex)) {
-    checkCount++;
-    const elapsed = Date.now() - startTime;
-
-    if (elapsed > ackTimeout) {
-      console.error(`[WAIT_ACK] ❌ Timeout waiting for chunk ${chunkIndex} acknowledgment for transfer ${transferId}`);
-      console.error(`[WAIT_ACK] Wait statistics:`, {
-        elapsed,
-        timeout: ackTimeout,
-        checksPerformed: checkCount,
-        chunkIndex,
-        totalChunks: transfer.totalChunks,
-        acknowledgedCount: transfer.received.size
-      });
-
-      // Попытка диагностики проблемы
-      await diagnoseAcknowledgmentFailure(transferId, chunkIndex, transfer);
-
-      throw new Error(`Timeout waiting for chunk ${chunkIndex} acknowledgment`);
-    }
-
-    // Проверяем, что transfer все еще существует (не был удален по timeout)
-    if (!activeTransfers.has(transferId)) {
-      console.error(`[WAIT_ACK] ❌ Transfer ${transferId} was removed during chunk wait`);
-      console.error(`[WAIT_ACK] Emergency recovery attempt...`);
-
-      // Экстренная попытка восстановления
-      const recoveryResult = await emergencyTransferRecoveryDuringWait(transferId, transfer);
-      if (!recoveryResult) {
-        throw new Error(`Transfer ${transferId} was removed during operation and recovery failed`);
-      }
-    }
-
-    // Периодическая диагностика (каждые 100 проверок)
-    if (checkCount % 100 === 0) {
-      console.log(`[WAIT_ACK] 📊 Wait status for ${transferId}:`, {
-        elapsed,
-        checks: checkCount,
-        chunkIndex,
-        acknowledged: transfer.received.size,
-        total: transfer.totalChunks
-      });
-    }
-
-    // Wait 100ms and check again
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
-
-  console.log(`[WAIT_ACK] ✅ Chunk ${chunkIndex} acknowledged for transfer ${transferId}`);
-  console.log(`[WAIT_ACK] Acknowledgment statistics:`, {
-    waitTime: Date.now() - startTime,
-    checksPerformed: checkCount,
-    acknowledgedCount: transfer.received.size,
-    totalChunks: transfer.totalChunks
-  });
-}
-
-// Создание заглушки transfer'а для восстановления при полной потере
-async function createStubTransferForRecovery(transferId: string, chunkIndex: number): Promise<any> {
-  try {
-    console.log(`[STUB_RECOVERY] 🔧 Creating stub transfer for ${transferId} at chunk ${chunkIndex}`);
-
-    // Проверяем, можем ли мы получить информацию из offscreen document
-    const offscreenInfo = await chrome.runtime.sendMessage({
-      type: 'GET_TRANSFER_INFO',
-      transferId,
-      timestamp: Date.now()
-    }).catch(() => null);
-
-    const stubTransfer = {
-      chunks: offscreenInfo?.chunks || [],
-      received: new Set([chunkIndex]), // Предполагаем, что текущий чанк уже получен
-      totalChunks: offscreenInfo?.totalChunks || 1,
-      metadata: offscreenInfo?.metadata || { stub: true, recovery: true },
-      resolve: () => console.log(`[STUB_RECOVERY] Stub transfer ${transferId} resolved`),
-      reject: (error: any) => console.error(`[STUB_RECOVERY] Stub transfer ${transferId} rejected:`, error),
-      timeout: 0,
-      createdAt: Date.now(),
-      lastAccessed: Date.now(),
-      isStub: true
-    };
-
-    activeTransfers.set(transferId, stubTransfer);
-    console.log(`[STUB_RECOVERY] ✅ Stub transfer created for ${transferId}`);
-
-    return stubTransfer;
-  } catch (error) {
-    console.error(`[STUB_RECOVERY] ❌ Failed to create stub transfer for ${transferId}:`, error);
-    return null;
-  }
-}
-
-// Диагностика проблем с подтверждением чанков
-async function diagnoseAcknowledgmentFailure(transferId: string, chunkIndex: number, transfer: any): Promise<void> {
-  console.log(`[ACK_DIAG] 🔍 Diagnosing acknowledgment failure for transfer ${transferId}, chunk ${chunkIndex}`);
-
-  const diagnostics = {
-    transferId,
-    chunkIndex,
-    acknowledgedCount: transfer.received.size,
-    totalChunks: transfer.totalChunks,
-    isStub: transfer.isStub || false,
-    createdAt: transfer.createdAt,
-    age: Date.now() - transfer.createdAt
-  };
-
-  console.log(`[ACK_DIAG] Transfer diagnostics:`, diagnostics);
-
-  // Проверяем связь с offscreen document
-  try {
-    const offscreenResponse = await chrome.runtime.sendMessage({
-      type: 'DIAGNOSE_CHUNK_ACK',
-      transferId,
-      chunkIndex,
-      timestamp: Date.now()
-    }).catch(() => ({ error: 'offscreen_unavailable' }));
-
-    console.log(`[ACK_DIAG] Offscreen diagnostics response:`, offscreenResponse);
-
-    if (offscreenResponse?.lastReceivedChunk !== undefined) {
-      console.log(`[ACK_DIAG] Offscreen last received chunk: ${offscreenResponse.lastReceivedChunk}`);
-      if (offscreenResponse.lastReceivedChunk >= chunkIndex) {
-        console.log(`[ACK_DIAG] ⚠️ Chunk ${chunkIndex} may have been received but not acknowledged properly`);
-      }
-    }
-  } catch (error) {
-    console.warn(`[ACK_DIAG] Offscreen diagnostics failed:`, error);
-  }
-
-  // Логируем детальную информацию для отладки
-  console.error(`[ACK_DIAG] 📊 Complete failure diagnostics:`, {
-    ...diagnostics,
-    activeTransfersCount: activeTransfers.size,
-    activeTransferIds: Array.from(activeTransfers.keys()),
-    timestamp: Date.now()
-  });
-}
-
-// Экстренное восстановление transfer'а во время ожидания acknowledgment'а
-async function emergencyTransferRecoveryDuringWait(transferId: string, originalTransfer: any): Promise<boolean> {
-  try {
-    console.log(`[EMERGENCY_WAIT_RECOVERY] 🚨 Emergency recovery during wait for ${transferId}`);
-
-    // Восстанавливаем transfer в activeTransfers
-    activeTransfers.set(transferId, {
-      ...originalTransfer,
-      lastAccessed: Date.now(),
-      emergencyRecoveryCount: (originalTransfer.emergencyRecoveryCount || 0) + 1
-    });
-
-    // Уведомляем offscreen document о восстановлении
-    await chrome.runtime.sendMessage({
-      type: 'TRANSFER_EMERGENCY_RECOVERY',
-      transferId,
-      timestamp: Date.now()
-    }).catch(() => {
-      console.warn(`[EMERGENCY_WAIT_RECOVERY] Offscreen notification failed`);
-    });
-
-    console.log(`[EMERGENCY_WAIT_RECOVERY] ✅ Transfer ${transferId} recovered during wait`);
-    return true;
-
-  } catch (error) {
-    console.error(`[EMERGENCY_WAIT_RECOVERY] ❌ Recovery failed for ${transferId}:`, error);
-    return false;
-  }
-}
-
-function handleChunkAcknowledgment(ackMessage: HtmlChunkAckMessage): void {
-  // Проверка валидности входного сообщения
-  if (!ackMessage || typeof ackMessage !== 'object') {
-    console.error(`[background][CHUNKING] ❌ Invalid acknowledgment message format`);
-    return;
-  }
-
-  const transferId = ackMessage.transferId;
-  const chunkIndex = ackMessage.chunkIndex;
-
-  // Проверка обязательных полей
-  if (!transferId || typeof transferId !== 'string') {
-    console.error(`[background][CHUNKING] ❌ Invalid transferId in acknowledgment message`);
-    return;
-  }
-
-  if (typeof chunkIndex !== 'number' || chunkIndex < 0) {
-    console.error(`[background][CHUNKING] ❌ Invalid chunk index:`, chunkIndex);
-    return;
-  }
-
-  console.log(`[background][CHUNKING] Processing acknowledgment for transfer ${transferId}, chunk ${chunkIndex}`);
-
-  // THREAD-SAFE TRANSFER LOOKUP С ЗАЩИТОЙ ОТ RACE CONDITIONS
-  let transfer = activeTransfers.get(transferId);
-  if (!transfer) {
-    console.warn(`[background][CHUNKING] ⚠️ Acknowledgment for unknown or already cleaned transfer: ${transferId}`);
-
-    // ПРОВЕРКА НА DUPLICATE PROCESSING: Возможно transfer уже обработан
-    const completedTransfer = (globalThis as any).completedTransfers?.get?.(transferId);
-    if (completedTransfer && completedTransfer.received?.has?.(chunkIndex)) {
-      console.log(`[background][CHUNKING] ✅ Chunk ${chunkIndex} already acknowledged in completed transfer ${transferId}`);
-      return;
-    }
-
-    // ПОПЫТКА ВОССТАНОВЛЕНИЯ: Ищем в других хранилищах
-    transfer = (globalThis as any).emergencyBackup?.get?.(transferId) ||
-                (globalThis as any).globalTransferRefs?.get?.(transferId);
-
-    if (transfer) {
-      console.log(`[background][CHUNKING] 🔄 Recovered transfer ${transferId} from backup storage`);
-      // Восстанавливаем в activeTransfers для продолжения обработки
-      activeTransfers.set(transferId, transfer);
-    } else {
-      console.warn(`[background][CHUNKING] ❌ Cannot process acknowledgment - transfer ${transferId} completely lost`);
-      return;
-    }
-  }
-
-  // УЛУЧШЕННЫЕ ПРОВЕРКИ ВАЛИДНОСТИ СООБЩЕНИЯ
-  if (typeof ackMessage.received !== 'boolean') {
-    console.error(`[background][CHUNKING] ❌ Invalid acknowledgment message format:`, ackMessage);
-    return;
-  }
-
-  // THREAD-SAFE ACKNOWLEDGMENT PROCESSING
-  if (ackMessage.received) {
-    // ЗАЩИТА ОТ DUPLICATE ACKNOWLEDGMENT
-    if (transfer.received.has(chunkIndex)) {
-      console.log(`[background][CHUNKING] ⚠️ Chunk ${chunkIndex} already acknowledged for transfer ${transferId} - ignoring duplicate`);
-      return;
-    }
-
-    // ДОБАВЛЯЕМ ACKNOWLEDGMENT С ДОПОЛНИТЕЛЬНЫМИ ПРОВЕРКАМИ
-    try {
-      transfer.received.add(chunkIndex);
-      console.log(`[background][CHUNKING] ✅ Chunk ${chunkIndex} acknowledged for transfer ${transferId} (${transfer.received.size}/${transfer.totalChunks})`);
-    } catch (error) {
-      console.error(`[background][CHUNKING] ❌ Failed to add chunk acknowledgment:`, error);
-      return;
-    }
-
-    // THREAD-SAFE CHECK FOR COMPLETION С ЗАЩИТОЙ ОТ RACE CONDITIONS
-    const currentAcknowledged = transfer.received.size;
-    const totalChunks = transfer.totalChunks;
-
-    console.log(`[background][CHUNKING] 📊 Transfer ${transferId} progress: ${currentAcknowledged}/${totalChunks}`);
-
-    if (currentAcknowledged === totalChunks) {
-      console.log(`[background][CHUNKING] 🎉 All chunks acknowledged for transfer ${transferId} - completion check`);
-
-      // THREAD-SAFE COMPLETION PROCESSING
-      // Проверяем, что transfer все еще активен и не был обработан другим потоком
-      if (!activeTransfers.has(transferId)) {
-        console.warn(`[background][CHUNKING] ⚠️ Transfer ${transferId} was already processed by another thread`);
-        return;
-      }
-
-      // ДОПОЛНИТЕЛЬНАЯ ВАЛИДАЦИЯ: Убеждаемся, что все чанки действительно получены
-      const missingChunks: number[] = [];
-      for (let i = 0; i < totalChunks; i++) {
-        if (!transfer.received.has(i)) {
-          missingChunks.push(i);
-        }
-      }
-
-      if (missingChunks.length > 0) {
-        console.error(`[background][CHUNKING] ❌ Completion validation failed - missing chunks: [${missingChunks.join(', ')}]`);
-        return;
-      }
-
-      console.log(`[background][CHUNKING] ✅ Completion validation passed - resolving transfer ${transferId}`);
-
-      try {
-        // THREAD-SAFE RESOLUTION
-        transfer.resolve(transferId);
-        console.log(`[background][CHUNKING] ✅ Transfer ${transferId} resolved successfully`);
-
-        // ОЧИСТКА ПОСЛЕ УСПЕШНОГО ЗАВЕРШЕНИЯ с задержкой для предотвращения race conditions
-        setTimeout(() => {
-          if (activeTransfers.has(transferId)) {
-            activeTransfers.delete(transferId);
-            console.log(`[background][CHUNKING] 🧹 Transfer ${transferId} cleaned up after successful completion`);
-          }
-        }, 500); // Увеличенная задержка для безопасности
-
-      } catch (resolveError) {
-        console.error(`[background][CHUNKING] ❌ Error resolving transfer ${transferId}:`, resolveError);
-
-        // В случае ошибки не удаляем transfer немедленно - даем время на восстановление
-        setTimeout(() => {
-          if (activeTransfers.has(transferId)) {
-            console.warn(`[background][CHUNKING] Force cleaning failed transfer ${transferId}`);
-            activeTransfers.delete(transferId);
-          }
-        }, 2000); // Дольше ждем в случае ошибки
-      }
-    }
-  } else {
-    console.error(`[background][CHUNKING] ❌ Chunk ${chunkIndex} acknowledgment failed for transfer ${transferId}`);
-
-    // THREAD-SAFE ERROR HANDLING
-    if (activeTransfers.has(transferId)) {
-      activeTransfers.delete(transferId);
-
-      if (transfer.reject) {
-        try {
-          transfer.reject(new Error(`Chunk ${chunkIndex} acknowledgment failed`));
-          console.log(`[background][CHUNKING] ❌ Transfer ${transferId} rejected due to chunk failure`);
-        } catch (rejectError) {
-          console.error(`[background][CHUNKING] ❌ Error rejecting transfer ${transferId}:`, rejectError);
-        }
-      }
-    }
-  }
-}
-
-const handleLegacyChrome = async (message: ExtensionMessage): Promise<void> => {
-  console.warn('[background][LEGACY CHROME] ================= EXECUTING FALLBACK WORKFLOW =================');
-  console.warn('[background][LEGACY CHROME] Chrome version < 109 detected, offscreen API not supported');
-  console.warn('[background][LEGACY CHROME] Timestamp:', new Date().toISOString());
-  console.warn('[background][LEGACY CHROME] User-Agent:', navigator.userAgent);
-  console.warn('[background][LEGACY CHROME] Extension ID:', chrome.runtime.id);
-
-  // Для старых версий просто пропускаем выполнение с предупреждением
-  // В будущем здесь можно добавить альтернативную логику без offscreen
-  console.warn('[background][LEGACY CHROME] Legacy Chrome workaround: Skipping workflow execution with graceful degradation');
-
-  if (message.type === 'EXECUTE_WORKFLOW' && message.pluginId && message.pageKey) {
-    console.warn(`[background][LEGACY CHROME] Cannot execute workflow for plugin: ${message.pluginId}`);
-    console.warn(`[background][LEGACY CHROME] Page Key: ${message.pageKey}`);
-    console.warn(`[background][LEGACY CHROME] Message ID: ${message.requestId || 'N/A'}`);
-
-    // Проверяем наличие chat API
-    if (!pluginChatApi) {
-      console.error('[background][LEGACY CHROME] pluginChatApi is not available');
-      return;
-    }
-
-    const chromeVersion = navigator.userAgent.match(/Chrome\/(\d+)/)?.[1] || 'unknown';
-
-    // Создаем детальное сообщение о предупреждении
-    const warningMessage: ChatMessage = {
-      role: 'plugin',
-      content: `⚠️ **Ограничение браузера**
-
-Эта версия Google Chrome (${chromeVersion}) не поддерживает необходимые API расширения (Offscreen Document API).
-
-**Что произошло:**
-- Расширение не смогло выполнить запланированную задачу для плагина "${message.pluginId || 'N/A'}"
-- Workflow будет пропущен для обеспечения стабильности работы
-
-**Рекомендация:**
-Обновите Google Chrome до версии 109 или новее для использования полной функциональности расширения.
-
-**Технические детали:**
-- Текущая версия: ${chromeVersion}
-- Требуемая версия: 109+
-- API Status: Offscreen Document недоступен`,
-      timestamp: Date.now()
-    };
-
-    try {
-      await pluginChatApi.saveMessage(message.pluginId, message.pageKey, warningMessage);
-      console.log('[background][LEGACY CHROME] ✅ Legacy Chrome warning saved to plugin chat');
-      console.log('[background][LEGACY CHROME] Message saved for plugin:', message.pluginId, 'pageKey:', message.pageKey);
-
-      // Также сохраняем дополнительное сообщение для отслеживания проблемы
-      const trackingMessage: ChatMessage = {
-        role: 'plugin',
-        content: `[TRACKING] Legacy Chrome v${navigator.userAgent.match(/Chrome\/(\d+)/)?.[1] || 'unknown'} blocked workflow execution for compatibility reasons.`,
-        timestamp: Date.now()
-      };
-      await pluginChatApi.saveMessage(message.pluginId, message.pageKey, trackingMessage);
-
-    } catch (error) {
-      console.error('[background][LEGACY CHROME] ❌ CRITICAL: Failed to save legacy warning to chat:', error);
-      console.error('[background][LEGACY CHROME] Error details:', {
-        name: (error as Error).name,
-        message: (error as Error).message,
-        stack: (error as Error).stack
-      });
-
-      // Попытка сохранить упрощенное сообщение в случае ошибки
-      try {
-        const simpleWarning: ChatMessage = {
-          role: 'plugin',
-          content: '⚠️ Ошибка выполнения: устаревшая версия Chrome. Обновите браузер до версии 109+.',
-          timestamp: Date.now()
-        };
-        await pluginChatApi.saveMessage(message.pluginId, message.pageKey, simpleWarning);
-        console.warn('[background][LEGACY CHROME] ⚠️ Fallback simple warning saved');
-      } catch (fallbackError) {
-        console.error('[background][LEGACY CHROME] ❌ CRITICAL: Even fallback message save failed:', fallbackError);
-      }
-    }
-
-    console.warn('[background][LEGACY CHROME] ================= FALLBACK WORKFLOW COMPLETE =================');
-  }
-};
-
-import type { ChatMessage } from './plugin-chat-api';
-import type { Plugin } from './plugin-manager';
-
-console.log('[background] All critical modules loaded, background initialization complete');
-
-// === TRANSFER STORAGE HEALTH MONITORING ===
-
-// Периодическая диагностика состояния transfer'ов
-setInterval(() => {
-  const now = Date.now();
-  const activeCount = activeTransfers.size;
-
-  if (activeCount > 0) {
-    console.log(`[TRANSFER_HEALTH] 📊 Transfer health check (${activeCount} active transfers):`);
-
-    let healthyCount = 0;
-    let staleCount = 0;
-    let invalidCount = 0;
-
-    for (const [transferId, transfer] of activeTransfers.entries()) {
-      const age = now - transfer.createdAt;
-      const lastAccessAge = now - transfer.lastAccessed;
-
-      // Проверяем валидность
-      const isValid = Array.isArray(transfer.chunks) &&
-                     transfer.received instanceof Set &&
-                     typeof transfer.totalChunks === 'number';
-
-      if (!isValid) {
-        invalidCount++;
-        console.warn(`[TRANSFER_HEALTH] ❌ Invalid transfer: ${transferId}`);
-      } else if (age > 30000) { // Старше 30 секунд
-        staleCount++;
-        console.warn(`[TRANSFER_HEALTH] ⚠️ Stale transfer: ${transferId} (${Math.round(age/1000)}s old)`);
-      } else {
-        healthyCount++;
-      }
-
-      // Проверяем на зависшие transfer'ы (более 10 секунд без доступа)
-      if (lastAccessAge > 10000 && !transfer.isRecovery) {
-        console.warn(`[TRANSFER_HEALTH] 🚨 Potentially stuck transfer: ${transferId} (${Math.round(lastAccessAge/1000)}s since last access)`);
-      }
-    }
-
-    console.log(`[TRANSFER_HEALTH] Health summary: ${healthyCount} healthy, ${staleCount} stale, ${invalidCount} invalid`);
-
-    // Автоматическая очистка очень старых transfer'ов
-    let cleanedCount = 0;
-    for (const [transferId, transfer] of activeTransfers.entries()) {
-      const age = now - transfer.createdAt;
-      if (age > 60000) { // Старше 60 секунд
-        activeTransfers.delete(transferId);
-        cleanedCount++;
-        console.log(`[TRANSFER_HEALTH] 🧹 Auto-cleaned stale transfer: ${transferId}`);
-      }
-    }
-
-    if (cleanedCount > 0) {
-      console.log(`[TRANSFER_HEALTH] 🧹 Cleaned ${cleanedCount} stale transfers`);
-    }
-  }
-}, 10000); // Каждые 10 секунд
-
-console.log('[background] Transfer storage health monitoring initialized');
-
-interface ExtensionMessage {
-  type: string;
-  pluginId?: string;
-  setting?: string;
-  value?: boolean;
-  pageKey?: string;
-  draftText?: string;
-  message?: ChatMessage | string;
-  source?: string;
-  command?: string;
-  data?: unknown;
-  // Для логов:
-  level?: 'info' | 'success' | 'error' | 'warning' | 'debug';
-  stepId?: string;
-  logData?: unknown;
-  // Для идентификации сообщений и запросов:
-  requestId?: string;
-  messageId?: string;
-  // Для Pyodide прямого тестирования:
-  pythonCode?: string;
-  // Для ручного тестирования Pyodide:
-  testName?: string;
-  code?: string;
-  timestamp?: number;
-}
-
-
-// Только стандартное поведение: панель открывается/закрывается глобально по клику на иконку
-chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
-
-// === OFFSCREEN DOCUMENT MANAGEMENT ===
-
-// Функция для проверки наличия Offscreen Document
-const hasOffscreenDocument = async (): Promise<boolean> => {
-  // Проверяем доступность offscreen API
-  if (!offscreenSupported()) {
-    console.log('[offscreen][manager] Offscreen API not supported, returning false');
-    return false;
-  }
-
-  try {
-    const result = await chrome.offscreen.hasDocument();
-    console.log('[offscreen][manager] Offscreen document exists:', result);
-    return result;
-  } catch (error) {
-    console.error('[offscreen][manager] Error checking offscreen document:', error);
-    return false;
-  }
-};
-
-// Enhanced production-ready функция для создания Offscreen Document с retry logic
-const createOffscreenDocument = async (): Promise<void> => {
-  // Проверяем доступность offscreen API
-  if (!offscreenSupported()) {
-    console.warn('[offscreen][manager] ❌ Chrome version does not support offscreen API (< 109)');
-    throw new Error('Offscreen API not supported in this Chrome version. Please update Chrome to version 109+.');
-  }
-
-  const maxAttempts = 3;
-  const retryDelay = 1000; // 1 second
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      console.log(`[offscreen][manager] Attempt ${attempt}/${maxAttempts}: Creating offscreen document...`);
-      console.log('[offscreen][manager] Document config:', {
-        url: 'offscreen.html',
-        reasons: ['WORKERS'],
-        justification: 'Pyodide Worker execution and MCP bridge delegation',
-        timestamp: new Date().toISOString()
-      });
-
-      // Try to create the document
-      await chrome.offscreen.createDocument({
-        url: 'offscreen.html',
-        reasons: ['WORKERS'],
-        justification: 'Pyodide Worker execution and MCP bridge delegation'
-      });
-
-      console.log('[offscreen][manager] ✅ Offscreen document created successfully on attempt', attempt);
-
-      // Verify the document was created by checking if it exists
-      try {
-        const documentExists = await chrome.offscreen.hasDocument();
-        if (documentExists) {
-          console.log('[offscreen][manager] ✅ Document verification successful');
-          return; // Success
-        } else {
-          throw new Error('Document creation verification failed - document does not exist');
-        }
-      } catch (verifyError) {
-        console.warn('[offscreen][manager] ⚠️ Document verification failed, but creation seemed successful:', verifyError);
-        // Still consider it a success since createDocument didn't throw
-        return;
-      }
-
-    } catch (error) {
-      console.error(`[offscreen][manager] Attempt ${attempt}/${maxAttempts} failed:`, error);
-      console.error('[offscreen][manager] Error details:', {
-        name: (error as Error).name,
-        message: (error as Error).message,
-        stack: (error as Error).stack
-      });
-
-      // If this was the last attempt, throw the error
-      if (attempt === maxAttempts) {
-        console.error('[offscreen][manager] ❌ All attempts to create offscreen document failed');
-        throw new Error(`Failed to create offscreen document after ${maxAttempts} attempts: ${(error as Error).message}`);
-      }
-
-      // Wait before next attempt
-      console.log(`[offscreen][manager] Waiting ${retryDelay}ms before retry...`);
-      await new Promise(resolve => setTimeout(resolve, retryDelay));
-    }
-  }
-};
-
-// Enhanced production-ready функция для обеспечения наличия Offscreen Document
-const ensureOffscreenDocument = async (): Promise<void> => {
-  console.log('[offscreen][manager] ===== ENSURING OFFSCREEN DOCUMENT AVAILABILITY =====');
-  console.log('[offscreen][manager] Timestamp:', new Date().toISOString());
-
-  try {
-    const exists = await hasOffscreenDocument();
-    console.log('[offscreen][manager] Offscreen document exists check result:', exists);
-
-    if (!exists) {
-      console.log('[offscreen][manager] ❌ Offscreen document not found, creating new document...');
-      console.log('[offscreen][manager] This may take a few seconds...');
-      await createOffscreenDocument();
-      console.log('[offscreen][manager] ✅ Offscreen document creation completed');
-
-      // Double-check after creation
-      const verifyExists = await hasOffscreenDocument();
-      if (!verifyExists) {
-        console.error('[offscreen][manager] ❌ CRITICAL: Document verification failed after creation');
-        throw new Error('Offscreen document creation verification failed');
-      }
-      console.log('[offscreen][manager] ✅ Offscreen document verification successful');
-    } else {
-      console.log('[offscreen][manager] ✅ Offscreen document already exists and is ready');
-    }
-
-    console.log('[offscreen][manager] ===== OFFSCREEN DOCUMENT ENSURANCE COMPLETE =====');
-  } catch (error) {
-    console.error('[offscreen][manager] ❌ CRITICAL ERROR in ensureOffscreenDocument:', error);
-    console.error('[offscreen][manager] Error details:', {
-      name: (error as Error).name,
-      message: (error as Error).message,
-      stack: (error as Error).stack
-    });
-
-    // Attempt recovery by trying to clean up and recreate
-    try {
-      console.log('[offscreen][manager] 🔄 Attempting recovery by forcing document recreation...');
-      await chrome.runtime.reload(); // This will restart the extension
-    } catch (recoveryError) {
-      console.error('[offscreen][manager] ❌ Recovery attempt failed:', recoveryError);
-    }
-
-    throw error; // Re-throw to let caller handle
-  }
-};
-
-// === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ УПРОЩЕНИЯ RUN_WORKFLOW ===
-
-// Безопасная функция для доступа к свойствам объектов
-const safeGet = <T>(obj: any, path: string[], defaultValue: T = null as T): T => {
-  try {
-    let current = obj;
-    for (const key of path) {
-      if (current == null || typeof current !== 'object') {
-        return defaultValue;
-      }
-      current = current[key];
-    }
-    return current ?? defaultValue;
-  } catch (error) {
-    console.warn('[background][UTILS] safeGet error for path:', path, error);
-    return defaultValue;
-  }
-};
-
-// Функция для проверки объекта на null/undefined
-const isValidObject = (obj: any): boolean => {
-  return obj != null && typeof obj === 'object';
-};
-
-// Функция для получения активной вкладки с проверками
-const getActiveTab = async (): Promise<chrome.tabs.Tab> => {
-  console.log('[background][UTILS] Getting active tab...');
-
-  try {
-    // Проверка доступности Chrome API
-    if (!chrome?.tabs?.query) {
-      throw new Error('Chrome tabs API недоступен');
-    }
-
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-
-    if (!Array.isArray(tabs) || tabs.length === 0) {
-      throw new Error('Не найдены вкладки');
-    }
-
-    const activeTab = tabs[0];
-
-    if (!isValidObject(activeTab)) {
-      throw new Error('Активная вкладка имеет некорректный формат');
-    }
-
-    if (typeof activeTab.id !== 'number') {
-      throw new Error('Активная вкладка не имеет корректного ID');
-    }
-
-    console.log('[background][UTILS] Active tab found:', {
-      id: activeTab.id,
-      url: safeGet(activeTab, ['url'], 'N/A'),
-      title: safeGet(activeTab, ['title'], 'N/A')?.substring(0, 50)
-    });
-
-    return activeTab;
-  } catch (error) {
-    console.error('[background][UTILS] Failed to get active tab:', error);
-    throw error;
-  }
-};
-
-// Функция для извлечения HTML из вкладки
-const extractPageHtml = async (tab: chrome.tabs.Tab): Promise<string> => {
-  console.log('[background][UTILS] Extracting HTML from tab:', safeGet(tab, ['id'], 'unknown'));
-
-  try {
-    // Проверка валидности входной вкладки
-    if (!isValidObject(tab)) {
-      throw new Error('Некорректный объект вкладки');
-    }
-
-    // Проверка доступности scripting API
-    if (!chrome?.scripting?.executeScript) {
-      throw new Error('Chrome scripting API недоступен');
-    }
-
-    // Проверка наличия tab ID
-    const tabId = safeGet(tab, ['id']);
-    if (!tabId || typeof tabId !== 'number') {
-      throw new Error('Tab ID не найден или имеет некорректный тип');
-    }
-
-    const results = await chrome.scripting.executeScript({
-      target: { tabId },
-      func: () => document.documentElement?.outerHTML || '<html><body>Empty page</body></html>'
-    });
-
-    if (!Array.isArray(results) || results.length === 0) {
-      throw new Error('Результат выполнения скрипта пустой');
-    }
-
-    const firstResult = results[0];
-    if (!isValidObject(firstResult)) {
-      throw new Error('Результат выполнения скрипта имеет некорректный формат');
-    }
-
-    if (!firstResult.result || typeof firstResult.result !== 'string') {
-      throw new Error('Не удалось получить содержимое страницы - некорректный результат');
-    }
-
-    const pageHtml = firstResult.result as string;
-
-    if (pageHtml.length < 100) {
-      console.warn('[background][UTILS] HTML too short, but proceeding:', pageHtml.length, 'chars');
-    }
-
-    console.log('[background][UTILS] HTML extracted successfully:', pageHtml.length, 'chars');
-    return pageHtml;
-
-  } catch (error) {
-    console.error('[background][UTILS] HTML extraction failed:', error);
-    throw error;
-  }
-};
-
-// Функция для проверки настроек плагина
-const validatePluginSettings = async (pluginId: string): Promise<void> => {
-  console.log('[background][UTILS] Validating plugin settings for:', pluginId);
-
-  try {
-    // Проверка pluginId
-    if (!pluginId || typeof pluginId !== 'string') {
-      throw new Error('Некорректный pluginId');
-    }
-
-    // Проверка доступности getPluginSettings
-    if (typeof getPluginSettings !== 'function') {
-      throw new Error('Функция getPluginSettings недоступна');
-    }
-
-    let settings = await getPluginSettings(pluginId);
-
-    // Проверка структуры настроек
-    if (!isValidObject(settings)) {
-      console.warn('[background][UTILS] Plugin settings is not an object, using defaults');
-      settings = { enabled: true, autorun: false };
-    }
-
-    if (!safeGet(settings, ['enabled'], true)) {
-      throw new Error('Плагин отключен');
-    }
-
-    console.log('[background][UTILS] Plugin settings validated successfully');
-  } catch (error) {
-    console.error('[background][UTILS] Plugin validation failed:', error);
-    throw error;
-  }
-};
-
-// Функция для отправки чанков в offscreen document
-const sendChunksToOffscreen = async (
-  transferId: string,
-  chunks: string[],
-  metadata: any
-): Promise<void> => {
-  console.log('[background][UTILS] Sending', chunks.length, 'chunks to offscreen for transfer:', transferId);
-
-  try {
-    // Флаг для остановки передачи при получении HTML_ASSEMBLED
-    let transferCompleted = false;
-    const setTransferCompleted = (completed: boolean) => {
-      console.log(`[background][UTILS] Transfer ${transferId} completion status set to:`, completed);
-      transferCompleted = completed;
-    };
-    (globalThis as any)[`setTransferCompleted_${transferId}`] = setTransferCompleted;
-
-    for (let i = 0; i < chunks.length; i++) {
-      // Проверяем, не завершен ли transfer
-      if (transferCompleted) {
-        console.log('[background][UTILS] Transfer completed, skipping remaining chunks');
-        return;
-      }
-
-      const chunkMessage = {
-        type: 'HTML_CHUNK',
-        transferId,
-        chunkIndex: i,
-        totalChunks: chunks.length,
-        chunkData: chunks[i],
-        metadata,
-        timestamp: Date.now()
-      };
-
-      console.log(`[background][UTILS] Sending chunk ${i}/${chunks.length - 1} (${chunks[i].length} chars)`);
-
-      await chrome.runtime.sendMessage(chunkMessage);
-
-      // Ждем подтверждения с timeout (упрощенная версия)
+      // Ждем подтверждения с timeout
       const ackTimeout = 5000;
       const ackStartTime = Date.now();
-      let ackReceived = false;
+      let ackChecked = false;
 
-      while (!ackReceived && (Date.now() - ackStartTime) < ackTimeout) {
+      while (!ackChecked && (Date.now() - ackStartTime) < ackTimeout) {
+        // Проверяем подтверждение каждые 100ms
         await new Promise(resolve => setTimeout(resolve, 100));
 
+        // Проверяем, есть ли подтверждение в глобальном состоянии
         const currentTransfer = activeTransfers.get(transferId);
         if (currentTransfer?.received?.has(i)) {
-          ackReceived = true;
-          console.log(`[background][UTILS] ✅ Chunk ${i} acknowledged`);
+          ackChecked = true;
+          console.log(`[CHUNK_TRANSMISSION] ✅ Chunk ${i} acknowledged`);
           break;
         }
 
         if (transferCompleted) {
-          console.log('[background][UTILS] Transfer completed during wait');
+          console.log(`[CHUNK_TRANSMISSION] Transfer completed during wait`);
           return;
         }
       }
 
-      if (!ackReceived) {
-        console.warn(`[background][UTILS] ⚠️ Chunk ${i} acknowledgment timeout, continuing...`);
+      if (!ackChecked) {
+        console.warn(`[CHUNK_TRANSMISSION] ⚠️ Chunk ${i} acknowledgment timeout, continuing...`);
       }
 
       // Задержка между chunks для стабильности
       if (i < chunks.length - 1) {
         await new Promise(resolve => setTimeout(resolve, CHUNK_DELAY));
       }
-    }
 
-    // Отправляем сообщение о завершении передачи chunks
+    } catch (chunkError) {
+      console.error(`[CHUNK_TRANSMISSION] Failed to send chunk ${i}:`, chunkError);
+      if (!transferCompleted) {
+        throw chunkError;
+      }
+      return;
+    }
+  }
+
+  // Отправляем сообщение о завершении передачи chunks
+  try {
     await chrome.runtime.sendMessage({
       type: 'HTML_CHUNK_COMPLETE',
       transferId,
       totalChunks: chunks.length,
       timestamp: Date.now()
     });
-
-    console.log('[background][UTILS] All chunks sent successfully');
-
-  } catch (error) {
-    console.error('[background][UTILS] Failed to send chunks:', error);
-    throw error;
+    console.log(`[CHUNK_TRANSMISSION] All chunks sent successfully`);
+  } catch (completeError) {
+    console.error(`[CHUNK_TRANSMISSION] Failed to send completion message:`, completeError);
+    throw completeError;
   }
-};
+}
 
 // Функция для запуска workflow в offscreen document
-const executeWorkflowInOffscreen = async (
+async function executeWorkflowInOffscreen(
   pluginId: string,
   pageKey: string,
   transferId: string,
-  requestId: string
-): Promise<void> => {
-  console.log('[background][UTILS] Executing workflow in offscreen:', {
+  requestId: string,
+  useChunks: boolean = false,
+  htmlData?: string
+): Promise<void> {
+  console.log(`[WORKFLOW_EXECUTION] 🚀 Starting workflow execution in offscreen`);
+  console.log(`[WORKFLOW_EXECUTION] Plugin ID: ${pluginId}`);
+  console.log(`[WORKFLOW_EXECUTION] Transfer ID: ${transferId}`);
+  console.log(`[WORKFLOW_EXECUTION] Use chunks: ${useChunks}`);
+  console.log(`[WORKFLOW_EXECUTION] HTML data length: ${htmlData?.length || 0}`);
+
+  const workflowPayload = {
+    type: 'EXECUTE_WORKFLOW',
     pluginId,
     pageKey,
+    requestId,
     transferId,
-    requestId
-  });
+    useChunks,
+    htmlData,
+    timestamp: Date.now()
+  };
 
   try {
-    const workflowPayload = {
-      type: 'EXECUTE_WORKFLOW',
-      pluginId,
-      pageKey,
-      requestId,
-      transferId,
-      useChunks: true,
-      chunkingMethod: 'enhanced',
-      timestamp: Date.now(),
-      metadata: {
-        totalChunks: 0, // Будет заполнено в sendChunksToOffscreen
-        chunkSize: CHUNK_SIZE,
-        totalSize: 0
-      }
-    };
-
-    console.log('[background][UTILS] Sending workflow payload to offscreen...');
     const result = await chrome.runtime.sendMessage(workflowPayload);
+    if (chrome.runtime.lastError) {
+      throw new Error(chrome.runtime.lastError.message);
+    }
+    console.log(`[WORKFLOW_EXECUTION] Workflow execution completed:`, result);
 
     if (result && result.success) {
-      console.log('[background][UTILS] Workflow execution completed successfully');
+      console.log(`[WORKFLOW_EXECUTION] ✅ Workflow executed successfully`);
     } else {
-      console.error('[background][UTILS] Workflow execution failed:', result?.error);
+      console.error(`[WORKFLOW_EXECUTION] ❌ Workflow execution failed:`, result?.error);
     }
-
   } catch (error) {
-    console.error('[background][UTILS] Workflow execution failed:', error);
+    console.error(`[WORKFLOW_EXECUTION] ❌ Workflow execution error:`, error);
     throw error;
   }
-};
+}
 
-// Функция для проверки и запуска плагина с учетом настроек
-const runPluginIfEnabled = async (pluginId: string) => {
-  try {
-    // Получаем настройки плагина
-    const settings = await getPluginSettings(pluginId);
+// === MAIN MESSAGE HANDLERS ===
 
-    // Проверяем, включен ли плагин
-    if (!settings.enabled) {
-      console.log(`[background] Plugin ${pluginId} is disabled, not running`);
-      return { success: false, reason: 'Plugin is disabled' };
-    }
-
-    // Запускаем рабочий процесс плагина
-    // await runWorkflow(pluginId); // This line was removed as per the edit hint
-    return { success: true };
-  } catch (error) {
-    console.error(`[background] Error running plugin ${pluginId}:`, error);
-    return { error: (error as Error).message };
-  }
-};
-
-// Функция для обновления настроек плагина
-const updatePluginSetting = async (pluginId: string, setting: string, value: boolean) => {
-  const settings = await pluginSettingsStorage.get();
-  const pluginSettings = settings[pluginId] || { enabled: true, autorun: false };
-
-  // Обновляем настройку
-  pluginSettings[setting] = value;
-
-  // Если плагин отключен, то отключаем и автозапуск
-  if (setting === 'enabled' && !value) {
-    pluginSettings.autorun = false;
-  }
-
-  // Сохраняем обновленные настройки
-  await pluginSettingsStorage.set({
-    ...settings,
-    [pluginId]: pluginSettings,
-  });
-
-  console.log(`[background] Updated plugin setting for ${pluginId}:`, setting, '=', value);
-  return { success: true };
-};
-
-// Функция для оповещения об обновлении чата
-const broadcastChatUpdate = (pluginId: string, pageKey: string) => {
-  chrome.runtime.sendMessage({
-    type: 'PLUGIN_CHAT_UPDATED',
-    pluginId,
-    pageKey,
-  });
-};
-
-// === ХРАНИЛИЩЕ ЛОГОВ ===
-type PluginLogEntry = {
-  timestamp: number;
-  pluginId: string;
-  pageKey?: string;
-  level: 'info' | 'success' | 'error' | 'warning' | 'debug';
-  stepId?: string;
-  message: string;
-  data?: unknown;
-};
-
-const pluginLogs: Record<string, PluginLogEntry[]> = {};
-
-const addPluginLog = (log: Omit<PluginLogEntry, 'timestamp'>) => {
-  const key = log.pluginId;
-  if (!pluginLogs[key]) pluginLogs[key] = [];
-  pluginLogs[key].push({ ...log, timestamp: Date.now() });
-  // Ограничим размер лога (например, 500 записей на плагин)
-  if (pluginLogs[key].length > 500) pluginLogs[key].shift();
-};
-
-// Обработчики сообщений для работы с плагинами
+// Активируем основной обработчик сообщений
 chrome.runtime.onMessage.addListener(
   async (message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => {
-    // console.log('[background] Got message:', message, 'from:', sender?.origin || sender?.id || 'unknown');
-    // console.log('[background] Message timestamp:', new Date().toISOString());
-    // console.log('[background] Sender details:', {
-    //   id: sender?.id,
-    //   origin: sender?.origin,
-    //   url: sender?.url,
-    //   tab: sender?.tab,
-    //   frameId: sender?.frameId
-    // });
+    console.log('[background] Main message handler activated with message:', message);
 
-    if (
-      typeof message === 'object' &&
-      message !== null &&
-      'source' in message &&
-      (message as ExtensionMessage).source === 'app-host-api' &&
-      'command' in message &&
-      'data' in message
-    ) {
-      handleHostApiMessage(message as { command: string; data: unknown }, sendResponse);
-      return true; // Keep message channel open for async response
+    const msg = message as any;
+
+    // Обработчик RUN_WORKFLOW с условной логикой выбора метода передачи
+    if (msg.type === 'RUN_WORKFLOW') {
+      console.log('[background][RUN_WORKFLOW] ===== STARTING RUN_WORKFLOW HANDLER =====');
+      console.log('[background][RUN_WORKFLOW] Plugin ID:', msg.pluginId);
+      console.log('[background][RUN_WORKFLOW] Request ID:', msg.requestId);
+
+      try {
+        // Проверка обязательных полей
+        if (!msg.pluginId) {
+          console.error('[background][RUN_WORKFLOW] Missing required field: pluginId');
+          sendResponse({ error: 'Отсутствует обязательное поле: pluginId' });
+          return true;
+        }
+
+        // ШАГ 1: Получить активную вкладку пользователя
+        console.log('[background][RUN_WORKFLOW] Querying active tab...');
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        const activeTab = tabs[0];
+
+        if (!activeTab || !activeTab.id) {
+          console.log('[background][RUN_WORKFLOW][ERROR] No active tab found');
+          sendResponse({ error: 'Не найдена активная вкладка' });
+          return true;
+        }
+
+        // ШАГ 2: Определить pageKey из URL активной вкладки
+        const pageKey = getPageKey(activeTab.url || '');
+        console.log('[background][RUN_WORKFLOW] Generated pageKey:', pageKey);
+
+        // ШАГ 3: Извлечь pageHTML
+        console.log('[background][RUN_WORKFLOW] Extracting page HTML...');
+        const results = await chrome.scripting.executeScript({
+          target: { tabId: activeTab.id },
+          func: () => document.documentElement.outerHTML
+        });
+
+        if (!results || !results[0] || !results[0].result || typeof results[0].result !== 'string') {
+          console.error('[background][RUN_WORKFLOW][ERROR] Invalid HTML result');
+          sendResponse({ error: 'Не удалось получить содержимое страницы' });
+          return true;
+        }
+
+        const pageHtml = results[0].result as string;
+        console.log('[background][RUN_WORKFLOW] ✓ HTML extracted:', pageHtml.length, 'chars');
+
+        // ШАГ 4: Проверить настройки плагина
+        const settings = await getPluginSettings(msg.pluginId);
+        if (!settings.enabled) {
+          console.log('[background][RUN_WORKFLOW][INFO] Plugin disabled');
+          sendResponse({ error: 'Плагин отключен' });
+          return true;
+        }
+
+        // ШАГ 5: ЧИТАТЬ НАСТРОЙКУ htmlTransmissionMode ИЗ STORAGE
+        console.log('[background][RUN_WORKFLOW] Reading htmlTransmissionMode setting...');
+
+        let htmlTransmissionMode = 'chunks'; // По умолчанию используем chunks
+        try {
+          const allSettings = await pluginSettingsStorage.get();
+          const pluginSettings = allSettings[msg.pluginId] || {};
+          htmlTransmissionMode = pluginSettings.htmlTransmissionMode || 'chunks';
+
+          console.log('[background][RUN_WORKFLOW] htmlTransmissionMode setting:', htmlTransmissionMode);
+        } catch (settingsError) {
+          console.warn('[background][RUN_WORKFLOW] Failed to read htmlTransmissionMode, using default:', settingsError);
+        }
+
+        // ШАГ 6: УСЛОВНАЯ ЛОГИКА ВЫБОРА МЕТОДА ПЕРЕДАЧИ
+        console.log('[background][RUN_WORKFLOW] ===== CHOOSING TRANSMISSION METHOD =====');
+        console.log('[background][RUN_WORKFLOW] HTML size:', pageHtml.length, 'chars');
+        console.log('[background][RUN_WORKFLOW] Transmission mode:', htmlTransmissionMode);
+
+        // ШАГ 7: Обеспечить наличие Offscreen Document
+        if (!offscreenSupported()) {
+          console.log('[background][RUN_WORKFLOW] Offscreen API not supported, using fallback...');
+          const fallbackMessage: any = {
+            type: 'EXECUTE_WORKFLOW',
+            pluginId: msg.pluginId,
+            pageKey: pageKey,
+            data: { pageHtml, pageKey, pluginId: msg.pluginId }
+          };
+          await handleLegacyChrome(fallbackMessage);
+          sendResponse({ success: true });
+          return true;
+        }
+
+        try {
+          const offscreenResult = await ensureOffscreenDocument();
+          if (!offscreenResult) {
+            console.log('[background][WORKFLOW][ERROR] Failed to ensure offscreen document');
+            return { success: false, error: 'Offscreen document initialization failed' };
+          }
+        } catch (error) {
+          console.error('[background][WORKFLOW][ERROR] Offscreen document error:', error);
+          return { success: false, error: 'Offscreen document creation failed' };
+        }
+
+        // ШАГ 8: ВЫПОЛНИТЬ ПЕРЕДАЧУ В ЗАВИСИМОСТИ ОТ НАСТРОЙКИ
+        const requestId = msg.requestId || `workflow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const transferId = `${requestId}_html_${Date.now()}`;
+
+        if (htmlTransmissionMode === 'direct') {
+          // ПРЯМАЯ ПЕРЕДАЧА HTML
+          console.log('[background][RUN_WORKFLOW] 📨 Using DIRECT HTML transmission');
+          await sendHtmlDirectly(msg.pluginId, pageKey, pageHtml, requestId, transferId);
+          console.log('[background][RUN_WORKFLOW] ✅ Direct transmission completed');
+
+          // CONFIRMATION: Проверяем успешность передачи
+          try {
+            const confirmResponse = await chrome.runtime.sendMessage({
+              type: 'CONFIRM_HTML_RECEIPT',
+              transferId,
+              pluginId: msg.pluginId,
+              timestamp: Date.now()
+            });
+            if (chrome.runtime.lastError) {
+              console.warn('[background][RUN_WORKFLOW] Confirmation failed:', chrome.runtime.lastError.message);
+            } else if (confirmResponse?.confirmed) {
+              console.log('[background][RUN_WORKFLOW] ✅ HTML receipt confirmed by offscreen');
+            }
+          } catch (confirmError) {
+            console.warn('[background][RUN_WORKFLOW] Confirmation check failed:', confirmError);
+          }
+        } else {
+          // CHUNKED ПЕРЕДАЧА HTML
+          console.log('[background][RUN_WORKFLOW] 📦 Using CHUNKED HTML transmission');
+          const chunkingResult = createChunks(pageHtml, CHUNK_SIZE);
+          console.log('[background][RUN_WORKFLOW] Created chunks:', chunkingResult.totalChunks);
+
+          // Храним transfer для отслеживания
+          const transferState = {
+            chunks: chunkingResult.chunks,
+            received: new Set<number>(),
+            totalChunks: chunkingResult.totalChunks,
+            metadata: {
+              pluginId: msg.pluginId,
+              pageKey: pageKey,
+              requestId: requestId,
+              totalSize: chunkingResult.totalSize,
+              timestamp: Date.now()
+            },
+            resolve: () => {
+              console.log(`[CHUNKING] Transfer ${transferId} completed successfully`);
+              activeTransfers.delete(transferId);
+            },
+            reject: (error: any) => {
+              console.error(`[CHUNKING] Transfer ${transferId} failed:`, error);
+              activeTransfers.delete(transferId);
+            },
+            timeout: 0,
+            createdAt: Date.now(),
+            lastAccessed: Date.now()
+          };
+
+          activeTransfers.set(transferId, transferState);
+
+          // Отправляем chunks
+          await sendChunksToOffscreen(transferId, chunkingResult.chunks, transferState.metadata);
+          console.log('[background][RUN_WORKFLOW] ✅ Chunked transmission completed');
+        }
+
+        console.log('[background][RUN_WORKFLOW] ===== RUN_WORKFLOW HANDLER COMPLETED =====');
+        sendResponse({ success: true });
+
+      } catch (error) {
+        console.error('[background][RUN_WORKFLOW] ❌ RUN_WORKFLOW handler error:', error);
+        sendResponse({ error: (error as Error).message });
+      }
+      return true;
     }
 
-    if (typeof message === 'object' && message !== null && 'type' in message) {
-      const msg = message as ExtensionMessage;
-      // console.log('[background] ===== MAIN MESSAGE HANDLER =====');
-      // console.log('[background] Processing message type:', msg.type);
-      // console.log('[background] Sender origin:', sender?.origin || 'none');
-      // console.log('[background] Sender ID:', sender?.id || 'none');
-      // console.log('[background] Message content preview:', JSON.stringify(message).substring(0, 200) + '...');
-      // console.log('[background] Timestamp:', new Date().toISOString());
-
-      if (msg.type === 'TEST_SYNC') {
-        console.log('[background] Processing TEST_SYNC request');
-        console.log('[background] TEST_SYNC timestamp:', new Date().toISOString());
-        const response = { success: true, message: 'Test sync response', timestamp: Date.now() };
-        console.log('[background] TEST_SYNC sending response:', response);
-        trackSendResponse(response);
-        console.log('[background] TEST_SYNC response sent');
-        return true;
-      }
-
-      if (msg.type === 'RUN_WORKFLOW') {
-        console.log('[background][DEBUG] ===== MESSAGE TYPE IS RUN_WORKFLOW =====');
-        console.log('[background][DEBUG] RUN_WORKFLOW message detected:', {
-          type: msg.type,
-          pluginId: msg.pluginId,
-          pageKey: msg.pageKey,
-          hasPluginId: !!msg.pluginId,
-          hasPageKey: !!msg.pageKey,
-          fullMessage: JSON.stringify(msg, null, 2)
-        });
-        // Продолжаем выполнение в условие ниже
-      }
-
-      if (msg.type === 'PING') {
-        // console.log('[background] Processing PING request');
-        // console.log('[background] PING timestamp:', new Date().toISOString());
-        trackSendResponse({ pong: true, timestamp: Date.now() });
-        // console.log('[background] PING response sent');
-        return true;
-      }
-
-      if (msg.type === 'TEST_PYODIDE_DIRECT') {
-        console.log('[background][TEST_PYODIDE_DIRECT] Processing direct Pyodide test request');
-        console.log('[background][TEST_PYODIDE_DIRECT] Python code to execute:', msg.pythonCode);
-
+    // Обработчики других типов сообщений
+    if (
+      msg.type === 'UPDATE_PLUGIN_SETTING' &&
+      msg.pluginId &&
+      msg.setting !== undefined &&
+      msg.value !== undefined
+    ) {
+      const { pluginId, setting, value } = msg;
+      console.log('[background] Processing UPDATE_PLUGIN_SETTING request for:', pluginId, setting, value);
+      (async () => {
         try {
-          (async () => {
-            try {
-              const result = await handleTestPyodideDirect(msg);
-              console.log('[background][TEST_PYODIDE_DIRECT] Test completed with result:', result);
-              if (!result) {
-                trackSendResponse({
-                  success: false,
-                  error: 'No response received from test execution',
-                  timestamp: Date.now()
-                });
-              } else {
-                trackSendResponse(result);
-              }
-            } catch (error) {
-              console.error('[background][TEST_PYODIDE_DIRECT] Test failed:', error);
-              trackSendResponse({
-                success: false,
-                error: (error as Error).message,
-                timestamp: Date.now()
-              });
-            }
-          })();
-        } catch (error) {
-          console.error('[background][TEST_PYODIDE_DIRECT] Critical error in async handler setup:', error);
-          trackSendResponse({
-            success: false,
-            error: (error as Error).message,
-            timestamp: Date.now()
-          });
-        }
-
-        return true; // Keep channel open for async response
-      }
-
-      // === РУЧНОЕ ТЕСТИРОВАНИЕ PYODIDE ===
-      if (msg.type === 'INITIALIZE_PYODIDE_MANUAL_TEST') {
-        console.log('[background][INITIALIZE_PYODIDE_MANUAL_TEST] Initializing Pyodide for manual testing');
-
-        try {
-          (async () => {
-            try {
-              // Убеждаемся что offscreen document существует
-              await ensureOffscreenDocument();
-
-              // Отправляем команду инициализации в offscreen document
-              const response = await chrome.runtime.sendMessage({
-                type: 'INITIALIZE_PYODIDE',
-                requestId: msg.requestId,
-                timestamp: msg.timestamp
-              });
-
-              trackSendResponse({
-                success: response?.success || true,
-                result: 'Pyodide initialized in offscreen document',
-                timestamp: Date.now()
-              });
-
-            } catch (error) {
-              console.error('[background][INITIALIZE_PYODIDE_MANUAL_TEST] Initialization failed:', error);
-              trackSendResponse({
-                success: false,
-                error: (error as Error).message,
-                timestamp: Date.now()
-              });
-            }
-          })();
-        } catch (error) {
-          console.error('[background][INITIALIZE_PYODIDE_MANUAL_TEST] Critical error in async handler setup:', error);
-          trackSendResponse({
-            success: false,
-            error: (error as Error).message,
-            timestamp: Date.now()
-          });
-        }
-
-        return true;
-      }
-
-      if (msg.type === 'EXECUTE_PYTHON_TEST_CODE') {
-        console.log('[background][EXECUTE_PYTHON_TEST_CODE] Executing Python test code');
-        console.log('[background][EXECUTE_PYTHON_TEST_CODE] Test name:', msg.testName);
-        console.log('[background][EXECUTE_PYTHON_TEST_CODE] Code:', msg.code);
-
-        try {
-          (async () => {
-            try {
-              // Отправляем код в offscreen document для исполнения
-              const response = await chrome.runtime.sendMessage({
-                type: 'EXECUTE_PYTHON_CODE',
-                code: msg.code,
-                testName: msg.testName,
-                requestId: msg.requestId,
-                timestamp: msg.timestamp
-              });
-
-              trackSendResponse({
-                success: response?.success || false,
-                result: response?.result,
-                error: response?.error,
-                timestamp: Date.now(),
-                executionTime: Date.now() - (msg.timestamp || 0)
-              });
-
-            } catch (error) {
-              console.error('[background][EXECUTE_PYTHON_TEST_CODE] Execution failed:', error);
-              trackSendResponse({
-                success: false,
-                error: (error as Error).message,
-                timestamp: Date.now()
-              });
-            }
-          })();
-        } catch (error) {
-          console.error('[background][EXECUTE_PYTHON_TEST_CODE] Critical error in async handler setup:', error);
-          trackSendResponse({
-            success: false,
-            error: (error as Error).message,
-            timestamp: Date.now()
-          });
-        }
-
-        return true;
-      }
-
-      if (msg.type === 'EXECUTE_PYTHON_ERROR_TEST') {
-        console.log('[background][EXECUTE_PYTHON_ERROR_TEST] Executing Python error test');
-        console.log('[background][EXECUTE_PYTHON_ERROR_TEST] Test name:', msg.testName);
-
-        try {
-          (async () => {
-            try {
-              // Отправляем код с ошибкой в offscreen document для тестирования error handling
-              const response = await chrome.runtime.sendMessage({
-                type: 'EXECUTE_PYTHON_CODE',
-                code: msg.code,
-                testName: msg.testName,
-                isErrorTest: true,
-                requestId: msg.requestId,
-                timestamp: msg.timestamp
-              });
-
-              // Ожидаем ошибку от Python кода, так что success=false это нормально
-              trackSendResponse({
-                success: response?.success || false,
-                result: response?.result,
-                error: response?.error,
-                timestamp: Date.now()
-              });
-
-            } catch (error) {
-              console.error('[background][EXECUTE_PYTHON_ERROR_TEST] Error test failed:', error);
-              trackSendResponse({
-                success: false,
-                error: (error as Error).message,
-                timestamp: Date.now()
-              });
-            }
-          })();
-        } catch (error) {
-          console.error('[background][EXECUTE_PYTHON_ERROR_TEST] Critical error in async handler setup:', error);
-          trackSendResponse({
-            success: false,
-            error: (error as Error).message,
-            timestamp: Date.now()
-          });
-        }
-
-        return true;
-      }
-
-      if (msg.type === 'GET_PLUGINS') {
-        console.log('[background] Processing GET_PLUGINS request from sender:', sender);
-        console.log('[background] GET_PLUGINS message timestamp:', new Date().toISOString());
-
-        try {
-          // АСИНХРОННАЯ ОБРАБОТКА: Возвращаем true и обрабатываем асинхронно
-          (async () => {
-            try {
-              console.log('[background] processGetPlugins started, timestamp:', new Date().toISOString());
-              console.log('[background] Sender details:', {
-                id: sender?.id,
-                origin: sender?.origin,
-                url: sender?.url,
-                tab: sender?.tab?.id,
-                frameId: sender?.frameId
-              });
-
-              console.log('[background] Getting available plugins...');
-              const startTime = Date.now();
-
-              // Параллельное выполнение для ускорения
-              const [plugins, allSettings] = await Promise.all([
-                getAvailablePlugins(),
-                pluginSettingsStorage.get()
-              ]);
-
-              const fetchTime = Date.now() - startTime;
-              console.log(`[background] Data fetched in ${fetchTime}ms`);
-              console.log('[background] getAvailablePlugins result:', plugins);
-              console.log('[background] Plugins count:', plugins?.length || 'undefined');
-              console.log('[background] Plugin settings:', allSettings);
-              console.log('[background] Settings type:', typeof allSettings);
-
-              if (!plugins || !Array.isArray(plugins)) {
-                console.error('[background] getAvailablePlugins returned invalid data:', plugins);
-                // Отправляем ошибку через broadcast
-                chrome.runtime.sendMessage({
-                  type: 'GET_PLUGINS_RESPONSE',
-                  error: 'Invalid plugins data from getAvailablePlugins',
-                  requestId: msg.requestId
-                });
-                trackSendResponse({ success: false, timestamp: Date.now() });
-                return;
-              }
-
-              const pluginsWithSettings = plugins.map((plugin: Plugin) => {
-                console.log('[background] Processing plugin:', plugin.id, plugin.name);
-                const settings = allSettings[plugin.id] || {
-                  enabled: true,
-                  autorun: false,
-                };
-                console.log('[background] Plugin settings for', plugin.id, ':', settings);
-
-                return {
-                  ...plugin,
-                  settings,
-                };
-              });
-
-              console.log('[background] Final plugins data:', pluginsWithSettings.length, 'plugins');
-              console.log('[background] Final plugins data details:', pluginsWithSettings.map(p => ({ id: p.id, name: p.name, settings: p.settings })));
-
-              // Отправляем успешный ответ через broadcast сообщение вместо sendResponse
-              const responseData = {
-                type: 'GET_PLUGINS_RESPONSE',
-                plugins: pluginsWithSettings,
-                requestId: msg.requestId // Добавляем requestId для сопоставления
-              };
-              console.log('[background] Broadcasting GET_PLUGINS_RESPONSE:', responseData);
-              console.log('[background] About to broadcast, timestamp:', new Date().toISOString());
-
-              // Отправляем broadcast сообщение всем слушателям (side panels, popups, etc.)
-              chrome.runtime.sendMessage(responseData);
-
-              console.log('[background] Successfully sent plugins response, timestamp:', new Date().toISOString());
-              // Отправляем подтверждение обработки для самого запроса
-              trackSendResponse({ success: true, timestamp: Date.now() });
-
-            } catch (error) {
-              console.error('[background] Error processing GET_PLUGINS:', error);
-              console.error('[background] Error details:', {
-                message: (error as Error).message,
-                stack: (error as Error).stack,
-                name: (error as Error).name
-              });
-
-              // Отправляем ошибку через broadcast сообщение
-              chrome.runtime.sendMessage({
-                type: 'GET_PLUGINS_RESPONSE',
-                error: (error as Error).message,
-                requestId: msg.requestId
-              });
-              console.log('[background] Sent error response broadcast');
-              trackSendResponse({ success: false, timestamp: Date.now() });
-            }
-          })();
-        } catch (error) {
-          console.error('[background][GET_PLUGINS] Critical error in async handler setup:', error);
-          trackSendResponse({
-            error: (error as Error).message,
-            requestId: msg.requestId
-          });
-        }
-
-        // ВОЗВРАЩАЕМ TRUE для поддержания канала открытым
-        return true;
-      }
-
-      // DEBUG: Проверяем все входящие сообщения
-      console.log('[background][DEBUG] ===== MESSAGE RECEIVED =====');
-      console.log('[background][DEBUG] Message type:', msg.type);
-      console.log('[background][DEBUG] Message pluginId:', msg.pluginId);
-      console.log('[background][DEBUG] Message pageKey:', msg.pageKey);
-      console.log('[background][DEBUG] Full message object:', JSON.stringify(msg, null, 2));
-      console.log('[background][DEBUG] Timestamp:', new Date().toISOString());
-
-      if (msg.type === 'RUN_WORKFLOW') {
-        console.log('[background][WORKFLOW] ===== RUN_WORKFLOW REQUEST RECEIVED =====');
-
-        // Проверка валидности сообщения
-        if (!msg || typeof msg !== 'object') {
-          console.error('[background][WORKFLOW] Invalid message format');
-          trackSendResponse({ error: 'Invalid message format' });
-          return true;
-        }
-
-        console.log('[background][WORKFLOW] Plugin ID:', msg.pluginId);
-        console.log('[background][WORKFLOW] Timestamp:', new Date().toISOString());
-
-        // [DEBUG] Добавляем логи для отслеживания настроек htmlTransmissionMode
-        console.log('[background][WORKFLOW][DEBUG] 🔍 Checking htmlTransmissionMode settings...');
-        try {
-          const settings = await chrome.storage.local.get(['htmlTransmissionMode']);
-          const htmlTransmissionMode = settings.htmlTransmissionMode || 'chunks';
-          console.log('[background][WORKFLOW][DEBUG] 📊 Current htmlTransmissionMode setting:', htmlTransmissionMode);
-          console.log('[background][WORKFLOW][DEBUG] 🎯 Should use direct transmission:', htmlTransmissionMode === 'direct');
-        } catch (settingsError) {
-          console.error('[background][WORKFLOW][DEBUG] ❌ Failed to read htmlTransmissionMode settings:', settingsError);
-        }
-
-        // УПРОЩЕННАЯ ОБРАБОТКА RUN_WORKFLOW
-        (async () => {
-          try {
-            // Валидация входных данных
-            if (!msg.pluginId || typeof msg.pluginId !== 'string') {
-              console.error('[background][WORKFLOW] Missing or invalid pluginId');
-              trackSendResponse({ error: 'Отсутствует или некорректно обязательное поле: pluginId' });
-              return;
-            }
-
-            console.log('[background][WORKFLOW] Processing workflow for plugin:', msg.pluginId);
-
-            // ШАГ 1: Получить активную вкладку
-            const activeTab = await getActiveTab();
-
-            // ШАГ 2: Определить pageKey
-            const pageKey = getPageKey(activeTab.url || '');
-            console.log('[background][WORKFLOW] Generated pageKey:', pageKey);
-
-            // ШАГ 3: Проверить настройки плагина
-            await validatePluginSettings(msg.pluginId);
-
-            // ШАГ 4: Извлечь HTML из вкладки
-            const pageHtml = await extractPageHtml(activeTab);
-
-            // ШАГ 5: Обработка в зависимости от поддержки offscreen API
-            if (!offscreenSupported()) {
-              console.log('[background][WORKFLOW] Offscreen API not supported, using legacy fallback');
-
-              const fallbackMessage: ExtensionMessage = {
-                type: 'EXECUTE_WORKFLOW',
-                pluginId: msg.pluginId,
-                pageKey: pageKey,
-                data: {
-                  pageHtml: pageHtml,
-                  pageKey: pageKey,
-                  pluginId: msg.pluginId
-                }
-              };
-
-              await handleLegacyChrome(fallbackMessage);
-              trackSendResponse({ success: true });
-              return;
-            }
-
-            // ШАГ 6: Обеспечить наличие offscreen document
-            await ensureOffscreenDocument();
-
-            // ШАГ 7: Подготовить данные для передачи
-            const requestId = msg.requestId || `workflow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            const transferId = `${requestId}_html_${Date.now()}`;
-
-            // ШАГ 8: Разбить HTML на chunks
-            const chunkingResult = createChunks(pageHtml, CHUNK_SIZE);
-            console.log('[background][WORKFLOW] Created', chunkingResult.totalChunks, 'chunks from', chunkingResult.totalSize, 'chars');
-            console.log('[background][WORKFLOW][DEBUG] 🚀 Starting CHUNKED transmission (current workflow method)');
-
-            // ШАГ 9: Создать transfer объект
-            const transferState = {
-              chunks: chunkingResult.chunks,
-              received: new Set<number>(),
-              totalChunks: chunkingResult.totalChunks,
-              metadata: {
-                pluginId: msg.pluginId,
-                pageKey: pageKey,
-                requestId: requestId,
-                totalSize: chunkingResult.totalSize,
-                timestamp: Date.now()
-              },
-              resolve: () => {
-                console.log(`[WORKFLOW] Transfer ${transferId} completed successfully`);
-                activeTransfers.delete(transferId);
-              },
-              reject: (error: any) => {
-                console.error(`[WORKFLOW] Transfer ${transferId} failed:`, error);
-                activeTransfers.delete(transferId);
-              },
-              timeout: 0,
-              createdAt: Date.now(),
-              lastAccessed: Date.now()
-            };
-
-            // Сохранить transfer
-            activeTransfers.set(transferId, transferState);
-
-            // ШАГ 10: Отправить chunks в offscreen document
-            await sendChunksToOffscreen(transferId, chunkingResult.chunks, transferState.metadata);
-
-            // ШАГ 11: Запустить workflow в offscreen document
-            await executeWorkflowInOffscreen(msg.pluginId, pageKey, transferId, requestId);
-
-            console.log('[background][WORKFLOW] ===== WORKFLOW EXECUTION COMPLETED =====');
-            trackSendResponse({ success: true });
-
-          } catch (error) {
-            console.error('[background][WORKFLOW] Critical error:', error);
-
-            // Обработка ошибок с более детальными сообщениями
-            let errorMessage = 'Неизвестная ошибка выполнения workflow';
-
-            if (error instanceof Error) {
-              errorMessage = error.message;
-            } else if (typeof error === 'string') {
-              errorMessage = error;
-            }
-
-            trackSendResponse({ error: errorMessage });
-          }
-        })();
-
-        return true;
-      }
-
-      if (msg.type === 'UPDATE_PLUGIN_SETTING') {
-        // Проверка валидности входных данных
-        if (!msg.pluginId || typeof msg.pluginId !== 'string') {
-          console.error('[background] UPDATE_PLUGIN_SETTING: Missing or invalid pluginId');
-          trackSendResponse({ error: 'Missing or invalid pluginId' });
-          return true;
-        }
-
-        if (!msg.setting || typeof msg.setting !== 'string') {
-          console.error('[background] UPDATE_PLUGIN_SETTING: Missing or invalid setting');
-          trackSendResponse({ error: 'Missing or invalid setting' });
-          return true;
-        }
-
-        if (msg.value === undefined) {
-          console.error('[background] UPDATE_PLUGIN_SETTING: Missing value');
-          trackSendResponse({ error: 'Missing value' });
-          return true;
-        }
-
-        const { pluginId, setting, value } = msg;
-        console.log('[background] Processing UPDATE_PLUGIN_SETTING request for:', pluginId, setting, value);
-        (async () => {
-          try {
-            await updatePluginSetting(pluginId, setting, value);
-            trackSendResponse({ success: true });
-          } catch (error: unknown) {
-            console.error('[background] Error in UPDATE_PLUGIN_SETTING:', error);
-            trackSendResponse({ error: (error as Error).message });
-          }
-        })();
-        return true;
-      }
-
-      if (msg.type === 'GET_PLUGIN_SETTINGS') {
-        console.log('[background] Processing GET_PLUGIN_SETTINGS request');
-
-        // Используем синхронную обработку
-        (async () => {
-          try {
-            const settings = await pluginSettingsStorage.get();
-            console.log('[background] Plugin settings:', settings);
-            trackSendResponse(settings);
-          } catch (error: unknown) {
-            console.error('[background] Error getting plugin settings:', error);
-            trackSendResponse({ error: (error as Error).message });
-          }
-        })();
-
-        return true;
-      }
-
-      // === Работа с чатами плагинов ===
-      if (msg.type === 'GET_PLUGIN_CHAT') {
-        // Проверка валидности входных данных
-        if (!msg.pluginId || typeof msg.pluginId !== 'string') {
-          console.error('[background] GET_PLUGIN_CHAT: Missing or invalid pluginId');
-          trackSendResponse({ error: 'Missing or invalid pluginId' });
-          return true;
-        }
-
-        if (!msg.pageKey || typeof msg.pageKey !== 'string') {
-          console.error('[background] GET_PLUGIN_CHAT: Missing or invalid pageKey');
-          trackSendResponse({ error: 'Missing or invalid pageKey' });
-          return true;
-        }
-
-        const { pluginId, pageKey, messageId } = msg;
-        const chatKey = `${pluginId}::${getPageKey(pageKey)}`;
-
-        console.log('[background] GET_PLUGIN_CHAT: начало обработки', {
-          pluginId,
-          pageKey,
-          messageId,
-          chatKey,
-          normalizedPageKey: getPageKey(pageKey),
-          timestamp: Date.now()
-        });
-
-        // Используем синхронную обработку
-        (async () => {
-          try {
-            const chat = await pluginChatApi.getOrLoadChat(chatKey);
-            console.log('[background] GET_PLUGIN_CHAT: результат getOrLoadChat', {
-              chat,
-              chatType: typeof chat,
-              hasChat: !!chat,
-              messagesLength: chat?.messages?.length,
-              chatKey,
-              pageKey
-            });
-
-            // Если чат не найден, возвращаем пустой объект с messages: []
-            if (!chat) {
-              console.log('[background] GET_PLUGIN_CHAT: чат не найден, возвращаем пустой массив сообщений');
-              chrome.runtime.sendMessage({
-                type: 'GET_PLUGIN_CHAT_RESPONSE',
-                messageId,
-                response: {
-                  messages: [],
-                  chatKey,
-                  pluginId,
-                  pageKey
-                }
-              });
-              return;
-            }
-
-            let safeChat = chat;
-            if (chat && Array.isArray(chat.messages) && chat.messages.length > 50) {
-              safeChat = { ...chat, messages: chat.messages.slice(-50) };
-              console.log('[background] GET_PLUGIN_CHAT: обрезан до 50 сообщений', {
-                originalLength: chat.messages.length,
-                newLength: safeChat.messages.length
-              });
-            }
-
-            try {
-              const serializable = JSON.parse(JSON.stringify(safeChat));
-              console.log('[background] GET_PLUGIN_CHAT: сериализация успешна', {
-                serializable,
-                serializableType: typeof serializable,
-                serializableKeys: Object.keys(serializable || {}),
-                serializableMessages: serializable?.messages,
-                isArrayMessages: Array.isArray(serializable?.messages),
-                chatKey,
-                pageKey
-              });
-
-              // Возвращаем объект с полем messages для совместимости с processChatResponse
-              const response = {
-                messages: serializable?.messages || [],
-                chatKey: serializable?.chatKey,
-                pluginId: serializable?.pluginId,
-                pageKey: serializable?.pageKey
-              };
-              console.log('[background] GET_PLUGIN_CHAT: отправляем ответ', {
-                response,
-                responseType: typeof response,
-                responseKeys: Object.keys(response),
-                responseMessagesLength: response.messages?.length,
-                messageId,
-                timestamp: Date.now()
-              });
-
-              chrome.runtime.sendMessage({
-                type: 'GET_PLUGIN_CHAT_RESPONSE',
-                messageId,
-                response
-              });
-
-            } catch (err) {
-              console.error('[background] GET_PLUGIN_CHAT: Ошибка сериализации чата:', {
-                error: err,
-                safeChat,
-                safeChatType: typeof safeChat,
-                safeChatKeys: Object.keys(safeChat || {}),
-                timestamp: Date.now()
-              });
-              chrome.runtime.sendMessage({
-                type: 'GET_PLUGIN_CHAT_RESPONSE',
-                messageId,
-                response: { error: 'serialization failed', details: String(err) }
-              });
-            }
-          } catch (err) {
-            console.error('[background] GET_PLUGIN_CHAT: Ошибка в getOrLoadChat:', {
-              error: err,
-              errorMessage: String(err),
-              errorStack: (err as Error).stack,
-              pluginId,
-              pageKey,
-              chatKey,
-              timestamp: Date.now()
-            });
-            chrome.runtime.sendMessage({
-              type: 'GET_PLUGIN_CHAT_RESPONSE',
-              messageId,
-              response: { error: String(err) }
-            });
-          }
-        })();
-
-        return true;
-      }
-
-      // Создание чата при начале ввода (ленивая инициализация)
-      if (msg.type === 'CREATE_PLUGIN_CHAT') {
-        // Проверка валидности входных данных
-        if (!msg.pluginId || typeof msg.pluginId !== 'string') {
-          console.error('[background] CREATE_PLUGIN_CHAT: Missing or invalid pluginId');
-          trackSendResponse({ error: 'Missing or invalid pluginId' });
-          return true;
-        }
-
-        if (!msg.pageKey || typeof msg.pageKey !== 'string') {
-          console.error('[background] CREATE_PLUGIN_CHAT: Missing or invalid pageKey');
-          trackSendResponse({ error: 'Missing or invalid pageKey' });
-          return true;
-        }
-
-        const { pluginId, pageKey } = msg;
-        const normPageKey = getPageKey(pageKey);
-        console.log('[background] CREATE_PLUGIN_CHAT pageKey:', pageKey, 'norm:', normPageKey);
-
-        // Используем синхронную обработку
-        (async () => {
-          try {
-            const chat = await pluginChatApi.createChatIfNotExists(pluginId, normPageKey);
-            console.log('[background] trackSendResponse(CREATE_PLUGIN_CHAT):', chat);
-            trackSendResponse(chat);
-            broadcastChatUpdate(pluginId, normPageKey);
-          } catch (error) {
-            console.error('[background] Error creating plugin chat:', error);
-            trackSendResponse({ error: String(error) });
-          }
-        })();
-
-        return true;
-      }
-
-      // Сохранение черновика сообщения (ленивая синхронизация)
-      if (msg.type === 'SAVE_PLUGIN_CHAT_DRAFT' && msg.pluginId && msg.pageKey && msg.draftText !== undefined) {
-        const { pluginId, pageKey, draftText } = msg;
-        const normPageKey = getPageKey(pageKey);
-        console.log('[background] SAVE_PLUGIN_CHAT_DRAFT pageKey:', pageKey, 'norm:', normPageKey);
-
-        // Используем синхронную обработку
-        (async () => {
-          try {
-            await pluginChatApi.saveDraft(pluginId, normPageKey, draftText);
-            console.log('[background] trackSendResponse(SAVE_PLUGIN_CHAT_DRAFT):', { success: true });
-            trackSendResponse({ success: true });
-          } catch (error) {
-            console.error('[background] Error saving plugin chat draft:', error);
-            trackSendResponse({ error: String(error) });
-          }
-        })();
-
-        return true;
-      }
-
-      // Получение черновика сообщения
-      if (msg.type === 'GET_PLUGIN_CHAT_DRAFT' && msg.pluginId && msg.pageKey) {
-        const { pluginId, pageKey } = msg;
-        const normPageKey = getPageKey(pageKey);
-        console.log('[background] GET_PLUGIN_CHAT_DRAFT pageKey:', pageKey, 'norm:', normPageKey);
-
-        // Используем синхронную обработку
-        (async () => {
-          try {
-            const draftText = await pluginChatApi.getDraft(pluginId, normPageKey);
-            console.log('[background] trackSendResponse(GET_PLUGIN_CHAT_DRAFT):', { draftText });
-            trackSendResponse({ draftText });
-          } catch (error) {
-            console.error('[background] Error getting plugin chat draft:', error);
-            trackSendResponse({ error: String(error) });
-          }
-        })();
-
-        return true;
-      }
-
-      if (msg.type === 'SAVE_PLUGIN_CHAT_MESSAGE') {
-        // Проверка валидности входных данных
-        if (!msg.pluginId || typeof msg.pluginId !== 'string') {
-          console.error('[background] SAVE_PLUGIN_CHAT_MESSAGE: Missing or invalid pluginId');
-          trackSendResponse({ error: 'Missing or invalid pluginId' });
-          return true;
-        }
-
-        if (!msg.pageKey || typeof msg.pageKey !== 'string') {
-          console.error('[background] SAVE_PLUGIN_CHAT_MESSAGE: Missing or invalid pageKey');
-          trackSendResponse({ error: 'Missing or invalid pageKey' });
-          return true;
-        }
-
-        if (!msg.message || typeof msg.message !== 'object') {
-          console.error('[background] SAVE_PLUGIN_CHAT_MESSAGE: Missing or invalid message');
-          trackSendResponse({ error: 'Missing or invalid message' });
-          return true;
-        }
-
-        const { pluginId, pageKey, message: chatMsg, messageId } = msg;
-        const normPageKey = getPageKey(pageKey);
-        console.log('[background] SAVE_PLUGIN_CHAT_MESSAGE: начало', {
-          pluginId,
-          pageKey,
-          messageId,
-          normPageKey,
-          chatMsg,
-          chatMsgType: typeof chatMsg,
-          chatMsgKeys: Object.keys(chatMsg),
-          timestamp: Date.now()
-        });
-
-        // Используем синхронную обработку
-        (async () => {
-          try {
-            const result = await pluginChatApi.saveMessage(pluginId, normPageKey, chatMsg as ChatMessage);
-            console.log('[background] SAVE_PLUGIN_CHAT_MESSAGE: saveMessage результат', {
-              result,
-              success: result.success,
-              pluginId,
-              pageKey,
-              normPageKey,
-              timestamp: Date.now()
-            });
-
-            // Удаляем черновик после отправки сообщения
-            await pluginChatApi.deleteDraft(pluginId, normPageKey);
-            console.log('[background] SAVE_PLUGIN_CHAT_MESSAGE: deleteDraft завершен', {
-              result,
-              pluginId,
-              pageKey,
-              normPageKey,
-              timestamp: Date.now()
-            });
-
-            // Отправляем событие для UI компонентов с messageId
-            chrome.runtime.sendMessage({
-              type: 'SAVE_PLUGIN_CHAT_MESSAGE_RESPONSE',
-              messageId,
-              success: true,
-              pluginId,
-              pageKey: normPageKey,
-              timestamp: Date.now()
-            });
-
-            broadcastChatUpdate(pluginId, normPageKey);
-          } catch (error) {
-            console.error('[background] SAVE_PLUGIN_CHAT_MESSAGE: ошибка', {
-              error,
-              errorMessage: String(error),
-              errorStack: (error as Error).stack,
-              pluginId,
-              pageKey,
-              normPageKey,
-              timestamp: Date.now()
-            });
-
-            // Отправляем событие об ошибке для UI компонентов с messageId
-            chrome.runtime.sendMessage({
-              type: 'SAVE_PLUGIN_CHAT_MESSAGE_RESPONSE',
-              messageId,
-              success: false,
-              error: String(error),
-              pluginId,
-              pageKey: normPageKey,
-              timestamp: Date.now()
-            });
-          }
-        })();
-
-        return true; // ВОЗВРАЩАЕМ true для поддержания канала открытым
-      }
-
-      if (msg.type === 'DELETE_PLUGIN_CHAT') {
-        // Проверка валидности входных данных
-        if (!msg.pluginId || typeof msg.pluginId !== 'string') {
-          console.error('[background] DELETE_PLUGIN_CHAT: Missing or invalid pluginId');
-          trackSendResponse({ error: 'Missing or invalid pluginId' });
-          return true;
-        }
-
-        if (!msg.pageKey || typeof msg.pageKey !== 'string') {
-          console.error('[background] DELETE_PLUGIN_CHAT: Missing or invalid pageKey');
-          trackSendResponse({ error: 'Missing or invalid pageKey' });
-          return true;
-        }
-
-        const { pluginId, pageKey, messageId } = msg;
-        const normPageKey = getPageKey(pageKey);
-        console.log('[background] DELETE_PLUGIN_CHAT pageKey:', pageKey, 'messageId:', messageId, 'norm:', normPageKey);
-
-        // Используем синхронную обработку
-        (async () => {
-          try {
-            await pluginChatApi.deleteChat(pluginId, normPageKey);
-
-            // Отправляем событие для UI компонентов с messageId
-            chrome.runtime.sendMessage({
-              type: 'DELETE_PLUGIN_CHAT_RESPONSE',
-              messageId,
-              success: true,
-              pluginId,
-              pageKey: normPageKey,
-              timestamp: Date.now()
-            });
-
-            broadcastChatUpdate(pluginId, normPageKey);
-          } catch (error) {
-            console.error('[background] Error deleting plugin chat:', error);
-
-            // Отправляем событие об ошибке для UI компонентов с messageId
-            chrome.runtime.sendMessage({
-              type: 'DELETE_PLUGIN_CHAT_RESPONSE',
-              messageId,
-              success: false,
-              error: String(error),
-              pluginId,
-              pageKey: normPageKey,
-              timestamp: Date.now()
-            });
-          }
-        })();
-
-        return true;
-      }
-
-      if (msg.type === 'LIST_PLUGIN_CHATS' && msg.pluginId) {
-        const { pluginId } = msg;
-        console.log('[background] Listing chats for plugin:', pluginId);
-
-        // Используем синхронную обработку
-        (async () => {
-          try {
-            const chats = await pluginChatApi.listChatsForPlugin(pluginId);
-            console.log('[background] Chats found:', chats);
-            trackSendResponse(chats);
-          } catch (error) {
-            console.error('[background] Error listing chats:', error);
-            trackSendResponse([]);
-          }
-        })();
-
-        return true;
-      }
-
-      // Получение всех черновиков для плагина
-      if (msg.type === 'LIST_PLUGIN_CHAT_DRAFTS' && msg.pluginId) {
-        const { pluginId } = msg;
-        console.log('[background] Listing drafts for plugin:', pluginId);
-
-        // Используем синхронную обработку
-        (async () => {
-          try {
-            const drafts = await pluginChatApi.listDraftsForPlugin(pluginId);
-            console.log('[background] Drafts found:', drafts);
-            trackSendResponse(drafts);
-          } catch (error) {
-            console.error('[background] Error listing drafts:', error);
-            trackSendResponse([]);
-          }
-        })();
-
-        return true;
-      }
-
-      // === ЛОГИРОВАНИЕ ===
-      if (msg.type === 'LOG_EVENT') {
-        // Проверка валидности входных данных
-        if (!msg.pluginId || typeof msg.pluginId !== 'string') {
-          console.error('[background] LOG_EVENT: Missing or invalid pluginId');
-          trackSendResponse({ error: 'Missing or invalid pluginId' });
-          return true;
-        }
-
-        if (!msg.message || typeof msg.message !== 'string') {
-          console.error('[background] LOG_EVENT: Missing or invalid message');
-          trackSendResponse({ error: 'Missing or invalid message' });
-          return true;
-        }
-
-        addPluginLog({
-          pluginId: msg.pluginId,
-          pageKey: msg.pageKey,
-          level: msg.level || 'info',
-          stepId: msg.stepId,
-          message: msg.message,
-          data: msg.logData,
-        });
-        // Оповещаем о новом логе
-        chrome.runtime.sendMessage({
-          type: 'PLUGIN_LOG_UPDATED',
-          pluginId: msg.pluginId,
-          pageKey: msg.pageKey,
-        });
-        trackSendResponse({ success: true });
-        return true;
-      }
-      // Получение логов по плагину
-      if (msg.type === 'LIST_PLUGIN_LOGS') {
-        // Проверка валидности входных данных
-        if (!msg.pluginId || typeof msg.pluginId !== 'string') {
-          console.error('[background] LIST_PLUGIN_LOGS: Missing or invalid pluginId');
-          trackSendResponse({ error: 'Missing or invalid pluginId' });
-          return true;
-        }
-
-        trackSendResponse(pluginLogs[msg.pluginId] || []);
-        return true;
-      }
-      // Получение всех логов (админ)
-      if (msg.type === 'LIST_ALL_PLUGIN_LOGS') {
-        trackSendResponse(pluginLogs);
-        return true;
-      }
-
-      // Получение URL активной вкладки (для side panel)
-      if (msg.type === 'GET_ACTIVE_TAB_URL') {
-        try {
-          const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-          if (tabs[0]?.url) {
-            trackSendResponse({ url: tabs[0].url });
-          } else {
-            trackSendResponse({ error: 'Active tab not found' });
-          }
+          await updatePluginSetting(pluginId, setting, value);
+          sendResponse({ success: true });
         } catch (error: unknown) {
-          trackSendResponse({ error: (error as Error).message });
+          console.error('[background] Error in UPDATE_PLUGIN_SETTING:', error);
+          sendResponse({ error: (error as Error).message });
         }
-        return true;
-      }
+      })();
+      return true;
+    }
 
-    console.log('[background][DEBUG] Main handler finished processing, checking final return...');
-    // ГАРАНТИРОВАННО возвращаем true, чтобы канал не закрывался преждевременно
-    console.log('[background] Returning true to keep channel open, timestamp:', new Date().toISOString());
+    if (msg.type === 'GET_PLUGIN_SETTINGS') {
+      console.log('[background] Processing GET_PLUGIN_SETTINGS request');
+      (async () => {
+        try {
+          const settings = await pluginSettingsStorage.get();
+          console.log('[background] Plugin settings:', settings);
+          sendResponse(settings);
+        } catch (error: unknown) {
+          console.error('[background] Error getting plugin settings:', error);
+          sendResponse({ error: (error as Error).message });
+        }
+      })();
+      return true;
+    }
+
+    // === HEARTBEAT: Обработчик PING для поддержания соединения ===
+    if (msg.type === 'PING') {
+      const pingReceiveTime = Date.now();
+      console.log(`[background][HEARTBEAT] 📨 Received PING from sidepanel at ${new Date(pingReceiveTime).toISOString()}`);
+      const response = { pong: true, timestamp: pingReceiveTime };
+      console.log(`[background][HEARTBEAT] 📤 Sending PONG response:`, response);
+      sendResponse(response);
+      return true;
+    }
+
+    if (msg.type === 'GET_PLUGINS') {
+      console.log('[background] Processing GET_PLUGINS request');
+      console.log('[background][GET_PLUGINS] Request received:', {
+        type: msg.type,
+        requestId: msg.requestId,
+        timestamp: new Date().toISOString()
+      });
+
+      (async () => {
+        try {
+          console.log('[background][GET_PLUGINS] Starting async plugin retrieval...');
+          const plugins = await getAvailablePlugins();
+          console.log('[background][GET_PLUGINS] Retrieved plugins:', plugins.length);
+          console.log('[background][GET_PLUGINS] Plugin details:', plugins.map(p => ({ id: p.id, name: p.name })));
+
+          const response = {
+            type: 'GET_PLUGINS_RESPONSE',
+            plugins: plugins,
+            requestId: msg.requestId,
+            timestamp: new Date().toISOString()
+          };
+
+          console.log('[background][GET_PLUGINS] Sending response via chrome.runtime.sendMessage()');
+          console.log('[background][GET_PLUGINS] Response payload:', {
+            type: response.type,
+            pluginsCount: response.plugins.length,
+            requestId: response.requestId,
+            hasPlugins: !!response.plugins
+          });
+
+          // Отправляем ответ через sendMessage вместо sendResponse для совместимости с sidepanel слушателем
+          await chrome.runtime.sendMessage(response);
+          console.log('[background][GET_PLUGINS] ✅ chrome.runtime.sendMessage() sent successfully');
+
+          // Вызываем sendResponse с undefined чтобы избежать ошибок в Chrome
+          sendResponse();
+          console.log('[background][GET_PLUGINS] ✅ sendResponse() called with undefined');
+
+        } catch (error: unknown) {
+          console.error('[background][GET_PLUGINS] ❌ Error getting plugins:', error);
+          const errorResponse = {
+            type: 'GET_PLUGINS_RESPONSE',
+            error: (error as Error).message,
+            requestId: msg.requestId,
+            timestamp: new Date().toISOString()
+          };
+
+          console.log('[background][GET_PLUGINS] Sending error response via chrome.runtime.sendMessage()');
+          await chrome.runtime.sendMessage(errorResponse);
+          console.log('[background][GET_PLUGINS] ❌ Error chrome.runtime.sendMessage() sent');
+
+          // Вызываем sendResponse с undefined чтобы избежать ошибок в Chrome
+          sendResponse();
+          console.log('[background][GET_PLUGINS] ✅ sendResponse() called with undefined after error');
+        }
+      })();
+      return true;
+    }
+
+    // === DEBUG: Добавляем логи для отслеживания неизвестных сообщений ===
+    if (!msg.type) {
+      console.log('[background][DEBUG] Получено сообщение:', msg);
+      console.log('[background][DEBUG] Тип сообщения:', msg.type);
+    }
+
+    console.log('[background] Returning true to keep channel open');
     return true;
-    };
   }
-  );
+);
 
 const handleHostApiMessage = async (
   message: { command: string; data: unknown },
@@ -3327,7 +1565,7 @@ const handleHostApiMessage = async (
             }),
           args: [selectors],
         });
-        trackSendResponse({ elements: elements[0].result });
+        sendResponse({ elements: elements[0].result });
         break;
       }
       case 'getActivePageContent': {
@@ -3345,14 +1583,14 @@ const handleHostApiMessage = async (
               .join('\n'),
           args: [selectors],
         });
-        trackSendResponse({ html: content[0].result });
+        sendResponse({ html: content[0].result });
         break;
       }
       case 'host_fetch': {
         const url = message.data as string;
         const response = await fetch(url);
         const data = await response.text();
-        trackSendResponse({ data });
+        sendResponse({ data });
         break;
       }
       case 'llm_call': {
@@ -3365,11 +1603,10 @@ const handleHostApiMessage = async (
 
           console.log('[HOST API] LLM call requested:', { modelAlias, pluginId });
 
-          // Загружаем manifest плагина для получения маппинга моделей
           const currentPlugin = pluginId || 'ozon-analyzer';
           const manifestUrl = chrome.runtime.getURL(`public/plugins/${currentPlugin}/manifest.json`);
 
-          let manifestResponse = null;
+          let manifestResponse;
           try {
             manifestResponse = await fetch(manifestUrl);
             if (!manifestResponse.ok) {
@@ -3377,7 +1614,7 @@ const handleHostApiMessage = async (
             }
           } catch (error) {
             console.error('[HOST API] Error loading manifest:', error);
-            trackSendResponse({
+            sendResponse({
               error: true,
               error_message: `Не удалось загрузить настройки плагина ${currentPlugin}: ${(error as Error).message}`
             });
@@ -3387,10 +1624,9 @@ const handleHostApiMessage = async (
           const manifest = await manifestResponse.json();
           const aiModels = manifest.ai_models || {};
 
-          // Определяем реальную модель на основе алиаса
           const actualModel = aiModels[modelAlias];
           if (!actualModel) {
-            trackSendResponse({
+            sendResponse({
               error: true,
               error_message: `Модель с алиасом '${modelAlias}' не найдена в манифесте плагина`
             });
@@ -3399,32 +1635,30 @@ const handleHostApiMessage = async (
 
           console.log('[HOST API] Using model:', actualModel, 'for alias:', modelAlias);
 
-          // Получаем API ключ для модели
           const apiKey = await getApiKeyForModel(actualModel);
           if (!apiKey) {
-            trackSendResponse({
+            sendResponse({
               error: true,
               error_message: `API ключ для модели ${actualModel} не найден`
             });
             return true;
           }
 
-          // Выполняем запрос к AI API
           try {
             const aiResponse = await callAiModel(actualModel, apiKey, options.prompt || '');
-            trackSendResponse({
+            sendResponse({
               response: aiResponse
             });
           } catch (aiError) {
             console.error('[HOST API] AI API error:', aiError);
-            trackSendResponse({
+            sendResponse({
               error: true,
               error_message: `Ошибка вызова AI API: ${(aiError as Error).message}`
             });
           }
         } catch (error) {
           console.error('[HOST API] llm_call error:', error);
-          trackSendResponse({
+          sendResponse({
             error: true,
             error_message: (error as Error).message
           });
@@ -3442,11 +1676,10 @@ const handleHostApiMessage = async (
 
           console.log('[HOST API] Get setting requested:', { settingName, pluginId });
 
-          // Загружаем manifest плагина для получения настроек
           const currentPlugin = pluginId || 'ozon-analyzer';
           const manifestUrl = chrome.runtime.getURL(`public/plugins/${currentPlugin}/manifest.json`);
 
-          let manifestResponse = null;
+          let manifestResponse;
           try {
             manifestResponse = await fetch(manifestUrl);
             if (!manifestResponse.ok) {
@@ -3454,7 +1687,7 @@ const handleHostApiMessage = async (
             }
           } catch (error) {
             console.error('[HOST API] Error loading manifest:', error);
-            trackSendResponse({
+            sendResponse({
               error: true,
               error_message: `Не удалось загрузить настройки плагина ${currentPlugin}: ${(error as Error).message}`
             });
@@ -3464,21 +1697,19 @@ const handleHostApiMessage = async (
           const manifest = await manifestResponse.json();
           const settings = manifest.settings || {};
 
-          // Получаем значение настройки
           let settingValue = settings[settingName];
 
           if (settingValue === undefined) {
-            // Если настройка не найдена, используем значение по умолчанию
             settingValue = defaultValue;
             console.log(`[HOST API] Setting '${settingName}' not found, using default:`, defaultValue);
           }
 
           console.log(`[HOST API] Returning setting '${settingName}':`, settingValue);
-          trackSendResponse({ value: settingValue });
+          sendResponse({ value: settingValue });
 
         } catch (error) {
           console.error('[HOST API] get_setting error:', error);
-          trackSendResponse({
+          sendResponse({
             error: true,
             error_message: (error as Error).message
           });
@@ -3486,417 +1717,14 @@ const handleHostApiMessage = async (
         break;
       }
       default:
-        trackSendResponse({ error: `Unknown command: ${message.command}` });
+        sendResponse({ error: `Unknown command: ${message.command}` });
     }
   } catch (error: unknown) {
-    trackSendResponse({ error: (error as Error).message });
+    sendResponse({ error: (error as Error).message });
   }
 
-  // Возвращаем true для поддержки асинхронных ответов
   return true;
 };
-
-// === OFFSCREEN DELEGATION RESPONSE HANDLER ===
-
-// Обработчик сообщений от Offscreen Document
-chrome.runtime.onMessage.addListener(
-  async (message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => {
-   // Проверяем, что сообщение исходит от нашего offscreen документа
-    if (sender.url?.includes('offscreen.html')) {
-      console.log('[background][OFFSCREEN RESPONSE] Message from offscreen received:', message);
-
-      if (typeof message === 'object' && message !== null && 'type' in message) {
-        const msg = message as ExtensionMessage;
-
-        if (msg.type === 'HTML_ASSEMBLED') {
-            // ЗАЩИТА ОТ DUPLICATE PROCESSING ДЛЯ HTML_ASSEMBLED
-            const transferId = msg.transferId;
-
-            // Проверка валидности входных данных
-            if (!transferId || typeof transferId !== 'string') {
-              console.error('[background][OFFSCREEN RESPONSE] ❌ Missing or invalid transferId in HTML_ASSEMBLED message');
-              return true;
-            }
-
-           // ПРОВЕРКА НА DUPLICATE PROCESSING
-           const duplicateKey = `html_assembled_processed_${transferId}`;
-           if ((globalThis as any)[duplicateKey]) {
-             console.warn(`[background][OFFSCREEN RESPONSE] ⚠️ DUPLICATE HTML_ASSEMBLED detected for transfer ${transferId} - ignoring`);
-             return true;
-           }
-
-           // УСТАНОВКА ФЛАГА ОБРАБОТКИ
-           (globalThis as any)[duplicateKey] = {
-             timestamp: Date.now(),
-             processed: true
-           };
-
-           console.log(`[background][OFFSCREEN RESPONSE] HTML_ASSEMBLED received for transfer ${transferId}`);
-           console.log(`[background][OFFSCREEN RESPONSE] 🔍 Processing HTML_ASSEMBLED for transfer ${transferId} (duplicate protection enabled)`);
-
-           // ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА: Проверка на уже завершенные transfers
-           if ((globalThis as any).completedTransfers?.has?.(transferId)) {
-             console.warn(`[background][OFFSCREEN RESPONSE] ⚠️ Transfer ${transferId} already completed - possible duplicate processing`);
-             // Все равно продолжаем, но логируем
-           }
-
-          // === МНОГОУРОВНЕВАЯ ПРОВЕРКА TRANSFER'А С ВОССТАНОВЛЕНИЕМ ===
-          const { found, transfer, recoveryAttempted, diagnostics } = await multiLayerTransferCheck(transferId);
-
-          if (!found || !transfer) {
-            console.error(`[background][OFFSCREEN RESPONSE] ❌ Transfer ${transferId} not found in any storage layer`);
-            console.error(`[background][OFFSCREEN RESPONSE] Multi-layer check diagnostics:`, diagnostics);
-
-            // === FALLBACK МЕХАНИЗМ ДЛЯ ПОЛНОСТЬЮ ПОТЕРЯННЫХ TRANSFER'ОВ ===
-            console.log(`[background][OFFSCREEN RESPONSE] 🔄 Attempting fallback recovery for HTML_ASSEMBLED`);
-
-            const fallbackResult = await fallbackTransferRecoveryForAssembled(msg);
-            if (fallbackResult) {
-              console.log(`[background][OFFSCREEN RESPONSE] ✅ Fallback recovery successful for ${transferId}`);
-              return true;
-            } else {
-              console.error(`[background][OFFSCREEN RESPONSE] ❌ Fallback recovery failed for ${transferId}`);
-              msg.data = {
-                error: 'Transfer not found and recovery failed',
-                transferId,
-                diagnostics,
-                timestamp: Date.now()
-              };
-              return true;
-            }
-          }
-
-          if (recoveryAttempted) {
-            console.log(`[background][OFFSCREEN RESPONSE] ⚠️ Transfer ${transferId} recovered using ${diagnostics.source} method`);
-          } else {
-            console.log(`[background][OFFSCREEN RESPONSE] ✅ Transfer ${transferId} found in primary storage`);
-          }
-
-          // Обновляем время последнего доступа
-          transfer.lastAccessed = Date.now();
-
-          // Детальная диагностика состояния transfer'а
-          const { isValid } = diagnoseTransferState(transferId);
-          if (!isValid) {
-            console.error(`[background][OFFSCREEN RESPONSE] ❌ Transfer ${transferId} has invalid state`);
-            msg.data = {
-              error: 'Transfer has invalid state',
-              transferId,
-              diagnostics: diagnoseTransferState(transferId).diagnostics
-            };
-            return true;
-          }
-
-          console.log(`[background][OFFSCREEN RESPONSE] ✅ Transfer ${transferId} validation passed, proceeding with EXECUTE_WORKFLOW`);
-
-          // УСТАНОВИТЬ ФЛАГ ЗАВЕРШЕНИЯ TRANSFER'А - ЭТО КЛОЮЧЕВОЕ ИСПРАВЛЕНИЕ
-          const setTransferCompleted = (globalThis as any)[`setTransferCompleted_${transferId}`];
-          if (setTransferCompleted) {
-            setTransferCompleted(true);
-            console.log(`[background][OFFSCREEN RESPONSE] ✅ Set transferCompleted flag for ${transferId}`);
-          } else {
-            console.warn(`[background][OFFSCREEN RESPONSE] ⚠️ setTransferCompleted function not found for transfer ${transferId}`);
-            // Создаем функцию на случай, если она была потеряна
-            (globalThis as any)[`setTransferCompleted_${transferId}`] = (completed: boolean) => {
-              console.log(`[background][OFFSCREEN RESPONSE] Emergency setTransferCompleted called for ${transferId}:`, completed);
-            };
-          }
-
-          // Объявить executeMessage заранее для корректного доступа
-          let executeMessage: any = null;
-
-          // Автоматически отправить EXECUTE_WORKFLOW после сборки HTML
-          if (msg.pluginId && typeof msg.pluginId === 'string' && msg.pageKey && typeof msg.pageKey === 'string') {
-            executeMessage = {
-              type: 'EXECUTE_WORKFLOW',
-              pluginId: msg.pluginId,
-              pageKey: msg.pageKey,
-              requestId: msg.requestId || transferId,
-              transferId: transferId,
-              useChunks: true,
-              timestamp: Date.now()
-            };
-
-            try {
-              console.log('[background][OFFSCREEN RESPONSE] 🚀 Sending EXECUTE_WORKFLOW to offscreen...');
-              await chrome.runtime.sendMessage(executeMessage);
-              console.log('[background][OFFSCREEN RESPONSE] ✅ EXECUTE_WORKFLOW sent successfully');
-            } catch (sendError) {
-              console.error('[background][OFFSCREEN RESPONSE] ❌ Failed to send EXECUTE_WORKFLOW:', sendError);
-              msg.data = {
-                error: `Failed to execute workflow: ${sendError.message}`,
-                transferId,
-                timestamp: Date.now()
-              };
-            }
-          } else {
-            console.warn(`[background][OFFSCREEN RESPONSE] ⚠️ Missing pluginId or pageKey in HTML_ASSEMBLED message`);
-          }
-
-          // ДОБАВИТЬ SEQUENCE NUMBERING ДЛЯ ASSEMBLED ДАННЫХ
-          const sequenceNumber = (globalThis as any).assembledSequenceCounter || 0;
-          (globalThis as any).assembledSequenceCounter = sequenceNumber + 1;
-
-          console.log(`[background][OFFSCREEN RESPONSE] 📊 Assembled data sequence number: ${sequenceNumber} for transfer ${transferId}`);
-
-          // ДОБАВИТЬ МЕТАДАННЫЕ О ПОСЛЕДОВАТЕЛЬНОСТИ К СООБЩЕНИЮ
-          if (executeMessage) {
-            executeMessage.sequenceNumber = sequenceNumber;
-            executeMessage.totalAssembled = (globalThis as any).assembledSequenceCounter;
-          }
-
-          // УЛУЧШЕННАЯ ОЧИСТКА С ЗАЩИТОЙ ОТ DUPLICATE
-          console.log(`[background][OFFSCREEN RESPONSE] 🧹 Starting comprehensive cleanup for transfer ${transferId}`);
-
-          if (activeTransfers.has(transferId)) {
-            activeTransfers.delete(transferId);
-            console.log(`[background][OFFSCREEN RESPONSE] ✅ Transfer ${transferId} cleaned up from active storage`);
-          } else {
-            console.log(`[background][OFFSCREEN RESPONSE] ⚠️ Transfer ${transferId} was already cleaned up`);
-          }
-
-          // Очистить функцию установки флага после удаления transfer'а
-          if ((globalThis as any)[`setTransferCompleted_${transferId}`]) {
-            delete (globalThis as any)[`setTransferCompleted_${transferId}`];
-            console.log(`[background][OFFSCREEN RESPONSE] ✅ Transfer completion function cleaned up for ${transferId}`);
-          }
-
-          // ОЧИСТИТЬ ФЛАГ ЗАЩИТЫ ОТ DUPLICATE ПОСЛЕ ЗАДЕРЖКИ
-          // Это предотвращает блокировку в случае ошибок, но сохраняет защиту от настоящих дубликатов
-          setTimeout(() => {
-            const duplicateKey = `html_assembled_processed_${transferId}`;
-            if ((globalThis as any)[duplicateKey]) {
-              const age = Date.now() - (globalThis as any)[duplicateKey].timestamp;
-              if (age > 30000) { // Очищать через 30 секунд
-                delete (globalThis as any)[duplicateKey];
-                console.log(`[background][OFFSCREEN RESPONSE] 🧹 Duplicate protection flag cleaned up for ${transferId} (${age}ms old)`);
-              } else {
-                console.log(`[background][OFFSCREEN RESPONSE] ⏳ Keeping duplicate protection flag for ${transferId} (${age}ms old)`);
-              }
-            }
-          }, 30000);
-
-          // ДОПОЛНИТЕЛЬНОЕ ЛОГИРОВАНИЕ ДЛЯ ОТСЛЕЖИВАНИЯ ПОСЛЕДОВАТЕЛЬНОСТИ
-          console.log(`[background][OFFSCREEN RESPONSE] 📈 Processing summary for transfer ${transferId}:`, {
-            sequenceNumber,
-            totalProcessed: (globalThis as any).assembledSequenceCounter,
-            timestamp: Date.now(),
-            transferCleaned: !activeTransfers.has(transferId)
-          });
-
-          return true;
-
-        } else if (msg.type === 'WORKFLOW_LOG') {
-           // Ретрансмировать логи от offscreen в UI
-           console.log('[background][OFFSCREEN RESPONSE] Relaying workflow log:', msg);
-
-           // Проверка валидности входных данных
-           if (!msg.pluginId || typeof msg.pluginId !== 'string') {
-             console.error('[background][OFFSCREEN RESPONSE] WORKFLOW_LOG: Missing or invalid pluginId');
-             return true;
-           }
-
-           if (!msg.message || typeof msg.message !== 'string') {
-             console.error('[background][OFFSCREEN RESPONSE] WORKFLOW_LOG: Missing or invalid message');
-             return true;
-           }
-
-           chrome.runtime.sendMessage({
-             type: 'LOG_EVENT',
-             pluginId: msg.pluginId,
-             message: msg.message,
-             level: msg.level || 'info',
-             stepId: msg.stepId,
-             logData: msg.logData,
-             pageKey: msg.pageKey
-           });
-           return true;
-
-        } else if (msg.type === 'WORKFLOW_RESULT') {
-          // Ретрансмировать результаты воркфлоу в UI
-          console.log('[background][OFFSCREEN RESPONSE] Relaying workflow result:', msg);
-
-          // Проверка валидности входных данных
-          if (!msg.pluginId || typeof msg.pluginId !== 'string') {
-            console.error('[background][OFFSCREEN RESPONSE] WORKFLOW_RESULT: Missing or invalid pluginId');
-            return true;
-          }
-
-          if (!msg.pageKey || typeof msg.pageKey !== 'string') {
-            console.error('[background][OFFSCREEN RESPONSE] WORKFLOW_RESULT: Missing or invalid pageKey');
-            return true;
-          }
-
-          const resultMessage: ChatMessage = {
-            role: 'plugin',
-            content: msg.data
-              ? `✅ Результат воркфлоу:\n\`\`\`json\n${JSON.stringify(msg.data, null, 2)}\n\`\`\``
-              : '✅ Воркфлоу выполнен успешно',
-            timestamp: Date.now()
-          };
-
-          try {
-            await pluginChatApi.saveMessage(msg.pluginId, getPageKey(msg.pageKey), resultMessage);
-            broadcastChatUpdate(msg.pluginId, getPageKey(msg.pageKey));
-            console.log('[background][OFFSCREEN RESPONSE] Workflow result saved to chat');
-          } catch (saveError) {
-            console.error('[background][OFFSCREEN RESPONSE] Failed to save result to chat:', saveError);
-          }
-
-          // Очистить transfer после успешного завершения WORKFLOW_RESULT
-          if (msg.transferId && activeTransfers.has(msg.transferId)) {
-            console.log('[background][OFFSCREEN RESPONSE] Cleaning up transfer after workflow result:', msg.transferId);
-            activeTransfers.delete(msg.transferId);
-          }
-
-          // Также ретрансмировать результат через стандартное сообщение
-          chrome.runtime.sendMessage({
-            type: 'WORKFLOW_COMPLETED',
-            pluginId: msg.pluginId,
-            result: msg.data,
-            requestId: msg.requestId
-          });
-
-          return true;
-       } else if (msg.type === 'WORKFLOW_ERROR') {
-         // Ретрансмировать ошибки воркфлоу в UI
-         console.error('[background][OFFSCREEN RESPONSE] Workflow error received:', msg);
-
-         // Проверка валидности входных данных
-         if (!msg.pluginId || typeof msg.pluginId !== 'string') {
-           console.error('[background][OFFSCREEN RESPONSE] WORKFLOW_ERROR: Missing or invalid pluginId');
-           return true;
-         }
-
-         if (!msg.pageKey || typeof msg.pageKey !== 'string') {
-           console.error('[background][OFFSCREEN RESPONSE] WORKFLOW_ERROR: Missing or invalid pageKey');
-           return true;
-         }
-
-         const errorMessage: ChatMessage = {
-           role: 'plugin',
-           content: `❌ Ошибка воркфлоу: ${msg.data || 'Неизвестная ошибка'}`,
-           timestamp: Date.now()
-         };
-
-         try {
-           await pluginChatApi.saveMessage(msg.pluginId, getPageKey(msg.pageKey), errorMessage);
-           broadcastChatUpdate(msg.pluginId, getPageKey(msg.pageKey));
-         } catch (saveError) {
-           console.error('[background][OFFSCREEN RESPONSE] Failed to save error to chat:', saveError);
-         }
-
-         return true;
-       } else if (msg.type === 'HTML_CHUNK_ACK') {
-         // Обработка подтверждения получения чанка от offscreen
-         console.log('[background][CHUNKING] Chunk acknowledgment received:', msg);
-
-         // Проверка валидности входного сообщения
-         if (!msg || typeof msg !== 'object') {
-           console.error('[background][CHUNKING] Invalid HTML_CHUNK_ACK message format');
-           return true;
-         }
-
-         if (!msg.transferId || typeof msg.transferId !== 'string') {
-           console.error('[background][CHUNKING] Missing or invalid transferId in HTML_CHUNK_ACK');
-           return true;
-         }
-
-         if (typeof msg.chunkIndex !== 'number' || msg.chunkIndex < 0) {
-           console.error('[background][CHUNKING] Invalid chunkIndex in HTML_CHUNK_ACK');
-           return true;
-         }
-
-         if (typeof msg.received !== 'boolean') {
-           console.error('[background][CHUNKING] Invalid received flag in HTML_CHUNK_ACK');
-           return true;
-         }
-
-         handleChunkAcknowledgment(msg as HtmlChunkAckMessage);
-         return true;
-
-       } else if (msg.type === 'PYODIDE_MESSAGE') {
-         console.log('[background][PYODIDE_MESSAGE] Adding to queue:', msg.messageId);
-
-         // Проверка валидности входного сообщения
-         if (!msg || typeof msg !== 'object') {
-           console.error('[background][PYODIDE_MESSAGE] Invalid message format');
-           return true;
-         }
-
-         // Проверка обязательных полей
-         if (!msg.pluginId || typeof msg.pluginId !== 'string') {
-           console.error('[background][PYODIDE_MESSAGE] Missing or invalid pluginId');
-           return true;
-         }
-
-         if (!msg.pageKey || typeof msg.pageKey !== 'string') {
-           console.error('[background][PYODIDE_MESSAGE] Missing or invalid pageKey');
-           return true;
-         }
-
-         if (!msg.message || typeof msg.message !== 'object') {
-           console.error('[background][PYODIDE_MESSAGE] Missing or invalid message');
-           return true;
-         }
-
-         // Добавляем сообщение в очередь вместо прямой обработки
-         pyodideMessageQueue.push(msg);
-
-         // Запускаем обработку очереди
-         processPyodideMessageQueue();
-
-         return true;
-
-       } else if (msg.type === 'PYODIDE_MESSAGE_SERVICE_WORKER') {
-         // Ретрансмировать PYODIDE_MESSAGE в UI (в Side Panel)
-         console.log('[background][PYODIDE_SERVICE_WORKER] PYODIDE_MESSAGE received from offscreen:', msg);
-
-         // Проверка валидности входных данных
-         if (!msg.pluginId || typeof msg.pluginId !== 'string') {
-           console.error('[background][PYODIDE_SERVICE_WORKER] Missing or invalid pluginId');
-           return true;
-         }
-
-         if (!msg.pageKey || typeof msg.pageKey !== 'string') {
-           console.error('[background][PYODIDE_SERVICE_WORKER] Missing or invalid pageKey');
-           return true;
-         }
-
-         if (msg.data === undefined || msg.data === null) {
-           console.error('[background][PYODIDE_SERVICE_WORKER] Missing data');
-           return true;
-         }
-
-         try {
-           // Сохраняем сообщение как плагиновый чат
-           const pyodideMessage: ChatMessage = {
-             role: 'plugin',
-             content: String(msg.data),
-             timestamp: msg.timestamp || Date.now()
-           };
-
-           await pluginChatApi.saveMessage(msg.pluginId, getPageKey(msg.pageKey), pyodideMessage);
-           broadcastChatUpdate(msg.pluginId, getPageKey(msg.pageKey));
-
-           console.log('[background][PYODIDE_SERVICE_WORKER] PYODIDE_MESSAGE relayed to side panel:', {
-             pluginId: msg.pluginId,
-             pageKey: msg.pageKey,
-             messageLength: pyodideMessage.content?.length
-           });
-
-           return true;
-         } catch (saveError) {
-           console.error('[background][PYODIDE_SERVICE_WORKER] Failed to save PYODIDE_MESSAGE to chat:', saveError);
-           return true;
-         }
-       }
-     }
-   }
-
-   return false; // Не блокировать другие обработчики
- },
-);
 
 const findTargetTab = async (): Promise<chrome.tabs.Tab> => {
   const allTabsInWindow = await chrome.tabs.query({ currentWindow: true });
@@ -3913,7 +1741,6 @@ const findTargetTab = async (): Promise<chrome.tabs.Tab> => {
   return targetTab;
 };
 
-// Обработчик прямого тестирования Pyodide
 const handleTestPyodideDirect = async (message: ExtensionMessage): Promise<{
   success: boolean;
   result?: unknown;
@@ -3926,19 +1753,34 @@ const handleTestPyodideDirect = async (message: ExtensionMessage): Promise<{
 
   console.log('[TEST_PYODIDE_DIRECT] Chrome version:', chromeVersion);
 
-  // Проверяем полную информацию о Pyodide
   try {
     console.log('[TEST_PYODIDE_DIRECT] Checking Pyodide availability...');
 
-    // Для Chrome >= 109 используем offscreen document
     if (offscreenSupported()) {
       console.log('[TEST_PYODIDE_DIRECT] Using offscreen document execution');
 
       try {
-        // Убеждаемся что offscreen document существует
-        await ensureOffscreenDocument();
+        try {
+          const offscreenResult = await ensureOffscreenDocument();
+          if (!offscreenResult) {
+            console.log('[TEST_PYODIDE_DIRECT][ERROR] Failed to ensure offscreen document');
+            return {
+              success: false,
+              error: 'Offscreen document initialization failed',
+              timestamp: Date.now(),
+              chromeVersion: chromeVersion
+            };
+          }
+        } catch (error) {
+          console.error('[TEST_PYODIDE_DIRECT][ERROR] Offscreen document error:', error);
+          return {
+            success: false,
+            error: 'Offscreen document creation failed',
+            timestamp: Date.now(),
+            chromeVersion: chromeVersion
+          };
+        }
 
-        // Отправляем запрос в offscreen document
         const testRequest = {
           type: 'TEST_PYODIDE_DIRECT_EXEC',
           pythonCode: message.pythonCode || 'print("Hello from Pyodide!")',
@@ -3968,7 +1810,6 @@ const handleTestPyodideDirect = async (message: ExtensionMessage): Promise<{
       }
 
     } else {
-      // Для старых версий Chrome (<109) - fallback mode
       console.log('[TEST_PYODIDE_DIRECT] Chrome < 109 detected, using fallback mode');
 
       return {
@@ -3997,146 +1838,347 @@ const handleTestPyodideDirect = async (message: ExtensionMessage): Promise<{
   }
 };
 
-// === Port API для устойчивого обмена с сайдпанелью ===
-chrome.runtime.onConnect.addListener(port => {
-  console.log('[background] Port connected:', port.name);
+// DEPRECATED: Function to send chunks sequentially - replaced by direct data exchange
+/*
+async function sendChunksSequentially(transferId: string): Promise<void> {
+  const transfer = activeTransfers.get(transferId);
+  if (!transfer) {
+    console.error('[background][CHUNKING] Transfer not found:', transferId);
+    return;
+  }
 
-  port.onMessage.addListener(async msg => {
-    if (msg.type === 'GET_PLUGINS') {
-      try {
-        const plugins = await getAvailablePlugins();
-        const allSettings = await pluginSettingsStorage.get();
-        const pluginsWithSettings = await Promise.all(
-          plugins.map(async plugin => ({
-            ...plugin,
-            settings: allSettings[plugin.id] || { enabled: true, autorun: false },
-          })),
-        );
-        port.postMessage({ type: 'PLUGINS_RESULT', plugins: pluginsWithSettings });
-      } catch (error) {
-        port.postMessage({ type: 'PLUGINS_ERROR', error: (error as Error).message });
+  // Дополнительные проверки на валидность transfer состояния
+  if (!Array.isArray(transfer.chunks) || transfer.chunks.length === 0) {
+    console.error('[background][CHUNKING] Invalid transfer chunks for:', transferId);
+    activeTransfers.delete(transferId); // Очистить невалидный transfer
+    return;
+  }
+
+  console.log(`[background][CHUNKING] Starting to send ${transfer.chunks.length} chunks (0-${transfer.chunks.length - 1})`);
+
+  // Флаг для остановки передачи при получении HTML_ASSEMBLED
+  let transferCompleted = false;
+
+  // Храним функцию для обновления флага
+  const setTransferCompleted = (completed: boolean) => {
+    console.log(`[background][CHUNKING] Transfer ${transferId} completion status set to:`, completed);
+    transferCompleted = completed;
+  };
+
+  // Export the setter to global scope for HTML_ASSEMBLED handler
+  (globalThis as any)[`setTransferCompleted_${transferId}`] = setTransferCompleted;
+*/
+
+// Функция для обработки сообщений через порт (аналогично основному message handler)
+async function handleMessage(message: any, sender: chrome.runtime.MessageSender): Promise<any> {
+  console.log('[background][PORT] Processing message:', message);
+
+  // Обработка RUN_WORKFLOW сообщений
+  if (message.type === 'RUN_WORKFLOW') {
+    console.log('[background][PORT][RUN_WORKFLOW] ===== STARTING RUN_WORKFLOW HANDLER =====');
+    console.log('[background][PORT][RUN_WORKFLOW] Plugin ID:', message.pluginId);
+
+    try {
+      // Проверка обязательных полей
+      if (!message.pluginId) {
+        throw new Error('Отсутствует обязательное поле: pluginId');
       }
+
+      // Получить активную вкладку пользователя
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const activeTab = tabs[0];
+
+      if (!activeTab || !activeTab.id) {
+        throw new Error('Не найдена активная вкладка');
+      }
+
+      // Определить pageKey из URL активной вкладки
+      const pageKey = getPageKey(activeTab.url || '');
+      console.log('[background][PORT][RUN_WORKFLOW] Generated pageKey:', pageKey);
+
+      // Извлечь pageHTML
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: activeTab.id },
+        func: () => document.documentElement.outerHTML
+      });
+
+      if (!results || !results[0] || !results[0].result || typeof results[0].result !== 'string') {
+        throw new Error('Не удалось получить содержимое страницы');
+      }
+
+      const pageHtml = results[0].result as string;
+      console.log('[background][PORT][RUN_WORKFLOW] ✓ HTML extracted:', pageHtml.length, 'chars');
+
+      // Проверить настройки плагина
+      const settings = await getPluginSettings(message.pluginId);
+      if (!settings.enabled) {
+        throw new Error('Плагин отключен');
+      }
+
+      // ЧИТАТЬ НАСТРОЙКУ htmlTransmissionMode ИЗ STORAGE
+      let htmlTransmissionMode = 'chunks';
+      try {
+        const allSettings = await pluginSettingsStorage.get();
+        const pluginSettings = allSettings[message.pluginId] || {};
+        htmlTransmissionMode = pluginSettings.htmlTransmissionMode || 'chunks';
+      } catch (settingsError) {
+        console.warn('[background][PORT][RUN_WORKFLOW] Failed to read htmlTransmissionMode:', settingsError);
+      }
+
+      // Обеспечить наличие Offscreen Document
+      if (!offscreenSupported()) {
+        const fallbackMessage: any = {
+          type: 'EXECUTE_WORKFLOW',
+          pluginId: message.pluginId,
+          pageKey: pageKey,
+          data: { pageHtml, pageKey, pluginId: message.pluginId }
+        };
+        await handleLegacyChrome(fallbackMessage);
+        return { success: true };
+      }
+
+      try {
+        const offscreenResult = await ensureOffscreenDocument();
+        if (!offscreenResult) {
+          return { success: false, error: 'Offscreen document initialization failed' };
+        }
+      } catch (error) {
+        return { success: false, error: 'Offscreen document creation failed' };
+      }
+
+      // ВЫПОЛНИТЬ ПЕРЕДАЧУ В ЗАВИСИМОСТИ ОТ НАСТРОЙКИ
+      const requestId = message.requestId || `workflow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const transferId = `${requestId}_html_${Date.now()}`;
+
+      if (htmlTransmissionMode === 'direct') {
+        await sendHtmlDirectly(message.pluginId, pageKey, pageHtml, requestId, transferId);
+      } else {
+        const chunkingResult = createChunks(pageHtml, CHUNK_SIZE);
+        const transferState = {
+          chunks: chunkingResult.chunks,
+          received: new Set<number>(),
+          totalChunks: chunkingResult.totalChunks,
+          metadata: {
+            pluginId: message.pluginId,
+            pageKey: pageKey,
+            requestId: requestId,
+            totalSize: chunkingResult.totalSize,
+            timestamp: Date.now()
+          },
+          resolve: () => {
+            console.log(`[PORT][CHUNKING] Transfer ${transferId} completed successfully`);
+            activeTransfers.delete(transferId);
+          },
+          reject: (error: any) => {
+            console.error(`[PORT][CHUNKING] Transfer ${transferId} failed:`, error);
+            activeTransfers.delete(transferId);
+          },
+          timeout: 0,
+          createdAt: Date.now(),
+          lastAccessed: Date.now()
+        };
+
+        activeTransfers.set(transferId, transferState);
+        await sendChunksToOffscreen(transferId, chunkingResult.chunks, transferState.metadata);
+      }
+
+      console.log('[background][PORT][RUN_WORKFLOW] ===== RUN_WORKFLOW HANDLER COMPLETED =====');
+      return { success: true };
+
+    } catch (error) {
+      console.error('[background][PORT][RUN_WORKFLOW] ❌ Error:', error);
+      return { error: (error as Error).message };
     }
-    // ... другие типы сообщений по аналогии
+  }
+
+  // Обработка других типов сообщений
+  if (message.type === 'UPDATE_PLUGIN_SETTING' &&
+      message.pluginId &&
+      message.setting !== undefined &&
+      message.value !== undefined) {
+    try {
+      await updatePluginSetting(message.pluginId, message.setting, message.value);
+      return { success: true };
+    } catch (error: unknown) {
+      return { error: (error as Error).message };
+    }
+  }
+
+  if (message.type === 'GET_PLUGIN_SETTINGS') {
+    try {
+      const settings = await pluginSettingsStorage.get();
+      return settings;
+    } catch (error: unknown) {
+      return { error: (error as Error).message };
+    }
+  }
+
+  // Обработка HOST API сообщений
+  if (message.command) {
+    // Используем существующую функцию handleHostApiMessage, но адаптируем для возврата результата
+    return new Promise((resolve) => {
+      handleHostApiMessage(message, resolve);
+    });
+  }
+
+  // Обработка TEST_PYODIDE_DIRECT
+  if (message.type === 'TEST_PYODIDE_DIRECT') {
+    return await handleTestPyodideDirect(message);
+  }
+
+  // Обработка GET_PLUGINS сообщений через порт
+  if (message.type === 'GET_PLUGINS') {
+    console.log('[background][PORT] Processing GET_PLUGINS request via port');
+    console.log('[background][PORT][GET_PLUGINS] Request received:', {
+      type: message.type,
+      requestId: message.requestId,
+      timestamp: new Date().toISOString()
+    });
+
+    try {
+      console.log('[background][PORT][GET_PLUGINS] Starting async plugin retrieval...');
+      const plugins = await getAvailablePlugins();
+      console.log('[background][PORT][GET_PLUGINS] Retrieved plugins:', plugins.length);
+      console.log('[background][PORT][GET_PLUGINS] Plugin details:', plugins.map(p => ({ id: p.id, name: p.name })));
+
+      const response = {
+        type: 'GET_PLUGINS_RESPONSE',
+        plugins: plugins,
+        requestId: message.requestId,
+        timestamp: new Date().toISOString()
+      };
+
+      console.log('[background][PORT][GET_PLUGINS] ✅ Sending response via port');
+      console.log('[background][PORT][GET_PLUGINS] Response payload:', {
+        type: response.type,
+        pluginsCount: response.plugins.length,
+        requestId: response.requestId,
+        hasPlugins: !!response.plugins
+      });
+
+      return response;
+
+    } catch (error: unknown) {
+      console.error('[background][PORT][GET_PLUGINS] ❌ Error getting plugins:', error);
+      const errorResponse = {
+        type: 'GET_PLUGINS_RESPONSE',
+        error: (error as Error).message,
+        requestId: message.requestId,
+        timestamp: new Date().toISOString()
+      };
+
+      console.log('[background][PORT][GET_PLUGINS] ❌ Sending error response via port');
+      return errorResponse;
+    }
+  }
+
+  console.log('[background][PORT] Unknown message type:', message.type);
+  return { error: 'Unknown message type' };
+}
+
+// Добавить chrome.runtime.onConnect обработчик
+chrome.runtime.onConnect.addListener((port: chrome.runtime.Port) => {
+  const connectTime = Date.now();
+  console.log(`[background][PORT] 🔗 Port connected: "${port.name}" at ${new Date(connectTime).toISOString()}`);
+  console.log(`[background][PORT] Port sender:`, port.sender);
+
+  // Обработчик отключения порта
+  port.onDisconnect.addListener(() => {
+    const disconnectTime = Date.now();
+    const lifetime = disconnectTime - connectTime;
+    console.log(`[background][PORT] ❌ Port disconnected: "${port.name}" after ${lifetime}ms`);
+    console.log(`[background][PORT] Disconnect time: ${new Date(disconnectTime).toISOString()}`);
+
+    // Проверяем причину отключения
+    if (chrome.runtime.lastError) {
+      console.error(`[background][PORT] Disconnect error:`, chrome.runtime.lastError.message);
+    }
+  });
+
+  // Обработчик сообщений через порт
+  port.onMessage.addListener(async (message, sender) => {
+    const messageTime = Date.now();
+    console.log(`[background][PORT] 📨 Port message received on "${port.name}" at ${new Date(messageTime).toISOString()}`);
+    console.log(`[background][PORT] Message type: ${message?.type || 'unknown'}`);
+
+    try {
+      // === HEARTBEAT: Добавить PING/PONG поддержку для портов ===
+      if (message?.type === 'PING') {
+        const pingReceiveTime = Date.now();
+        console.log(`[background][PORT][HEARTBEAT] 📨 Received PING on port "${port.name}" at ${new Date(pingReceiveTime).toISOString()}`);
+        const pongResponse = { pong: true, timestamp: pingReceiveTime, port: port.name };
+        console.log(`[background][PORT][HEARTBEAT] 📤 Sending PONG response to port "${port.name}":`, pongResponse);
+        port.postMessage(pongResponse);
+        return; // Не продолжаем обработку для PING
+      }
+
+      const result = await handleMessage(message, sender);
+      if (result !== undefined) {
+        const responseTime = Date.now();
+        console.log(`[background][PORT] 📤 Sending response to port "${port.name}" after ${responseTime - messageTime}ms`);
+        port.postMessage(result);
+      } else {
+        console.log(`[background][PORT] No response sent for message type: ${message?.type}`);
+      }
+    } catch (error) {
+      const errorTime = Date.now();
+      console.error(`[background][PORT] 💥 Message processing error after ${errorTime - messageTime}ms:`, error);
+      port.postMessage({ error: (error as Error).message });
+    }
   });
 });
 
-// Обработчик для автозапуска плагинов при загрузке страницы
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'complete' && tab.url && (tab.url.startsWith('http') || tab.url.startsWith('https'))) {
+// Улучшенный Keep-alive механизм для предотвращения выгрузки background скрипта
+function keepAlive() {
+  console.log('[background][KEEP-ALIVE] 🚀 Starting enhanced keep-alive mechanism');
+
+  // Основной keep-alive каждые 20 секунд
+  setInterval(() => {
     try {
-      // Получаем все плагины и их настройки
-      const plugins = await getAvailablePlugins();
-      const allSettings = await pluginSettingsStorage.get();
-
-      console.log('[background] Tab updated, checking plugins for autorun:', tab.url);
-
-      // Проверяем каждый плагин на наличие автозапуска и соответствия URL
-      for (const plugin of plugins) {
-        const settings = allSettings[plugin.id] || { enabled: true, autorun: false };
-
-        // Если плагин включен и настроен на автозапуск
-        if (settings.enabled && settings.autorun) {
-          // Здесь можно добавить проверку host_permissions, если manifest доступен напрямую в plugin
-          // По умолчанию просто запускаем плагин
-          await runPluginIfEnabled(plugin.id);
-        }
-      }
+      chrome.runtime.getPlatformInfo(() => {
+        console.log('[background][KEEP-ALIVE] ✅ Keep-alive ping successful');
+      });
     } catch (error) {
-      console.error('[background] Error in autorun handler:', error);
+      console.error('[background][KEEP-ALIVE] ❌ Keep-alive ping failed:', error);
     }
-  }
+  }, 20000);
+
+  // Дополнительный механизм - слушаем события для поддержания активности
+  chrome.tabs.onActivated.addListener(() => {
+    console.log('[background][KEEP-ALIVE] 📍 Tab activated - keeping alive');
+  });
+
+  chrome.tabs.onUpdated.addListener(() => {
+    console.log('[background][KEEP-ALIVE] 📍 Tab updated - keeping alive');
+  });
+
+  // Слушаем messages для дополнительной активности
+  chrome.runtime.onMessage.addListener((message) => {
+    console.log('[background][KEEP-ALIVE] 📨 Message received - keeping alive');
+    return true; // Важно для async responses
+  });
+}
+keepAlive();
+
+// Глобальный обработчик ошибок
+self.addEventListener('unhandledrejection', (event) => {
+  console.error('[background] Unhandled promise rejection:', event.reason);
+  event.preventDefault();
 });
 
-exampleThemeStorage.get().then(theme => {
-  console.log('[background] Theme loaded:', theme);
-});
-
-// Comprehensive production diagnostics for offscreen API state
-console.log('[background] 🚀 =============================================');
-console.log('[background] 🚀 EXTENSION INITIALIZATION DIAGNOSTIC REPORT');
-console.log('[background] 🚀 =============================================');
-console.log('[background] 📊 System Information:');
-console.log('[background]   - Timestamp:', new Date().toISOString());
-console.log('[background]   - User-Agent:', navigator.userAgent);
-console.log('[background]   - Chrome version:', navigator.userAgent.match(/Chrome\/(\d+)/)?.[1] || 'Unknown');
-console.log('[background]   - Extension ID:', chrome.runtime.id);
-
-// Detailed offscreen API support check
-const isOffscreenSupported = offscreenSupported();
-console.log('[background] 📊 Offscreen API Analysis:');
-console.log('[background]   - Offscreen API supported:', isOffscreenSupported);
-
-if (!isOffscreenSupported) {
-  console.warn('[background] ⚠️ LEGACY CHROME DETECTED (< 109):');
-  console.warn('[background]   - Offscreen API is not available in this Chrome version');
-  console.warn('[background]   - Fallback workflow execution mode will be used');
-  console.warn('[background]   - To enable full functionality, please update Chrome to version 109+');
-  console.warn('[background]   - See: https://developer.chrome.com/docs/extensions/migrating-to-service-workers/');
-  console.warn('[background] ❌ PRODUCTION IMPACT: Pyodide workflows will fail with legacy fallback');
-} else {
-  console.log('[background] ✅ Modern Chrome detected (>= 109)');
-  console.log('[background]   - Full offscreen document workflow available');
-  console.log('[background]   - Pyodide execution via workers expected to work');
-
-  // Additional runtime verification
+// Обработчик клика на кнопку расширения для открытия sidepanel
+chrome.action.onClicked.addListener(async (tab) => {
   try {
-    console.log('[background] 🔍 Runtime Context Verification:');
-    console.log('[background]   - Runtime permissions check...');
-
-    // Test basic offscreen interaction if supported
-    (async () => {
-      try {
-        const hasDocument = await chrome.offscreen.hasDocument();
-        console.log('[background]   - Offscreen document exists on startup:', hasDocument);
-
-        if (!hasDocument) {
-          console.log('[background]   - Creating initial offscreen document...');
-          await ensureOffscreenDocument();
-          console.log('[background]   - Initial offscreen document created successfully');
-        }
-      } catch (initError) {
-        console.error('[background] ❌ Critical: Failed to initialize offscreen document on startup:', initError);
-        console.error('[background]   - This may indicate manifest/permission issues');
-      }
-    })().catch((error) => {
-      console.error('[background] ❌ Async initialization failed:', error);
-    });
-
-  } catch (runtimeError) {
-    console.error('[background] ❌ Runtime verification failed:', runtimeError);
+    console.log('[background] Action button clicked, opening sidepanel...');
+    await chrome.sidePanel.open({ windowId: tab.windowId });
+    console.log('[background] Sidepanel opened successfully');
+  } catch (error) {
+    console.error('[background] Failed to open sidepanel:', error);
   }
-}
-
-console.log('[background] 📈 Available Chrome APIs:', typeof chrome !== 'undefined' ? Object.keys(chrome).filter(key => typeof chrome[key as keyof typeof chrome] === 'object').join(', ') : 'None');
-console.log('[background] 🚀 =============================================');
-
-console.log('[background] Background script fully loaded and ready');
-console.log('[background] Extension ID:', chrome.runtime.id);
-console.log('[background] Available APIs:', {
-  runtime: typeof chrome.runtime,
-  tabs: typeof chrome.tabs,
-  storage: typeof chrome.storage,
-  sidePanel: typeof chrome.sidePanel,
-  scripting: typeof chrome.scripting,
-  offscreen: typeof chrome.offscreen
 });
 
-// Дополнительная диагностика Offscreen API
-console.log('[background][OFFSCREEN DIAGNOSTIC] Detailed Offscreen API analysis:');
-console.log('[background][OFFSCREEN DIAGNOSTIC]   chrome object:', typeof chrome);
-console.log('[background][OFFSCREEN DIAGNOSTIC]   chrome.offscreen:', typeof chrome.offscreen);
-if (chrome.offscreen) {
-  console.log('[background][OFFSCREEN DIAGNOSTIC]   chrome.offscreen properties:', Object.keys(chrome.offscreen));
-  console.log('[background][OFFSCREEN DIAGNOSTIC]   hasDocument:', typeof chrome.offscreen.hasDocument);
-  console.log('[background][OFFSCREEN DIAGNOSTIC]   createDocument:', typeof chrome.offscreen.createDocument);
-} else {
-  console.log('[background][OFFSCREEN DIAGNOSTIC]   chrome.offscreen is undefined!');
-}
-
-// Проверка глобального состояния
-console.log('[background][OFFSCREEN DIAGNOSTIC] Global context info:');
-console.log('[background][OFFSCREEN DIAGNOSTIC]   window:', typeof window);
-console.log('[background][OFFSCREEN DIAGNOSTIC]   self:', typeof self);
-console.log('[background][OFFSCREEN DIAGNOSTIC]   globalThis:', typeof globalThis);
-console.log('[background] Edit chrome-extension/src/background/index.ts and save to reload.');
+// Final initialization message
+console.log('[background] Background script fully initialized and ready for workflow requests');
+console.log('[background] HTML transmission mode selection is now functional');
+console.log('[background] Action onClicked handler registered for sidepanel');
+console.log('[background] Extension ready for use');
