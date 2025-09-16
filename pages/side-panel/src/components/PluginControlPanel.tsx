@@ -178,45 +178,87 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     // Обработка разных форматов ответа с дополнительной диагностикой
     let messagesArray = null;
 
-    if (response && Array.isArray(response.messages)) {
-      // Формат: { messages: [...] }
-      messagesArray = response.messages;
-      console.log('[PluginControlPanel] ✅ Используем формат с messages:', {
+    // Список возможных путей к массиву сообщений в приоритете
+    const messagePaths = [
+      { path: ['messages'], description: 'messages' },
+      { path: ['chat'], description: 'chat' },
+      { path: ['chat', 'messages'], description: 'chat.messages' },
+      { path: ['data', 'messages'], description: 'data.messages' },
+      { path: ['result', 'messages'], description: 'result.messages' },
+      { path: ['items'], description: 'items' },
+      { path: ['history'], description: 'history' },
+      { path: ['logs'], description: 'logs' },
+    ];
+
+    // Функция для извлечения значения по пути
+    const getValueByPath = (obj: any, path: string[]): any => {
+      let current = obj;
+      for (const key of path) {
+        if (current && typeof current === 'object' && key in current) {
+          current = current[key];
+        } else {
+          return undefined;
+        }
+      }
+      return current;
+    };
+
+    // Если response является массивом напрямую
+    if (Array.isArray(response)) {
+      messagesArray = response;
+      console.log('[PluginControlPanel] ✅ Ответ является массивом напрямую:', {
         length: messagesArray.length,
-        firstMessage: messagesArray[0],
-        sampleMessage: messagesArray[0] ? {
+        firstMessage: messagesArray[0] ? {
           id: messagesArray[0].id,
-          content: messagesArray[0].content,
+          content: messagesArray[0].content || messagesArray[0].text,
           role: messagesArray[0].role,
           timestamp: messagesArray[0].timestamp,
         } : 'no messages'
       });
-    } else if (response && Array.isArray(response.chat)) {
-      // Формат: { chat: [...] }
-      messagesArray = response.chat;
-      console.log('[PluginControlPanel] ✅ Используем формат с chat:', {
-        length: messagesArray.length,
-        firstMessage: messagesArray[0]
-      });
-    } else if (response && response.chat && Array.isArray(response.chat.messages)) {
-      // Формат: { chat: { messages: [...] } }
-      messagesArray = response.chat.messages;
-      console.log('[PluginControlPanel] ✅ Используем вложенный формат:', {
-        length: messagesArray.length,
-        firstMessage: messagesArray[0]
-      });
-    } else if (response && response.error) {
+    } else if (response && typeof response === 'object') {
       // Обработка ошибок от background
-      console.error('[PluginControlPanel] ❌ Background вернул ошибку:', response.error);
-      setError(`Ошибка от background: ${response.error}`);
-      setMessages([]);
-      return;
+      if (response.error) {
+        console.error('[PluginControlPanel] ❌ Background вернул ошибку:', response.error);
+        setError(`Ошибка от background: ${response.error}`);
+        setMessages([]);
+        return;
+      }
+
+      // Поиск массива сообщений по возможным путям
+      for (const { path, description } of messagePaths) {
+        const candidate = getValueByPath(response, path);
+        if (Array.isArray(candidate)) {
+          messagesArray = candidate;
+          console.log(`[PluginControlPanel] ✅ Найден массив сообщений по пути '${description}':`, {
+            length: messagesArray.length,
+            firstMessage: messagesArray[0] ? {
+              id: messagesArray[0].id,
+              content: messagesArray[0].content || messagesArray[0].text,
+              role: messagesArray[0].role,
+              timestamp: messagesArray[0].timestamp,
+            } : 'no messages'
+          });
+          break;
+        }
+      }
+
+      // Если не нашли массив, логируем структуру объекта для диагностики
+      if (!messagesArray) {
+        console.warn('[PluginControlPanel] ⚠️ Не найден массив сообщений в объекте ответа:', {
+          responseType: typeof response,
+          responseKeys: Object.keys(response),
+          responseSample: JSON.stringify(response).substring(0, 500),
+          timestamp: new Date().toISOString()
+        });
+        messagesArray = [];
+      }
     } else {
-      console.warn('[PluginControlPanel] ⚠️ Неизвестный формат ответа:', {
+      // Response не является объектом или массивом
+      console.warn('[PluginControlPanel] ⚠️ Ответ имеет неподдерживаемый тип:', {
         response,
         responseType: typeof response,
-        responseKeys: response ? Object.keys(response) : 'no keys',
-        responseStringified: JSON.stringify(response)
+        responseStringified: JSON.stringify(response).substring(0, 200),
+        timestamp: new Date().toISOString()
       });
       messagesArray = [];
     }
