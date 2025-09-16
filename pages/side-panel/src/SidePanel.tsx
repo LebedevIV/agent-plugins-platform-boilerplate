@@ -559,6 +559,36 @@ const SidePanel = () => {
     };
   }, [selectedPlugin]);
 
+  // useEffect для автоматического сброса состояния плагина при смене вкладки
+  useEffect(() => {
+    console.log('[SidePanel] currentTabUrl изменился:', currentTabUrl);
+
+    if (selectedPlugin && currentTabUrl) {
+      const isAllowed = isPluginAllowedOnHost(selectedPlugin);
+      console.log('[SidePanel] Проверка плагина для новой страницы:', {
+        pluginId: selectedPlugin.id,
+        pluginName: selectedPlugin.name,
+        currentTabUrl,
+        isAllowed,
+        hostPermissions: selectedPlugin.manifest?.host_permissions || selectedPlugin.host_permissions
+      });
+
+      if (!isAllowed) {
+        console.log('[SidePanel] Плагин не разрешен для новой страницы, сбрасываем состояние');
+        setSelectedPlugin(null);
+        setShowControlPanel(false);
+        setRunningPlugin(null);
+        setPausedPlugin(null);
+      } else {
+        console.log('[SidePanel] Плагин разрешен для новой страницы, сохраняем состояние');
+      }
+    } else if (!selectedPlugin) {
+      console.log('[SidePanel] Нет выбранного плагина для проверки');
+    } else if (!currentTabUrl) {
+      console.log('[SidePanel] Нет URL для проверки (currentTabUrl is null)');
+    }
+  }, [currentTabUrl, selectedPlugin, isPluginAllowedOnHost]);
+
   return (
     <LocalErrorBoundary>
       {/* AI-First: Основной layout сайдпанели, все визуальные компоненты локальные */}
