@@ -83,11 +83,25 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
 }) => {
   // Состояние для активной вкладки в панели управления
   const [activeTab, setActiveTab] = useState<PanelView>('chat');
+  // Состояние для текущего pageKey с динамическим обновлением
+  const [currentPageKey, setCurrentPageKey] = useState(getPageKey(currentTabUrl));
+
+  // useEffect для обновления pageKey при изменении currentTabUrl
+  useEffect(() => {
+    const newPageKey = getPageKey(currentTabUrl);
+    console.log('[PluginControlPanel] currentTabUrl изменился:', {
+      oldPageKey: currentPageKey,
+      newPageKey,
+      currentTabUrl,
+      timestamp: new Date().toISOString()
+    });
+    setCurrentPageKey(newPageKey);
+  }, [currentTabUrl]);
   // Используем хук для ленивой синхронизации
   const { message, setMessage, isDraftSaved, isDraftLoading, draftError, loadDraft, clearDraft, draftText } =
     useLazyChatSync({
       pluginId: plugin.id,
-      pageKey: getPageKey(currentTabUrl),
+      pageKey: currentPageKey, // <-- Теперь динамический pageKey
       debounceMs: 1000, // 1 секунда задержки
     });
 
@@ -115,7 +129,6 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
 
   // Получаем ключ чата для текущего плагина и страницы
   const pluginId = plugin.id;
-  const pageKey = getPageKey(currentTabUrl);
 
   // Вспомогательная функция для отправки сообщений в background с ожиданием ответа
   const sendMessageToBackgroundAsync = useCallback(async (message: any): Promise<any> => {
@@ -174,6 +187,13 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       responseKeys: response ? Object.keys(response) : 'response is null/undefined',
       timestamp: new Date().toISOString()
     });
+
+    // Обработка случая пустого чата (background возвращает null)
+    if (response === null) {
+      console.log('[PluginControlPanel] ✅ Получен null - чат пустой, устанавливаем пустой массив сообщений');
+      setMessages([]);
+      return;
+    }
 
     // Обработка разных форматов ответа с дополнительной диагностикой
     let messagesArray = null;
@@ -306,7 +326,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
 
     console.log('[PluginControlPanel] ===== НАЧАЛО loadChat =====', {
       pluginId,
-      pageKey,
+      pageKey: currentPageKey,
       currentTabUrl,
       timestamp: new Date().toISOString(),
       isRunning,
@@ -317,7 +337,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       const response = await sendMessageToBackgroundAsync({
         type: 'GET_PLUGIN_CHAT',
         pluginId,
-        pageKey,
+        pageKey: currentPageKey,
       });
 
       console.log('[PluginControlPanel] loadChat - получен ответ от background:', response);
@@ -342,13 +362,13 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     }
 
     console.log('[PluginControlPanel] ===== loadChat ЗАВЕРШЕН =====');
-  }, [pluginId, pageKey, sendMessageToBackgroundAsync, currentTabUrl, isRunning, isPaused, processChatResponse]);
+  }, [pluginId, currentPageKey, sendMessageToBackgroundAsync, currentTabUrl, isRunning, isPaused, processChatResponse]);
 
   // Добавить useEffect для вызова loadChat при монтировании и смене pluginId/pageKey
   useEffect(() => {
     console.log('[PluginControlPanel] useEffect[loadChat] - триггер вызова loadChat', {
       pluginId,
-      pageKey,
+      pageKey: currentPageKey,
       currentTabUrl,
       timestamp: new Date().toISOString()
     });
@@ -359,15 +379,26 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     });
   }, [loadChat]);
 
+  // useEffect для перезагрузки чата при смене pageKey
+  useEffect(() => {
+    console.log('[PluginControlPanel] pageKey изменился, перезагружаем чат и черновик');
+    // Перезагружаем чат для новой страницы
+    loadChat().catch((error) => {
+      console.error('[PluginControlPanel] Ошибка при перезагрузке чата:', error);
+    });
+    // Перезагружаем черновик для новой страницы
+    loadDraft();
+  }, [currentPageKey, loadChat, loadDraft]);
+
   // Событийная синхронизация чата между вкладками и обработка результатов сохранения сообщений
   useEffect(() => {
     console.log('[PluginControlPanel] useEffect[handleChatUpdate] - регистрация слушателя сообщений', {
       pluginId,
-      pageKey,
+      pageKey: currentPageKey,
       timestamp: new Date().toISOString()
     });
 
-    const handleChatUpdate = (event: { type: string; pluginId: string; pageKey: string; messages?: ChatMessage[]; messageId?: string; response?: any }) => {
+    const handleChatUpdate = (event: { type: string; pluginId: string; pageKey: string; messages?: ChatMessage[]; messageId?: string; response?: any; success?: boolean; error?: string; message?: any; timestamp?: number }) => {
       console.log('[PluginControlPanel] ===== handleChatUpdate - получено сообщение =====', {
         type: event?.type,
         pluginId: event?.pluginId,
@@ -379,7 +410,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       });
 
       // Обработка обновлений чата от других компонентов/вкладок
-      if (event?.type === 'PLUGIN_CHAT_UPDATED' && event.pluginId === pluginId && event.pageKey === pageKey) {
+      if (event?.type === 'PLUGIN_CHAT_UPDATED' && event.pluginId === pluginId && event.pageKey === currentPageKey) {
         console.log('[PluginControlPanel] handleChatUpdate - обновление чата получено, запрашиваем актуальные данные');
         // Запрашиваем актуальные данные чата асинхронно
         loadChat().catch((error) => {
@@ -470,7 +501,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       chrome.runtime.onMessage.removeListener(handleChatUpdate);
       chrome.runtime.onMessage.removeListener(handleChatOperationResult);
     };
-  }, [pluginId, pageKey, processChatResponse, sendMessageToBackground, loadChat]);
+  }, [pluginId, currentPageKey, processChatResponse, sendMessageToBackground, loadChat]);
 
   // Восстановление черновика при возврате на вкладку 'Чат'
   useEffect(() => {
@@ -483,7 +514,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   useEffect(() => {
     console.log('[PluginControlPanel] === РЕНДЕР ===', {
       pluginId,
-      pageKey,
+      pageKey: currentPageKey,
       draftText,
       message,
       currentView,
@@ -560,7 +591,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     sendMessageToBackground({
       type: 'SAVE_PLUGIN_CHAT_MESSAGE',
       pluginId,
-      pageKey,
+      pageKey: currentPageKey,
       message: {
         role: 'user',
         content: newMessage.text,
@@ -659,7 +690,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     sendMessageToBackground({
       type: 'DELETE_PLUGIN_CHAT',
       pluginId,
-      pageKey,
+      pageKey: currentPageKey,
     });
 
     // Очищаем локальное состояние сразу
