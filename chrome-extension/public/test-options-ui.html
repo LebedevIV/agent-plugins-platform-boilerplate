@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест UI переключателя настроек</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8fafc;
+            color: #1f2937;
+            height: 100vh;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .header {
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            color: #1f2937;
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: #6b7280;
+            font-size: 16px;
+        }
+
+        .setting-group {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .setting-group h3 {
+            color: #1f2937;
+            font-size: 18px;
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+
+        .setting-item {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 0;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+            flex-shrink: 0;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .toggle-slider {
+            background-color: #2196F3;
+        }
+
+        input:checked + .toggle-slider:before {
+            transform: translateX(26px);
+        }
+
+        .setting-info {
+            flex: 1;
+        }
+
+        .setting-label {
+            font-weight: 500;
+            color: #1f2937;
+            margin-bottom: 4px;
+            display: block;
+        }
+
+        .setting-description {
+            color: #6b7280;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #10b981;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+            z-index: 1000;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification.error {
+            background: #ef4444;
+        }
+
+        .info-panel {
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 20px;
+        }
+
+        .info-panel h4 {
+            color: #0369a1;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+
+        .info-panel p {
+            color: #0c4a6e;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .test-controls {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 20px;
+        }
+
+        .test-controls h4 {
+            color: #374151;
+            margin-bottom: 12px;
+            font-size: 16px;
+        }
+
+        .test-controls button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-right: 8px;
+            font-size: 14px;
+        }
+
+        .test-controls button:hover {
+            background: #2563eb;
+        }
+
+        .test-controls button.secondary {
+            background: #6b7280;
+        }
+
+        .test-controls button.secondary:hover {
+            background: #4b5563;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧪 Тест UI переключателя настроек</h1>
+            <p>Тестирование переключателя режима передачи HTML</p>
+        </div>
+
+        <div class="setting-group">
+            <h3>📄 Передача HTML страниц</h3>
+            <div class="setting-item">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="htmlTransmissionMode">
+                    <span class="toggle-slider"></span>
+                </label>
+                <div class="setting-info">
+                    <span class="setting-label">Отправлять HTML целиком</span>
+                    <span class="setting-description">
+                        Быстрее, но может не работать с очень большими страницами (>50MB).
+                        При отключении HTML будет передаваться частями для стабильности.
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="info-panel">
+            <h4>ℹ️ Текущий режим</h4>
+            <p id="current-mode-display">Загрузка...</p>
+        </div>
+
+        <div class="info-panel">
+            <h4>📊 Сохранённые настройки</h4>
+            <p id="saved-settings-display">Нет сохранённых настроек</p>
+        </div>
+
+        <div class="test-controls">
+            <h4>🎮 Тестовые функции</h4>
+            <button onclick="simulateDirectMode()">Установить режим "direct"</button>
+            <button onclick="simulateChunksMode()">Установить режим "chunks"</button>
+            <button onclick="clearSettings()" class="secondary">Очистить настройки</button>
+            <button onclick="reloadSettings()" class="secondary">Перезагрузить настройки</button>
+        </div>
+    </div>
+
+    <div id="notification" class="notification"></div>
+
+    <script>
+        // Симуляция chrome.storage для тестирования
+        const mockStorage = {
+            data: {},
+            get: async function(keys) {
+                return new Promise((resolve) => {
+                    setTimeout(() => {
+                        const result = {};
+                        if (Array.isArray(keys)) {
+                            keys.forEach(key => {
+                                result[key] = this.data[key];
+                            });
+                        } else if (typeof keys === 'string') {
+                            result[keys] = this.data[keys];
+                        } else if (typeof keys === 'object') {
+                            Object.keys(keys).forEach(key => {
+                                result[key] = this.data[key] !== undefined ? this.data[key] : keys[key];
+                            });
+                        }
+                        resolve(result);
+                    }, 100); // Имитация асинхронности
+                });
+            },
+            set: async function(data) {
+                return new Promise((resolve) => {
+                    setTimeout(() => {
+                        Object.assign(this.data, data);
+                        resolve();
+                    }, 100);
+                });
+            }
+        };
+
+        // Глобальные переменные
+        let currentSettings = {};
+
+        // Показ уведомления
+        function showNotification(message, isError = false) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${isError ? 'error' : ''} show`;
+
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+
+        // Загрузка настроек
+        async function loadSettings() {
+            try {
+                const result = await mockStorage.get(['htmlTransmissionMode']);
+                currentSettings = result;
+
+                const mode = result.htmlTransmissionMode || 'chunks';
+                const checkbox = document.getElementById('htmlTransmissionMode');
+                checkbox.checked = mode === 'direct';
+
+                updateModeDisplay(mode);
+                updateSavedSettingsDisplay();
+                console.log('Настройки загружены:', result);
+            } catch (error) {
+                console.error('Ошибка загрузки настроек:', error);
+                showNotification('Ошибка загрузки настроек', true);
+            }
+        }
+
+        // Сохранение настроек
+        async function saveSettings() {
+            try {
+                const checkbox = document.getElementById('htmlTransmissionMode');
+                const mode = checkbox.checked ? 'direct' : 'chunks';
+
+                await mockStorage.set({
+                    htmlTransmissionMode: mode
+                });
+
+                currentSettings.htmlTransmissionMode = mode;
+                updateModeDisplay(mode);
+                updateSavedSettingsDisplay();
+                showNotification('Настройки сохранены');
+                console.log('Настройки сохранены:', mode);
+            } catch (error) {
+                console.error('Ошибка сохранения настроек:', error);
+                showNotification('Ошибка сохранения настроек', true);
+            }
+        }
+
+        // Обновление отображения текущего режима
+        function updateModeDisplay(mode) {
+            const modeDisplay = document.getElementById('current-mode-display');
+            if (mode === 'direct') {
+                modeDisplay.innerHTML = '<span style="color: #10b981;">●</span> Прямая передача (HTML целиком)';
+            } else {
+                modeDisplay.innerHTML = '<span style="color: #2196f3;">●</span> Передача частями (chunks)';
+            }
+        }
+
+        // Обновление отображения сохранённых настроек
+        function updateSavedSettingsDisplay() {
+            const display = document.getElementById('saved-settings-display');
+            const data = JSON.stringify(mockStorage.data, null, 2);
+            display.textContent = data || 'Нет сохранённых настроек';
+        }
+
+        // Тестовые функции
+        function simulateDirectMode() {
+            document.getElementById('htmlTransmissionMode').checked = true;
+            saveSettings();
+        }
+
+        function simulateChunksMode() {
+            document.getElementById('htmlTransmissionMode').checked = false;
+            saveSettings();
+        }
+
+        async function clearSettings() {
+            mockStorage.data = {};
+            await loadSettings();
+            showNotification('Настройки очищены');
+        }
+
+        async function reloadSettings() {
+            await loadSettings();
+            showNotification('Настройки перезагружены');
+        }
+
+        // Инициализация страницы
+        async function init() {
+            // Загружаем настройки
+            await loadSettings();
+
+            // Добавляем обработчик события для переключателя
+            document.getElementById('htmlTransmissionMode').addEventListener('change', saveSettings);
+
+            console.log('Тестовая страница инициализирована');
+            showNotification('Тестовая страница готова');
+        }
+
+        // Запуск инициализации
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    </script>
+</body>
+</html>

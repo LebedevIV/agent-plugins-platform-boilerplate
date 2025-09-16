@@ -3,6 +3,133 @@
 
 import { ensureOffscreenDocument } from './offscreen-manager';
 import { TransferMetadataManager } from './transfer-metadata-manager';
+import { getPluginSettings } from '../../packages/storage/lib/plugin-settings';
+
+// ===============================================================================
+// GLOBAL SETTINGS TYPES AND FUNCTIONS
+// ===============================================================================
+
+/**
+ * Интерфейс глобальных настроек расширения
+ */
+interface GlobalSettings {
+  htmlTransmissionMode: 'chunks' | 'direct';
+  // Другие глобальные настройки могут быть добавлены здесь
+}
+
+/**
+ * Получает глобальные настройки расширения из chrome.storage.local
+ */
+async function getGlobalSettings(): Promise<GlobalSettings> {
+  try {
+    console.log('[background][GLOBAL_SETTINGS] Reading global settings from chrome.storage.local...');
+    const settings = await chrome.storage.local.get([
+      'htmlTransmissionMode'
+    ]);
+
+    const htmlTransmissionMode = settings.htmlTransmissionMode || 'chunks';
+    console.log(`[background][GLOBAL_SETTINGS] ✅ Successfully loaded global settings: htmlTransmissionMode=${htmlTransmissionMode}`);
+
+    return {
+      htmlTransmissionMode
+    };
+  } catch (error) {
+    console.error('[background][GLOBAL_SETTINGS] ❌ Failed to load global settings from chrome.storage.local:', error);
+    console.warn('[background][GLOBAL_SETTINGS] 🔄 Using fallback: htmlTransmissionMode=chunks');
+    return { htmlTransmissionMode: 'chunks' }; // fallback
+  }
+}
+
+// ===============================================================================
+// HTML TRANSMISSION CONSTANTS - Direct transmission limits and warnings
+// ===============================================================================
+
+const MAX_DIRECT_SIZE = 50 * 1024 * 1024; // 50MB безопасный лимит для прямой передачи
+const WARN_SIZE = 10 * 1024 * 1024; // 10MB - предупреждение о большом размере
+
+// ===============================================================================
+// HTML DIRECT TRANSMISSION - Alternative to chunked transmission
+// ===============================================================================
+
+/**
+ * Прямая передача HTML без разделения на чанки
+ * @param pageHtml HTML содержимое страницы
+ * @param workflowPayload Объект с данными workflow (pluginId, requestId, transferId)
+ */
+async function sendHtmlDirectly(
+  pageHtml: string,
+  workflowPayload: {
+    pluginId: string;
+    requestId: string;
+    transferId: string;
+  }
+): Promise<void> {
+  const htmlSize = pageHtml.length;
+
+  console.log(`[HtmlDirect] 📤 Начинаем прямую передачу HTML (${htmlSize} символов, ${(htmlSize / 1024 / 1024).toFixed(2)}MB)`);
+
+  // Проверка размера HTML
+  if (htmlSize > MAX_DIRECT_SIZE) {
+    const errorMsg = `HTML размер (${(htmlSize / 1024 / 1024).toFixed(2)}MB) превышает безопасный лимит (${MAX_DIRECT_SIZE / 1024 / 1024}MB)`;
+    console.error(`[HtmlDirect] ❌ ${errorMsg}`);
+    throw new Error(errorMsg);
+  }
+
+  if (htmlSize > WARN_SIZE) {
+    console.warn(`[HtmlDirect] ⚠️ Большой HTML размер: ${(htmlSize / 1024 / 1024).toFixed(2)}MB (> ${WARN_SIZE / 1024 / 1024}MB)`);
+  }
+
+  try {
+    // Убеждаемся, что offscreen document доступен
+    const offscreenAvailable = await isOffscreenAvailable();
+    if (!offscreenAvailable) {
+      console.log(`[HtmlDirect] 🔧 Offscreen недоступен, создаем...`);
+      await ensureOffscreenDocument();
+    }
+
+    // Прямая передача в offscreen document
+    console.log(`[HtmlDirect] 📤 Отправляем EXECUTE_WORKFLOW с полным HTML`);
+
+    const sendAttempts = 3;
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= sendAttempts; attempt++) {
+      try {
+        await safeSendMessage({
+          type: 'EXECUTE_WORKFLOW',
+          pluginId: workflowPayload.pluginId,
+          requestId: workflowPayload.requestId,
+          transferId: workflowPayload.transferId,
+          pageKey: `transfer_${workflowPayload.transferId}`,
+          useChunks: false, // Отмечаем, что не используем чанки
+          pageHtml: '', // Пустая строка, так как передаем assembledHtml
+          assembledHtml: pageHtml // Передаем полный HTML напрямую
+        }, 10000); // Увеличенный таймаут для больших данных
+
+        console.log(`[HtmlDirect] ✅ EXECUTE_WORKFLOW отправлен успешно (попытка ${attempt})`);
+        return; // Успех
+
+      } catch (error) {
+        lastError = error as Error;
+        console.warn(`[HtmlDirect] ⚠️ Попытка ${attempt} провалилась:`, error);
+
+        if (attempt < sendAttempts) {
+          // Ждем перед следующей попыткой
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        }
+      }
+    }
+
+    // Все попытки провалились
+    const errorMsg = `Не удалось отправить HTML напрямую после ${sendAttempts} попыток: ${lastError?.message}`;
+    console.error(`[HtmlDirect] ❌ ${errorMsg}`);
+    throw new Error(errorMsg);
+
+  } catch (error) {
+    console.error(`[HtmlDirect] ❌ Ошибка прямой передачи HTML:`, error);
+    throw error; // Пробрасываем ошибку для обработки на уровне выше
+  }
+}
 
 // ===============================================================================
 // TRACK RESPONSE UTILITY - Enhanced response logging
@@ -3087,6 +3214,15 @@ class BackgroundController {
       // Create workflow promise before sending data
       const resultPromise = this.promiseManager.create(requestId, message.pluginId);
 
+      // Читаем глобальные настройки для определения режима передачи HTML
+      console.log(`[Background][HTML_TRANSMISSION] 🔍 Reading global settings from chrome.storage.local...`);
+      const globalSettings = await getGlobalSettings();
+      const useDirectTransmission = globalSettings.htmlTransmissionMode === 'direct';
+
+      console.log(`[Background][HTML_TRANSMISSION] ✅ Global settings loaded: htmlTransmissionMode=${globalSettings.htmlTransmissionMode}`);
+      console.log(`[Background][HTML_TRANSMISSION] 📊 Using global transmission mode: ${globalSettings.htmlTransmissionMode} (Plugin: ${message.pluginId})`);
+      console.log(`[Background][HTML_TRANSMISSION] 🎯 Direct transmission enabled: ${useDirectTransmission}`);
+
       // Устанавливаем глобальные переменные для передачи метаданных в TransferMetadataManager
       (globalThis as any).metadataManager = this.metadataManager;
       (globalThis as any).currentTransferMetadata = {
@@ -3094,8 +3230,60 @@ class BackgroundController {
         pageKey: requestId
       };
 
-      console.log(`[Background][DIAG] 📤 SENDING HTML (${pageHtml.length} chars) as chunks for transfer ${transferId}`);
-      await this.chunkManager.sendInChunks(pageHtml, transferId);
+      // Выбор метода передачи HTML на основе глобальных настроек и размера контента
+      const htmlSizeMB = pageHtml.length / 1024 / 1024;
+      const sizeLimitMB = MAX_DIRECT_SIZE / 1024 / 1024;
+
+      if (useDirectTransmission && pageHtml.length < MAX_DIRECT_SIZE) {
+        console.log(`[Background][HTML_TRANSMISSION] 🚀 Using DIRECT transmission for ${pageHtml.length} chars (${htmlSizeMB.toFixed(2)}MB)`);
+        console.log(`[Background][HTML_TRANSMISSION] 📊 Global settings: htmlTransmissionMode=${globalSettings.htmlTransmissionMode}, size check: ${htmlSizeMB.toFixed(2)}MB < ${sizeLimitMB.toFixed(0)}MB limit`);
+
+        try {
+          // Прямая передача HTML
+          await sendHtmlDirectly(pageHtml, {
+            pluginId: message.pluginId,
+            requestId,
+            transferId
+          });
+
+          // Для прямой передачи не нужен pending workflow, так как EXECUTE_WORKFLOW отправляется сразу
+          // Удаляем из pendingWorkflows, так как workflow уже запущен
+          this.pendingWorkflows.delete(transferId);
+
+        } catch (directError) {
+          console.warn(`[Background][HTML_TRANSMISSION] ⚠️ Direct transmission failed, falling back to chunks:`, directError);
+          console.log(`[Background][HTML_TRANSMISSION] 🔄 Fallback triggered due to direct transmission error`);
+
+          // Fallback на чанки при ошибке прямой передачи
+          console.log(`[Background][HTML_TRANSMISSION] 🔄 Falling back to chunked transmission for transfer ${transferId}`);
+          await this.chunkManager.sendInChunks(pageHtml, transferId);
+
+          // Store workflow data for later when HTML is assembled (для чанкового режима)
+          this.pendingWorkflows.set(transferId, {
+            requestId,
+            pluginId: message.pluginId,
+            pageHtml
+          });
+        }
+
+      } else {
+        // Используем чанки (стандартный режим или fallback)
+        const reason = !useDirectTransmission
+          ? `chunks mode selected in global settings`
+          : `HTML too large (${htmlSizeMB.toFixed(2)}MB > ${sizeLimitMB.toFixed(0)}MB limit)`;
+
+        console.log(`[Background][HTML_TRANSMISSION] 📦 Using CHUNKED transmission (${reason}) for ${pageHtml.length} chars (${htmlSizeMB.toFixed(2)}MB)`);
+        console.log(`[Background][HTML_TRANSMISSION] 📊 Global settings: htmlTransmissionMode=${globalSettings.htmlTransmissionMode}, size check: ${htmlSizeMB.toFixed(2)}MB vs ${sizeLimitMB.toFixed(0)}MB limit`);
+
+        await this.chunkManager.sendInChunks(pageHtml, transferId);
+
+        // Store workflow data for later when HTML is assembled
+        this.pendingWorkflows.set(transferId, {
+          requestId,
+          pluginId: message.pluginId,
+          pageHtml
+        });
+      }
 
       // Store workflow data for later when HTML is assembled
       this.pendingWorkflows.set(transferId, {
@@ -3155,7 +3343,7 @@ class BackgroundController {
     return html;
   }
   
-  private handleWorkflowCompleted(message: WorkflowCompletedMessage): void {
+  private async handleWorkflowCompleted(message: WorkflowCompletedMessage): Promise<void> {
     console.log('[BACKGROUND DEBUG] Handling workflow completed:');
     console.log('[BACKGROUND DEBUG] requestId:', message.requestId);
     console.log('[BACKGROUND DEBUG] success:', message.success);

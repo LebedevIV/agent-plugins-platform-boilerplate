@@ -583,13 +583,12 @@ async function handleExecuteWorkflow(data: ExecuteWorkflowMessage['data']) {
 
     let pageHtml = data.pageHtml;
 
-  // Use pre-assembled HTML if provided
-  if (data.assembledHtml) {
-    console.log(`[offscreen][DIAG] 🔄 Using pre-assembled HTML (${data.assembledHtml.length} chars) from EXECUTE_WORKFLOW`);
-    pageHtml = data.assembledHtml;
-  }
+    // Use pre-assembled HTML if provided
+    if (data.assembledHtml) {
+      console.log(`[offscreen][DIAG] 🔄 Using pre-assembled HTML (${data.assembledHtml.length} chars) from EXECUTE_WORKFLOW`);
+      pageHtml = data.assembledHtml;
+    }
 
-  try {
     // DIAGNOSTIC: Always check ChunkManager state regardless of useChunks flag
     console.log(`[offscreen][DIAG] CHECKING CHUNK MANAGER STATE:`);
     console.log(`[offscreen][DIAG] Transfer exists: ${chunkManager['transfers'].has(data.transferId)}`);

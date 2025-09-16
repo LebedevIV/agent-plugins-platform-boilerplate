@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Agent Plugins Platform - Options</title>
+    <title>Agent Plugins Platform - Настройки</title>
     <style>
         * {
             margin: 0;
@@ -16,32 +16,322 @@
             background: #f8fafc;
             color: #1f2937;
             height: 100vh;
-            overflow: hidden;
+            padding: 20px;
+            line-height: 1.6;
         }
 
-        #app-container {
-            height: 100vh;
-            width: 100vw;
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
         }
 
-        /* Loading state */
+        .header {
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            color: #1f2937;
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: #6b7280;
+            font-size: 16px;
+        }
+
+        .setting-group {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .setting-group h3 {
+            color: #1f2937;
+            font-size: 18px;
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+
+        .setting-item {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 0;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+            flex-shrink: 0;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .toggle-slider {
+            background-color: #2196F3;
+        }
+
+        input:checked + .toggle-slider:before {
+            transform: translateX(26px);
+        }
+
+        .setting-info {
+            flex: 1;
+        }
+
+        .setting-label {
+            font-weight: 500;
+            color: #1f2937;
+            margin-bottom: 4px;
+            display: block;
+        }
+
+        .setting-description {
+            color: #6b7280;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #10b981;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+            z-index: 1000;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification.error {
+            background: #ef4444;
+        }
+
         .loading {
             display: flex;
             align-items: center;
             justify-content: center;
-            height: 100vh;
+            height: 200px;
             font-size: 16px;
             color: #6b7280;
         }
+
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10b981;
+            margin-right: 8px;
+        }
+
+        .status-indicator.loading {
+            background: #f59e0b;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
     </style>
-  <script type="module" crossorigin src="./assets/index-CNQsTj65.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-C7Ftd-oV.css">
 </head>
 <body>
-    <div id="app-container">
-        <div id="loading-indicator" class="loading">Loading options...</div>
+    <div class="container">
+        <div class="header">
+            <h1>⚙️ Настройки расширения</h1>
+            <p>Настройте поведение расширения Agent Plugins Platform</p>
+        </div>
+
+        <div id="loading-indicator" class="loading">
+            <span class="status-indicator loading"></span>
+            Загрузка настроек...
+        </div>
+
+        <div id="settings-content" style="display: none;">
+            <div class="setting-group">
+                <h3>📄 Передача HTML страниц</h3>
+                <div class="setting-item">
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="htmlTransmissionMode">
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <div class="setting-info">
+                        <span class="setting-label">Отправлять HTML целиком</span>
+                        <span class="setting-description">
+                            Быстрее, но может не работать с очень большими страницами (>50MB).
+                            При отключении HTML будет передаваться частями для стабильности.
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="setting-group">
+                <h3>ℹ️ Информация</h3>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Текущий режим</span>
+                        <span class="setting-description" id="current-mode">
+                            Загрузка...
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-    
-    <!-- React app will be mounted here -->
+
+    <div id="notification" class="notification"></div>
+
+    <script>
+        // Глобальные переменные
+        let currentSettings = {};
+
+        // Показ уведомления
+        function showNotification(message, isError = false) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${isError ? 'error' : ''} show`;
+
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+
+        // Загрузка настроек
+        async function loadSettings() {
+            try {
+                console.log('[options][DEBUG] 🔍 Loading settings from chrome.storage.local...');
+                const result = await chrome.storage.local.get(['htmlTransmissionMode']);
+                currentSettings = result;
+
+                const mode = result.htmlTransmissionMode || 'chunks';
+                const checkbox = document.getElementById('htmlTransmissionMode');
+                checkbox.checked = mode === 'direct';
+
+                console.log('[options][DEBUG] 📊 Loaded htmlTransmissionMode:', mode, '(from storage:', result.htmlTransmissionMode, ')');
+                console.log('[options][DEBUG] 🎯 Checkbox checked state:', checkbox.checked);
+
+                updateModeDisplay(mode);
+                showNotification('Настройки загружены');
+            } catch (error) {
+                console.error('[options][DEBUG] ❌ Error loading settings:', error);
+                showNotification('Ошибка загрузки настроек', true);
+            }
+        }
+
+        // Сохранение настроек
+        async function saveSettings() {
+            try {
+                const checkbox = document.getElementById('htmlTransmissionMode');
+                const mode = checkbox.checked ? 'direct' : 'chunks';
+
+                console.log('[options][DEBUG] 💾 Saving htmlTransmissionMode:', mode, '(checkbox checked:', checkbox.checked, ')');
+
+                await chrome.storage.local.set({
+                    htmlTransmissionMode: mode
+                });
+
+                console.log('[options][DEBUG] ✅ Settings saved to chrome.storage.local');
+
+                currentSettings.htmlTransmissionMode = mode;
+                updateModeDisplay(mode);
+                showNotification('Настройки сохранены');
+
+                // Дополнительная верификация сохранения
+                const verification = await chrome.storage.local.get(['htmlTransmissionMode']);
+                console.log('[options][DEBUG] 🔍 Verification - saved value:', verification.htmlTransmissionMode);
+
+            } catch (error) {
+                console.error('[options][DEBUG] ❌ Error saving settings:', error);
+                showNotification('Ошибка сохранения настроек', true);
+            }
+        }
+
+        // Обновление отображения текущего режима
+        function updateModeDisplay(mode) {
+            const modeDisplay = document.getElementById('current-mode');
+            if (mode === 'direct') {
+                modeDisplay.innerHTML = '<span style="color: #10b981;">●</span> Прямая передача (HTML целиком)';
+            } else {
+                modeDisplay.innerHTML = '<span style="color: #2196f3;">●</span> Передача частями (chunks)';
+            }
+        }
+
+        // Инициализация страницы
+        async function init() {
+            // Скрываем индикатор загрузки
+            document.getElementById('loading-indicator').style.display = 'none';
+
+            // Показываем контент настроек
+            document.getElementById('settings-content').style.display = 'block';
+
+            // Загружаем настройки
+            await loadSettings();
+
+            // Добавляем обработчик события для переключателя
+            document.getElementById('htmlTransmissionMode').addEventListener('change', saveSettings);
+
+            console.log('Настройки инициализированы');
+        }
+
+        // Запуск инициализации
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+
+        // Обработка ошибок
+        window.addEventListener('error', (event) => {
+            console.error('JavaScript error:', event.error);
+            showNotification('Произошла ошибка в приложении', true);
+        });
+
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error('Unhandled promise rejection:', event.reason);
+            showNotification('Произошла необработанная ошибка', true);
+        });
+    </script>
 </body>
 </html>

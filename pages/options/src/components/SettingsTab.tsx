@@ -1,8 +1,10 @@
-import type React from 'react';
+import React from 'react';
 import { cn } from '@extension/ui';
 import type { AIKey } from '../hooks/useAIKeys';
 import { useTranslations } from '../hooks/useTranslations';
 import ToggleButton from './ToggleButton';
+
+type HtmlTransmissionMode = 'chunks' | 'direct';
 
 interface SettingsTabProps {
   aiKeys: AIKey[];
@@ -38,6 +40,38 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   const { t } = useTranslations(locale);
   console.log('[SettingsTab] theme:', theme, 'setTheme:', typeof setTheme);
 
+  // Состояние для настройки htmlTransmissionMode
+  const [htmlTransmissionMode, setHtmlTransmissionMode] = React.useState<HtmlTransmissionMode>('chunks');
+
+  // Загрузка настройки htmlTransmissionMode при монтировании компонента
+  React.useEffect(() => {
+    const loadHtmlTransmissionMode = async () => {
+      try {
+        console.log('[SettingsTab][DEBUG] 🔍 Loading htmlTransmissionMode from chrome.storage.local...');
+        const result = await chrome.storage.local.get(['htmlTransmissionMode']);
+        const mode = (result.htmlTransmissionMode as HtmlTransmissionMode) || 'chunks';
+        console.log('[SettingsTab][DEBUG] 📊 Loaded htmlTransmissionMode:', mode, '(from storage:', result.htmlTransmissionMode, ')');
+        setHtmlTransmissionMode(mode);
+      } catch (error) {
+        console.error('[SettingsTab][DEBUG] ❌ Error loading htmlTransmissionMode:', error);
+      }
+    };
+
+    loadHtmlTransmissionMode();
+  }, []);
+
+  // Сохранение настройки htmlTransmissionMode
+  const saveHtmlTransmissionMode = async (mode: HtmlTransmissionMode) => {
+    try {
+      console.log('[SettingsTab][DEBUG] 💾 Saving htmlTransmissionMode:', mode);
+      await chrome.storage.local.set({ htmlTransmissionMode: mode });
+      console.log('[SettingsTab][DEBUG] ✅ htmlTransmissionMode saved to chrome.storage.local');
+      setHtmlTransmissionMode(mode);
+    } catch (error) {
+      console.error('[SettingsTab][DEBUG] ❌ Error saving htmlTransmissionMode:', error);
+    }
+  };
+
   if (!theme || typeof setTheme !== 'function') {
     return <div className="settings-section">Ошибка: theme/setTheme не переданы</div>;
   }
@@ -48,6 +82,29 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       <div className="settings-sections">
         <div className="settings-section">
           <h3>{t('options_settings_general_title')}</h3>
+          <div className="setting-item">
+            {/* HTML Transmission Mode Toggle */}
+            <ToggleButton
+              checked={htmlTransmissionMode === 'direct'}
+              onChange={(checked) => saveHtmlTransmissionMode(checked ? 'direct' : 'chunks')}
+              label="Отправлять HTML целиком"
+            />
+            <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px', marginLeft: '40px' }}>
+              {'Быстрее, но может не работать с очень большими страницами (>50MB).'}
+              <br />
+              {'При отключении HTML будет передаваться частями для стабильности.'}
+            </div>
+          </div>
+          <div className="setting-item">
+            <div className="setting-info">
+              <span className="setting-label">Текущий режим</span>
+              <span className="setting-description" style={{ color: htmlTransmissionMode === 'direct' ? '#10b981' : '#2196f3' }}>
+                {htmlTransmissionMode === 'direct' ?
+                  '● Прямая передача (HTML целиком)' :
+                  '● Передача частями (chunks)'}
+              </span>
+            </div>
+          </div>
           <div className="setting-item">
             {/* AI-First: Переключатель автообновления плагинов */}
             <ToggleButton checked={true} onChange={() => {}} label={t('options_settings_general_autoUpdate')} />

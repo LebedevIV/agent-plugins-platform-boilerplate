@@ -1,4 +1,4 @@
-import type React from 'react';
+import React from 'react';
 import { useEffect } from 'react';
 import { PROJECT_URL_OBJECT } from '@extension/shared';
 import { useAIKeys, usePlugins, useTabs, useTranslations } from '../hooks';

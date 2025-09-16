@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Большая тестовая страница</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { color: #333; }
+        .content { max-width: 1200px; margin: 0 auto; }
+        .large-content { background: #f0f0f0; padding: 20px; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div class="content">
+        <h1>Большая тестовая страница</h1>
+        <p>Это большая HTML страница для тестирования системы передачи HTML с большими объемами данных.</p>
+        <div class="large-content">
+            <h2>Тестовый контент</h2>
+            <!-- Генерируем большой объем повторяющегося контента -->
+            <script>
+                // Генерируем большой HTML контент
+                const largeContent = document.createElement('div');
+                let content = '';
+
+                // Создаем ~30MB контента
+                const targetSize = 30 * 1024 * 1024; // 30MB
+                const baseText = 'Это тестовый контент для проверки системы передачи больших HTML страниц. ' +
+                                'Система должна корректно обрабатывать большие объемы данных, ' +
+                                'автоматически переключаясь между режимами direct и chunks в зависимости от настроек. ' +
+                                'Тест проверяет работу с HTML размером более 50MB для проверки fallback логики. ';
+
+                while (content.length < targetSize) {
+                    content += '<p>' + baseText + Math.random() + '</p>';
+                }
+
+                largeContent.innerHTML = '<h3>Сгенерированный контент (' + (content.length / 1024 / 1024).toFixed(2) + 'MB)</h3>' + content;
+                document.querySelector('.large-content').appendChild(largeContent);
+            </script>
+        </div>
+    </div>
+</body>
+</html>

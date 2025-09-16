@@ -69,14 +69,32 @@ async function processPyodideMessageQueue(): Promise<void> {
 
   while (pyodideMessageQueue.length > 0) {
     const msg = pyodideMessageQueue.shift();
+
+    // Проверка валидности сообщения
+    if (!msg || typeof msg !== 'object') {
+      console.error('[background][PYODIDE_QUEUE] Invalid message format, skipping');
+      continue;
+    }
+
     console.log('[background][PYODIDE_QUEUE] Processing message:', msg.messageId);
 
     try {
+      // Проверка обязательных полей
+      const pluginId = msg.pluginId;
+      const pageKey = msg.pageKey;
+      const message = msg.message;
+
+      if (!pluginId || !pageKey || !message) {
+        console.error('[background][PYODIDE_QUEUE] Missing required fields:', { pluginId: !!pluginId, pageKey: !!pageKey, message: !!message });
+        trackSendResponse({ success: false, error: 'Missing required fields', messageId: msg.messageId });
+        continue;
+      }
+
       console.log('[background][PYODIDE_QUEUE] Saving message to chat...');
-      await pluginChatApi.saveMessage(msg.pluginId, getPageKey(msg.pageKey), msg.message as ChatMessage);
+      await pluginChatApi.saveMessage(pluginId, getPageKey(pageKey), message as ChatMessage);
 
       console.log('[background][PYODIDE_QUEUE] Broadcasting chat update...');
-      broadcastChatUpdate(msg.pluginId, getPageKey(msg.pageKey));
+      broadcastChatUpdate(pluginId, getPageKey(pageKey));
 
       console.log('[background][PYODIDE_QUEUE] Sending success response for:', msg.messageId);
       trackSendResponse({ success: true, messageId: msg.messageId });
@@ -198,12 +216,15 @@ function createChunks(html: string, chunkSize: number = CHUNK_SIZE): {
   totalSize: number;
   chunkSize: number;
 } {
+  console.log('[createChunks][DEBUG] 🔄 createChunks called with HTML length:', html.length, 'chunkSize:', chunkSize);
+
   const chunks: string[] = [];
   const totalSize = html.length;
 
   // Проверяем, не превышает ли общий размер лимиты
   const maxTotalSize = chunkSize * MAX_CHUNKS;
   if (totalSize > maxTotalSize) {
+    console.error('[createChunks][DEBUG] ❌ HTML too large:', totalSize, 'chars exceeds maximum', maxTotalSize, 'chars');
     throw new Error(`HTML data too large: ${totalSize} chars exceeds maximum ${maxTotalSize} chars (${MAX_CHUNKS} chunks × ${chunkSize} chars)`);
   }
 
@@ -213,7 +234,8 @@ function createChunks(html: string, chunkSize: number = CHUNK_SIZE): {
     chunks.push(chunk);
   }
 
-  console.log(`[IMPROVED_CHUNKING] Created ${chunks.length} chunks from ${totalSize} chars (chunk size: ${chunkSize})`);
+  console.log(`[createChunks][DEBUG] ✅ Created ${chunks.length} chunks from ${totalSize} chars (chunk size: ${chunkSize})`);
+  console.log(`[createChunks][DEBUG] 📊 HTML size: ${(totalSize / 1024 / 1024).toFixed(2)}MB, Max allowed: ${(maxTotalSize / 1024 / 1024).toFixed(2)}MB`);
 
   return {
     chunks,
@@ -238,14 +260,15 @@ interface HtmlChunkMessage {
     requestId: string;
   };
 }
+*/
 
+// Required interface for chunk acknowledgment
 interface HtmlChunkAckMessage {
   type: 'HTML_CHUNK_ACK';
   transferId: string;
   chunkIndex: number;
   received: boolean;
 }
-*/
 
 // DEPRECATED: Global state for managing chunk transfers - no longer used
 // Keeping minimal structure for backwards compatibility
@@ -694,12 +717,18 @@ async function processRecoveredAssembledTransfer(msg: any, transfer: any): Promi
     let pluginId = msg.pluginId;
     let pageKey = msg.pageKey;
 
+    // Проверка валидности входного сообщения
+    if (!msg || typeof msg !== 'object') {
+      console.error(`[RECOVERY_PROCESSING] ❌ Invalid message format for recovery processing`);
+      throw new Error('Invalid message format');
+    }
+
     // ПОПЫТКА ВОССТАНОВЛЕНИЯ PLUGINID ИЗ РАЗЛИЧНЫХ ИСТОЧНИКОВ
     if (!pluginId) {
       console.log(`[RECOVERY_PROCESSING] 🔍 Attempting to recover pluginId for transfer ${transferId}`);
 
       // Источник 1: Метаданные transfer'а
-      if (transfer.metadata?.pluginId) {
+      if (transfer && transfer.metadata?.pluginId) {
         pluginId = transfer.metadata.pluginId;
         console.log(`[RECOVERY_PROCESSING] ✅ Recovered pluginId from transfer metadata: ${pluginId}`);
       }
@@ -732,7 +761,7 @@ async function processRecoveredAssembledTransfer(msg: any, transfer: any): Promi
       }
 
       // Источник 4: Fallback - извлечение из transferId
-      if (!pluginId && transferId.includes('_html')) {
+      if (!pluginId && transferId && typeof transferId === 'string' && transferId.includes('_html')) {
         const parts = transferId.split('_');
         if (parts.length >= 3) {
           pluginId = parts.slice(0, parts.length - 2).join('_');
@@ -746,7 +775,7 @@ async function processRecoveredAssembledTransfer(msg: any, transfer: any): Promi
       console.log(`[RECOVERY_PROCESSING] 🔍 Attempting to recover pageKey for transfer ${transferId}`);
 
       // Источник 1: Метаданные transfer'а
-      if (transfer.metadata?.pageKey) {
+      if (transfer && transfer.metadata?.pageKey) {
         pageKey = transfer.metadata.pageKey;
         console.log(`[RECOVERY_PROCESSING] ✅ Recovered pageKey from transfer metadata: ${pageKey}`);
       }
@@ -764,7 +793,7 @@ async function processRecoveredAssembledTransfer(msg: any, transfer: any): Promi
       if (!pageKey) {
         try {
           const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-          if (tabs[0]?.url) {
+          if (tabs && tabs[0]?.url) {
             const { getPageKey } = await import('../../../packages/shared/lib/utils/helpers');
             pageKey = getPageKey(tabs[0].url);
             console.log(`[RECOVERY_PROCESSING] ✅ Generated pageKey from active tab: ${pageKey}`);
@@ -782,14 +811,14 @@ async function processRecoveredAssembledTransfer(msg: any, transfer: any): Promi
     }
 
     // ВАЛИДАЦИЯ ВОССТАНОВЛЕННЫХ ДАННЫХ
-    if (!pluginId) {
+    if (!pluginId || typeof pluginId !== 'string') {
       console.error(`[RECOVERY_PROCESSING] ❌ CRITICAL: Cannot determine pluginId for recovered transfer ${transferId}`);
-      throw new Error(`Missing pluginId - recovery failed`);
+      throw new Error(`Missing or invalid pluginId - recovery failed`);
     }
 
-    if (!pageKey) {
+    if (!pageKey || typeof pageKey !== 'string') {
       console.error(`[RECOVERY_PROCESSING] ❌ CRITICAL: Cannot determine pageKey for recovered transfer ${transferId}`);
-      throw new Error(`Missing pageKey - recovery failed`);
+      throw new Error(`Missing or invalid pageKey - recovery failed`);
     }
 
     console.log(`[RECOVERY_PROCESSING] ✅ Recovery data validated - pluginId: ${pluginId}, pageKey: ${pageKey}`);
@@ -1447,8 +1476,25 @@ async function emergencyTransferRecoveryDuringWait(transferId: string, originalT
 }
 
 function handleChunkAcknowledgment(ackMessage: HtmlChunkAckMessage): void {
+  // Проверка валидности входного сообщения
+  if (!ackMessage || typeof ackMessage !== 'object') {
+    console.error(`[background][CHUNKING] ❌ Invalid acknowledgment message format`);
+    return;
+  }
+
   const transferId = ackMessage.transferId;
   const chunkIndex = ackMessage.chunkIndex;
+
+  // Проверка обязательных полей
+  if (!transferId || typeof transferId !== 'string') {
+    console.error(`[background][CHUNKING] ❌ Invalid transferId in acknowledgment message`);
+    return;
+  }
+
+  if (typeof chunkIndex !== 'number' || chunkIndex < 0) {
+    console.error(`[background][CHUNKING] ❌ Invalid chunk index:`, chunkIndex);
+    return;
+  }
 
   console.log(`[background][CHUNKING] Processing acknowledgment for transfer ${transferId}, chunk ${chunkIndex}`);
 
@@ -1481,11 +1527,6 @@ function handleChunkAcknowledgment(ackMessage: HtmlChunkAckMessage): void {
   // УЛУЧШЕННЫЕ ПРОВЕРКИ ВАЛИДНОСТИ СООБЩЕНИЯ
   if (typeof ackMessage.received !== 'boolean') {
     console.error(`[background][CHUNKING] ❌ Invalid acknowledgment message format:`, ackMessage);
-    return;
-  }
-
-  if (typeof chunkIndex !== 'number' || chunkIndex < 0) {
-    console.error(`[background][CHUNKING] ❌ Invalid chunk index:`, chunkIndex);
     return;
   }
 
@@ -1935,8 +1976,12 @@ const getActiveTab = async (): Promise<chrome.tabs.Tab> => {
 
     const activeTab = tabs[0];
 
-    if (!isValidObject(activeTab) || !activeTab.id) {
-      throw new Error('Не найдена активная вкладка или вкладка не имеет ID');
+    if (!isValidObject(activeTab)) {
+      throw new Error('Активная вкладка имеет некорректный формат');
+    }
+
+    if (typeof activeTab.id !== 'number') {
+      throw new Error('Активная вкладка не имеет корректного ID');
     }
 
     console.log('[background][UTILS] Active tab found:', {
@@ -1957,6 +2002,11 @@ const extractPageHtml = async (tab: chrome.tabs.Tab): Promise<string> => {
   console.log('[background][UTILS] Extracting HTML from tab:', safeGet(tab, ['id'], 'unknown'));
 
   try {
+    // Проверка валидности входной вкладки
+    if (!isValidObject(tab)) {
+      throw new Error('Некорректный объект вкладки');
+    }
+
     // Проверка доступности scripting API
     if (!chrome?.scripting?.executeScript) {
       throw new Error('Chrome scripting API недоступен');
@@ -1964,12 +2014,12 @@ const extractPageHtml = async (tab: chrome.tabs.Tab): Promise<string> => {
 
     // Проверка наличия tab ID
     const tabId = safeGet(tab, ['id']);
-    if (!tabId) {
-      throw new Error('Tab ID не найден');
+    if (!tabId || typeof tabId !== 'number') {
+      throw new Error('Tab ID не найден или имеет некорректный тип');
     }
 
     const results = await chrome.scripting.executeScript({
-      target: { tabId: tabId },
+      target: { tabId },
       func: () => document.documentElement?.outerHTML || '<html><body>Empty page</body></html>'
     });
 
@@ -1978,7 +2028,11 @@ const extractPageHtml = async (tab: chrome.tabs.Tab): Promise<string> => {
     }
 
     const firstResult = results[0];
-    if (!isValidObject(firstResult) || !firstResult.result || typeof firstResult.result !== 'string') {
+    if (!isValidObject(firstResult)) {
+      throw new Error('Результат выполнения скрипта имеет некорректный формат');
+    }
+
+    if (!firstResult.result || typeof firstResult.result !== 'string') {
       throw new Error('Не удалось получить содержимое страницы - некорректный результат');
     }
 
@@ -2012,7 +2066,7 @@ const validatePluginSettings = async (pluginId: string): Promise<void> => {
       throw new Error('Функция getPluginSettings недоступна');
     }
 
-    const settings = await getPluginSettings(pluginId);
+    let settings = await getPluginSettings(pluginId);
 
     // Проверка структуры настроек
     if (!isValidObject(settings)) {
@@ -2594,16 +2648,35 @@ chrome.runtime.onMessage.addListener(
 
       if (msg.type === 'RUN_WORKFLOW') {
         console.log('[background][WORKFLOW] ===== RUN_WORKFLOW REQUEST RECEIVED =====');
+
+        // Проверка валидности сообщения
+        if (!msg || typeof msg !== 'object') {
+          console.error('[background][WORKFLOW] Invalid message format');
+          trackSendResponse({ error: 'Invalid message format' });
+          return true;
+        }
+
         console.log('[background][WORKFLOW] Plugin ID:', msg.pluginId);
         console.log('[background][WORKFLOW] Timestamp:', new Date().toISOString());
+
+        // [DEBUG] Добавляем логи для отслеживания настроек htmlTransmissionMode
+        console.log('[background][WORKFLOW][DEBUG] 🔍 Checking htmlTransmissionMode settings...');
+        try {
+          const settings = await chrome.storage.local.get(['htmlTransmissionMode']);
+          const htmlTransmissionMode = settings.htmlTransmissionMode || 'chunks';
+          console.log('[background][WORKFLOW][DEBUG] 📊 Current htmlTransmissionMode setting:', htmlTransmissionMode);
+          console.log('[background][WORKFLOW][DEBUG] 🎯 Should use direct transmission:', htmlTransmissionMode === 'direct');
+        } catch (settingsError) {
+          console.error('[background][WORKFLOW][DEBUG] ❌ Failed to read htmlTransmissionMode settings:', settingsError);
+        }
 
         // УПРОЩЕННАЯ ОБРАБОТКА RUN_WORKFLOW
         (async () => {
           try {
             // Валидация входных данных
-            if (!msg.pluginId) {
-              console.error('[background][WORKFLOW] Missing pluginId');
-              trackSendResponse({ error: 'Отсутствует обязательное поле: pluginId' });
+            if (!msg.pluginId || typeof msg.pluginId !== 'string') {
+              console.error('[background][WORKFLOW] Missing or invalid pluginId');
+              trackSendResponse({ error: 'Отсутствует или некорректно обязательное поле: pluginId' });
               return;
             }
 
@@ -2652,6 +2725,7 @@ chrome.runtime.onMessage.addListener(
             // ШАГ 8: Разбить HTML на chunks
             const chunkingResult = createChunks(pageHtml, CHUNK_SIZE);
             console.log('[background][WORKFLOW] Created', chunkingResult.totalChunks, 'chunks from', chunkingResult.totalSize, 'chars');
+            console.log('[background][WORKFLOW][DEBUG] 🚀 Starting CHUNKED transmission (current workflow method)');
 
             // ШАГ 9: Создать transfer объект
             const transferState = {
@@ -2709,12 +2783,26 @@ chrome.runtime.onMessage.addListener(
         return true;
       }
 
-      if (
-        msg.type === 'UPDATE_PLUGIN_SETTING' &&
-        msg.pluginId &&
-        msg.setting !== undefined &&
-        msg.value !== undefined
-      ) {
+      if (msg.type === 'UPDATE_PLUGIN_SETTING') {
+        // Проверка валидности входных данных
+        if (!msg.pluginId || typeof msg.pluginId !== 'string') {
+          console.error('[background] UPDATE_PLUGIN_SETTING: Missing or invalid pluginId');
+          trackSendResponse({ error: 'Missing or invalid pluginId' });
+          return true;
+        }
+
+        if (!msg.setting || typeof msg.setting !== 'string') {
+          console.error('[background] UPDATE_PLUGIN_SETTING: Missing or invalid setting');
+          trackSendResponse({ error: 'Missing or invalid setting' });
+          return true;
+        }
+
+        if (msg.value === undefined) {
+          console.error('[background] UPDATE_PLUGIN_SETTING: Missing value');
+          trackSendResponse({ error: 'Missing value' });
+          return true;
+        }
+
         const { pluginId, setting, value } = msg;
         console.log('[background] Processing UPDATE_PLUGIN_SETTING request for:', pluginId, setting, value);
         (async () => {
@@ -2748,7 +2836,20 @@ chrome.runtime.onMessage.addListener(
       }
 
       // === Работа с чатами плагинов ===
-      if (msg.type === 'GET_PLUGIN_CHAT' && msg.pluginId && msg.pageKey) {
+      if (msg.type === 'GET_PLUGIN_CHAT') {
+        // Проверка валидности входных данных
+        if (!msg.pluginId || typeof msg.pluginId !== 'string') {
+          console.error('[background] GET_PLUGIN_CHAT: Missing or invalid pluginId');
+          trackSendResponse({ error: 'Missing or invalid pluginId' });
+          return true;
+        }
+
+        if (!msg.pageKey || typeof msg.pageKey !== 'string') {
+          console.error('[background] GET_PLUGIN_CHAT: Missing or invalid pageKey');
+          trackSendResponse({ error: 'Missing or invalid pageKey' });
+          return true;
+        }
+
         const { pluginId, pageKey, messageId } = msg;
         const chatKey = `${pluginId}::${getPageKey(pageKey)}`;
 
@@ -2869,7 +2970,20 @@ chrome.runtime.onMessage.addListener(
       }
 
       // Создание чата при начале ввода (ленивая инициализация)
-      if (msg.type === 'CREATE_PLUGIN_CHAT' && msg.pluginId && msg.pageKey) {
+      if (msg.type === 'CREATE_PLUGIN_CHAT') {
+        // Проверка валидности входных данных
+        if (!msg.pluginId || typeof msg.pluginId !== 'string') {
+          console.error('[background] CREATE_PLUGIN_CHAT: Missing or invalid pluginId');
+          trackSendResponse({ error: 'Missing or invalid pluginId' });
+          return true;
+        }
+
+        if (!msg.pageKey || typeof msg.pageKey !== 'string') {
+          console.error('[background] CREATE_PLUGIN_CHAT: Missing or invalid pageKey');
+          trackSendResponse({ error: 'Missing or invalid pageKey' });
+          return true;
+        }
+
         const { pluginId, pageKey } = msg;
         const normPageKey = getPageKey(pageKey);
         console.log('[background] CREATE_PLUGIN_CHAT pageKey:', pageKey, 'norm:', normPageKey);
@@ -2932,7 +3046,26 @@ chrome.runtime.onMessage.addListener(
         return true;
       }
 
-      if (msg.type === 'SAVE_PLUGIN_CHAT_MESSAGE' && msg.pluginId && msg.pageKey && msg.message) {
+      if (msg.type === 'SAVE_PLUGIN_CHAT_MESSAGE') {
+        // Проверка валидности входных данных
+        if (!msg.pluginId || typeof msg.pluginId !== 'string') {
+          console.error('[background] SAVE_PLUGIN_CHAT_MESSAGE: Missing or invalid pluginId');
+          trackSendResponse({ error: 'Missing or invalid pluginId' });
+          return true;
+        }
+
+        if (!msg.pageKey || typeof msg.pageKey !== 'string') {
+          console.error('[background] SAVE_PLUGIN_CHAT_MESSAGE: Missing or invalid pageKey');
+          trackSendResponse({ error: 'Missing or invalid pageKey' });
+          return true;
+        }
+
+        if (!msg.message || typeof msg.message !== 'object') {
+          console.error('[background] SAVE_PLUGIN_CHAT_MESSAGE: Missing or invalid message');
+          trackSendResponse({ error: 'Missing or invalid message' });
+          return true;
+        }
+
         const { pluginId, pageKey, message: chatMsg, messageId } = msg;
         const normPageKey = getPageKey(pageKey);
         console.log('[background] SAVE_PLUGIN_CHAT_MESSAGE: начало', {
@@ -3007,7 +3140,20 @@ chrome.runtime.onMessage.addListener(
         return true; // ВОЗВРАЩАЕМ true для поддержания канала открытым
       }
 
-      if (msg.type === 'DELETE_PLUGIN_CHAT' && msg.pluginId && msg.pageKey) {
+      if (msg.type === 'DELETE_PLUGIN_CHAT') {
+        // Проверка валидности входных данных
+        if (!msg.pluginId || typeof msg.pluginId !== 'string') {
+          console.error('[background] DELETE_PLUGIN_CHAT: Missing or invalid pluginId');
+          trackSendResponse({ error: 'Missing or invalid pluginId' });
+          return true;
+        }
+
+        if (!msg.pageKey || typeof msg.pageKey !== 'string') {
+          console.error('[background] DELETE_PLUGIN_CHAT: Missing or invalid pageKey');
+          trackSendResponse({ error: 'Missing or invalid pageKey' });
+          return true;
+        }
+
         const { pluginId, pageKey, messageId } = msg;
         const normPageKey = getPageKey(pageKey);
         console.log('[background] DELETE_PLUGIN_CHAT pageKey:', pageKey, 'messageId:', messageId, 'norm:', normPageKey);
@@ -3087,7 +3233,20 @@ chrome.runtime.onMessage.addListener(
       }
 
       // === ЛОГИРОВАНИЕ ===
-      if (msg.type === 'LOG_EVENT' && msg.pluginId && typeof msg.message === 'string') {
+      if (msg.type === 'LOG_EVENT') {
+        // Проверка валидности входных данных
+        if (!msg.pluginId || typeof msg.pluginId !== 'string') {
+          console.error('[background] LOG_EVENT: Missing or invalid pluginId');
+          trackSendResponse({ error: 'Missing or invalid pluginId' });
+          return true;
+        }
+
+        if (!msg.message || typeof msg.message !== 'string') {
+          console.error('[background] LOG_EVENT: Missing or invalid message');
+          trackSendResponse({ error: 'Missing or invalid message' });
+          return true;
+        }
+
         addPluginLog({
           pluginId: msg.pluginId,
           pageKey: msg.pageKey,
@@ -3106,7 +3265,14 @@ chrome.runtime.onMessage.addListener(
         return true;
       }
       // Получение логов по плагину
-      if (msg.type === 'LIST_PLUGIN_LOGS' && msg.pluginId) {
+      if (msg.type === 'LIST_PLUGIN_LOGS') {
+        // Проверка валидности входных данных
+        if (!msg.pluginId || typeof msg.pluginId !== 'string') {
+          console.error('[background] LIST_PLUGIN_LOGS: Missing or invalid pluginId');
+          trackSendResponse({ error: 'Missing or invalid pluginId' });
+          return true;
+        }
+
         trackSendResponse(pluginLogs[msg.pluginId] || []);
         return true;
       }
@@ -3343,13 +3509,14 @@ chrome.runtime.onMessage.addListener(
         const msg = message as ExtensionMessage;
 
         if (msg.type === 'HTML_ASSEMBLED') {
-           // ЗАЩИТА ОТ DUPLICATE PROCESSING ДЛЯ HTML_ASSEMBLED
-           const transferId = msg.transferId;
+            // ЗАЩИТА ОТ DUPLICATE PROCESSING ДЛЯ HTML_ASSEMBLED
+            const transferId = msg.transferId;
 
-           if (!transferId) {
-             console.error('[background][OFFSCREEN RESPONSE] ❌ Missing transferId in HTML_ASSEMBLED message');
-             return true;
-           }
+            // Проверка валидности входных данных
+            if (!transferId || typeof transferId !== 'string') {
+              console.error('[background][OFFSCREEN RESPONSE] ❌ Missing or invalid transferId in HTML_ASSEMBLED message');
+              return true;
+            }
 
            // ПРОВЕРКА НА DUPLICATE PROCESSING
            const duplicateKey = `html_assembled_processed_${transferId}`;
@@ -3439,7 +3606,7 @@ chrome.runtime.onMessage.addListener(
           let executeMessage: any = null;
 
           // Автоматически отправить EXECUTE_WORKFLOW после сборки HTML
-          if (msg.pluginId && msg.pageKey) {
+          if (msg.pluginId && typeof msg.pluginId === 'string' && msg.pageKey && typeof msg.pageKey === 'string') {
             executeMessage = {
               type: 'EXECUTE_WORKFLOW',
               pluginId: msg.pluginId,
@@ -3520,40 +3687,60 @@ chrome.runtime.onMessage.addListener(
           return true;
 
         } else if (msg.type === 'WORKFLOW_LOG') {
-          // Ретрансмировать логи от offscreen в UI
-          console.log('[background][OFFSCREEN RESPONSE] Relaying workflow log:', msg);
-          chrome.runtime.sendMessage({
-            type: 'LOG_EVENT',
-            pluginId: msg.pluginId,
-            message: msg.message,
-            level: msg.level || 'info',
-            stepId: msg.stepId,
-            logData: msg.logData,
-            pageKey: msg.pageKey
-          });
-          return true;
+           // Ретрансмировать логи от offscreen в UI
+           console.log('[background][OFFSCREEN RESPONSE] Relaying workflow log:', msg);
+
+           // Проверка валидности входных данных
+           if (!msg.pluginId || typeof msg.pluginId !== 'string') {
+             console.error('[background][OFFSCREEN RESPONSE] WORKFLOW_LOG: Missing or invalid pluginId');
+             return true;
+           }
+
+           if (!msg.message || typeof msg.message !== 'string') {
+             console.error('[background][OFFSCREEN RESPONSE] WORKFLOW_LOG: Missing or invalid message');
+             return true;
+           }
+
+           chrome.runtime.sendMessage({
+             type: 'LOG_EVENT',
+             pluginId: msg.pluginId,
+             message: msg.message,
+             level: msg.level || 'info',
+             stepId: msg.stepId,
+             logData: msg.logData,
+             pageKey: msg.pageKey
+           });
+           return true;
 
         } else if (msg.type === 'WORKFLOW_RESULT') {
           // Ретрансмировать результаты воркфлоу в UI
           console.log('[background][OFFSCREEN RESPONSE] Relaying workflow result:', msg);
 
-          // Отправить результат и обновить чат
-          if (msg.pluginId && msg.pageKey) {
-            const resultMessage: ChatMessage = {
-              role: 'plugin',
-              content: msg.data
-                ? `✅ Результат воркфлоу:\n\`\`\`json\n${JSON.stringify(msg.data, null, 2)}\n\`\`\``
-                : '✅ Воркфлоу выполнен успешно',
-              timestamp: Date.now()
-            };
+          // Проверка валидности входных данных
+          if (!msg.pluginId || typeof msg.pluginId !== 'string') {
+            console.error('[background][OFFSCREEN RESPONSE] WORKFLOW_RESULT: Missing or invalid pluginId');
+            return true;
+          }
 
-            try {
-              await pluginChatApi.saveMessage(msg.pluginId, getPageKey(msg.pageKey), resultMessage);
-              broadcastChatUpdate(msg.pluginId, getPageKey(msg.pageKey));
-              console.log('[background][OFFSCREEN RESPONSE] Workflow result saved to chat');
-            } catch (saveError) {
-              console.error('[background][OFFSCREEN RESPONSE] Failed to save result to chat:', saveError);
-            }
+          if (!msg.pageKey || typeof msg.pageKey !== 'string') {
+            console.error('[background][OFFSCREEN RESPONSE] WORKFLOW_RESULT: Missing or invalid pageKey');
+            return true;
+          }
+
+          const resultMessage: ChatMessage = {
+            role: 'plugin',
+            content: msg.data
+              ? `✅ Результат воркфлоу:\n\`\`\`json\n${JSON.stringify(msg.data, null, 2)}\n\`\`\``
+              : '✅ Воркфлоу выполнен успешно',
+            timestamp: Date.now()
+          };
+
+          try {
+            await pluginChatApi.saveMessage(msg.pluginId, getPageKey(msg.pageKey), resultMessage);
+            broadcastChatUpdate(msg.pluginId, getPageKey(msg.pageKey));
+            console.log('[background][OFFSCREEN RESPONSE] Workflow result saved to chat');
+          } catch (saveError) {
+            console.error('[background][OFFSCREEN RESPONSE] Failed to save result to chat:', saveError);
           }
 
           // Очистить transfer после успешного завершения WORKFLOW_RESULT
@@ -3575,30 +3762,83 @@ chrome.runtime.onMessage.addListener(
          // Ретрансмировать ошибки воркфлоу в UI
          console.error('[background][OFFSCREEN RESPONSE] Workflow error received:', msg);
 
-         if (msg.pluginId && msg.pageKey) {
-           const errorMessage: ChatMessage = {
-             role: 'plugin',
-             content: `❌ Ошибка воркфлоу: ${msg.data || 'Неизвестная ошибка'}`,
-             timestamp: Date.now()
-           };
+         // Проверка валидности входных данных
+         if (!msg.pluginId || typeof msg.pluginId !== 'string') {
+           console.error('[background][OFFSCREEN RESPONSE] WORKFLOW_ERROR: Missing or invalid pluginId');
+           return true;
+         }
 
-           try {
-             await pluginChatApi.saveMessage(msg.pluginId, getPageKey(msg.pageKey), errorMessage);
-             broadcastChatUpdate(msg.pluginId, getPageKey(msg.pageKey));
-           } catch (saveError) {
-             console.error('[background][OFFSCREEN RESPONSE] Failed to save error to chat:', saveError);
-           }
+         if (!msg.pageKey || typeof msg.pageKey !== 'string') {
+           console.error('[background][OFFSCREEN RESPONSE] WORKFLOW_ERROR: Missing or invalid pageKey');
+           return true;
+         }
+
+         const errorMessage: ChatMessage = {
+           role: 'plugin',
+           content: `❌ Ошибка воркфлоу: ${msg.data || 'Неизвестная ошибка'}`,
+           timestamp: Date.now()
+         };
+
+         try {
+           await pluginChatApi.saveMessage(msg.pluginId, getPageKey(msg.pageKey), errorMessage);
+           broadcastChatUpdate(msg.pluginId, getPageKey(msg.pageKey));
+         } catch (saveError) {
+           console.error('[background][OFFSCREEN RESPONSE] Failed to save error to chat:', saveError);
          }
 
          return true;
        } else if (msg.type === 'HTML_CHUNK_ACK') {
          // Обработка подтверждения получения чанка от offscreen
          console.log('[background][CHUNKING] Chunk acknowledgment received:', msg);
+
+         // Проверка валидности входного сообщения
+         if (!msg || typeof msg !== 'object') {
+           console.error('[background][CHUNKING] Invalid HTML_CHUNK_ACK message format');
+           return true;
+         }
+
+         if (!msg.transferId || typeof msg.transferId !== 'string') {
+           console.error('[background][CHUNKING] Missing or invalid transferId in HTML_CHUNK_ACK');
+           return true;
+         }
+
+         if (typeof msg.chunkIndex !== 'number' || msg.chunkIndex < 0) {
+           console.error('[background][CHUNKING] Invalid chunkIndex in HTML_CHUNK_ACK');
+           return true;
+         }
+
+         if (typeof msg.received !== 'boolean') {
+           console.error('[background][CHUNKING] Invalid received flag in HTML_CHUNK_ACK');
+           return true;
+         }
+
          handleChunkAcknowledgment(msg as HtmlChunkAckMessage);
          return true;
 
        } else if (msg.type === 'PYODIDE_MESSAGE') {
          console.log('[background][PYODIDE_MESSAGE] Adding to queue:', msg.messageId);
+
+         // Проверка валидности входного сообщения
+         if (!msg || typeof msg !== 'object') {
+           console.error('[background][PYODIDE_MESSAGE] Invalid message format');
+           return true;
+         }
+
+         // Проверка обязательных полей
+         if (!msg.pluginId || typeof msg.pluginId !== 'string') {
+           console.error('[background][PYODIDE_MESSAGE] Missing or invalid pluginId');
+           return true;
+         }
+
+         if (!msg.pageKey || typeof msg.pageKey !== 'string') {
+           console.error('[background][PYODIDE_MESSAGE] Missing or invalid pageKey');
+           return true;
+         }
+
+         if (!msg.message || typeof msg.message !== 'object') {
+           console.error('[background][PYODIDE_MESSAGE] Missing or invalid message');
+           return true;
+         }
 
          // Добавляем сообщение в очередь вместо прямой обработки
          pyodideMessageQueue.push(msg);
@@ -3612,35 +3852,42 @@ chrome.runtime.onMessage.addListener(
          // Ретрансмировать PYODIDE_MESSAGE в UI (в Side Panel)
          console.log('[background][PYODIDE_SERVICE_WORKER] PYODIDE_MESSAGE received from offscreen:', msg);
 
-         if (msg.pluginId && msg.pageKey && msg.data) {
-           try {
-             // Сохраняем сообщение как плагиновый чат
-             const pyodideMessage: ChatMessage = {
-               role: 'plugin',
-               content: String(msg.data),
-               timestamp: msg.timestamp || Date.now()
-             };
+         // Проверка валидности входных данных
+         if (!msg.pluginId || typeof msg.pluginId !== 'string') {
+           console.error('[background][PYODIDE_SERVICE_WORKER] Missing or invalid pluginId');
+           return true;
+         }
 
-             await pluginChatApi.saveMessage(msg.pluginId, getPageKey(msg.pageKey), pyodideMessage);
-             broadcastChatUpdate(msg.pluginId, getPageKey(msg.pageKey));
+         if (!msg.pageKey || typeof msg.pageKey !== 'string') {
+           console.error('[background][PYODIDE_SERVICE_WORKER] Missing or invalid pageKey');
+           return true;
+         }
 
-             console.log('[background][PYODIDE_SERVICE_WORKER] PYODIDE_MESSAGE relayed to side panel:', {
-               pluginId: msg.pluginId,
-               pageKey: msg.pageKey,
-               messageLength: pyodideMessage.content?.length
-             });
+         if (msg.data === undefined || msg.data === null) {
+           console.error('[background][PYODIDE_SERVICE_WORKER] Missing data');
+           return true;
+         }
 
-             return true;
-           } catch (saveError) {
-             console.error('[background][PYODIDE_SERVICE_WORKER] Failed to save PYODIDE_MESSAGE to chat:', saveError);
-             return true;
-           }
-         } else {
-           console.warn('[background][PYODIDE_SERVICE_WORKER] Missing required fields in PYODIDE_MESSAGE:', {
-             pluginId: !!msg.pluginId,
-             pageKey: !!msg.pageKey,
-             data: !!msg.data
+         try {
+           // Сохраняем сообщение как плагиновый чат
+           const pyodideMessage: ChatMessage = {
+             role: 'plugin',
+             content: String(msg.data),
+             timestamp: msg.timestamp || Date.now()
+           };
+
+           await pluginChatApi.saveMessage(msg.pluginId, getPageKey(msg.pageKey), pyodideMessage);
+           broadcastChatUpdate(msg.pluginId, getPageKey(msg.pageKey));
+
+           console.log('[background][PYODIDE_SERVICE_WORKER] PYODIDE_MESSAGE relayed to side panel:', {
+             pluginId: msg.pluginId,
+             pageKey: msg.pageKey,
+             messageLength: pyodideMessage.content?.length
            });
+
+           return true;
+         } catch (saveError) {
+           console.error('[background][PYODIDE_SERVICE_WORKER] Failed to save PYODIDE_MESSAGE to chat:', saveError);
            return true;
          }
        }
@@ -3852,7 +4099,9 @@ if (!isOffscreenSupported) {
         console.error('[background] ❌ Critical: Failed to initialize offscreen document on startup:', initError);
         console.error('[background]   - This may indicate manifest/permission issues');
       }
-    })();
+    })().catch((error) => {
+      console.error('[background] ❌ Async initialization failed:', error);
+    });
 
   } catch (runtimeError) {
     console.error('[background] ❌ Runtime verification failed:', runtimeError);
