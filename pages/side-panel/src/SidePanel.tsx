@@ -185,90 +185,12 @@ const SidePanel = () => {
     };
   }, [startHeartbeat, stopHeartbeat]);
 
-  // Слушатель для ответов на GET_PLUGINS с расширенным логированием
-  useEffect(() => {
-    const handlePluginResponse = (message: any, sender: any, sendResponse: any) => {
-      console.log('[SidePanel][MESSAGE_LISTENER] 📨 Message received:', {
-        type: message?.type,
-        hasRequestId: !!message?.requestId,
-        hasPlugins: !!message?.plugins,
-        hasError: !!message?.error,
-        sender: sender,
-        timestamp: new Date().toISOString()
-      });
-
-      if (message.type === 'GET_PLUGINS_RESPONSE') {
-        console.log('[SidePanel][GET_PLUGINS_RESPONSE] 🎯 GET_PLUGINS response received!');
-        console.log('[SidePanel][GET_PLUGINS_RESPONSE] Full message:', message);
-        console.log('[SidePanel][GET_PLUGINS_RESPONSE] Request ID:', message.requestId);
-        console.log('[SidePanel][GET_PLUGINS_RESPONSE] Timestamp:', new Date().toISOString());
-
-        // Очищаем таймаут при получении ответа
-        const timeoutId = (window as any).pluginsTimeoutId;
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-          (window as any).pluginsTimeoutId = null;
-          console.log('[SidePanel][GET_PLUGINS_RESPONSE] ✅ Timeout cleared');
-        } else {
-          console.warn('[SidePanel][GET_PLUGINS_RESPONSE] ⚠️ No timeout to clear');
-        }
-
-        if (message.error) {
-          console.error('[SidePanel][GET_PLUGINS_RESPONSE] ❌ Error from background:', message.error);
-          console.error('[SidePanel][GET_PLUGINS_RESPONSE] Error details:', {
-            error: message.error,
-            requestId: message.requestId,
-            timestamp: message.timestamp
-          });
-          addToastWithDeps('Ошибка загрузки плагинов: ' + message.error, 'error');
-          return true;
-        }
-
-        if (message.plugins) {
-          console.log('[SidePanel][GET_PLUGINS_RESPONSE] ✅ Successful response received');
-          console.log('[SidePanel][GET_PLUGINS_RESPONSE] Plugins count:', message.plugins.length);
-          console.log('[SidePanel][GET_PLUGINS_RESPONSE] Plugin details:', message.plugins.map((p: any) => ({
-            id: p.id,
-            name: p.name,
-            version: p.version
-          })));
-
-          setPlugins(message.plugins);
-          console.log('[SidePanel][GET_PLUGINS_RESPONSE] ✅ Plugins state updated successfully');
-          console.log('[SidePanel][GET_PLUGINS_RESPONSE] ✅ Plugin loading completed');
-        } else {
-          console.error('[SidePanel][GET_PLUGINS_RESPONSE] ❌ Empty response from background:', message);
-          console.error('[SidePanel][GET_PLUGINS_RESPONSE] Response structure:', Object.keys(message));
-          addToastWithDeps('Получен некорректный ответ от background', 'error');
-        }
-
-        return true; // Важно для асинхронных ответов
-      }
-
-      // Логируем все другие типы сообщений
-      if (message.type && message.type !== 'PING') {
-        console.log('[SidePanel][MESSAGE_LISTENER] 📝 Other message type received:', message.type);
-      }
-
-      return false;
-    };
-
-    console.log('[SidePanel][MESSAGE_LISTENER] 🚀 Registering message listener for GET_PLUGINS_RESPONSE');
-    chrome.runtime.onMessage.addListener(handlePluginResponse);
-    console.log('[SidePanel][MESSAGE_LISTENER] ✅ Message listener registered');
-
-    return () => {
-      console.log('[SidePanel][MESSAGE_LISTENER] 🧹 Removing message listener');
-      chrome.runtime.onMessage.removeListener(handlePluginResponse);
-      console.log('[SidePanel][MESSAGE_LISTENER] ✅ Message listener removed');
-    };
-  }, []);
 
   useEffect(() => {
-    console.log('[SidePanel] useEffect: Начинаем загрузку плагинов через Message API');
+    console.log('[SidePanel] useEffect: Начинаем загрузку плагинов через Promise-based подход');
 
-    // Функция для загрузки плагинов через Message API
-    const loadPluginsViaMessageAPI = async () => {
+    // Функция для загрузки плагинов через Promise-based подход
+    const loadPlugins = async () => {
       try {
         console.log('[SidePanel] === НАЧАЛО ЗАГРУЗКИ ПЛАГИНОВ ===');
         console.log('[SidePanel] Отправляем GET_PLUGINS сообщение в background');
@@ -289,33 +211,37 @@ const SidePanel = () => {
           throw new Error('Background script недоступен');
         }
 
-        // Отправляем запрос на получение плагинов
+        // Отправляем запрос на получение плагинов и ожидаем ответ через Promise
         console.log('[SidePanel][DEBUG] Отправляем GET_PLUGINS сообщение в background');
         console.log('[SidePanel][DEBUG] Время отправки:', new Date().toISOString());
 
-        const requestId = Date.now().toString();
-        console.log('[SidePanel][DEBUG] Request ID:', requestId);
-        console.log('[SidePanel][DEBUG] Отправка сообщения:', { type: 'GET_PLUGINS', requestId });
+        const response = await chrome.runtime.sendMessage({ type: 'GET_PLUGINS' });
 
-        await chrome.runtime.sendMessage({
-          type: 'GET_PLUGINS',
-          requestId
-        });
+        if (chrome.runtime.lastError) {
+          throw new Error(chrome.runtime.lastError.message);
+        }
 
-        console.log('[SidePanel][DEBUG] GET_PLUGINS сообщение отправлено, ожидаем ответ');
+        console.log('[SidePanel][DEBUG] Получен ответ от background:', response);
 
-        console.log('[SidePanel] Сообщение GET_PLUGINS отправлено, ожидаем ответ через слушатель');
+        if (response && response.plugins) {
+          console.log('[SidePanel] ✅ Получены плагины:', response.plugins);
+          console.log('[SidePanel] Количество плагинов:', response.plugins.length);
+          console.log('[SidePanel] Детали плагинов:', response.plugins.map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            version: p.version
+          })));
 
-        // Устанавливаем таймаут на случай, если ответ не придет
-        const timeoutId = setTimeout(() => {
-          console.error('[SidePanel] ❌ Таймаут ожидания ответа GET_PLUGINS (5000ms)');
-          addToastWithDeps('Таймаут загрузки плагинов', 'error');
-        }, 5000);
-
-        // Сохраняем таймаут для очистки при получении ответа
-        (window as any).pluginsTimeoutId = timeoutId;
+          setPlugins(response.plugins);
+          console.log('[SidePanel] ✅ Состояние плагинов обновлено успешно');
+          console.log('[SidePanel] ✅ Загрузка плагинов завершена');
+        } else {
+          console.error('[SidePanel] ❌ Неверный ответ от background:', response);
+          console.error('[SidePanel] Структура ответа:', Object.keys(response || {}));
+          addToastWithDeps('Получен некорректный ответ от background', 'error');
+        }
       } catch (error) {
-        console.error('[SidePanel] ❌ Исключение при загрузке плагинов:', error);
+        console.error('[SidePanel] ❌ Ошибка загрузки плагинов:', error);
         console.error('[SidePanel] Детали ошибки:', {
           error,
           message: (error as Error).message,
@@ -327,7 +253,7 @@ const SidePanel = () => {
     };
 
     // Загружаем плагины
-    loadPluginsViaMessageAPI();
+    loadPlugins();
   }, []);
 
   useEffect(() => {

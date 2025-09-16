@@ -1481,7 +1481,7 @@ chrome.runtime.onMessage.addListener(
         timestamp: new Date().toISOString()
       });
 
-      // Асинхронная обработка без sendResponse - используем только chrome.runtime.sendMessage
+      // Асинхронная обработка с использованием sendResponse для корректной работы sidepanel
       (async () => {
         try {
           console.log('[background][GET_PLUGINS] Starting async plugin retrieval...');
@@ -1496,7 +1496,7 @@ chrome.runtime.onMessage.addListener(
             timestamp: new Date().toISOString()
           };
 
-          console.log('[background][GET_PLUGINS] Sending response via chrome.runtime.sendMessage()');
+          console.log('[background][GET_PLUGINS] Sending response via sendResponse()');
           console.log('[background][GET_PLUGINS] Response payload:', {
             type: response.type,
             pluginsCount: response.plugins.length,
@@ -1504,9 +1504,9 @@ chrome.runtime.onMessage.addListener(
             hasPlugins: !!response.plugins
           });
 
-          // Отправляем ответ только через chrome.runtime.sendMessage для совместимости с sidepanel
-          await chrome.runtime.sendMessage(response);
-          console.log('[background][GET_PLUGINS] ✅ Response sent successfully via chrome.runtime.sendMessage()');
+          // Отправляем ответ через sendResponse для правильной асинхронной обработки
+          sendResponse(response);
+          console.log('[background][GET_PLUGINS] ✅ Response sent successfully via sendResponse()');
 
         } catch (error: unknown) {
           console.error('[background][GET_PLUGINS] ❌ Error getting plugins:', error);
@@ -1517,13 +1517,13 @@ chrome.runtime.onMessage.addListener(
             timestamp: new Date().toISOString()
           };
 
-          console.log('[background][GET_PLUGINS] Sending error response via chrome.runtime.sendMessage()');
-          await chrome.runtime.sendMessage(errorResponse);
-          console.log('[background][GET_PLUGINS] ❌ Error response sent via chrome.runtime.sendMessage()');
+          console.log('[background][GET_PLUGINS] Sending error response via sendResponse()');
+          sendResponse(errorResponse);
+          console.log('[background][GET_PLUGINS] ❌ Error response sent via sendResponse()');
         }
       })();
 
-      // Возвращаем true чтобы указать асинхронную обработку, но не используем sendResponse
+      // Возвращаем true чтобы указать асинхронную обработку
       return true;
     }
 
@@ -2153,6 +2153,36 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
         };
 
         console.log('[background][PORT][GET_PLUGINS] Returning error response for port delivery');
+        return errorResponse;
+      }
+    })();
+  }
+
+  // Обработка GET_PLUGIN_CHAT сообщений через порт - возвращаем ответ через порт
+  if (message.type === 'GET_PLUGIN_CHAT') {
+    console.log('[background][PORT] Processing GET_PLUGIN_CHAT request via port:', message.pluginId, message.pageKey);
+
+    // Асинхронная обработка с возвратом результата через порт
+    return (async () => {
+      try {
+        const result = await pluginChatApi.getOrLoadChat(message.pluginId, message.pageKey);
+        console.log('[background][PORT] GET_PLUGIN_CHAT: result obtained for port delivery', {
+          resultType: typeof result,
+          hasResult: !!result,
+          resultKeys: result ? Object.keys(result) : [],
+          timestamp: Date.now()
+        });
+
+        console.log('[background][PORT] GET_PLUGIN_CHAT: returning result for port delivery');
+        return result;
+
+      } catch (error: unknown) {
+        console.error('[background][PORT] GET_PLUGIN_CHAT: Error in processing:', error);
+        const errorResponse = {
+          error: (error as Error).message,
+          timestamp: Date.now()
+        };
+        console.log('[background][PORT] GET_PLUGIN_CHAT: returning error response for port delivery');
         return errorResponse;
       }
     })();
