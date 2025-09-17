@@ -379,9 +379,13 @@ async function initializePyodide() {
     logInfo('PYODIDE', 'Setting up js bridge for Python scripts...');
     pyodide.globals.set('js', {
       sendMessageToChat: async (message) => {
+        console.log('[DIAGNOSTIC] ===== PYODIDE sendMessageToChat CALLED =====');
+        console.log('[DIAGNOSTIC] Raw message from Python:', message);
         logDebug('PYODIDE', 'JS bridge attempting to send message');
         try {
           const jsMessage = message.toJs ? message.toJs({ dict_converter: Object.fromEntries }) : message;
+          console.log('[DIAGNOSTIC] Converted JS message:', jsMessage);
+
           // Исправление: правильно обрабатываем объект с полем content
           let content;
           if (typeof jsMessage === 'string') {
@@ -392,8 +396,11 @@ async function initializePyodide() {
             content = JSON.stringify(jsMessage);
           }
 
+          console.log('[DIAGNOSTIC] Final content to send:', content.substring(0, 200) + '...');
+
           // Асинхронная отправка с Promise и таймаутом для предотвращения ошибок каналов
           const messageId = `pyodide_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          console.log('[DIAGNOSTIC] Generated messageId:', messageId);
           logInfo('PYODIDE', `sendMessageToChat starting for messageId: ${messageId}, content length: ${content.length}`);
 
           return new Promise((resolve, reject) => {
@@ -404,7 +411,7 @@ async function initializePyodide() {
             }, 10000); // 10 секунд таймаут (увеличен с 5 секунд)
 
             try {
-              chrome.runtime.sendMessage({
+              const pyodideMessage = {
                 type: 'PYODIDE_MESSAGE',
                 messageId: messageId,
                 pluginId: currentPluginId,
@@ -414,12 +421,18 @@ async function initializePyodide() {
                   content: content,
                   timestamp: Date.now()
                 }
-              }, (response) => {
+              };
+              console.log('[DIAGNOSTIC] Sending PYODIDE_MESSAGE:', pyodideMessage);
+
+              chrome.runtime.sendMessage(pyodideMessage, (response) => {
+                console.log('[DIAGNOSTIC] PYODIDE_MESSAGE response received:', response);
                 clearTimeout(timeoutId);
                 if (chrome.runtime.lastError) {
+                  console.log('[DIAGNOSTIC] PYODIDE_MESSAGE chrome.runtime error:', chrome.runtime.lastError);
                   logError('PYODIDE', 'sendMessageToChat chrome.runtime error:', chrome.runtime.lastError);
                   resolve({ success: false, error: chrome.runtime.lastError.message });
                 } else {
+                  console.log('[DIAGNOSTIC] PYODIDE_MESSAGE sent successfully with ID:', messageId);
                   logInfo('PYODIDE', `PYODIDE_MESSAGE отправлено successfully с ID: ${messageId}`);
                   resolve({ success: true, response: response });
                 }
@@ -431,6 +444,7 @@ async function initializePyodide() {
             }
           });
         } catch (error) {
+          console.log('[DIAGNOSTIC] Unexpected error in sendMessageToChat:', error);
           logError('PYODIDE', 'Unexpected error in sendMessageToChat:', error);
           return Promise.resolve({ success: false, error: error.message });
         }
@@ -613,12 +627,28 @@ function handleHtmlChunk(chunkMessage) {
   // Check if transfer is complete
   if (transfer.receivedChunks === totalChunks) {
     logInfo('CHUNKING', `All chunks received for transfer ${transferId}`);
+
+    // LOG CHUNK ASSEMBLY START
+    console.log('[DIAGNOSTIC] ===== STARTING CHUNK ASSEMBLY =====');
+    console.log('[DIAGNOSTIC] Transfer ID:', transferId);
+    console.log('[DIAGNOSTIC] Total chunks:', totalChunks);
+    console.log('[DIAGNOSTIC] Chunk details:');
+    transfer.chunks.forEach((chunk, idx) => {
+      console.log(`[DIAGNOSTIC] Chunk ${idx}: ${chunk ? chunk.length : 'EMPTY'} characters`);
+    });
     // Automatically mark transfer as completed when all chunks are received
     transfer.completed = true;
 
     // Assemble the complete HTML from all chunks
     const assembledHtml = transfer.chunks.join('');
     logInfo('CHUNKING', `Successfully assembled HTML for transfer ${transferId}, total length: ${assembledHtml.length}`);
+
+    // LOG ASSEMBLED HTML FOR DIAGNOSTICS
+    console.log('[DIAGNOSTIC] ===== ASSEMBLED HTML CONTENT =====');
+    console.log('[DIAGNOSTIC] HTML Length:', assembledHtml.length);
+    console.log('[DIAGNOSTIC] First 1000 chars:', assembledHtml.substring(0, Math.min(1000, assembledHtml.length)));
+    console.log('[DIAGNOSTIC] Last 500 chars:', assembledHtml.substring(Math.max(0, assembledHtml.length - 500)));
+    console.log('[DIAGNOSTIC] ===== END ASSEMBLED HTML =====');
 
     // Send HTML_ASSEMBLED message to background with extracted pluginId and pageKey
     safeSendMessageSync({
@@ -807,6 +837,27 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
 
     // Вызвать Python функцию БЕЗ аргументов - данные уже в globals
     logInfo('PYODIDE', 'Calling Python function analyze_ozon_product()');
+
+    // LOG DATA RECEIVED BY PYTHON
+    console.log('[DIAGNOSTIC] ===== PYTHON DATA RECEIVED =====');
+    try {
+      const pageHtmlChunkCount = pyodide.globals.get('page_html_chunk_count');
+      console.log('[DIAGNOSTIC] page_html_chunk_count:', pageHtmlChunkCount);
+
+      if (pageHtmlChunkCount) {
+        for (let i = 0; i < pageHtmlChunkCount; i++) {
+          const chunkKey = `page_html_chunk_${i}`;
+          const chunkData = pyodide.globals.get(chunkKey);
+          console.log(`[DIAGNOSTIC] ${chunkKey} length: ${chunkData ? chunkData.length : 'EMPTY'}`);
+        }
+      } else {
+        const pageHtmlDirect = pyodide.globals.get('page_html');
+        console.log('[DIAGNOSTIC] page_html direct length:', pageHtmlDirect ? pageHtmlDirect.length : 'EMPTY');
+      }
+    } catch (logError) {
+      console.log('[DIAGNOSTIC] Error logging Python globals:', logError);
+    }
+    console.log('[DIAGNOSTIC] ===== END PYTHON DATA =====');
 
     let resultProxy;
     try {

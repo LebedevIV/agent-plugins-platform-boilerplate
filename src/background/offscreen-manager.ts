@@ -19,17 +19,23 @@ async function hasOffscreenDocument(): Promise<boolean> {
   }
 }
 
-export async function ensureOffscreenDocument(): Promise<void> {
+export async function ensureOffscreenDocument(): Promise<boolean> {
   if (await hasOffscreenDocument()) {
     console.log('[OffscreenManager] Offscreen document already exists.');
-    return;
+    return true; // Возвращаем true вместо undefined
   }
 
-  console.log('[OffscreenManager] Creating offscreen document...');
-  await chrome.offscreen.createDocument({
-    url: OFFSCREEN_DOCUMENT_PATH,
-    reasons: [chrome.offscreen.Reason.DOM_SCRAPING],
-    justification: 'Required for running Pyodide and complex plugin logic.',
-  });
-  console.log('[OffscreenManager] Offscreen document created.');
+  try {
+    console.log('[OffscreenManager] Creating offscreen document...');
+    await chrome.offscreen.createDocument({
+      url: OFFSCREEN_DOCUMENT_PATH,
+      reasons: [chrome.offscreen.Reason.DOM_SCRAPING],
+      justification: 'Required for running Pyodide and complex plugin logic.',
+    });
+    console.log('[OffscreenManager] Offscreen document created.');
+    return true;
+  } catch (error) {
+    console.error('[OffscreenManager] Failed to create offscreen document:', error);
+    return false;
+  }
 }

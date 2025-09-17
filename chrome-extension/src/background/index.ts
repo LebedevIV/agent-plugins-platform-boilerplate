@@ -566,7 +566,7 @@ async function fallbackTransferRecoveryForAssembled(msg: any): Promise<boolean> 
         timeout: 0,
         createdAt: Date.now(),
         lastAccessed: Date.now(),
-        assembledData: msg.assembledData || msg.htmlData,
+        pageHtml: msg.assembledData || msg.htmlData,
         isRecovery: true
       };
 
@@ -604,7 +604,7 @@ async function fallbackTransferRecoveryForAssembled(msg: any): Promise<boolean> 
         timeout: 0,
         createdAt: Date.now(),
         lastAccessed: Date.now(),
-        assembledData: offscreenData.assembledData,
+        pageHtml: offscreenData.assembledData,
         isRecovery: true
       };
 
@@ -782,7 +782,7 @@ async function processRecoveredAssembledTransfer(msg: any, transfer: any): Promi
       requestId: msg.requestId || transferId,
       transferId: transferId,
       useChunks: false, // Данные уже собраны
-      assembledData: transfer.assembledData || transfer.html,
+      pageHtml: transfer.assembledData || transfer.html,
       recovery: true,
       recoverySource: transfer.isRecovery ? 'fallback_recovery' : 'recovered',
       timestamp: Date.now()
@@ -794,14 +794,14 @@ async function processRecoveredAssembledTransfer(msg: any, transfer: any): Promi
 
       // ПОПЫТКА ПОЛУЧИТЬ ДАННЫЕ ИЗ ДРУГИХ ИСТОЧНИКОВ
       if (transfer.chunks && Array.isArray(transfer.chunks)) {
-        executeMessage.assembledData = transfer.chunks.join('');
-        console.log(`[RECOVERY_PROCESSING] ✅ Reassembled data from chunks: ${executeMessage.assembledData.length} chars`);
+        executeMessage.pageHtml = transfer.chunks.join('');
+        console.log(`[RECOVERY_PROCESSING] ✅ Reassembled data from chunks: ${executeMessage.pageHtml.length} chars`);
       } else {
         console.warn(`[RECOVERY_PROCESSING] ⚠️ No chunks available for reassembly`);
       }
     }
 
-    console.log(`[RECOVERY_PROCESSING] 🚀 Sending recovery EXECUTE_WORKFLOW for ${transferId} (${executeMessage.assembledData?.length || 0} chars)`);
+    console.log(`[RECOVERY_PROCESSING] 🚀 Sending recovery EXECUTE_WORKFLOW for ${transferId} (${executeMessage.pageHtml?.length || 0} chars)`);
     await chrome.runtime.sendMessage(executeMessage);
     console.log(`[RECOVERY_PROCESSING] ✅ Recovery EXECUTE_WORKFLOW sent successfully for ${transferId}`);
 
@@ -809,7 +809,7 @@ async function processRecoveredAssembledTransfer(msg: any, transfer: any): Promi
     console.log(`[RECOVERY_PROCESSING] 📊 Recovery summary for ${transferId}:`, {
       pluginId,
       pageKey,
-      dataLength: executeMessage.assembledData?.length || 0,
+      dataLength: executeMessage.pageHtml?.length || 0,
       recoveryType: executeMessage.recoverySource,
       timestamp: executeMessage.timestamp
     });
@@ -1615,6 +1615,143 @@ chrome.runtime.onMessage.addListener(
       return true;
     }
 
+    // === PYODIDE_MESSAGE: Обработчик сообщений от offscreen document ===
+    if (msg.type === 'PYODIDE_MESSAGE') {
+      console.log('[background][PYODIDE_MESSAGE] 📨 Received PYODIDE_MESSAGE from offscreen');
+      console.log('[background][PYODIDE_MESSAGE] Message data:', {
+        pluginId: msg.pluginId,
+        pageKey: msg.pageKey,
+        message: msg.message?.substring(0, 100) + (msg.message?.length > 100 ? '...' : ''),
+        timestamp: msg.timestamp
+      });
+
+      (async () => {
+        try {
+          // Проверяем наличие обязательных полей
+          if (!msg.pluginId || !msg.pageKey || !msg.message) {
+            console.error('[background][PYODIDE_MESSAGE] ❌ Missing required fields:', {
+              pluginId: !!msg.pluginId,
+              pageKey: !!msg.pageKey,
+              message: !!msg.message
+            });
+            sendResponse({ error: 'Missing required fields: pluginId, pageKey, or message' });
+            return;
+          }
+
+          // Генерируем messageId
+          const messageId = `pyodide_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+          // Сохраняем сообщение в чат плагина
+          const result = await pluginChatApi.saveMessage(msg.pluginId, msg.pageKey, {
+            id: messageId,
+            content: msg.message,
+            sender: 'plugin',
+            timestamp: msg.timestamp || Date.now(),
+            type: 'plugin_message'
+          });
+
+          console.log('[background][PYODIDE_MESSAGE] ✅ Message saved successfully:', result);
+
+          // Отправляем событие обновления чата для всех слушателей
+          chrome.runtime.sendMessage({
+            type: 'PLUGIN_CHAT_UPDATED',
+            pluginId: msg.pluginId,
+            pageKey: msg.pageKey,
+            messageId: messageId
+          }).catch((error) => {
+            console.warn('[background][PYODIDE_MESSAGE] Failed to send PLUGIN_CHAT_UPDATED event:', error);
+          });
+
+          // Отправляем ответ
+          sendResponse({
+            success: true,
+            messageId: messageId,
+            type: 'PYODIDE_MESSAGE_RESPONSE'
+          });
+
+        } catch (error: unknown) {
+          console.error('[background][PYODIDE_MESSAGE] ❌ Error processing message:', error);
+          sendResponse({
+            error: (error as Error).message,
+            type: 'PYODIDE_MESSAGE_RESPONSE'
+          });
+        }
+      })();
+
+      return true; // Указываем асинхронную обработку
+    }
+
+    // === HTML_ASSEMBLED: Обработчик завершения сборки HTML из чанков ===
+    if (msg.type === 'HTML_ASSEMBLED') {
+      console.log('[background][HTML_ASSEMBLED] 📨 Received HTML_ASSEMBLED from offscreen');
+      console.log('[background][HTML_ASSEMBLED] Assembly data:', {
+        transferId: msg.transferId,
+        pluginId: msg.pluginId,
+        pageKey: msg.pageKey,
+        requestId: msg.requestId,
+        htmlLength: msg.html?.length || 0,
+        metadata: msg.metadata
+      });
+
+      (async () => {
+        try {
+          // Проверяем наличие обязательных полей
+          if (!msg.pluginId || !msg.pageKey || !msg.html) {
+            console.error('[background][HTML_ASSEMBLED] ❌ Missing required fields:', {
+              pluginId: !!msg.pluginId,
+              pageKey: !!msg.pageKey,
+              html: !!msg.html
+            });
+            sendResponse({ error: 'Missing required fields: pluginId, pageKey, or html' });
+            return;
+          }
+
+          console.log('[background][HTML_ASSEMBLED] ✅ HTML assembly confirmed, launching workflow...');
+
+          // Теперь запускаем EXECUTE_WORKFLOW с собранным HTML
+          const executeWorkflowMessage = {
+            type: 'EXECUTE_WORKFLOW',
+            pluginId: msg.pluginId,
+            pageKey: msg.pageKey,
+            requestId: msg.requestId,
+            transferId: msg.transferId,
+            useChunks: false, // HTML уже собран
+            pageHtml: msg.html,
+            timestamp: Date.now()
+          };
+
+          console.log('[background][HTML_ASSEMBLED] 🚀 Sending EXECUTE_WORKFLOW to offscreen:', {
+            pluginId: msg.pluginId,
+            pageKey: msg.pageKey.substring(0, 50) + '...',
+            requestId: msg.requestId,
+            htmlLength: msg.html.length
+          });
+
+          // Отправляем EXECUTE_WORKFLOW в offscreen
+          chrome.runtime.sendMessage(executeWorkflowMessage).catch((error) => {
+            console.error('[background][HTML_ASSEMBLED] ❌ Failed to send EXECUTE_WORKFLOW:', error);
+          });
+
+          // Отправляем подтверждение сборки
+          sendResponse({
+            success: true,
+            type: 'HTML_ASSEMBLED_RESPONSE',
+            transferId: msg.transferId,
+            workflowLaunched: true
+          });
+
+        } catch (error: unknown) {
+          console.error('[background][HTML_ASSEMBLED] ❌ Error processing assembled HTML:', error);
+          sendResponse({
+            error: (error as Error).message,
+            type: 'HTML_ASSEMBLED_RESPONSE'
+          });
+        }
+      })();
+
+      return true; // Указываем асинхронную обработку
+    }
+
     // === DEBUG: Добавляем логи для отслеживания неизвестных сообщений ===
     if (!msg.type) {
       console.log('[background][DEBUG] Получено сообщение:', msg);
@@ -2184,6 +2321,139 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
         };
         console.log('[background][PORT] GET_PLUGIN_CHAT: returning error response for port delivery');
         return errorResponse;
+      }
+    })();
+  }
+
+  // Обработка PYODIDE_MESSAGE сообщений через порт
+  if (message.type === 'PYODIDE_MESSAGE') {
+    console.log('[background][PORT][PYODIDE_MESSAGE] 📨 Received PYODIDE_MESSAGE from offscreen via port');
+    console.log('[background][PORT][PYODIDE_MESSAGE] Message data:', {
+      pluginId: message.pluginId,
+      pageKey: message.pageKey,
+      message: message.message?.substring(0, 100) + (message.message?.length > 100 ? '...' : ''),
+      timestamp: message.timestamp
+    });
+
+    // Асинхронная обработка с возвратом результата через порт
+    return (async () => {
+      try {
+        // Проверяем наличие обязательных полей
+        if (!message.pluginId || !message.pageKey || !message.message) {
+          console.error('[background][PORT][PYODIDE_MESSAGE] ❌ Missing required fields:', {
+            pluginId: !!message.pluginId,
+            pageKey: !!message.pageKey,
+            message: !!message.message
+          });
+          return { error: 'Missing required fields: pluginId, pageKey, or message' };
+        }
+
+        // Генерируем messageId
+        const messageId = `pyodide_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+        // Сохраняем сообщение в чат плагина
+        const result = await pluginChatApi.saveMessage(message.pluginId, message.pageKey, {
+          id: messageId,
+          content: message.message,
+          sender: 'plugin',
+          timestamp: message.timestamp || Date.now(),
+          type: 'plugin_message'
+        });
+
+        console.log('[background][PORT][PYODIDE_MESSAGE] ✅ Message saved successfully:', result);
+
+        // Отправляем событие обновления чата для всех слушателей
+        chrome.runtime.sendMessage({
+          type: 'PLUGIN_CHAT_UPDATED',
+          pluginId: message.pluginId,
+          pageKey: message.pageKey,
+          messageId: messageId
+        }).catch((error) => {
+          console.warn('[background][PORT][PYODIDE_MESSAGE] Failed to send PLUGIN_CHAT_UPDATED event:', error);
+        });
+
+        // Возвращаем успешный ответ
+        return {
+          success: true,
+          messageId: messageId,
+          type: 'PYODIDE_MESSAGE_RESPONSE'
+        };
+
+      } catch (error: unknown) {
+        console.error('[background][PORT][PYODIDE_MESSAGE] ❌ Error processing message:', error);
+        return {
+          error: (error as Error).message,
+          type: 'PYODIDE_MESSAGE_RESPONSE'
+        };
+      }
+    })();
+  }
+
+  // Обработка HTML_ASSEMBLED сообщений через порт
+  if (message.type === 'HTML_ASSEMBLED') {
+    console.log('[background][PORT][HTML_ASSEMBLED] 📨 Received HTML_ASSEMBLED from offscreen via port');
+    console.log('[background][PORT][HTML_ASSEMBLED] Assembly data:', {
+      transferId: message.transferId,
+      pluginId: message.pluginId,
+      pageKey: message.pageKey,
+      requestId: message.requestId,
+      htmlLength: message.html?.length || 0,
+      metadata: message.metadata
+    });
+
+    // Асинхронная обработка с возвратом результата через порт
+    return (async () => {
+      try {
+        // Проверяем наличие обязательных полей
+        if (!message.pluginId || !message.pageKey || !message.html) {
+          console.error('[background][PORT][HTML_ASSEMBLED] ❌ Missing required fields:', {
+            pluginId: !!message.pluginId,
+            pageKey: !!message.pageKey,
+            html: !!message.html
+          });
+          return { error: 'Missing required fields: pluginId, pageKey, or html' };
+        }
+
+        console.log('[background][PORT][HTML_ASSEMBLED] ✅ HTML assembly confirmed, launching workflow...');
+
+        // Теперь запускаем EXECUTE_WORKFLOW с собранным HTML
+        const executeWorkflowMessage = {
+          type: 'EXECUTE_WORKFLOW',
+          pluginId: message.pluginId,
+          pageKey: message.pageKey,
+          requestId: message.requestId,
+          transferId: message.transferId,
+          useChunks: false, // HTML уже собран
+          pageHtml: message.html,
+          timestamp: Date.now()
+        };
+
+        console.log('[background][PORT][HTML_ASSEMBLED] 🚀 Sending EXECUTE_WORKFLOW to offscreen:', {
+          pluginId: message.pluginId,
+          pageKey: message.pageKey.substring(0, 50) + '...',
+          requestId: message.requestId,
+          htmlLength: message.html.length
+        });
+
+        // Отправляем EXECUTE_WORKFLOW в offscreen
+        chrome.runtime.sendMessage(executeWorkflowMessage).catch((error) => {
+          console.error('[background][PORT][HTML_ASSEMBLED] ❌ Failed to send EXECUTE_WORKFLOW:', error);
+        });
+
+        // Возвращаем подтверждение сборки
+        return {
+          success: true,
+          type: 'HTML_ASSEMBLED_RESPONSE',
+          transferId: message.transferId,
+          workflowLaunched: true
+        };
+
+      } catch (error: unknown) {
+        console.error('[background][PORT][HTML_ASSEMBLED] ❌ Error processing assembled HTML:', error);
+        return {
+          error: (error as Error).message,
+          type: 'HTML_ASSEMBLED_RESPONSE'
+        };
       }
     })();
   }
