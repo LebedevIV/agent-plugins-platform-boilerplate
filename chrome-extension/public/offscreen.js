@@ -396,7 +396,7 @@ async function initializePyodide() {
             content = JSON.stringify(jsMessage);
           }
 
-          console.log('[DIAGNOSTIC] Final content to send:', content.substring(0, 200) + '...');
+          console.log('[DIAGNOSTIC] Final content to send:', (typeof content === 'string' ? content.substring(0, 200) + '...' : String(content)));
 
           // Асинхронная отправка с Promise и таймаутом для предотвращения ошибок каналов
           const messageId = `pyodide_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -646,8 +646,9 @@ function handleHtmlChunk(chunkMessage) {
     // LOG ASSEMBLED HTML FOR DIAGNOSTICS
     console.log('[DIAGNOSTIC] ===== ASSEMBLED HTML CONTENT =====');
     console.log('[DIAGNOSTIC] HTML Length:', assembledHtml.length);
-    console.log('[DIAGNOSTIC] First 1000 chars:', assembledHtml.substring(0, Math.min(1000, assembledHtml.length)));
-    console.log('[DIAGNOSTIC] Last 500 chars:', assembledHtml.substring(Math.max(0, assembledHtml.length - 500)));
+    console.log('[DIAGNOSTIC] First 1000 chars:', (typeof assembledHtml === 'string' ? assembledHtml.substring(0, Math.min(1000, assembledHtml.length)) : String(assembledHtml)));
+    const lastChars = (typeof assembledHtml === 'string' && assembledHtml.length > 500) ? assembledHtml.substring(Math.max(0, assembledHtml.length - 500)) : String(assembledHtml);
+    console.log('[DIAGNOSTIC] Last 500 chars:', lastChars);
     console.log('[DIAGNOSTIC] ===== END ASSEMBLED HTML =====');
 
     // Send HTML_ASSEMBLED message to background with extracted pluginId and pageKey
@@ -803,67 +804,118 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
     // === НОВАЯ СИСТЕМА ПЕРЕДАЧИ ДАННЫХ ЧЕРЕЗ PYODIDE.GLOBALS ===
     logDebug('PYODIDE', 'Starting data transmission to Pyodide globals');
 
+    // ДИАГНОСТИКА: Проверить тип и структуру workflowPayload.page_html
+    logInfo('PYODIDE', `🔍 WORKFLOW PAYLOAD DIAGNOSTIC:`);
+    logInfo('PYODIDE', `🔍 workflowPayload.page_html type: ${typeof workflowPayload.page_html}`);
+    if (workflowPayload.page_html && typeof workflowPayload.page_html === 'object') {
+      logInfo('PYODIDE', `🔍 workflowPayload.page_html keys: ${Object.keys(workflowPayload.page_html)}`);
+      logInfo('PYODIDE', `🔍 __isChunkedString: ${workflowPayload.page_html.__isChunkedString}`);
+      logInfo('PYODIDE', `🔍 chunkCount: ${workflowPayload.page_html.chunkCount}`);
+    } else if (workflowPayload.page_html && typeof workflowPayload.page_html === 'string') {
+      logInfo('PYODIDE', `🔍 workflowPayload.page_html length: ${workflowPayload.page_html.length} chars`);
+    }
+
     // Проверить, есть ли page_html в workflowPayload
     if (workflowPayload.page_html && typeof workflowPayload.page_html === 'object' && workflowPayload.page_html.__isChunkedString) {
-      logInfo('PYODIDE', 'Detected chunk data for transmission');
+      logInfo('PYODIDE', '✅ Detected chunk data for transmission (CHUNK BRANCH)');
 
       // Извлечь метаданные из chunk структуры
       const chunkMetadata = workflowPayload.page_html;
       const chunkCount = chunkMetadata.chunkCount;
 
-      // Установить метаданные в Pyodide globals
-      pyodide.globals.set('page_html_chunk_count', chunkCount);
-      pyodide.globals.set('page_html_total_length', chunkMetadata.totalLength);
+      logInfo('PYODIDE', `Setting up chunk data transmission for ${chunkCount} chunks`);
 
-      // Установить все чанки в Pyodide globals
-      for (let i = 0; i < chunkCount; i++) {
-        const chunkKey = `page_html_chunk_${i}`;
-        const chunkValue = workflowPayload[chunkKey] || '';
-        pyodide.globals.set(chunkKey, chunkValue);
+      // НЕМЕДЛЕННО УСТАНОВИТЬ ВСЕ ПЕРЕМЕННЫЕ ПРЯМО ПЕРЕД ВЫЗОВОМ PYTHON ФУНКЦИИ
+      // Это критично - установка должна происходить в том же контексте выполнения
+      try {
+        // Очистить старые переменные
+        try { pyodide.globals.delete('page_html_chunk_count'); } catch(e) {}
+        try { pyodide.globals.delete('page_html_total_length'); } catch(e) {}
+        try { pyodide.globals.delete('page_html'); } catch(e) {}
+
+        // Установить новые переменные
+        pyodide.globals.set('page_html_chunk_count', chunkCount);
+        pyodide.globals.set('page_html_total_length', chunkMetadata.totalLength);
+
+        // Установить все чанки
+        for (let i = 0; i < chunkCount; i++) {
+          const chunkKey = `page_html_chunk_${i}`;
+          const chunkValue = workflowPayload[chunkKey] || '';
+          try { pyodide.globals.delete(chunkKey); } catch(e) {} // Очистить старую
+          pyodide.globals.set(chunkKey, chunkValue);
+        }
+
+        logInfo('PYODIDE', `✅ All chunk variables set successfully: count=${chunkCount}, totalLength=${chunkMetadata.totalLength}`);
+
+        // НЕМЕДЛЕННАЯ ВЕРИФИКАЦИЯ В ТОМ ЖЕ КОНТЕКСТЕ
+        const verifyCount = pyodide.globals.get('page_html_chunk_count');
+        const verifyLength = pyodide.globals.get('page_html_total_length');
+
+        if (verifyCount === chunkCount && verifyLength === chunkMetadata.totalLength) {
+          logInfo('PYODIDE', '✅ Chunk variables verified successfully');
+        } else {
+          logError('PYODIDE', `❌ Verification failed: count=${verifyCount}/${chunkCount}, length=${verifyLength}/${chunkMetadata.totalLength}`);
+        }
+
+      } catch (setError) {
+        logError('PYODIDE', 'Error setting chunk variables in globals:', setError);
+        throw setError;
       }
-      logInfo('PYODIDE', `All ${chunkCount} chunks set in globals`);
 
     } else {
-      logInfo('PYODIDE', 'No chunk data found, using direct transmission');
+      logInfo('PYODIDE', '🔄 No chunk data found, using direct transmission (DIRECT BRANCH)');
 
       // Fallback: установить page_html напрямую если нет chunks
       if (workflowPayload.page_html && typeof workflowPayload.page_html === 'string') {
+        try { pyodide.globals.delete('page_html'); } catch(e) {} // Очистить старую
         pyodide.globals.set('page_html', workflowPayload.page_html);
         logInfo('PYODIDE', `page_html set directly, length: ${workflowPayload.page_html.length}`);
+
+        // === ИСПРАВЛЕНИЕ: Симулировать chunk логику для совместимости с Python кодом ===
+        logInfo('PYODIDE', '🔧 FIXING: Simulating chunk variables for direct HTML transmission');
+
+        // Очистить старые chunk переменные
+        try { pyodide.globals.delete('page_html_chunk_count'); } catch(e) {}
+        try { pyodide.globals.delete('page_html_total_length'); } catch(e) {}
+        try { pyodide.globals.delete('page_html_chunk_0'); } catch(e) {}
+
+        // Установить chunk переменные для совместимости с Python
+        pyodide.globals.set('page_html_chunk_count', 1);
+        pyodide.globals.set('page_html_total_length', workflowPayload.page_html.length);
+        pyodide.globals.set('page_html_chunk_0', workflowPayload.page_html);
+
+        logInfo('PYODIDE', `✅ Chunk variables simulated: count=1, totalLength=${workflowPayload.page_html.length}`);
+
+        // Верификация всех переменных
+        const verifyCount = pyodide.globals.get('page_html_chunk_count');
+        const verifyLength = pyodide.globals.get('page_html_total_length');
+        const verifyChunk0 = pyodide.globals.get('page_html_chunk_0');
+        const verifyHtml = pyodide.globals.get('page_html');
+
+        if (verifyCount === 1 &&
+            verifyLength === workflowPayload.page_html.length &&
+            verifyChunk0 === workflowPayload.page_html &&
+            verifyHtml === workflowPayload.page_html) {
+          logInfo('PYODIDE', '✅ All variables verified successfully - Python compatibility ensured');
+        } else {
+          logError('PYODIDE', `❌ Verification failed: count=${verifyCount}/1, length=${verifyLength}/${workflowPayload.page_html.length}, chunk0_length=${verifyChunk0 ? verifyChunk0.length : 'null'}/${workflowPayload.page_html.length}`);
+        }
       } else {
         logWarn('PYODIDE', 'page_html not found or has wrong type');
       }
     }
 
-    // Вызвать Python функцию БЕЗ аргументов - данные уже в globals
+    // ВЫЗВАТЬ PYTHON ФУНКЦИЮ НЕМЕДЛЕННО ПОСЛЕ УСТАНОВКИ ПЕРЕМЕННЫХ
     logInfo('PYODIDE', 'Calling Python function analyze_ozon_product()');
-
-    // LOG DATA RECEIVED BY PYTHON
-    console.log('[DIAGNOSTIC] ===== PYTHON DATA RECEIVED =====');
-    try {
-      const pageHtmlChunkCount = pyodide.globals.get('page_html_chunk_count');
-      console.log('[DIAGNOSTIC] page_html_chunk_count:', pageHtmlChunkCount);
-
-      if (pageHtmlChunkCount) {
-        for (let i = 0; i < pageHtmlChunkCount; i++) {
-          const chunkKey = `page_html_chunk_${i}`;
-          const chunkData = pyodide.globals.get(chunkKey);
-          console.log(`[DIAGNOSTIC] ${chunkKey} length: ${chunkData ? chunkData.length : 'EMPTY'}`);
-        }
-      } else {
-        const pageHtmlDirect = pyodide.globals.get('page_html');
-        console.log('[DIAGNOSTIC] page_html direct length:', pageHtmlDirect ? pageHtmlDirect.length : 'EMPTY');
-      }
-    } catch (logError) {
-      console.log('[DIAGNOSTIC] Error logging Python globals:', logError);
-    }
-    console.log('[DIAGNOSTIC] ===== END PYTHON DATA =====');
 
     let resultProxy;
     try {
-      console.log('[DIAGNOSTIC] Starting call to analyze_ozon_product()');
+      console.log('[DIAGNOSTIC] ===== PYTHON FUNCTION CALL =====');
+      console.log('[DIAGNOSTIC] About to call analyze_ozon_product()');
+
       resultProxy = await pyodide.runPythonAsync('analyze_ozon_product()');
-      console.log('[DIAGNOSTIC] Call to analyze_ozon_product() completed, received result proxy');
+
+      console.log('[DIAGNOSTIC] Call to analyze_ozon_product() completed successfully');
       logInfo('PYODIDE', 'Python function called successfully');
     } catch (callError) {
       console.error('[DIAGNOSTIC] Call to analyze_ozon_product() failed:', callError);
@@ -929,7 +981,8 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
       timestamp: Date.now()
     };
     logInfo('EXECUTION', `Sending success response for workflow: pluginId=${pluginId}, requestId=${requestId}`);
-    logDebug('EXECUTION', `Response payload: ${JSON.stringify(successResponse).substring(0, 200)}...`);
+    const responsePayload = JSON.stringify(successResponse);
+    logDebug('EXECUTION', `Response payload: ${typeof responsePayload === 'string' ? responsePayload.substring(0, 200) : String(responsePayload).substring(0, 200)}...`);
     sendResponse(successResponse);
 
   } catch (error) {

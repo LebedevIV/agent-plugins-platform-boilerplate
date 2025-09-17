@@ -76,7 +76,7 @@ function handleWorkerMessage(event) {
   const { type, requestId, success, result, error } = event.data;
 
   console.log('[ContentWorkerManager] Worker message received:', type, requestId ?
-    '(id: ' + requestId.substring(0, 16) + '...)' : '');
+    '(id: ' + (typeof requestId === 'string' ? requestId.substring(0, 16) : String(requestId).substring(0, 16)) + '...)' : '');
 
   // Handle host calls - forward to background
   if (type === 'host_call') {
@@ -252,7 +252,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('[ContentWorkerManager] Received message:', message.type, 'from:', sender?.id || 'unknown');
 
   if (message.type === 'WORKER_EXECUTE_PYTHON') {
-    console.log('[ContentWorkerManager] Processing WORKER_EXECUTE_PYTHON:', message.code?.substring(0, 100) + '...');
+    console.log('[ContentWorkerManager] Processing WORKER_EXECUTE_PYTHON:', message.code ? (typeof message.code === 'string' ? message.code.substring(0, 100) : String(message.code).substring(0, 100)) + '...' : 'undefined');
     (async () => {
       try {
         console.log('[ContentWorkerManager] Starting Python execution...');

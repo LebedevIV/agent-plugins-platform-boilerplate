@@ -1621,7 +1621,7 @@ chrome.runtime.onMessage.addListener(
       console.log('[background][PYODIDE_MESSAGE] Message data:', {
         pluginId: msg.pluginId,
         pageKey: msg.pageKey,
-        message: msg.message?.substring(0, 100) + (msg.message?.length > 100 ? '...' : ''),
+        message: typeof msg.message === 'string' ? msg.message.substring(0, 100) + (msg.message.length > 100 ? '...' : '') : String(msg.message),
         timestamp: msg.timestamp
       });
 
@@ -1722,7 +1722,7 @@ chrome.runtime.onMessage.addListener(
 
           console.log('[background][HTML_ASSEMBLED] 🚀 Sending EXECUTE_WORKFLOW to offscreen:', {
             pluginId: msg.pluginId,
-            pageKey: msg.pageKey.substring(0, 50) + '...',
+            pageKey: typeof msg.pageKey === 'string' ? msg.pageKey.substring(0, 50) + '...' : String(msg.pageKey),
             requestId: msg.requestId,
             htmlLength: msg.html.length
           });
@@ -1779,7 +1779,7 @@ const handleHostApiMessage = async (
               const elements = document.querySelectorAll(selector);
               return Array.from(elements).map(el => ({
                 tagName: el.tagName,
-                textContent: el.textContent?.substring(0, 200),
+                textContent: typeof el.textContent === 'string' ? el.textContent.substring(0, 200) : String(el.textContent || ''),
                 attributes: Array.from(el.attributes).map((attr: Attr) => ({ name: attr.name, value: attr.value })),
               }));
             }),
@@ -2331,7 +2331,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
     console.log('[background][PORT][PYODIDE_MESSAGE] Message data:', {
       pluginId: message.pluginId,
       pageKey: message.pageKey,
-      message: message.message?.substring(0, 100) + (message.message?.length > 100 ? '...' : ''),
+      message: typeof message.message === 'string' ? message.message.substring(0, 100) + (message.message.length > 100 ? '...' : '') : String(message.message),
       timestamp: message.timestamp
     });
 
@@ -2430,7 +2430,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
 
         console.log('[background][PORT][HTML_ASSEMBLED] 🚀 Sending EXECUTE_WORKFLOW to offscreen:', {
           pluginId: message.pluginId,
-          pageKey: message.pageKey.substring(0, 50) + '...',
+          pageKey: typeof message.pageKey === 'string' ? message.pageKey.substring(0, 50) + '...' : String(message.pageKey),
           requestId: message.requestId,
           htmlLength: message.html.length
         });

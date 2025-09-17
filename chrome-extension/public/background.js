@@ -3554,7 +3554,7 @@ const handleHostApiMessage = async (message, sendResponse) => {
               var _a2;
               return {
                 tagName: el.tagName,
-                textContent: (_a2 = el.textContent) == null ? void 0 : _a2.substring(0, 200),
+                textContent: (_a2 = el.textContent) == null ? void 0 : typeof _a2 === 'string' ? _a2.substring(0, 200) : String(_a2).substring(0, 200),
                 attributes: Array.from(el.attributes).map((attr) => ({ name: attr.name, value: attr.value }))
               };
             });

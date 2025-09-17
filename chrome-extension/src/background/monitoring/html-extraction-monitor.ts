@@ -172,7 +172,7 @@ export class HTMLExtractionMonitor {
 
     // Регистрация метрик
     this.monitoringCore.getMetricsCollector().incrementCounter('dom_queries_total', {
-      selector: selector.substring(0, 50), // ограничение длины
+      selector: typeof selector === 'string' ? selector.substring(0, 50) : String(selector || ''),
       success: success.toString(),
       performance: queryTime > 100 ? 'slow' : 'fast'
     });
