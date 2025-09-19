@@ -953,7 +953,7 @@ async function handleExecuteWorkflow(data: ExecuteWorkflowMessage['data']) {
 
 // Handle HEARTBEAT_CHECK message
 async function handleHeartbeatCheck(message: HeartbeatMessage) {
-  console.log(`[offscreen][HEARTBEAT] 💓 Received heartbeat check ${message.heartbeatId}`);
+  console.debug(`[offscreen][HEARTBEAT] 💓 Received heartbeat check ${message.heartbeatId}`);
 
   try {
     // Collect offscreen health data
@@ -968,11 +968,11 @@ async function handleHeartbeatCheck(message: HeartbeatMessage) {
     };
 
     const latency = Date.now() - message.timestamp;
-    console.log(`[offscreen][HEARTBEAT] 📤 Sending heartbeat response ${message.heartbeatId} (${latency}ms latency)`);
+    console.debug(`[offscreen][HEARTBEAT] 📤 Sending heartbeat response ${message.heartbeatId} (${latency}ms latency)`);
 
     try {
       await safeSendMessageOffscreen(response);
-      console.log(`[offscreen][HEARTBEAT] ✅ Heartbeat response sent successfully`);
+      console.debug(`[offscreen][HEARTBEAT] ✅ Heartbeat response sent successfully`);
     } catch (sendError) {
       console.error(`[offscreen][HEARTBEAT] ❌ Failed to send heartbeat response:`, sendError);
       throw new Error(`Failed to send heartbeat response: ${(sendError as Error).message}`);

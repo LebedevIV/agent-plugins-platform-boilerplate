@@ -668,7 +668,7 @@ class HeartbeatMonitor {
     this.stats.lastHeartbeatTime = startTime;
 
     try {
-      console.log(`[HeartbeatMonitor] 💓 Sending heartbeat ${heartbeatId} (Circuit Breaker State: ${this.circuitBreaker.getState()})`);
+      console.debug(`[HeartbeatMonitor] 💓 Sending heartbeat ${heartbeatId} (Circuit Breaker State: ${this.circuitBreaker.getState()})`);
 
       // CIRCUIT BREAKER PROTECTION: Wrap heartbeat operation with circuit breaker
       const result = await this.circuitBreaker.execute(
@@ -695,7 +695,7 @@ class HeartbeatMonitor {
       const latency = Date.now() - startTime;
       this.updateLatency(latency);
 
-      console.log(`[HeartbeatMonitor] ✅ Heartbeat ${heartbeatId} successful (${latency}ms)`);
+      console.debug(`[HeartbeatMonitor] ✅ Heartbeat ${heartbeatId} successful (${latency}ms)`);
       this.stats.successful++;
       this.stats.consecutiveFailures = 0;
 

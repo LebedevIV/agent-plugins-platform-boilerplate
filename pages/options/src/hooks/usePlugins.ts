@@ -246,11 +246,11 @@ const usePlugins = () => {
 
     // Запуск heartbeat при монтировании
     React.useEffect(() => {
-      console.log('[usePlugins] Starting heartbeat mechanism');
+      console.debug('[usePlugins] Starting heartbeat mechanism');
       startHeartbeat();
 
       return () => {
-        console.log('[usePlugins] Stopping heartbeat mechanism');
+        console.debug('[usePlugins] Stopping heartbeat mechanism');
         stopHeartbeat();
       };
     }, [startHeartbeat, stopHeartbeat, pingWithRetry]);

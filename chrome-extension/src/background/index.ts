@@ -190,7 +190,16 @@ const sendHtmlDirectly = async (
 
     // Запускаем workflow в offscreen document с прямой передачей
     try {
-      await executeWorkflowInOffscreen(pluginId, pageKey, transferId, requestId);
+      // Получить API ключ для передачи в offscreen
+      let geminiApiKey;
+      try {
+        geminiApiKey = await getApiKeyForModel('gemini-flash');
+        console.log('[background][DIRECT_TRANSMISSION] ✅ API key retrieved for workflow');
+      } catch (keyError) {
+        console.warn('[background][DIRECT_TRANSMISSION] ⚠️ Failed to get API key:', keyError);
+      }
+
+      await executeWorkflowInOffscreen(pluginId, pageKey, transferId, requestId, false, undefined, geminiApiKey);
       console.log('[background][DIRECT_TRANSMISSION] Workflow execution initiated successfully');
     } catch (workflowError) {
       console.error('[background][DIRECT_TRANSMISSION] Failed to execute workflow:', workflowError);
@@ -788,6 +797,15 @@ async function processRecoveredAssembledTransfer(msg: any, transfer: any): Promi
       timestamp: Date.now()
     };
 
+    // Получить API ключ для Gemini и добавить к сообщению
+    try {
+      const geminiApiKey = await getApiKeyForModel('gemini-flash');
+      executeMessage.geminiApiKey = geminiApiKey;
+      console.log('[RECOVERY_PROCESSING] ✅ API key added to EXECUTE_WORKFLOW message');
+    } catch (keyError) {
+      console.warn('[RECOVERY_PROCESSING] ⚠️ Failed to get API key for EXECUTE_WORKFLOW:', keyError);
+    }
+
     // ДОПОЛНИТЕЛЬНАЯ ВАЛИДАЦИЯ ASSEMBLED DATA
     if (!executeMessage.assembledData || executeMessage.assembledData.length === 0) {
       console.warn(`[RECOVERY_PROCESSING] ⚠️ Assembled data is empty for transfer ${transferId}`);
@@ -1210,13 +1228,27 @@ async function executeWorkflowInOffscreen(
   transferId: string,
   requestId: string,
   useChunks: boolean = false,
-  htmlData?: string
+  htmlData?: string,
+  apiKey?: string
 ): Promise<void> {
   console.log(`[WORKFLOW_EXECUTION] 🚀 Starting workflow execution in offscreen`);
   console.log(`[WORKFLOW_EXECUTION] Plugin ID: ${pluginId}`);
   console.log(`[WORKFLOW_EXECUTION] Transfer ID: ${transferId}`);
   console.log(`[WORKFLOW_EXECUTION] Use chunks: ${useChunks}`);
   console.log(`[WORKFLOW_EXECUTION] HTML data length: ${htmlData?.length || 0}`);
+
+  // Получить API ключ для Gemini
+  let geminiApiKey = apiKey;
+  if (!geminiApiKey) {
+    try {
+      console.log('[WORKFLOW_EXECUTION] 🔑 Getting Gemini API key...');
+      geminiApiKey = await getApiKeyForModel('gemini-flash');
+      console.log('[WORKFLOW_EXECUTION] ✅ Gemini API key retrieved successfully');
+    } catch (keyError) {
+      console.error('[WORKFLOW_EXECUTION] ❌ Failed to get Gemini API key:', keyError);
+      console.warn('[WORKFLOW_EXECUTION] ⚠️ Continuing without API key - offscreen will handle fallback');
+    }
+  }
 
   const workflowPayload = {
     type: 'EXECUTE_WORKFLOW',
@@ -1226,6 +1258,7 @@ async function executeWorkflowInOffscreen(
     transferId,
     useChunks,
     htmlData,
+    geminiApiKey,
     timestamp: Date.now()
   };
 
@@ -1466,9 +1499,9 @@ chrome.runtime.onMessage.addListener(
     // === HEARTBEAT: Обработчик PING для поддержания соединения ===
     if (msg.type === 'PING') {
       const pingReceiveTime = Date.now();
-      console.log(`[background][HEARTBEAT] 📨 Received PING from sidepanel at ${new Date(pingReceiveTime).toISOString()}`);
+      console.debug(`[background][HEARTBEAT] 📨 Received PING from sidepanel at ${new Date(pingReceiveTime).toISOString()}`);
       const response = { pong: true, timestamp: pingReceiveTime };
-      console.log(`[background][HEARTBEAT] 📤 Sending PONG response:`, response);
+      console.debug(`[background][HEARTBEAT] 📤 Sending PONG response:`, response);
       sendResponse(response);
       return true;
     }
@@ -1726,6 +1759,15 @@ chrome.runtime.onMessage.addListener(
             requestId: msg.requestId,
             htmlLength: msg.html.length
           });
+
+          // Получить API ключ и добавить к сообщению
+          try {
+            const geminiApiKey = await getApiKeyForModel('gemini-flash');
+            executeWorkflowMessage.geminiApiKey = geminiApiKey;
+            console.log('[background][HTML_ASSEMBLED] ✅ API key added to EXECUTE_WORKFLOW message');
+          } catch (keyError) {
+            console.warn('[background][HTML_ASSEMBLED] ⚠️ Failed to get API key for EXECUTE_WORKFLOW:', keyError);
+          }
 
           // Отправляем EXECUTE_WORKFLOW в offscreen
           chrome.runtime.sendMessage(executeWorkflowMessage).catch((error) => {
@@ -2435,6 +2477,15 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
           htmlLength: message.html.length
         });
 
+        // Получить API ключ и добавить к сообщению
+        try {
+          const geminiApiKey = await getApiKeyForModel('gemini-flash');
+          executeWorkflowMessage.geminiApiKey = geminiApiKey;
+          console.log('[background][PORT][HTML_ASSEMBLED] ✅ API key added to EXECUTE_WORKFLOW message');
+        } catch (keyError) {
+          console.warn('[background][PORT][HTML_ASSEMBLED] ⚠️ Failed to get API key for EXECUTE_WORKFLOW:', keyError);
+        }
+
         // Отправляем EXECUTE_WORKFLOW в offscreen
         chrome.runtime.sendMessage(executeWorkflowMessage).catch((error) => {
           console.error('[background][PORT][HTML_ASSEMBLED] ❌ Failed to send EXECUTE_WORKFLOW:', error);
@@ -2491,9 +2542,9 @@ chrome.runtime.onConnect.addListener((port: chrome.runtime.Port) => {
       // === HEARTBEAT: Добавить PING/PONG поддержку для портов ===
       if (message?.type === 'PING') {
         const pingReceiveTime = Date.now();
-        console.log(`[background][PORT][HEARTBEAT] 📨 Received PING on port "${port.name}" at ${new Date(pingReceiveTime).toISOString()}`);
+        console.debug(`[background][PORT][HEARTBEAT] 📨 Received PING on port "${port.name}" at ${new Date(pingReceiveTime).toISOString()}`);
         const pongResponse = { pong: true, timestamp: pingReceiveTime, port: port.name };
-        console.log(`[background][PORT][HEARTBEAT] 📤 Sending PONG response to port "${port.name}":`, pongResponse);
+        console.debug(`[background][PORT][HEARTBEAT] 📤 Sending PONG response to port "${port.name}":`, pongResponse);
         port.postMessage(pongResponse);
         return; // Не продолжаем обработку для PING
       }
@@ -2522,7 +2573,7 @@ function keepAlive() {
   setInterval(() => {
     try {
       chrome.runtime.getPlatformInfo(() => {
-        console.log('[background][KEEP-ALIVE] ✅ Keep-alive ping successful');
+        console.debug('[background][KEEP-ALIVE] ✅ Keep-alive ping successful');
       });
     } catch (error) {
       console.error('[background][KEEP-ALIVE] ❌ Keep-alive ping failed:', error);

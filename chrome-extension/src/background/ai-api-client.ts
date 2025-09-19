@@ -6,6 +6,7 @@
 
 import type { getMonitoringCore } from './monitoring/index.js';
 import { LogLevel } from './monitoring/monitoring-core.js';
+import { APIKeyManager } from '../../../pages/options/src/utils/encryption.js';
 
 export interface AiModelResponse {
   response: string;
@@ -290,25 +291,8 @@ export async function getApiKeyForModel(modelAlias: string): Promise<string | nu
       throw new Error(`Неизвестная модель: ${modelAlias}`);
     }
 
-    // В будущем здесь можно добавить логику получения API ключей из безопасного хранилища
-    // Пока используем переменные окружения или настройки расширения
-    const apiKeyName = config.api_key_env;
-
-    // Пробуем получить из chrome.storage (local)
-    const storageResult = await chrome.storage.local.get([apiKeyName]);
-    if (storageResult[apiKeyName]) {
-      return storageResult[apiKeyName];
-    }
-
-    // Запасной вариант - проверяем переменные окружения (хотя в расширениях они ограничены)
-    // Это больше для разработки и тестирования
-    const envApiKey = process.env[apiKeyName];
-    if (envApiKey) {
-      return envApiKey;
-    }
-
-    console.warn(`[AI Client] API key not found for model ${modelAlias} (${apiKeyName})`);
-    return null;
+    // Получаем API ключ через систему шифрования APIKeyManager
+    return await APIKeyManager.getDecryptedKey(modelAlias);
   } catch (error) {
     console.error('[AI Client] Error getting API key:', error);
     return null;
