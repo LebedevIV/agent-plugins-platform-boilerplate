@@ -2133,7 +2133,7 @@ async function sendChunksSequentially(transferId: string): Promise<void> {
 
 // Функция для обработки сообщений через порт (аналогично основному message handler)
 async function handleMessage(message: any, sender: chrome.runtime.MessageSender): Promise<any> {
-  console.log('[background][PORT] Processing message:', message);
+  console.debug('[background][PORT] Processing message:', message);
 
   // Обработка RUN_WORKFLOW сообщений
   if (message.type === 'RUN_WORKFLOW') {
@@ -2535,8 +2535,8 @@ chrome.runtime.onConnect.addListener((port: chrome.runtime.Port) => {
   // Обработчик сообщений через порт
   port.onMessage.addListener(async (message, sender) => {
     const messageTime = Date.now();
-    console.log(`[background][PORT] 📨 Port message received on "${port.name}" at ${new Date(messageTime).toISOString()}`);
-    console.log(`[background][PORT] Message type: ${message?.type || 'unknown'}`);
+    console.debug(`[background][PORT] 📨 Port message received on "${port.name}" at ${new Date(messageTime).toISOString()}`);
+    console.debug(`[background][PORT] Message type: ${message?.type || 'unknown'}`);
 
     try {
       // === HEARTBEAT: Добавить PING/PONG поддержку для портов ===
@@ -2552,10 +2552,10 @@ chrome.runtime.onConnect.addListener((port: chrome.runtime.Port) => {
       const result = await handleMessage(message, sender);
       if (result !== undefined) {
         const responseTime = Date.now();
-        console.log(`[background][PORT] 📤 Sending response to port "${port.name}" after ${responseTime - messageTime}ms`);
+        console.debug(`[background][PORT] 📤 Sending response to port "${port.name}" after ${responseTime - messageTime}ms`);
         port.postMessage(result);
       } else {
-        console.log(`[background][PORT] No response sent for message type: ${message?.type}`);
+        console.debug(`[background][PORT] No response sent for message type: ${message?.type}`);
       }
     } catch (error) {
       const errorTime = Date.now();

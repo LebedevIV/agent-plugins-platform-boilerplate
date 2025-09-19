@@ -8,6 +8,19 @@
  * Handles direct Python code execution in offscreen context
  * Supports chunked HTML data transfer for large documents
  */
+// Маппинг типов анализа на технические имена моделей
+const ANALYSIS_TYPE_MAPPING = {
+  'basic_analysis': 'gemini-flash',
+  'detailed_comparison': 'gemini-pro',
+  'deep_analysis': 'gemini-pro',
+  'scraping_fallback': 'gemini-flash'
+};
+
+// Маппинг технических имён на конкретные модели API
+const MODEL_NAME_MAPPING = {
+  'gemini-flash': 'gemini-2.5-flash-lite:generateContent',
+  'gemini-pro': 'gemini-2.5-pro:generateContent'
+};
 
 // === CHUNKING HTML DATA RECEIVER ===
 
@@ -467,6 +480,14 @@ async function initializePyodide() {
           const cleanedModelAlias = jsModelAlias.replace(':generateContent', '');
           logDebug('PYODIDE', `Cleaned model alias: ${cleanedModelAlias}`);
 
+          // Преобразовать тип анализа в техническое имя модели
+          const technicalModelName = ANALYSIS_TYPE_MAPPING[cleanedModelAlias] || cleanedModelAlias;
+
+          // Преобразовать техническое имя в конкретную модель API
+          const finalModelName = MODEL_NAME_MAPPING[technicalModelName] || technicalModelName;
+
+          logDebug('PYODIDE', `Model mapping: ${cleanedModelAlias} -> ${technicalModelName} -> ${finalModelName}`);
+
           // 2. Получение API ключа из параметров или глобальной переменной
           let apiKey = jsOptions.apiKey;
 
@@ -499,7 +520,7 @@ async function initializePyodide() {
           };
 
                     // 4. HTTP запрос к Gemini API
-          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${cleanedModelAlias}:generateContent?key=${apiKey}`;
+          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${finalModelName}:generateContent?key=${apiKey}`;
 
           logDebug('PYODIDE', `Making request to Gemini API: ${geminiUrl}`);
 
@@ -1346,6 +1367,9 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     // ОБНОВИТЬ ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ JS BRIDGE - ИСПРАВЛЕНИЕ HARDCODED PAGEKEY
     currentPluginId = pluginId;
     currentPageKey = pageKey;
+
+    // ДОБАВИТЬ ЭТУ СТРОКУ:
+    window.geminiApiKey = message.geminiApiKey;
 
     // ПОЛУЧАЕМ HTML ДАННЫЕ ИЗ CHUNKS ИЛИ НАПРЯМУЮ
     let workflowPayload;
