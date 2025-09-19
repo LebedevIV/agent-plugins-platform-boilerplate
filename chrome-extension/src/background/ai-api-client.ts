@@ -489,8 +489,8 @@ export async function setApiKeyForModel(modelAlias: string, apiKey: string): Pro
       throw new Error(`Неизвестная модель: ${modelAlias}`);
     }
 
-    const apiKeyName = config.api_key_env;
-    await chrome.storage.local.set({ [apiKeyName]: apiKey });
+    // Сохраняем API ключ через систему шифрования APIKeyManager
+    await APIKeyManager.saveEncryptedKey(modelAlias, apiKey);
 
     console.log(`[AI Client] API key set for model ${modelAlias}`);
   } catch (error) {
