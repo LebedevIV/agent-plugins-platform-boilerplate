@@ -13,7 +13,8 @@ const ANALYSIS_TYPE_MAPPING = {
   'basic_analysis': 'gemini-flash',
   'detailed_comparison': 'gemini-pro',
   'deep_analysis': 'gemini-pro',
-  'scraping_fallback': 'gemini-flash'
+  'scraping_fallback': 'gemini-flash',
+  'compliance_check': 'gemini-flash'
 };
 
 // Маппинг технических имён на конкретные модели API

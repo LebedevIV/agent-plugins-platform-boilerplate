@@ -1,6 +1,6 @@
 {
   "name": "project-graph-agent",
-  "version": "1.0.405",
+  "version": "1.0.411",
   "description": "Jsonnet-driven project control system for AI agents",
   "main": "scripts/graph_generator.mjs",
   "type": "module",

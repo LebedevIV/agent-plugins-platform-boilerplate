@@ -2904,7 +2904,7 @@ def _analyze_composition_vs_description(description: str, composition: str) -> D
 
     Ключевые элементы описания: {', '.join(key_elements['desc_keywords'])}
     Ключевые ингредиенты состава: {', '.join(key_elements['comp_keywords'])}
-    Совпадения: {len(key_elements['matches'])}/{len(key_elements['total_comp'])} найдено
+    Совпадения: {len(key_elements['matches'])}/{key_elements['total_comp']} найдено
 
     Полный анализ:
     Описание: {description[:2000]}...
@@ -2914,10 +2914,15 @@ def _analyze_composition_vs_description(description: str, composition: str) -> D
     """
 
     try:
-        console_log(f"Отправка запроса к AI: {prompt[:200]}...")
-        # Используем псевдоним "basic_analysis", который в манифесте
-        # сопоставлен с быстрой и дешевой моделью типа `gemini-flash`.
-        result_str = ozon_analyzer_server._call_ai_model("basic_analysis", prompt)
+        # Логирование запроса к Gemini API в полном формате
+        console_log("[GEMINI REQUEST] ===== REQUEST TO GEMINI API =====")
+        console_log(f"[GEMINI REQUEST] Model: compliance_check")
+        console_log("[GEMINI REQUEST] Product Info: Description length: " + str(safe_len(description)) + " chars, Composition length: " + str(safe_len(composition)) + " chars")
+        console_log(f"[GEMINI REQUEST] Prompt: {prompt}")
+        console_log("[GEMINI REQUEST] Request Body: {'prompt': 'provided'}")
+        console_log("[GEMINI REQUEST] ===== END REQUEST =====")
+        # Используем псевдоним "compliance_check" для проверки соответствия описания и состава
+        result_str = ozon_analyzer_server._call_ai_model("compliance_check", prompt)
 
         # Проверка типа данных от AI и конвертация при необходимости
         if not isinstance(result_str, str):
