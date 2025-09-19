@@ -519,10 +519,18 @@ async function initializePyodide() {
             }
           };
 
-                    // 4. HTTP запрос к Gemini API
-          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${finalModelName}:generateContent?key=${apiKey}`;
+          // 4. HTTP запрос к Gemini API - исправление двойной подстановки :generateContent
+          // Проверяем, содержит ли finalModelName уже :generateContent
+          let urlModelName = finalModelName;
+          if (!finalModelName.includes(':generateContent')) {
+            // Добавляем :generateContent только если его нет
+            urlModelName = `${finalModelName}:generateContent`;
+          }
+
+          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${urlModelName}?key=${apiKey}`;
 
           logDebug('PYODIDE', `Making request to Gemini API: ${geminiUrl}`);
+          logDebug('PYODIDE', `Final URL: ${geminiUrl}`);
 
           // ЛОГИРОВАНИЕ ЗАПРОСА К GEMINI API
           console.log('[GEMINI REQUEST] ===== REQUEST TO GEMINI API =====');
