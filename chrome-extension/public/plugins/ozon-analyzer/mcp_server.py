@@ -319,7 +319,7 @@ class BatchProcessor:
     async def _process_single_request(self, request: Dict[str, Any]) -> None:
         """Обработать одиночный запрос."""
         try:
-            response = ozon_analyzer_server._call_ai_model(
+            response = await ozon_analyzer_server._call_ai_model(
                 request['model_alias'],
                 request['prompt'],
                 request['context']
@@ -339,7 +339,7 @@ class BatchProcessor:
                 )
                 combined_prompt += "\n\nОтветь на каждый запрос отдельно, разделяя ---REQUEST_SEPARATOR---"
 
-                combined_response = ozon_analyzer_server._call_ai_model(model_alias, combined_prompt)
+                combined_response = await ozon_analyzer_server._call_ai_model(model_alias, combined_prompt)
 
                 # Разделяем ответы
                 response_parts = combined_response.split("---REQUEST_SEPARATOR---")
@@ -536,9 +536,9 @@ class OzonAnalyzerServer:
             'total_requests': total_requests
         }
 
-    def _call_ai_model(self, model_alias: str, prompt: str, context: Optional[str] = None) -> str:
+    async def _call_ai_model(self, model_alias: str, prompt: str, context: Optional[str] = None) -> str:
         """
-        Вызов AI модели с кешированием.
+        Асинхронный вызов AI модели с кешированием.
         Ключ кеша формируется на основе model_alias и prompt.
         """
         self.cache_metrics['total_requests'] += 1
@@ -575,17 +575,18 @@ class OzonAnalyzerServer:
         start_time = datetime.now()
 
         try:
-            # Синхронный вызов AI модели
-            response_proxy = js.llm_call(model_alias, {"prompt": prompt})
+            # Асинхронный вызов AI модели
+            response_proxy = await js.llm_call(model_alias, {"prompt": prompt})
             if response_proxy is None:
                 raise Exception("js.llm_call вернул None")
 
-            # Ожидаем результат
-            import asyncio
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            result = loop.run_until_complete(response_proxy)
-            loop.close()
+            # Правильная обработка PyodideFuture
+            if hasattr(response_proxy, 'to_py'):
+                # Если это PyodideFuture, конвертируем
+                result = response_proxy.to_py()
+            else:
+                # Если уже готовый результат
+                result = response_proxy
 
             if result is None or safe_dict_get(result, "error"):
                 error_msg = safe_dict_get(result, "error_message", "Неизвестная ошибка") if result else "Пустой ответ от хоста"
@@ -2073,6 +2074,52 @@ def _diagnose_variable_access(variable_name: str) -> Dict[str, Any]:
         'timestamp': datetime.now().isoformat()
     }
 
+def _run_async_in_sync(coro):
+    """
+    Вспомогательная функция для запуска асинхронных корутин в синхронном контексте.
+    Используется для совместимости с существующим workflow-engine.js
+    В Pyodide обычно нет уже запущенного event loop, поэтому используем asyncio.run()
+    """
+    try:
+        # В большинстве случаев в Pyodide нет запущенного event loop
+        return asyncio.run(coro)
+    except RuntimeError as e:
+        # Если event loop уже запущен, логируем ошибку и возвращаем fallback
+        console_log(f"RuntimeError в _run_async_in_sync: {e}")
+        # Попробуем создать новый loop в текущем thread
+        try:
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            result = new_loop.run_until_complete(coro)
+            new_loop.close()
+            return result
+        except Exception as e2:
+            console_log(f"Не удалось создать новый event loop: {e2}")
+            # Возвращаем fallback значения
+            return ({"score": 5, "reasoning": "Ошибка выполнения асинхронного кода"}, [])
+
+async def _analyze_product_async(description: str, composition: str, categories: List[str]) -> tuple:
+    """
+    Асинхронная версия анализа продукта для внутреннего использования.
+    Возвращает кортеж (analysis_result, analogs)
+    """
+    # Запускаем анализ соответствия и поиск аналогов параллельно
+    analysis_task = _analyze_composition_vs_description(description, composition)
+    analogs_task = _find_similar_products(categories, composition)
+
+    analysis_result, analogs = await asyncio.gather(analysis_task, analogs_task, return_exceptions=True)
+
+    # Обрабатываем исключения
+    if isinstance(analysis_result, Exception):
+        console_log(f"Ошибка в анализе соответствия: {analysis_result}")
+        analysis_result = {"score": 5, "reasoning": f"Ошибка анализа: {str(analysis_result)}"}
+
+    if isinstance(analogs, Exception):
+        console_log(f"Ошибка в поиске аналогов: {analogs}")
+        analogs = [{"name": f"Ошибка поиска аналогов: {str(analogs)}", "error": True}]
+
+    return analysis_result, analogs
+
 def analyze_ozon_product() -> Dict[str, Any]:
     """
     Главная точка входа для анализа страницы товара Ozon.
@@ -2437,43 +2484,36 @@ def analyze_ozon_product() -> Dict[str, Any]:
         cache_key_analysis = f"analysis:{hash(description[:100] + composition[:100])}"
         cached_analysis = memory_manager.get_cached_lru(cache_key_analysis)
 
-        if cached_analysis:
-            console_log("Найден кеш для анализа соответствия")
-            analysis_result = cached_analysis
-        else:
-            # Выполняем AI вызовы с улучшенной обработкой ошибок
-            try:
-                analysis_result = _analyze_composition_vs_description(description, composition)
-                console_log("Анализ соответствия завершен")
+        cache_key_analogs = f"analogs:{hash(str(categories) + composition[:100])}"
+        cached_analogs = memory_manager.get_cached_lru(cache_key_analogs)
 
-                # Кешируем успешный результат
+        # Если оба результата в кеше, используем их
+        if cached_analysis and cached_analogs:
+            console_log("Найден кеш для анализа и поиска аналогов")
+            analysis_result = cached_analysis
+            analogs = cached_analogs
+        else:
+            # Выполняем асинхронные AI вызовы через wrapper
+            try:
+                console_log("Запускаю асинхронный анализ...")
+                analysis_result, analogs = _run_async_in_sync(
+                    _analyze_product_async(description, composition, categories)
+                )
+
+                # Кешируем успешные результаты
                 if analysis_result and isinstance(analysis_result, dict) and 'score' in analysis_result:
                     memory_manager.cache_lru(cache_key_analysis, analysis_result, max_age_seconds=1800)  # 30 мин
                     console_log("Результат анализа закэширован")
 
-            except Exception as e:
-                console_log(f"Ошибка анализа соответствия: {e}")
-                analysis_result = {"score": 5, "reasoning": f"Ошибка AI анализа соответствия описания и состава: {str(e)}. Проверьте доступность AI модели и корректность входных данных."}
-
-        # Аналогично для поиска аналогов
-        cache_key_analogs = f"analogs:{hash(str(categories) + composition[:100])}"
-        cached_analogs = memory_manager.get_cached_lru(cache_key_analogs)
-
-        if cached_analogs:
-            console_log("Найден кеш для поиска аналогов")
-            analogs = cached_analogs
-        else:
-            try:
-                analogs = _find_similar_products(categories, composition)
-                console_log("Поиск аналогов завершен")
-
-                # Кешируем успешный результат
                 if analogs and isinstance(analogs, list) and len(analogs) > 0:
                     memory_manager.cache_lru(cache_key_analogs, analogs, max_age_seconds=3600)  # 1 час
                     console_log("Результат поиска аналогов закэширован")
 
+                console_log("Асинхронный анализ завершен")
+
             except Exception as e:
-                console_log(f"Ошибка поиска аналогов: {e}")
+                console_log(f"Ошибка асинхронного анализа: {e}")
+                analysis_result = {"score": 5, "reasoning": f"Ошибка AI анализа: {str(e)}. Проверьте доступность AI модели и корректность входных данных."}
                 analogs = [{"name": "Ошибка поиска аналогов", "error": str(e)}]
 
         console_log("Оптимизированный анализ завершен!")
@@ -2645,7 +2685,7 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
         # "deep_analysis" - это псевдоним из `manifest.json` этого плагина.
         # Платформа сама определит, какую реальную модель (например, gemini-pro)
         # использовать, и подставит соответствующий API-ключ.
-        result = ozon_analyzer_server._call_ai_model("deep_analysis", prompt)
+        result = await ozon_analyzer_server._call_ai_model("deep_analysis", prompt)
 
         # Проверка типа данных от AI в perform_deep_analysis
         if not isinstance(result, str):
@@ -2876,7 +2916,7 @@ def _reconstruct_chunked_strings(input_data: Dict[str, Any]) -> Dict[str, Any]:
         console_log(f"❌ Traceback: {traceback.format_exc()}")
         return input_data  # Возвращаем исходные данные при ошибке
 
-def _analyze_composition_vs_description(description: str, composition: str) -> Dict[str, Any]:
+async def _analyze_composition_vs_description(description: str, composition: str) -> Dict[str, Any]:
     """
     Оптимизированный анализ соответствия описания и состава с предобработкой.
     Использует преданализ для сокращения размера промпта и cache busting.
@@ -2922,7 +2962,7 @@ def _analyze_composition_vs_description(description: str, composition: str) -> D
         console_log("[GEMINI REQUEST] Request Body: {'prompt': 'provided'}")
         console_log("[GEMINI REQUEST] ===== END REQUEST =====")
         # Используем псевдоним "compliance_check" для проверки соответствия описания и состава
-        result_str = ozon_analyzer_server._call_ai_model("compliance_check", prompt)
+        result_str = await ozon_analyzer_server._call_ai_model("compliance_check", prompt)
 
         # Проверка типа данных от AI и конвертация при необходимости
         if not isinstance(result_str, str):
@@ -2964,7 +3004,7 @@ def _analyze_composition_vs_description(description: str, composition: str) -> D
                         end_idx = fixed_json.rfind('}')
                         if end_idx != -1:
                             fixed_json = fixed_json[:end_idx + 1]
-    
+
                     parsed = json.loads(fixed_json)
                     console_log("JSON удалось исправить автоматически")
                     return parsed
@@ -2998,7 +3038,7 @@ async def _call_ai_model_with_fallback(model_alias: str, prompt: str, context: O
     if not use_batch or len(prompt) > 10000:  # Очень длинные промпты не группируем
         return await _call_ai_model_immediate(model_alias, prompt, context)
 
-    return ozon_analyzer_server._call_ai_model(model_alias, prompt, context)
+    return await ozon_analyzer_server._call_ai_model(model_alias, prompt, context)
 
 async def _call_ai_model_immediate(model_alias: str, prompt: str, context: Optional[str] = None) -> str:
     """
@@ -3017,7 +3057,12 @@ async def _call_ai_model_immediate(model_alias: str, prompt: str, context: Optio
         response_proxy = await js.llm_call(model_alias, {"prompt": prompt})
         if response_proxy is None:
             raise Exception("js.llm_call return None response proxy")
-        result = response_proxy.to_py()
+
+        # Правильная обработка PyodideFuture
+        if hasattr(response_proxy, 'to_py'):
+            result = response_proxy.to_py()
+        else:
+            result = response_proxy
 
         if result is None or safe_dict_get(result, "error"):
             error_msg = safe_dict_get(result, "error_message", "Неизвестная ошибка") if result else "Пустой ответ от хоста"
@@ -3103,7 +3148,7 @@ def _extract_description_and_composition(soup: 'SimpleHTMLParser') -> tuple:
     """Заглушка для извлечения описания и состава."""
     return "Пример описания", "Пример состава"
 
-def _find_similar_products(categories: List[str], composition: str) -> List[Dict[str, Any]]:
+async def _find_similar_products(categories: List[str], composition: str) -> List[Dict[str, Any]]:
     """
     Оптимизированный поиск аналогичных продуктов на основе категорий и состава.
     Использует параллельные AI запросы для поиска аналогичных товаров в разных категориях.
@@ -3139,8 +3184,8 @@ def _find_similar_products(categories: List[str], composition: str) -> List[Dict
         console_log(f"[GEMINI REQUEST] Prompt: {search_prompt}")
         console_log("[GEMINI REQUEST] Request Body: {'prompt': 'provided'}")
         console_log("[GEMINI REQUEST] ===== END REQUEST =====")
-        # Используем синхронный вызов AI модели
-        response = ozon_analyzer_server._call_ai_model("basic_analysis", search_prompt)
+        # Используем асинхронный вызов AI модели
+        response = await ozon_analyzer_server._call_ai_model("basic_analysis", search_prompt)
 
         # Детальная проверка ответа AI перед обработкой
         if response is None:
