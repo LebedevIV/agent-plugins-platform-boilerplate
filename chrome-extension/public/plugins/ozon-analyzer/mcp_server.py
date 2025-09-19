@@ -3130,6 +3130,15 @@ def _find_similar_products(categories: List[str], composition: str) -> List[Dict
     """
 
     try:
+        # Логирование запроса к Gemini API в полном формате
+        console_log("[GEMINI REQUEST] ===== REQUEST TO GEMINI API =====")
+        console_log(f"[GEMINI REQUEST] Model: basic_analysis")
+        console_log(f"[GEMINI REQUEST] Categories: {', '.join(categories)}")
+        console_log(f"[GEMINI REQUEST] Product Type: {product_type}")
+        console_log(f"[GEMINI REQUEST] Composition length: {safe_len(composition)} chars")
+        console_log(f"[GEMINI REQUEST] Prompt: {search_prompt}")
+        console_log("[GEMINI REQUEST] Request Body: {'prompt': 'provided'}")
+        console_log("[GEMINI REQUEST] ===== END REQUEST =====")
         # Используем синхронный вызов AI модели
         response = ozon_analyzer_server._call_ai_model("basic_analysis", search_prompt)
 

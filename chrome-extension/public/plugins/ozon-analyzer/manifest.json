@@ -13,6 +13,7 @@
   "permissions": ["activeTab", "scripting"],
   "ai_models": {
     "basic_analysis": "gemini-flash",
+    "compliance_check": "gemini-flash",
     "detailed_comparison": "gemini-pro",
     "deep_analysis": "gemini-pro",
     "scraping_fallback": "gemini-flash"
