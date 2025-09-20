@@ -574,7 +574,7 @@ async function initializePyodide() {
           console.log('[GEMINI RESPONSE] ===== RESPONSE FROM GEMINI API =====');
           console.log('[GEMINI RESPONSE] Model:', cleanedModelAlias);
           console.log('[GEMINI RESPONSE] Response length:', generatedText.length);
-          console.log('[GEMINI RESPONSE] Response preview:', generatedText.substring(0, 500) + '...');
+          console.log('[GEMINI RESPONSE] Full response:', generatedText);
           console.log('[GEMINI RESPONSE] ===== END RESPONSE =====');
 
           logDebug('PYODIDE', `LLM call completed successfully, response length: ${generatedText.length}`);

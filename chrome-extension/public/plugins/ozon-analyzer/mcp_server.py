@@ -591,7 +591,17 @@ class OzonAnalyzerServer:
             if result is None or safe_dict_get(result, "error"):
                 error_msg = safe_dict_get(result, "error_message", "Неизвестная ошибка") if result else "Пустой ответ от хоста"
                 raise Exception(f"Ошибка вызова API: {error_msg}")
-
+        
+            # ДОБАВИТЬ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ ЗДЕСЬ:
+            console_log("=== СЫРОЙ ОТВЕТ ОТ js.llm_call ===")
+            console_log(f"Тип результата: {type(result)}")
+            console_log(f"Содержимое результата: {result}")
+            if isinstance(result, dict):
+                console_log(f"Ключи в результате: {list(result.keys())}")
+                for key, value in result.items():
+                    console_log(f"  {key}: {type(value)} = {value}")
+            console_log("=== КОНЕЦ СЫРОГО ОТВЕТА ===")
+        
             response_text = safe_dict_get(result, "response", "Нет ответа от модели.")
             response_time = int((datetime.now() - start_time).total_seconds() * 1000)
 
@@ -2956,10 +2966,19 @@ async def _analyze_composition_vs_description(description: str, composition: str
     try:
         # Логирование запроса к Gemini API в полном формате
         console_log("[GEMINI REQUEST] ===== REQUEST TO GEMINI API =====")
-        console_log(f"[GEMINI REQUEST] Model: compliance_check")
-        console_log("[GEMINI REQUEST] Product Info: Description length: " + str(safe_len(description)) + " chars, Composition length: " + str(safe_len(composition)) + " chars")
+        console_log("[GEMINI REQUEST] Model: compliance_check")
         console_log(f"[GEMINI REQUEST] Prompt: {prompt}")
-        console_log("[GEMINI REQUEST] Request Body: {'prompt': 'provided'}")
+        console_log(f"[GEMINI REQUEST] Request Body: {{")
+        console_log(f"[GEMINI REQUEST]   \"contents\": [")
+        console_log(f"[GEMINI REQUEST]     {{")
+        console_log(f"[GEMINI REQUEST]       \"parts\": [")
+        console_log(f"[GEMINI REQUEST]         {{")
+        console_log(f"[GEMINI REQUEST]           \"text\": \"{json.dumps(prompt).strip('\"')}\"")
+        console_log(f"[GEMINI REQUEST]         }}")
+        console_log(f"[GEMINI REQUEST]       ]")
+        console_log(f"[GEMINI REQUEST]     }}")
+        console_log(f"[GEMINI REQUEST]   ]")
+        console_log(f"[GEMINI REQUEST] }}")
         console_log("[GEMINI REQUEST] ===== END REQUEST =====")
         # Используем псевдоним "compliance_check" для проверки соответствия описания и состава
         result_str = await ozon_analyzer_server._call_ai_model("compliance_check", prompt)
@@ -2969,48 +2988,57 @@ async def _analyze_composition_vs_description(description: str, composition: str
             chat_message(f"🔄 AI вернул {type(result_str)} вместо строки, конвертируем")
             result_str = str(result_str)
 
-        # Очистка и парсинг ответа от AI. Модели часто "оборачивают"
-        # JSON в Markdown, который нужно удалить.
+        # Улучшенная обработка ответа AI с многоуровневым fallback
         if isinstance(result_str, str) and len(result_str.strip()) > 0:
-            cleaned_str = result_str.strip().replace('```json', '').replace('```', '')
+            console_log(f"🔍 Начинаем обработку ответа AI длиной {len(result_str)} символов")
 
-            # Используем стандартный и безопасный `json.loads` для парсинга.
+            # Шаг 1: Стандартная очистка
+            cleaned_str = result_str.strip().replace('```json', '').replace('```', '')
+            console_log(f"После стандартной очистки: {len(cleaned_str)} символов")
+
+            # Шаг 2: Попытка стандартного парсинга
             try:
                 parsed = json.loads(cleaned_str)
-                # Простая валидация формата ответа
+                # Валидация формата ответа
                 if isinstance(parsed, dict) and 'score' in parsed:
                     score = parsed.get('score')
                     reasoning = parsed.get('reasoning')
-                    console_log(f"Получен ответ от AI: score={score}, reasoning_length={len(str(reasoning or ''))}")
+                    console_log(f"✅ Стандартный парсинг успешен: score={score}, reasoning_length={len(str(reasoning or ''))}")
                     desc_len = safe_len(description)
                     comp_len = safe_len(composition)
                     console_log(f"Обработка результатов: description_len={desc_len}, composition_len={comp_len}")
                     return parsed
                 else:
-                    return {"score": 5, "reasoning": "Неверный формат ответа от AI (отсутствует 'score')."}
+                    console_log("⚠️ Стандартный парсинг вернул словарь без поля 'score'")
             except json.JSONDecodeError as je:
-                chat_message(f"⚠️ Ошибка парсинга JSON от AI анализа")
-                console_log(f"JSON парсинг ошибка в _analyze_composition_vs_description: {str(je)}")
-                console_log(f"Необработанный ответ AI: {cleaned_str[:200]}...")  # Логируем первые 200 символов для диагностики
-                # Попытка исправить распространенные проблемы с JSON
-                try:
-                    # Убираем возможные лишние символы в начале и конце
-                    fixed_json = cleaned_str.strip()
-                    if not fixed_json.startswith('{'):
-                        start_idx = fixed_json.find('{')
-                        if start_idx != -1:
-                            fixed_json = fixed_json[start_idx:]
-                    if not fixed_json.endswith('}'):
-                        end_idx = fixed_json.rfind('}')
-                        if end_idx != -1:
-                            fixed_json = fixed_json[:end_idx + 1]
+                console_log(f"❌ Стандартный JSON парсинг провалился: {str(je)}")
+                console_log(f"Необработанный ответ AI: {cleaned_str[:200]}...")
 
-                    parsed = json.loads(fixed_json)
-                    console_log("JSON удалось исправить автоматически")
-                    return parsed
-                except:
-                    console_log("Автоматическое исправление JSON не удалось")
-                    return {"score": 5, "reasoning": f"Не удалось распарсить JSON от AI: {cleaned_str[:100]}..."}
+            # Шаг 3: Альтернативное извлечение JSON
+            console_log("🔄 Пробуем альтернативное извлечение JSON...")
+            alternative_result = _extract_json_from_ai_response(result_str)
+            if alternative_result:
+                console_log("✅ Альтернативное извлечение успешно!")
+                return alternative_result
+
+            # Шаг 4: Попытка ремонта JSON
+            console_log("🔧 Пробуем ремонт JSON...")
+            repair_result = _attempt_json_repair(cleaned_str)
+            if repair_result:
+                console_log("✅ Ремонт JSON успешен!")
+                return repair_result
+
+            # Шаг 5: Финальный fallback
+            console_log("❌ Все методы обработки провалились, используем fallback")
+            desc_len = safe_len(description)
+            comp_len = safe_len(composition)
+
+            return {
+                "score": 5,
+                "reasoning": f"Не удалось распарсить JSON от AI после всех попыток исправления. "
+                           f"Исходный ответ: {cleaned_str[:100]}... "
+                           f"(описание: {desc_len} символов, состав: {comp_len} символов)"
+            }
         else:
             chat_message(f"⚠️ AI вернул пустой или некорректный ответ: {type(result_str)}")
             return {"score": 5, "reasoning": f"AI вернул некорректный тип данных: {type(result_str)}"}
@@ -3026,6 +3054,206 @@ async def _analyze_composition_vs_description(description: str, composition: str
             desc_len = 0
             comp_len = 0
         return { "score": 0, "reasoning": f"Ошибка анализа AI: {str(e)}. Рекомендуется проверить доступность AI модели и корректность входных данных (описание: {desc_len} символов, состав: {comp_len} символов)." }
+
+def _extract_json_from_ai_response(ai_response: str) -> Optional[Dict[str, Any]]:
+    """
+    Альтернативная функция извлечения JSON из ответа AI с множественными стратегиями.
+    Использует различные подходы для поиска и извлечения JSON из ответа модели.
+    """
+    if not isinstance(ai_response, str) or not ai_response.strip():
+        return None
+
+    console_log(f"🔍 Начинаем альтернативное извлечение JSON из ответа длиной {len(ai_response)} символов")
+
+    # Стратегия 1: Прямой поиск JSON объекта
+    console_log("Стратегия 1: Прямой поиск JSON объекта")
+    try:
+        # Ищем самый длинный валидный JSON объект в ответе
+        json_pattern = r'\{[^{}]*\{[^{}]*\}[^{}]*\}|\{[^{}]*\}'
+        matches = re.findall(json_pattern, ai_response, re.DOTALL)
+
+        if matches:
+            # Сортируем по длине и пробуем парсить
+            matches.sort(key=len, reverse=True)
+            for match in matches[:3]:  # Проверяем топ-3 самых длинных
+                try:
+                    parsed = json.loads(match)
+                    if isinstance(parsed, dict) and 'score' in parsed:
+                        console_log(f"✅ Найден валидный JSON по стратегии 1: {len(match)} символов")
+                        return parsed
+                except json.JSONDecodeError:
+                    continue
+
+    except Exception as e:
+        console_log(f"Ошибка в стратегии 1: {e}")
+
+    # Стратегия 2: Поиск между маркерами кода
+    console_log("Стратегия 2: Поиск между маркерами кода")
+    try:
+        code_block_patterns = [
+            r'```json\s*(\{.*?\})\s*```',
+            r'```\s*(\{.*?\})\s*```',
+            r'```[^\n]*\s*(\{.*?\})\s*```'
+        ]
+
+        for pattern in code_block_patterns:
+            matches = re.findall(pattern, ai_response, re.IGNORECASE | re.DOTALL)
+            for match in matches:
+                try:
+                    parsed = json.loads(match)
+                    if isinstance(parsed, dict) and 'score' in parsed:
+                        console_log(f"✅ Найден валидный JSON в код-блоке по стратегии 2: {len(match)} символов")
+                        return parsed
+                except json.JSONDecodeError:
+                    continue
+
+    except Exception as e:
+        console_log(f"Ошибка в стратегии 2: {e}")
+
+    # Стратегия 3: Поиск по ключевым словам и извлечение структуры
+    console_log("Стратегия 3: Поиск по ключевым словам")
+    try:
+        # Ищем score
+        score_pattern = r'"score"\s*:\s*(\d+)'
+        score_match = re.search(score_pattern, ai_response, re.IGNORECASE)
+
+        if score_match:
+            score = int(score_match.group(1))
+
+            # Ищем reasoning
+            reasoning_pattern = r'"reasoning"\s*:\s*"([^"]*(?:\\"[^"]*)*)"'
+            reasoning_match = re.search(reasoning_pattern, ai_response, re.IGNORECASE | re.DOTALL)
+
+            if reasoning_match:
+                reasoning = reasoning_match.group(1)
+                result = {"score": score, "reasoning": reasoning}
+
+                console_log(f"✅ Извлечена структура JSON по стратегии 3: score={score}")
+                return result
+
+    except Exception as e:
+        console_log(f"Ошибка в стратегии 3: {e}")
+
+    console_log("❌ Ни одна стратегия извлечения JSON не сработала")
+    return None
+
+def _attempt_json_repair(broken_json: str) -> Optional[Dict[str, Any]]:
+    """
+    Комплексная функция ремонта поврежденного JSON с множественными стратегиями.
+    Используется когда стандартный json.loads() не может распарсить ответ AI.
+    """
+    if not isinstance(broken_json, str) or not broken_json.strip():
+        return None
+
+    console_log(f"🔧 Начинаем ремонт JSON длиной {len(broken_json)} символов")
+
+    original_json = broken_json
+
+    # Шаг 1: Очистка от Markdown и лишних символов
+    console_log("Шаг 1: Очистка от Markdown")
+    try:
+        # Убираем Markdown обертки
+        cleaned = broken_json.replace('```json', '').replace('```', '').strip()
+
+        # Убираем лишние пробелы и переносы
+        cleaned = re.sub(r'\s+', ' ', cleaned)
+
+        # Убираем BOM и невидимые символы
+        cleaned = cleaned.replace('\ufeff', '').replace('\u200b', '')
+
+        console_log(f"После очистки: {len(cleaned)} символов (было {len(broken_json)})")
+
+        if len(cleaned) != len(broken_json):
+            console_log("✅ Выполнена очистка Markdown")
+        else:
+            console_log("ℹ️ Очистка Markdown не изменила содержимое")
+
+    except Exception as e:
+        console_log(f"Ошибка в шаге 1: {e}")
+        cleaned = broken_json
+
+    # Шаг 2: Исправление кавычек
+    console_log("Шаг 2: Исправление кавычек")
+    try:
+        # Исправляем неправильные кавычки
+        fixed_quotes = cleaned.replace('"', '"').replace('"', '"')
+
+        # Исправляем отсутствующие кавычки в ключах
+        fixed_quotes = re.sub(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', fixed_quotes)
+
+        # Исправляем отсутствующие кавычки в строковых значениях
+        fixed_quotes = re.sub(r':\s*([a-zA-Zа-яА-Я][^",}]+)', r': "\1"', fixed_quotes)
+
+        console_log("✅ Исправлены кавычки")
+
+    except Exception as e:
+        console_log(f"Ошибка в шаге 2: {e}")
+        fixed_quotes = cleaned
+
+    # Шаг 3: Исправление структуры
+    console_log("Шаг 3: Исправление структуры")
+    try:
+        # Убеждаемся что начинается с {
+        if not fixed_quotes.strip().startswith('{'):
+            start_idx = fixed_quotes.find('{')
+            if start_idx != -1:
+                fixed_quotes = fixed_quotes[start_idx:]
+            else:
+                # Если нет {, добавляем
+                fixed_quotes = '{' + fixed_quotes
+
+        # Убеждаемся что заканчивается на }
+        if not fixed_quotes.strip().endswith('}'):
+            end_idx = fixed_quotes.rfind('}')
+            if end_idx != -1:
+                fixed_quotes = fixed_quotes[:end_idx + 1]
+            else:
+                # Если нет }, добавляем
+                fixed_quotes = fixed_quotes + '}'
+
+        console_log("✅ Исправлена структура JSON")
+
+    except Exception as e:
+        console_log(f"Ошибка в шаге 3: {e}")
+
+    # Шаг 4: Попытка парсинга
+    console_log("Шаг 4: Попытка парсинга исправленного JSON")
+    try:
+        parsed = json.loads(fixed_quotes)
+
+        if isinstance(parsed, dict) and 'score' in parsed:
+            console_log("✅ JSON успешно отремонтирован и распарсен")
+            return parsed
+        else:
+            console_log("❌ Отремонтированный JSON не содержит ожидаемой структуры")
+
+    except json.JSONDecodeError as je:
+        console_log(f"❌ Парсинг отремонтированного JSON не удался: {str(je)}")
+
+        # Шаг 5: Агрессивный ремонт
+        console_log("Шаг 5: Агрессивный ремонт JSON")
+        try:
+            # Создаем минимальный валидный JSON на основе найденных данных
+            score_match = re.search(r'score["\s]*:[\s]*(\d+)', fixed_quotes, re.IGNORECASE)
+            reasoning_match = re.search(r'reasoning["\s]*:[\s]*["]([^"]*)["]', fixed_quotes, re.IGNORECASE)
+
+            if score_match:
+                score = int(score_match.group(1))
+                reasoning = reasoning_match.group(1) if reasoning_match else "Анализ завершен с помощью агрессивного ремонта"
+
+                fallback_json = {
+                    "score": score,
+                    "reasoning": reasoning
+                }
+
+                console_log(f"✅ Создан fallback JSON: score={score}")
+                return fallback_json
+
+        except Exception as e:
+            console_log(f"❌ Агрессивный ремонт не удался: {e}")
+
+    console_log("❌ Все стратегии ремонта JSON провалились")
+    return None
 
 
 # Лояльная функция batch processor с расширенной функциональностью
@@ -3177,12 +3405,19 @@ async def _find_similar_products(categories: List[str], composition: str) -> Lis
     try:
         # Логирование запроса к Gemini API в полном формате
         console_log("[GEMINI REQUEST] ===== REQUEST TO GEMINI API =====")
-        console_log(f"[GEMINI REQUEST] Model: basic_analysis")
-        console_log(f"[GEMINI REQUEST] Categories: {', '.join(categories)}")
-        console_log(f"[GEMINI REQUEST] Product Type: {product_type}")
-        console_log(f"[GEMINI REQUEST] Composition length: {safe_len(composition)} chars")
+        console_log("[GEMINI REQUEST] Model: basic_analysis")
         console_log(f"[GEMINI REQUEST] Prompt: {search_prompt}")
-        console_log("[GEMINI REQUEST] Request Body: {'prompt': 'provided'}")
+        console_log(f"[GEMINI REQUEST] Request Body: {{")
+        console_log(f"[GEMINI REQUEST]   \"contents\": [")
+        console_log(f"[GEMINI REQUEST]     {{")
+        console_log(f"[GEMINI REQUEST]       \"parts\": [")
+        console_log(f"[GEMINI REQUEST]         {{")
+        console_log(f"[GEMINI REQUEST]           \"text\": \"{json.dumps(search_prompt).strip('\"')}\"")
+        console_log(f"[GEMINI REQUEST]         }}")
+        console_log(f"[GEMINI REQUEST]       ]")
+        console_log(f"[GEMINI REQUEST]     }}")
+        console_log(f"[GEMINI REQUEST]   ]")
+        console_log(f"[GEMINI REQUEST] }}")
         console_log("[GEMINI REQUEST] ===== END REQUEST =====")
         # Используем асинхронный вызов AI модели
         response = await ozon_analyzer_server._call_ai_model("basic_analysis", search_prompt)
