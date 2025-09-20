@@ -575,18 +575,76 @@ class OzonAnalyzerServer:
         start_time = datetime.now()
 
         try:
+            console_log(f"[BRIDGE DIAGNOSTIC] ===== ВЫЗОВ js.llm_call =====")
+            console_log(f"[BRIDGE DIAGNOSTIC] Model alias: {model_alias}")
+            console_log(f"[BRIDGE DIAGNOSTIC] Prompt length: {len(prompt)} characters")
+            console_log(f"[BRIDGE DIAGNOSTIC] Prompt preview: {prompt[:200]}...")
+
             # Асинхронный вызов AI модели
             response_proxy = await js.llm_call(model_alias, {"prompt": prompt})
+
+            console_log(f"[BRIDGE DIAGNOSTIC] js.llm_call returned: {response_proxy}")
+            console_log(f"[BRIDGE DIAGNOSTIC] Response proxy type: {type(response_proxy)}")
+
             if response_proxy is None:
+                console_log(f"[BRIDGE DIAGNOSTIC] ❌ js.llm_call вернул None!")
                 raise Exception("js.llm_call вернул None")
 
             # Правильная обработка PyodideFuture
             if hasattr(response_proxy, 'to_py'):
+                console_log(f"[BRIDGE DIAGNOSTIC] Конвертация PyodideFuture в Python объект...")
                 # Если это PyodideFuture, конвертируем
                 result = response_proxy.to_py()
+                console_log(f"[BRIDGE DIAGNOSTIC] После конвертации: {result}")
+                console_log(f"[BRIDGE DIAGNOSTIC] Тип после конвертации: {type(result)}")
             else:
+                console_log(f"[BRIDGE DIAGNOSTIC] Результат уже в Python формате")
                 # Если уже готовый результат
                 result = response_proxy
+
+            # ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ СЫРОГО ОТВЕТА ОТ js.llm_call
+            console_log("[RAW JS RESPONSE] ===== СЫРОЙ ОТВЕТ ОТ js.llm_call =====")
+            console_log(f"[RAW JS RESPONSE] Тип результата: {type(result)}")
+            console_log(f"[RAW JS RESPONSE] Содержимое результата: {result}")
+            if isinstance(result, dict):
+                console_log(f"[RAW JS RESPONSE] Ключи в результате: {list(result.keys())}")
+                for key, value in result.items():
+                    console_log(f"[RAW JS RESPONSE]   {key}: {type(value)} = {value}")
+
+                # Проверяем новый формат ответа с полем 'result'
+                result_field = safe_dict_get(result, "result")
+                response_field = safe_dict_get(result, "response")  # для обратной совместимости
+
+                console_log(f"[RAW JS RESPONSE] result поле: {result_field}")
+                console_log(f"[RAW JS RESPONSE] response поле: {response_field}")
+
+                # Определяем, какое поле использовать
+                if result_field is not None:
+                    console_log("[RAW JS RESPONSE] ✅ Используем поле 'result' (новый формат)")
+                    final_response_text = result_field
+                elif response_field is not None:
+                    console_log("[RAW JS RESPONSE] ✅ Используем поле 'response' (старый формат)")
+                    final_response_text = response_field
+                else:
+                    console_log("[RAW JS RESPONSE] ❌ Ни result, ни response поля не найдены")
+                    final_response_text = None
+
+                # Дополнительная информация из нового формата
+                model_info = safe_dict_get(result, "model")
+                response_length = safe_dict_get(result, "response_length")
+                raw_response = safe_dict_get(result, "raw_response")
+
+                if model_info:
+                    console_log(f"[RAW JS RESPONSE] Model info: {model_info}")
+                if response_length:
+                    console_log(f"[RAW JS RESPONSE] Response length: {response_length}")
+                if raw_response:
+                    console_log(f"[RAW JS RESPONSE] Raw response type: {type(raw_response)}")
+
+            else:
+                console_log("[RAW JS RESPONSE] response поле: None (результат не является словарем)")
+                final_response_text = None
+            console_log("[RAW JS RESPONSE] ===== КОНЕЦ СЫРОГО ОТВЕТА =====")
 
             if result is None or safe_dict_get(result, "error"):
                 error_msg = safe_dict_get(result, "error_message", "Неизвестная ошибка") if result else "Пустой ответ от хоста"
@@ -601,8 +659,15 @@ class OzonAnalyzerServer:
                 for key, value in result.items():
                     console_log(f"  {key}: {type(value)} = {value}")
             console_log("=== КОНЕЦ СЫРОГО ОТВЕТА ===")
-        
-            response_text = safe_dict_get(result, "response", "Нет ответа от модели.")
+
+            # ИСПОЛЬЗУЕМ final_response_text ИЗ РАСШИРЕННОГО ЛОГИРОВАНИЯ
+            if 'final_response_text' in locals() and final_response_text is not None:
+                response_text = final_response_text
+                console_log(f"✅ Используем final_response_text: {type(response_text)} длиной {safe_len(response_text)}")
+            else:
+                # Fallback для обратной совместимости
+                response_text = safe_dict_get(result, "response", "Нет ответа от модели.")
+                console_log(f"⚠️ Используем fallback response_text: {safe_dict_get(result, 'response', 'None')}")
             response_time = int((datetime.now() - start_time).total_seconds() * 1000)
 
             # Проверяем тип ответа
@@ -2932,7 +2997,15 @@ async def _analyze_composition_vs_description(description: str, composition: str
     Использует преданализ для сокращения размера промпта и cache busting.
     """
 
+    # [DIAGNOSTIC] ===== ВХОД В _analyze_composition_vs_description =====
+    console_log("[DIAGNOSTIC] ===== ВХОД В _analyze_composition_vs_description =====")
+    console_log(f"[DIAGNOSTIC] Description length: {safe_len(description)}")
+    console_log(f"[DIAGNOSTIC] Composition length: {safe_len(composition)}")
+    console_log(f"[DIAGNOSTIC] Description preview: {description[:100]}..." if description else "[DIAGNOSTIC] Description: None")
+    console_log(f"[DIAGNOSTIC] Composition preview: {composition[:100]}..." if composition else "[DIAGNOSTIC] Composition: None")
+
     if not description or not composition:
+        console_log("[DIAGNOSTIC] ===== ВЫХОД ИЗ _analyze_composition_vs_description (пустые данные) =====")
         return { "score": 0, "reasoning": "Не удалось извлечь описание или состав товара." }
 
     console_log(f"Анализ соответствия: desc='{description[:100]}...', comp='{composition[:100]}...'")
@@ -2980,68 +3053,142 @@ async def _analyze_composition_vs_description(description: str, composition: str
         console_log(f"[GEMINI REQUEST]   ]")
         console_log(f"[GEMINI REQUEST] }}")
         console_log("[GEMINI REQUEST] ===== END REQUEST =====")
+        # [DIAGNOSTIC] ===== ВЫЗОВ AI МОДЕЛИ =====
+        console_log("[DIAGNOSTIC] ===== ВЫЗОВ AI МОДЕЛИ =====")
+        console_log("[DIAGNOSTIC] Перед вызовом compliance_check")
+        console_log(f"[DIAGNOSTIC] Модель: compliance_check")
+        console_log(f"[DIAGNOSTIC] Длина промпта: {safe_len(prompt)} символов")
+        console_log(f"[DIAGNOSTIC] Промпт начинается: {prompt[:100]}...")
         # Используем псевдоним "compliance_check" для проверки соответствия описания и состава
         result_str = await ozon_analyzer_server._call_ai_model("compliance_check", prompt)
+
+        # [DIAGNOSTIC] ===== РЕЗУЛЬТАТ ВЫЗОВА AI МОДЕЛИ =====
+        console_log("[DIAGNOSTIC] ===== РЕЗУЛЬТАТ ВЫЗОВА AI МОДЕЛИ =====")
+        console_log(f"[DIAGNOSTIC] Результат compliance_check: {result_str}")
+        console_log(f"[DIAGNOSTIC] Тип результата: {type(result_str)}")
+        console_log(f"[DIAGNOSTIC] Длина результата: {safe_len(result_str)} символов")
 
         # Проверка типа данных от AI и конвертация при необходимости
         if not isinstance(result_str, str):
             chat_message(f"🔄 AI вернул {type(result_str)} вместо строки, конвертируем")
             result_str = str(result_str)
 
+        # [DIAGNOSTIC] ===== ОБРАБОТКА РЕЗУЛЬТАТА =====
+        console_log("[DIAGNOSTIC] ===== ОБРАБОТКА РЕЗУЛЬТАТА =====")
+        console_log(f"[DIAGNOSTIC] Перед clean_ai_response: {result_str}")
+
         # Улучшенная обработка ответа AI с многоуровневым fallback
         if isinstance(result_str, str) and len(result_str.strip()) > 0:
             console_log(f"🔍 Начинаем обработку ответа AI длиной {len(result_str)} символов")
 
-            # Шаг 1: Стандартная очистка
-            cleaned_str = result_str.strip().replace('```json', '').replace('```', '')
-            console_log(f"После стандартной очистки: {len(cleaned_str)} символов")
+            # Шаг 1: Улучшенная очистка markdown обёртки
+            console_log(f"[BRIDGE DIAGNOSTIC] ===== НАЧАЛО ОБРАБОТКИ ОТВЕТА AI =====")
+            console_log(f"[BRIDGE DIAGNOSTIC] Исходный ответ AI: {result_str}")
+            console_log(f"[BRIDGE DIAGNOSTIC] Тип исходного ответа: {type(result_str)}")
+            console_log(f"[BRIDGE DIAGNOSTIC] Длина исходного ответа: {len(result_str)} символов")
+        
+            # Улучшенная очистка markdown обёртки с учетом пробелов и переносов строк
+            original_length = len(result_str)
+        
+            # Регулярное выражение для удаления markdown обёртки ```json...```
+            markdown_pattern = re.compile(r'```\s*json\s*\n?(.*?)\n?\s*```', re.IGNORECASE | re.DOTALL)
+            cleaned_str = markdown_pattern.sub(r'\1', result_str.strip())
+        
+            # Дополнительная очистка на случай если остались одиночные ```
+            cleaned_str = cleaned_str.replace('```', '').strip()
+        
+            console_log(f"[BRIDGE DIAGNOSTIC] После улучшенной очистки: {len(cleaned_str)} символов")
+            console_log(f"[BRIDGE DIAGNOSTIC] Очищенный ответ: {cleaned_str[:200]}...")
+            console_log(f"[BRIDGE DIAGNOSTIC] Удалено символов: {original_length - len(cleaned_str)}")
+        
+            # Логируем исправления
+            if original_length != len(cleaned_str):
+                console_log(f"[BRIDGE DIAGNOSTIC] ✅ Выполнено исправление markdown обёртки")
+            else:
+                console_log(f"[BRIDGE DIAGNOSTIC] ℹ️ Markdown обёртка не найдена, ответ уже чистый")
 
-            # Шаг 2: Попытка стандартного парсинга
+            # Шаг 1.5: Попытка парсинга очищенного ответа напрямую (без markdown)
+            console_log(f"[BRIDGE DIAGNOSTIC] ===== ПРЯМАЯ ПОПЫТКА ПАРСИНГА ОЧИЩЕННОГО ОТВЕТА =====")
             try:
                 parsed = json.loads(cleaned_str)
+                console_log(f"[BRIDGE DIAGNOSTIC] JSON успешно распарсен напрямую: {parsed}")
+                console_log(f"[BRIDGE DIAGNOSTIC] Тип распарсенного объекта: {type(parsed)}")
+
                 # Валидация формата ответа
                 if isinstance(parsed, dict) and 'score' in parsed:
                     score = parsed.get('score')
                     reasoning = parsed.get('reasoning')
-                    console_log(f"✅ Стандартный парсинг успешен: score={score}, reasoning_length={len(str(reasoning or ''))}")
+                    console_log(f"[BRIDGE DIAGNOSTIC] ✅ Прямой парсинг успешен: score={score}, reasoning_length={len(str(reasoning or ''))}")
+                    console_log(f"[BRIDGE DIAGNOSTIC] Полные данные ответа: score={score}, reasoning='{reasoning}'")
                     desc_len = safe_len(description)
                     comp_len = safe_len(composition)
-                    console_log(f"Обработка результатов: description_len={desc_len}, composition_len={comp_len}")
+                    console_log(f"[BRIDGE DIAGNOSTIC] Данные анализа: description_len={desc_len}, composition_len={comp_len}")
+                    console_log(f"[BRIDGE DIAGNOSTIC] Финальный результат: {parsed}")
                     return parsed
                 else:
-                    console_log("⚠️ Стандартный парсинг вернул словарь без поля 'score'")
+                    console_log(f"[BRIDGE DIAGNOSTIC] ⚠️ Прямой парсинг вернул словарь без поля 'score': {parsed}")
+                    console_log(f"[BRIDGE DIAGNOSTIC] Доступные ключи: {list(parsed.keys()) if isinstance(parsed, dict) else 'не словарь'}")
             except json.JSONDecodeError as je:
-                console_log(f"❌ Стандартный JSON парсинг провалился: {str(je)}")
-                console_log(f"Необработанный ответ AI: {cleaned_str[:200]}...")
+                console_log(f"[BRIDGE DIAGNOSTIC] ❌ Прямой JSON парсинг провалился: {str(je)}")
+                console_log(f"[BRIDGE DIAGNOSTIC] Позиция ошибки: {je.pos if hasattr(je, 'pos') else 'неизвестно'}")
+                console_log(f"[BRIDGE DIAGNOSTIC] Необработанный ответ AI: {cleaned_str[:200]}...")
+                console_log(f"[BRIDGE DIAGNOSTIC] Проблемный фрагмент: {cleaned_str[max(0, je.pos-50):je.pos+50] if hasattr(je, 'pos') and je.pos else 'не определено'}")
+
+            # Шаг 2: Попытка парсинга исходного ответа напрямую (на случай, если это уже чистый JSON)
+            console_log(f"[BRIDGE DIAGNOSTIC] ===== ПОПЫТКА ПАРСИНГА ИСХОДНОГО ОТВЕТА =====")
+            try:
+                parsed = json.loads(result_str.strip())
+                console_log(f"[BRIDGE DIAGNOSTIC] Исходный ответ успешно распарсен: {parsed}")
+                console_log(f"[BRIDGE DIAGNOSTIC] Тип распарсенного объекта: {type(parsed)}")
+
+                # Валидация формата ответа
+                if isinstance(parsed, dict) and 'score' in parsed:
+                    score = parsed.get('score')
+                    reasoning = parsed.get('reasoning')
+                    console_log(f"[BRIDGE DIAGNOSTIC] ✅ Парсинг исходного ответа успешен: score={score}, reasoning_length={len(str(reasoning or ''))}")
+                    console_log(f"[BRIDGE DIAGNOSTIC] Полные данные ответа: score={score}, reasoning='{reasoning}'")
+                    return parsed
+                else:
+                    console_log(f"[BRIDGE DIAGNOSTIC] ⚠️ Парсинг исходного ответа вернул словарь без поля 'score': {parsed}")
+            except json.JSONDecodeError as je:
+                console_log(f"[BRIDGE DIAGNOSTIC] ❌ Парсинг исходного ответа провалился: {str(je)}")
 
             # Шаг 3: Альтернативное извлечение JSON
-            console_log("🔄 Пробуем альтернативное извлечение JSON...")
+            console_log(f"[BRIDGE DIAGNOSTIC] 🔄 ШАГ 3: Альтернативное извлечение JSON из ответа: {result_str[:100]}...")
             alternative_result = _extract_json_from_ai_response(result_str)
             if alternative_result:
-                console_log("✅ Альтернативное извлечение успешно!")
+                console_log(f"[BRIDGE DIAGNOSTIC] ✅ Альтернативное извлечение успешно: {alternative_result}")
                 return alternative_result
+            else:
+                console_log(f"[BRIDGE DIAGNOSTIC] ❌ Альтернативное извлечение не удалось")
 
             # Шаг 4: Попытка ремонта JSON
-            console_log("🔧 Пробуем ремонт JSON...")
+            console_log(f"[BRIDGE DIAGNOSTIC] 🔧 ШАГ 4: Попытка ремонта JSON: {cleaned_str[:100]}...")
             repair_result = _attempt_json_repair(cleaned_str)
             if repair_result:
-                console_log("✅ Ремонт JSON успешен!")
+                console_log(f"[BRIDGE DIAGNOSTIC] ✅ Ремонт JSON успешен: {repair_result}")
                 return repair_result
+            else:
+                console_log(f"[BRIDGE DIAGNOSTIC] ❌ Ремонт JSON не удался")
 
             # Шаг 5: Финальный fallback
-            console_log("❌ Все методы обработки провалились, используем fallback")
+            console_log(f"[BRIDGE DIAGNOSTIC] ❌ ШАГ 5: Все методы обработки провалились, используем fallback")
             desc_len = safe_len(description)
             comp_len = safe_len(composition)
 
-            return {
+            fallback_result = {
                 "score": 5,
                 "reasoning": f"Не удалось распарсить JSON от AI после всех попыток исправления. "
-                           f"Исходный ответ: {cleaned_str[:100]}... "
-                           f"(описание: {desc_len} символов, состав: {comp_len} символов)"
+                            f"Исходный ответ: {cleaned_str[:100]}... "
+                            f"(описание: {desc_len} символов, состав: {comp_len} символов)"
             }
+            console_log(f"[BRIDGE DIAGNOSTIC] Финальный результат (финальный fallback): {fallback_result}")
+            return fallback_result
         else:
             chat_message(f"⚠️ AI вернул пустой или некорректный ответ: {type(result_str)}")
-            return {"score": 5, "reasoning": f"AI вернул некорректный тип данных: {type(result_str)}"}
+            error_result = {"score": 5, "reasoning": f"AI вернул некорректный тип данных: {type(result_str)}"}
+            console_log(f"[DIAGNOSTIC] Финальный результат (некорректный ответ AI): {error_result}")
+            return error_result
 
     except Exception as e:
         console_log(f"Критическая ошибка в _analyze_composition_vs_description: {str(e)}")
@@ -3053,7 +3200,9 @@ async def _analyze_composition_vs_description(description: str, composition: str
             console_log(f"Ошибка при подсчете длины: {str(len_error)}")
             desc_len = 0
             comp_len = 0
-        return { "score": 0, "reasoning": f"Ошибка анализа AI: {str(e)}. Рекомендуется проверить доступность AI модели и корректность входных данных (описание: {desc_len} символов, состав: {comp_len} символов)." }
+        exception_result = { "score": 0, "reasoning": f"Ошибка анализа AI: {str(e)}. Рекомендуется проверить доступность AI модели и корректность входных данных (описание: {desc_len} символов, состав: {comp_len} символов)." }
+        console_log(f"[DIAGNOSTIC] Финальный результат (критическая ошибка): {exception_result}")
+        return exception_result
 
 def _extract_json_from_ai_response(ai_response: str) -> Optional[Dict[str, Any]]:
     """
@@ -3068,6 +3217,15 @@ def _extract_json_from_ai_response(ai_response: str) -> Optional[Dict[str, Any]]
     # Стратегия 1: Прямой поиск JSON объекта
     console_log("Стратегия 1: Прямой поиск JSON объекта")
     try:
+        # Сначала пробуем распарсить весь ответ как чистый JSON (без markdown)
+        try:
+            parsed = json.loads(ai_response.strip())
+            if isinstance(parsed, dict) and 'score' in parsed:
+                console_log(f"✅ Весь ответ распарсен как чистый JSON по стратегии 1")
+                return parsed
+        except json.JSONDecodeError:
+            pass  # Продолжаем с другими стратегиями
+
         # Ищем самый длинный валидный JSON объект в ответе
         json_pattern = r'\{[^{}]*\{[^{}]*\}[^{}]*\}|\{[^{}]*\}'
         matches = re.findall(json_pattern, ai_response, re.DOTALL)
@@ -3075,7 +3233,7 @@ def _extract_json_from_ai_response(ai_response: str) -> Optional[Dict[str, Any]]
         if matches:
             # Сортируем по длине и пробуем парсить
             matches.sort(key=len, reverse=True)
-            for match in matches[:3]:  # Проверяем топ-3 самых длинных
+            for match in matches[:5]:  # Проверяем топ-5 самых длинных для лучшего покрытия
                 try:
                     parsed = json.loads(match)
                     if isinstance(parsed, dict) and 'score' in parsed:
@@ -3087,24 +3245,31 @@ def _extract_json_from_ai_response(ai_response: str) -> Optional[Dict[str, Any]]
     except Exception as e:
         console_log(f"Ошибка в стратегии 1: {e}")
 
-    # Стратегия 2: Поиск между маркерами кода
+    # Стратегия 2: Улучшенный поиск между маркерами кода
     console_log("Стратегия 2: Поиск между маркерами кода")
     try:
+        # Улучшенные паттерны для поиска JSON в markdown блоках
         code_block_patterns = [
-            r'```json\s*(\{.*?\})\s*```',
-            r'```\s*(\{.*?\})\s*```',
-            r'```[^\n]*\s*(\{.*?\})\s*```'
+            r'```\s*json\s*\n?\s*(\{.*?\})\s*\n?\s*```',  # ```json\n{...}\n```
+            r'```\s*(\{.*?\})\s*```',  # ```\n{...}\n```
+            r'```[^\n]*\s*\n?\s*(\{.*?\})\s*\n?\s*```',  # ```language\n{...}\n```
+            r'```\s*json\s*\n?\s*(\{[\s\S]*?\})\s*\n?\s*```',  # Многострочный JSON
         ]
 
-        for pattern in code_block_patterns:
+        for pattern_idx, pattern in enumerate(code_block_patterns):
             matches = re.findall(pattern, ai_response, re.IGNORECASE | re.DOTALL)
-            for match in matches:
+            console_log(f"Стратегия 2.{pattern_idx + 1}: найдено {len(matches)} совпадений")
+
+            for match_idx, match in enumerate(matches):
                 try:
+                    console_log(f"Попытка парсинга совпадения {match_idx + 1}: {match[:100]}...")
                     parsed = json.loads(match)
                     if isinstance(parsed, dict) and 'score' in parsed:
-                        console_log(f"✅ Найден валидный JSON в код-блоке по стратегии 2: {len(match)} символов")
+                        score = parsed.get('score')
+                        console_log(f"✅ Найден валидный JSON в код-блоке по стратегии 2.{pattern_idx + 1}: score={score}")
                         return parsed
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as e:
+                    console_log(f"Парсинг совпадения {match_idx + 1} провалился: {e}")
                     continue
 
     except Exception as e:
@@ -3149,24 +3314,65 @@ def _attempt_json_repair(broken_json: str) -> Optional[Dict[str, Any]]:
 
     original_json = broken_json
 
-    # Шаг 1: Очистка от Markdown и лишних символов
+    # Шаг 1: Улучшенная очистка от Markdown и лишних символов
     console_log("Шаг 1: Очистка от Markdown")
     try:
-        # Убираем Markdown обертки
-        cleaned = broken_json.replace('```json', '').replace('```', '').strip()
+        original_json = broken_json
+        cleaned = original_json
 
-        # Убираем лишние пробелы и переносы
-        cleaned = re.sub(r'\s+', ' ', cleaned)
+        # Проверяем, является ли JSON уже чистым (без markdown)
+        try:
+            parsed_clean = json.loads(cleaned.strip())
+            if isinstance(parsed_clean, dict) and 'score' in parsed_clean:
+                console_log("✅ JSON уже чистый, markdown обёртка отсутствует")
+                return parsed_clean
+        except json.JSONDecodeError:
+            pass  # Продолжаем очистку
+
+        # Убираем Markdown обертки с улучшенными паттернами
+        markdown_patterns = [
+            r'```\s*json\s*\n?\s*',  # ```json или ```json\n
+            r'```\s*',               # ``` с возможными пробелами
+            r'\s*```',               # ``` в конце с пробелами
+        ]
+
+        for pattern in markdown_patterns:
+            cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
+
+        # Дополнительная очистка
+        cleaned = cleaned.strip()
+
+        # Проверяем, если после очистки получился корректный JSON
+        try:
+            parsed = json.loads(cleaned)
+            if isinstance(parsed, dict) and 'score' in parsed:
+                console_log("✅ После очистки Markdown получился валидный JSON")
+                return parsed
+        except json.JSONDecodeError:
+            pass  # Продолжаем очистку
+
+        # Убираем лишние пробелы и переносы (сохраняя структуру)
+        cleaned = re.sub(r'[ \t]+', ' ', cleaned)  # Сжимаем множественные пробелы
+        cleaned = re.sub(r'\n\s*\n', '\n', cleaned)  # Убираем пустые строки
 
         # Убираем BOM и невидимые символы
         cleaned = cleaned.replace('\ufeff', '').replace('\u200b', '')
 
-        console_log(f"После очистки: {len(cleaned)} символов (было {len(broken_json)})")
+        console_log(f"После очистки: {len(cleaned)} символов (было {len(original_json)})")
 
-        if len(cleaned) != len(broken_json):
+        if len(cleaned) != len(original_json):
             console_log("✅ Выполнена очистка Markdown")
         else:
-            console_log("ℹ️ Очистка Markdown не изменила содержимое")
+            console_log("ℹ️ Markdown обёртка не найдена")
+
+        # Финальная проверка очищенного JSON
+        try:
+            parsed_final = json.loads(cleaned)
+            if isinstance(parsed_final, dict) and 'score' in parsed_final:
+                console_log("✅ После полной очистки получился валидный JSON")
+                return parsed_final
+        except json.JSONDecodeError:
+            console_log("ℹ️ После очистки JSON всё ещё невалидный, продолжаем ремонт")
 
     except Exception as e:
         console_log(f"Ошибка в шаге 1: {e}")
@@ -3430,7 +3636,11 @@ async def _find_similar_products(categories: List[str], composition: str) -> Lis
 
         # Проверка типа данных от AI
         if not isinstance(response, str):
-            chat_message(f"🔄 AI вернул {type(response)} вместо строки при поиске аналогов, конвертируем")
+            console_log(f"[BRIDGE DIAGNOSTIC] AI вернул {type(response)} вместо строки, конвертируем")
+            console_log(f"[BRIDGE DIAGNOSTIC] Исходный ответ AI: {response}")
+            console_log(f"[BRIDGE DIAGNOSTIC] Тип исходного ответа: {type(response)}")
+            if hasattr(response, '__dict__'):
+                console_log(f"[BRIDGE DIAGNOSTIC] Атрибуты ответа: {response.__dict__}")
             response = str(response)
 
         # Проверяем, что ответ не пустой после конвертации
@@ -3439,8 +3649,13 @@ async def _find_similar_products(categories: List[str], composition: str) -> Lis
             console_log(f"Пустой ответ от AI: '{response}' (длина: {len(response) if response else 0})")
             return _generate_fallback_analogs(categories, product_type)
 
-        # Логируем начало обработки ответа
-        console_log(f"Начало обработки ответа AI: длина={len(response)}, первые 100 символов='{response[:100]}...'")
+        # ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ ОТВЕТА ОТ AI В _find_similar_products
+        console_log("[FIND_SIMILAR] ===== НАЧАЛО ОБРАБОТКИ ОТВЕТА AI =====")
+        console_log(f"[FIND_SIMILAR] Длина ответа: {len(response)}")
+        console_log(f"[FIND_SIMILAR] Первые 200 символов: {response[:200]}...")
+        console_log(f"[FIND_SIMILAR] Последние 200 символов: ...{response[-200:] if len(response) > 200 else response}")
+        console_log(f"[FIND_SIMILAR] Полный ответ: {response}")
+        console_log("[FIND_SIMILAR] ===== КОНЕЦ ЛОГИРОВАНИЯ ОТВЕТА =====")
 
         # Парсим ответ
         try:

@@ -369,7 +369,7 @@ class SimpleWorkflowEngine {
       // Load packages
       await this.pyodide.loadPackage(['micropip', 'beautifulsoup4', 'requests']);
 
-      // Set up js bridge for Python
+      // Set up js bridge for Python with enhanced diagnostic logging
       this.pyodide.runPython(`
 import js
 import sys
@@ -377,19 +377,90 @@ from typing import Any, Dict
 import json
 
 def sendMessageToChat(message):
-    js.sendMessageToChat(message)
+    print(f"[BRIDGE DIAGNOSTIC] sendMessageToChat called with: {message}")
+    print(f"[BRIDGE DIAGNOSTIC] Message type: {type(message)}")
+    try:
+        result = js.sendMessageToChat(message)
+        print(f"[BRIDGE DIAGNOSTIC] sendMessageToChat result: {result}")
+        return result
+    except Exception as e:
+        print(f"[BRIDGE DIAGNOSTIC] Error in sendMessageToChat: {e}")
+        return None
+
+def llm_call(model_alias, params):
+    print(f"[BRIDGE DIAGNOSTIC] ===== llm_call BRIDGE CALL =====")
+    print(f"[BRIDGE DIAGNOSTIC] Model: {model_alias}")
+    print(f"[BRIDGE DIAGNOSTIC] Params: {params}")
+    print(f"[BRIDGE DIAGNOSTIC] Params type: {type(params)}")
+    try:
+        result = js.llm_call(model_alias, params)
+        print(f"[BRIDGE DIAGNOSTIC] llm_call raw result: {result}")
+        print(f"[BRIDGE DIAGNOSTIC] llm_call result type: {type(result)}")
+        return result
+    except Exception as e:
+        print(f"[BRIDGE DIAGNOSTIC] Error in llm_call: {e}")
+        return None
+
+def get_setting(setting_name):
+    print(f"[BRIDGE DIAGNOSTIC] get_setting called: {setting_name}")
+    try:
+        result = js.get_setting(setting_name)
+        print(f"[BRIDGE DIAGNOSTIC] get_setting result: {result}")
+        return result
+    except Exception as e:
+        print(f"[BRIDGE DIAGNOSTIC] Error in get_setting: {e}")
+        return False
 
 def host_fetch(url):
-    return js.hostFetch(url)
+    print(f"[BRIDGE DIAGNOSTIC] host_fetch called: {url}")
+    try:
+        result = js.hostFetch(url)
+        print(f"[BRIDGE DIAGNOSTIC] host_fetch result type: {type(result)}")
+        return result
+    except Exception as e:
+        print(f"[BRIDGE DIAGNOSTIC] Error in host_fetch: {e}")
+        return None
 
+# Register bridge functions
 js.sendMessageToChat = sendMessageToChat
+js.llm_call = llm_call
+js.get_setting = get_setting
 js.host_fetch = host_fetch
+
+print("[BRIDGE DIAGNOSTIC] ===== PYODIDE JS BRIDGE INITIALIZED =====")
+print(f"[BRIDGE DIAGNOSTIC] Available JS functions: sendMessageToChat, llm_call, get_setting, host_fetch")
 `);
 
       // Load the plugin code
+      console.log('[BRIDGE DIAGNOSTIC] ===== LOADING PYTHON PLUGIN CODE =====');
       const response = await fetch(chrome.runtime.getURL('plugins/ozon-analyzer/mcp_server.py'));
       const pythonCode = await response.text();
+      console.log(`[BRIDGE DIAGNOSTIC] Python code loaded: ${pythonCode.length} characters`);
+
+      console.log('[BRIDGE DIAGNOSTIC] ===== EXECUTING PYTHON CODE =====');
       this.pyodide.runPython(pythonCode);
+      console.log('[BRIDGE DIAGNOSTIC] Python code executed successfully');
+
+      // Verify bridge functions are available
+      console.log('[BRIDGE DIAGNOSTIC] ===== VERIFYING BRIDGE FUNCTIONS =====');
+      try {
+        const bridgeTest = this.pyodide.runPython(`
+try:
+    import js
+    print(f"[BRIDGE DIAGNOSTIC] JS object available: {js is not None}")
+    print(f"[BRIDGE DIAGNOSTIC] llm_call available: {hasattr(js, 'llm_call')}")
+    print(f"[BRIDGE DIAGNOSTIC] sendMessageToChat available: {hasattr(js, 'sendMessageToChat')}")
+    print(f"[BRIDGE DIAGNOSTIC] get_setting available: {hasattr(js, 'get_setting')}")
+    print("[BRIDGE DIAGNOSTIC] Bridge verification completed")
+    "BRIDGE_OK"
+except Exception as e:
+    print(f"[BRIDGE DIAGNOSTIC] Bridge verification failed: {e}")
+    "BRIDGE_FAILED"
+`);
+        console.log(`[BRIDGE DIAGNOSTIC] Bridge verification result: ${bridgeTest}`);
+      } catch (error) {
+        console.error('[BRIDGE DIAGNOSTIC] Error during bridge verification:', error);
+      }
 
       this.logger.log('[WorkflowEngine] Pyodide initialized successfully');
     } catch (error) {
@@ -406,28 +477,67 @@ js.host_fetch = host_fetch
     try {
       this.logger.log('[WorkflowEngine] Executing Python analysis...');
 
+      // [BRIDGE DIAGNOSTIC] ===== ПЕРЕД ПЕРЕДАЧЕЙ ДАННЫХ В PYTHON =====
+      console.log('[BRIDGE DIAGNOSTIC] ===== ПЕРЕД ПЕРЕДАЧЕЙ ДАННЫХ В PYTHON =====');
+      console.log(`[BRIDGE DIAGNOSTIC] HTML content type: ${typeof htmlContent}`);
+      console.log(`[BRIDGE DIAGNOSTIC] HTML content length: ${htmlContent?.length || 0}`);
+      console.log(`[BRIDGE DIAGNOSTIC] HTML content preview: ${htmlContent?.substring(0, 200)}...`);
+      console.log(`[BRIDGE DIAGNOSTIC] Pyodide ready: ${!!this.pyodide}`);
+      console.log(`[BRIDGE DIAGNOSTIC] Pyodide globals available: ${!!this.pyodide?.globals}`);
+      console.log('[BRIDGE DIAGNOSTIC] ===== НАЧАЛО ПЕРЕДАЧИ В PYTHON =====');
+
       // Set the HTML content in Python
       this.pyodide.globals.set('page_html', htmlContent);
+
+      console.log('[BRIDGE DIAGNOSTIC] HTML content successfully set in Python globals');
 
       // Execute the analysis function
       const result = this.pyodide.runPython(`
 import logging
 logging.basicConfig(level=logging.INFO)
 
-# Mock js object for the Python code
+# Mock js object for the Python code with enhanced logging
 class MockJs:
     def sendMessageToChat(self, message):
-        print(f"Chat message: {message}")
+        print(f"[BRIDGE DIAGNOSTIC] MockJs.sendMessageToChat called with: {message}")
+        print(f"[BRIDGE DIAGNOSTIC] Message type: {type(message)}")
+        if isinstance(message, dict):
+            print(f"[BRIDGE DIAGNOSTIC] Message keys: {list(message.keys())}")
+        return None
+
+    def llm_call(self, model_alias, params):
+        print(f"[BRIDGE DIAGNOSTIC] MockJs.llm_call called with model: {model_alias}")
+        print(f"[BRIDGE DIAGNOSTIC] Params: {params}")
+        print(f"[BRIDGE DIAGNOSTIC] Params type: {type(params)}")
+        # This would normally call the real JS llm_call function
+        # For diagnostic purposes, we'll simulate a response
+        return {"response": "Mock diagnostic response", "status": "success"}
+
+    def get_setting(self, setting_name):
+        print(f"[BRIDGE DIAGNOSTIC] MockJs.get_setting called with: {setting_name}")
+        return False
 
 js = MockJs()
 
 # Execute the analysis
 try:
+    print("[BRIDGE DIAGNOSTIC] ===== ЗАПУСК PYTHON АНАЛИЗА =====")
     result = analyze_ozon_product()
+    print(f"[BRIDGE DIAGNOSTIC] ===== PYTHON АНАЛИЗ ЗАВЕРШЕН =====")
+    print(f"[BRIDGE DIAGNOSTIC] Результат анализа: {result}")
+    print(f"[BRIDGE DIAGNOSTIC] Тип результата: {type(result)}")
+    if isinstance(result, dict):
+        print(f"[BRIDGE DIAGNOSTIC] Ключи результата: {list(result.keys())}")
     result
 except Exception as e:
+    print(f"[BRIDGE DIAGNOSTIC] ===== ОШИБКА В PYTHON АНАЛИЗЕ: {e} =====")
     {"status": "error", "error": str(e)}
 `);
+
+      console.log('[BRIDGE DIAGNOSTIC] ===== РЕЗУЛЬТАТ ИЗ PYTHON ПОЛУЧЕН =====');
+      console.log(`[BRIDGE DIAGNOSTIC] Result type: ${typeof result}`);
+      console.log(`[BRIDGE DIAGNOSTIC] Result keys: ${result && typeof result === 'object' ? Object.keys(result) : 'N/A'}`);
+      console.log(`[BRIDGE DIAGNOSTIC] Result preview:`, result);
 
       this.logger.log('[WorkflowEngine] Python analysis completed:', result);
       return result;
