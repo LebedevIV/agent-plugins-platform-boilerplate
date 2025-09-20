@@ -1,9 +1,10 @@
 {
   "extends": "@extension/tsconfig/app",
   "compilerOptions": {
-    "baseUrl": ".",
+    "baseUrl": "..",
     "paths": {
-      "@src/*": ["src/*"]
+      "@src/*": ["src/*"],
+      "@extension/storage": ["packages/storage/index.mts"]
     },
     "types": ["node", "chrome"]
   },

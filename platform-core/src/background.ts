@@ -9,6 +9,12 @@
 
 console.log("APP Background Script Loaded (v0.9.0 - Resilient Fetch).");
 
+// Глобальная функция trackSendResponse для использования вне обработчика сообщений
+function trackSendResponse(response: any): boolean {
+  console.log('[background][RESPONSE] Sending response:', JSON.stringify(response));
+  return true;
+}
+
 //================================================================//
 //  1. РЕАЛИЗАЦИЯ HOST API
 //================================================================//
@@ -351,18 +357,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   switch (command) {
     case "getActivePageContent":
       if (!targetTabId) {
-        sendResponse({ error: "Target tab ID was not provided." });
+        trackSendResponse({ error: "Target tab ID was not provided." });
         return false;
       }
-      hostApiImpl.getActivePageContent(targetTabId).then(sendResponse);
+      hostApiImpl.getActivePageContent(targetTabId).then(trackSendResponse);
       return true;
 
     case "getElements":
       if (!targetTabId) {
-        sendResponse({ error: "Target tab ID was not provided." });
+        trackSendResponse({ error: "Target tab ID was not provided." });
         return false;
       }
-      hostApiImpl.getElements(targetTabId, data).then(sendResponse);
+      hostApiImpl.getElements(targetTabId, data).then(trackSendResponse);
       return true;
 
       case "host_fetch":
@@ -373,10 +379,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         (async () => {
             try {
                 const jsonData = await fetchWithRetry(url);
-                sendResponse({ error: false, data: jsonData });
+                trackSendResponse({ error: false, data: jsonData });
             } catch (err: any) {
                 console.error('[Background] КРИТИЧЕСКАЯ ОШИБКА в fetchWithRetry:', err);
-                sendResponse({ error: true, error_message: err.message });
+                trackSendResponse({ error: true, error_message: err.message });
             }
         })();
         
@@ -384,14 +390,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     case "analyzeConnectionStats":
       if (!data || !data.hostname) {
-        sendResponse({ error: "Hostname was not provided." });
+        trackSendResponse({ error: "Hostname was not provided." });
         return false;
       }
-      hostApiImpl.analyzeConnectionStats(data).then(sendResponse);
+      hostApiImpl.analyzeConnectionStats(data).then(trackSendResponse);
       return true;
 
     default:
-      sendResponse({ error: `Unknown command: ${command}` });
+      trackSendResponse({ error: `Unknown command: ${command}` });
       return false;
   }
 });

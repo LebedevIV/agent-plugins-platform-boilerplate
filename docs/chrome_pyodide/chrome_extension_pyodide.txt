@@ -1,0 +1,244 @@
+// === offscreen.js ===
+let pyodide = null;
+let initializationPromise = null;
+let isInitializing = false;
+
+// Инициализация Pyodide с улучшенной обработкой ошибок
+async function initializePyodide() {
+  if (initializationPromise) {
+    return initializationPromise;
+  }
+  
+  if (isInitializing) {
+    throw new Error('Pyodide уже инициализируется');
+  }
+
+  initializationPromise = (async () => {
+    isInitializing = true;
+    try {
+      console.log('Загрузка Pyodide...');
+      
+      // Проверяем доступность CDN
+      const cdnTest = await fetch('https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js');
+      if (!cdnTest.ok) {
+        throw new Error('CDN недоступен');
+      }
+      
+      pyodide = await loadPyodide({
+        indexURL: "https://cdn.jsdelivr.net/pyodide/v0.24.1/full/",
+        stdout: (text) => console.log('Python stdout:', text),
+        stderr: (text) => console.error('Python stderr:', text)
+      });
+      
+      // Установка базовых пакетов с обработкой ошибок
+      try {
+        console.log('Загрузка пакетов...');
+        await pyodide.loadPackage(["numpy", "pandas"]);
+        console.log('Базовые пакеты загружены');
+      } catch (packageError) {
+        console.warn('Не удалось загрузить некоторые пакеты:', packageError);
+        // Продолжаем работу без пакетов
+      }
+      
+      // Настройка базовой среды Python
+      pyodide.runPython(`
+import sys
+import traceback
+from io import StringIO
+
+# Функции для безопасного выполнения кода
+def safe_exec(code):
+    try:
+        # Создаем локальное пространство имен
+        local_ns = {}
+        exec(code, {"__builtins__": __builtins__}, local_ns)
+        return local_ns
+    except Exception as e:
+        raise e
+
+def format_exception(e):
+    return ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+      `);
+      
+      console.log('Pyodide успешно инициализирован');
+      isInitializing = false;
+      return pyodide;
+    } catch (error) {
+      isInitializing = false;
+      console.error('Ошибка инициализации Pyodide:', error);
+      
+      // Уведомляем background script об ошибке
+      chrome.runtime.sendMessage({
+        type: 'PYODIDE_INIT_ERROR',
+        target: 'background',
+        error: error.message
+      });
+      
+      throw error;
+    }
+  })();
+  
+  return initializationPromise;
+}
+
+// Выполнение Python кода с улучшенной безопасностью
+async function executePython(code, timeout = 30000) {
+  try {
+    if (!pyodide) {
+      await initializePyodide();
+    }
+    
+    // Проверка на потенциально опасный код
+    const dangerousPatterns = [
+      /import\s+os/i,
+      /import\s+subprocess/i,
+      /eval\s*\(/i,
+      /exec\s*\(/i,
+      /__import__/i
+    ];
+    
+    const isDangerous = dangerousPatterns.some(pattern => pattern.test(code));
+    if (isDangerous) {
+      return {
+        success: false,
+        error: 'Обнаружен потенциально небезопасный код'
+      };
+    }
+    
+    // Выполнение с таймаутом
+    const executionPromise = new Promise((resolve, reject) => {
+      try {
+        // Захват вывода Python
+        pyodide.runPython(`
+stdout_buffer = StringIO()
+stderr_buffer = StringIO()
+original_stdout = sys.stdout
+original_stderr = sys.stderr
+sys.stdout = stdout_buffer
+sys.stderr = stderr_buffer
+
+try:
+    exec_result = safe_exec('''${code.replace(/'/g, "\\'")}''')
+    result_value = None
+    
+    # Пытаемся найти последнее выражение для возврата
+    lines = '''${code.replace(/'/g, "\\'")}'''.strip().split('\\n')
+    last_line = lines[-1].strip() if lines else ''
+    
+    if last_line and not last_line.startswith(('print', 'import', 'from', 'def', 'class', 'if', 'for', 'while', 'try', 'with')):
+        try:
+            result_value = eval(last_line, exec_result)
+        except:
+            pass
+            
+except Exception as e:
+    execution_error = format_exception(e)
+finally:
+    sys.stdout = original_stdout
+    sys.stderr = original_stderr
+        `);
+        
+        const output = pyodide.runPython('stdout_buffer.getvalue()');
+        const errorOutput = pyodide.runPython('stderr_buffer.getvalue()');
+        
+        let result;
+        let executionError;
+        
+        try {
+          result = pyodide.runPython('result_value');
+        } catch {
+          result = null;
+        }
+        
+        try {
+          executionError = pyodide.runPython('execution_error');
+        } catch {
+          executionError = null;
+        }
+        
+        if (executionError) {
+          resolve({
+            success: false,
+            error: executionError,
+            output: output,
+            stderr: errorOutput
+          });
+        } else {
+          resolve({
+            success: true,
+            result: result,
+            output: output,
+            stderr: errorOutput
+          });
+        }
+      } catch (error) {
+        reject(error);
+      }
+    });
+    
+    // Применение таймаута
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`Execution timeout after ${timeout}ms`)), timeout);
+    });
+    
+    return await Promise.race([executionPromise, timeoutPromise]);
+    
+  } catch (error) {
+    return {
+      success: false,
+      error: `Ошибка выполнения: ${error.message}`
+    };
+  }
+}
+
+// Управление памятью - очистка неиспользуемых объектов
+function cleanup() {
+  if (pyodide) {
+    try {
+      pyodide.runPython(`
+import gc
+gc.collect()
+      `);
+    } catch (error) {
+      console.warn('Ошибка очистки памяти:', error);
+    }
+  }
+}
+
+// Обработка сообщений от background script
+chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
+  if (message.target === 'offscreen' && message.type === 'RUN_PYTHON') {
+    try {
+      const result = await executePython(message.code, message.timeout);
+      
+      // Очищаем память после выполнения
+      cleanup();
+      
+      sendResponse(result);
+    } catch (error) {
+      sendResponse({
+        success: false,
+        error: error.message
+      });
+    }
+    return true; // Асинхронный ответ
+  }
+});
+
+// Инициализация при загрузке страницы
+document.addEventListener('DOMContentLoaded', () => {
+  // Показываем статус загрузки
+  const outputDiv = document.getElementById('python-output');
+  if (outputDiv) {
+    outputDiv.textContent = 'Инициализация Pyodide...';
+  }
+  
+  initializePyodide()
+    .then(() => {
+      if (outputDiv) {
+        outputDiv.textContent = 'Pyodide готов к использованию';
+      }
+    })
+    .catch(error => {
+      if (outputDiv) {
+        outputDiv.textContent

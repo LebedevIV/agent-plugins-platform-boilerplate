@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧪 Ручное тестирование Pyodide в Offscreen Context</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 2.2em;
+            font-weight: 300;
+        }
+
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.8;
+            font-size: 1.1em;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .test-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .control-panel {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            border: 2px solid #e9ecef;
+            transition: all 0.3s ease;
+        }
+
+        .control-panel:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .control-panel h3 {
+            margin-top: 0;
+            color: #2c3e50;
+            font-size: 1.3em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .start-button {
+            background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 1.1em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+
+        .start-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(39, 174, 96, 0.3);
+        }
+
+        .start-button:disabled {
+            background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        .status-ready {
+            background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+            color: white;
+        }
+
+        .status-testing {
+            background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+            color: white;
+            animation: pulse 1.5s infinite;
+        }
+
+        .status-error {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            color: white;
+        }
+
+        .status-waiting {
+            background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%);
+            color: white;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .test-results {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+        }
+
+        .results-panel {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            border: 2px solid #e9ecef;
+        }
+
+        .results-panel h3 {
+            margin-top: 0;
+            color: #2c3e50;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .summary-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .stat-label {
+            color: #7f8c8d;
+            margin-top: 5px;
+        }
+
+        .test-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .test-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+        }
+
+        .test-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .test-passed .test-icon { background: #27ae60; color: white; }
+        .test-failed .test-icon { background: #e74c3c; color: white; }
+        .test-pending .test-icon { background: #95a5a6; color: white; }
+
+        .test-details {
+            flex: 1;
+        }
+
+        .test-name {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .test-description {
+            font-size: 0.9em;
+            color: #7f8c8d;
+        }
+
+        .test-result {
+            font-family: monospace;
+            font-size: 0.85em;
+            color: #2ecc71;
+        }
+
+        .test-error {
+            font-family: monospace;
+            font-size: 0.85em;
+            color: #e74c3c;
+        }
+
+        .execution-log {
+            background: #2c3e50;
+            color: #ecf0f1;
+            border-radius: 15px;
+            padding: 25px;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9em;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            line-height: 1.4;
+        }
+
+        .log-entry {
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(236, 240, 241, 0.1);
+        }
+
+        .log-timestamp {
+            color: #95a5a6;
+            margin-right: 10px;
+        }
+
+        .log-level {
+            font-weight: bold;
+            min-width: 70px;
+            display: inline-block;
+        }
+
+        .log-info { color: #3498db; }
+        .log-success { color: #27ae60; }
+        .log-error { color: #e74c3c; }
+        .log-critical { color: #e74c3c; font-weight: bold; }
+        .log-debug { color: #95a5a6; }
+        .log-summary { color: #9b59b6; }
+        .log-analysis { color: #9b59b6; }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 4px;
+        }
+
+        .architecture-ready {
+            background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .architecture-warning {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .footer {
+            background: #34495e;
+            color: #bdc3c7;
+            padding: 20px;
+            text-align: center;
+            font-size: 0.9em;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔬 Ручное тестирование Pyodide</h1>
+            <p>Проверка возможности Python execution в Offscreen Document context</p>
+            <div class="status-badge status-waiting" id="globalStatus">
+                ⏳ Ожидание запуска
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="test-controls">
+                <div class="control-panel">
+                    <h3>🚀 Пуск тестирования</h3>
+                    <p>Запустите полное тестирование Pyodide architecture в offscreen document context</p>
+                    <button class="start-button" id="startTestBtn" onclick="startManualTesting()">
+                        ▶️ Начать ручное тестирование
+                    </button>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="testProgress"></div>
+                    </div>
+                </div>
+
+                <div class="control-panel">
+                    <h3>📊 Статус системы</h3>
+                    <div class="summary-stats">
+                        <div class="stat-card">
+                            <div class="stat-number" id="testsTotal">0</div>
+                            <div class="stat-label">Всего тестов</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" id="testsPassed">0</div>
+                            <div class="stat-label">Пройдено</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" id="testsFailed">0</div>
+                            <div class="stat-label">Провалено</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" id="successRate">0%</div>
+                            <div class="stat-label">Успешность</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="test-results" id="testResults" class="hidden">
+                <div class="results-panel">
+                    <h3>📋 Результаты тестов</h3>
+                    <div id="architectureStatus"></div>
+                    <div id="testItems"></div>
+                </div>
+
+                <div class="results-panel">
+                    <h3>📝 Лог исполнения</h3>
+                    <div class="execution-log" id="executionLog">
+                        Журнал тестирования появится здесь после запуска...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>🧪 Ручное тестирование Pyodide в Offscreen Document Context • Chrome Extension • v1.0</p>
+            <p><strong>Контакты:</strong> developer@pyodide-extension.test • <strong>Версия:</strong> Manual Test Framework 1.0</p>
+        </div>
+    </div>
+
+    <!-- Загрузка скрипта тестирования -->
+    <script src="test-scripts/pyodide-offscreen-manual-test.js"></script>
+
+    <script>
+        // Глобальное состояние тестирования
+        let currentTestingSession = null;
+        let testStartTime = null;
+
+        // DOM элементы
+        const statusBadge = document.getElementById('globalStatus');
+        const startBtn = document.getElementById('startTestBtn');
+        const progressBar = document.getElementById('testProgress');
+        const testsTotal = document.getElementById('testsTotal');
+        const testsPassed = document.getElementById('testsPassed');
+        const testsFailed = document.getElementById('testsFailed');
+        const successRate = document.getElementById('successRate');
+        const architectureStatus = document.getElementById('architectureStatus');
+        const testItems = document.getElementById('testItems');
+        const executionLog = document.getElementById('executionLog');
+        const testResults = document.getElementById('testResults');
+
+        /**
+         * Запуск ручного тестирования
+         */
+        async function startManualTesting() {
+            try {
+                log('🚀 Запуск ручного тестирования Pyodide в offscreen контексте...');
+
+                // Подготовка UI
+                updateGlobalStatus('testing', '🔄 Выполнение тестов...');
+                startBtn.disabled = true;
+                startBtn.textContent = '⏳ Тестирование...';
+                progressBar.style.width = '0%';
+
+                testStartTime = Date.now();
+                currentTestingSession = new PyodideOffscreenManualTester();
+
+                // Запуск тестирования
+                const result = await currentTestingSession.startManualTesting();
+
+                const duration = Math.round((Date.now() - testStartTime) / 1000);
+                log(`✅ Ручное тестирование завершено за ${duration} секунд`);
+
+                // Обновление UI с результатами
+                updateTestResults(result);
+
+                if (result.success) {
+                    updateGlobalStatus('ready', '✅ Тестирование пройдено успешно');
+                    startBtn.textContent = '✅ Готово';
+                } else {
+                    updateGlobalStatus('error', '❌ Тестирование провалено');
+                    startBtn.textContent = '❌ Ошибка';
+                }
+
+            } catch (error) {
+                log(`❌ Критическая ошибка тестирования: ${error.message}`, 'ERROR');
+                updateGlobalStatus('error', `❌ Ошибка: ${error.message}`);
+                startBtn.disabled = false;
+                startBtn.textContent = '🔄 Повторить попытку';
+
+                // Показываем секцию результатов с ошибкой
+                testResults.classList.remove('hidden');
+                architectureStatus.innerHTML = `
+                    <div class="architecture-warning">
+                        <h3>❌ Критическая ошибка тестирования</h3>
+                        <p><strong>Ошибка:</strong> ${error.message}</p>
+                        <p>Проверьте консоль браузера для получения дополнительной информации.</p>
+                    </div>
+                `;
+            }
+        }
+
+        /**
+         * Обновление глобального статуса
+         */
+        function updateGlobalStatus(status, message) {
+            const classes = {
+                ready: 'status-ready',
+                testing: 'status-testing',
+                error: 'status-error',
+                waiting: 'status-waiting'
+            };
+
+            statusBadge.className = `status-badge ${classes[status] || classes.waiting}`;
+            statusBadge.textContent = message;
+        }
+
+        /**
+         * Обновление результатов тестирования
+         */
+        function updateTestResults(result) {
+            testResults.classList.remove('hidden');
+
+            // Разбор результатов
+            const summary = analyzeTestResults(result);
+
+            // Обновление статистики
+            updateStats(summary);
+
+            // Показываем статус архитектуры
+            showArchitectureStatus(summary);
+
+            // Показываем детали тестов
+            showTestDetails(result.results || []);
+
+            // Показываем логи
+            showExecutionLogs(result.logs || []);
+
+            log(`📊 Итоговые результаты: ${summary.passed} прошло из ${summary.total} (${summary.successRate}%)`);
+        }
+
+        /**
+         * Анализ результатов тестирования
+         */
+        function analyzeTestResults(result) {
+            const tests = result.results || [];
+            const total = tests.length;
+            const passed = tests.filter(t => t.status === 'PASSED').length;
+            const failed = total - passed;
+            const successRate = total > 0 ? Math.round((passed / total) * 100) : 0;
+
+            return {
+                total,
+                passed,
+                failed,
+                successRate,
+                criticalTestsOk: tests
+                    .filter(t => ['offscreen_creation', 'pyodide_initialization'].includes(t.test))
+                    .every(t => t.status === 'PASSED'),
+                architectureReady: successRate >= 80 && result.success
+            };
+        }
+
+        /**
+         * Обновление статистических показателей
+         */
+        function updateStats(summary) {
+            testsTotal.textContent = summary.total;
+            testsPassed.textContent = summary.passed;
+            testsFailed.textContent = summary.failed;
+            successRate.textContent = `${summary.successRate}%`;
+
+            // Анимация прогресс-бара
+            setTimeout(() => {
+                progressBar.style.width = `${summary.successRate}%`;
+            }, 100);
+        }
+
+        /**
+         * Показ статуса архитектуры
+         */
+        function showArchitectureStatus(summary) {
+            let statusHtml = '';
+
+            if (summary.architectureReady) {
+                statusHtml = `
+                    <div class="architecture-ready">
+                        <h3>✅ Python Execution Architecture Ready!</h3>
+                        <p>✅ Pyodide успешно работает в offscreen document контексте</p>
+                        <p>✅ Все базовые тесты пройдены</p>
+                        <p>✅ DOM API и Web APIs доступны</p>
+                        <p>✅ Архитектура готова для production использования</p>
+                    </div>
+                `;
+            } else {
+                statusHtml = `
+                    <div class="architecture-warning">
+                        <h3>⚠️ Architecture Issues Detected</h3>
+                        <p>❌ Успешность тестирования: ${summary.successRate}%</p>
+                        ${!summary.criticalTestsOk ? '<p>❌ Критические компоненты не работают</p>' : ''}
+                        ${summary.failed > 0 ? `<p>❌ ${summary.failed} тестов провалено</p>` : ''}
+                        <p>Проверьте детали ниже и консоль браузера для диагностики</p>
+                    </div>
+                `;
+            }
+
+            architectureStatus.innerHTML = statusHtml;
+        }
+
+        /**
+         * Показ деталей тестирования
+         */
+        function showTestDetails(tests) {
+            if (tests.length === 0) {
+                testItems.innerHTML = '<p>Результаты тестов не найдены</p>';
+                return;
+            }
+
+            const testsHtml = tests.map(test => {
+                const testClass = test.status === 'PASSED' ? 'test-passed' : 'test-failed';
+                const icon = test.status === 'PASSED' ? '✅' : '❌';
+                const timeInfo = test.executionTime ? ` (${test.executionTime}ms)` : '';
+
+                return `
+                    <div class="test-item ${testClass}">
+                        <div class="test-info">
+                            <div class="test-icon">${icon}</div>
+                            <div class="test-details">
+                                <div class="test-name">${test.test}${timeInfo}</div>
+                                <div class="test-description">${test.description || 'Без описания'}</div>
+                            </div>
+                        </div>
+                        <div class="${test.status === 'PASSED' ? 'test-result' : 'test-error'}">
+                            ${test.status === 'PASSED' ? (test.result || 'Успешно') : (test.error || 'Ошибка')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            testItems.innerHTML = testsHtml;
+        }
+
+        /**
+         * Показ логов выполнения
+         */
+        function showExecutionLogs(logs) {
+            if (logs.length === 0) {
+                executionLog.textContent = 'Логи тестирования не найдены';
+                return;
+            }
+
+            const logsHtml = logs.map(entry => {
+                const timestamp = new Date(entry.timestamp).toLocaleTimeString();
+                const levelClass = `log-${entry.level.toLowerCase()}`;
+
+                return `<div class="log-entry">
+                    <span class="log-timestamp">${timestamp}</span>
+                    <span class="log-level ${levelClass}">[${entry.level}]</span>
+                    ${entry.message}
+                </div>`;
+            }).join('');
+
+            executionLog.innerHTML = logsHtml;
+        }
+
+        /**
+         * Логирование
+         */
+        function log(message, level = 'INFO') {
+            console.log(`[${level}] ${message}`);
+
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            logEntry.innerHTML = `
+                <span class="log-timestamp">${new Date().toLocaleTimeString()}</span>
+                <span class="log-level log-${level.toLowerCase()}">[${level}]</span>
+                ${message}
+            `;
+
+            executionLog.appendChild(logEntry);
+            executionLog.scrollTop = executionLog.scrollHeight;
+        }
+
+        /**
+         * Инициализация страницы при загрузке
+         */
+        document.addEventListener('DOMContentLoaded', function() {
+            log('🧪 Ручное тестирование Pyodide Offscreen Context загружено');
+            log(`📖 Используйте кнопку "Начать ручное тестирование" для запуска`);
+            log(`🔍 Откройте Developer Tools для дополнительного логирования`);
+
+            // Принудительное скрытие результатов при загрузке
+            testResults.classList.add('hidden');
+        });
+    </script>
+</body>
+</html>

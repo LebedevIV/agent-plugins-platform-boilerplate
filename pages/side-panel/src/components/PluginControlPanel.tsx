@@ -1,3 +1,26 @@
+/**
+ * PluginControlPanel.tsx - Панель управления плагином с чатом
+ *
+ * ИСПРАВЛЕНИЕ ПРОБЛЕМЫ С ПОЛУЧЕНИЕМ ОТВЕТА GET_PLUGIN_CHAT:
+ * ========================================================
+ *
+ * Проблема: Background отправлял ответ через sendResponse() callback, но компонент
+ * ожидал ответ через chrome.runtime.sendMessage() с типом 'GET_PLUGIN_CHAT_RESPONSE'.
+ *
+ * Решение: Изменен механизм коммуникации на использование Promise-based подхода
+ * с помощью sendMessageToBackgroundAsync(), который правильно работает с sendResponse().
+ *
+ * Теперь:
+ * 1. Компонент отправляет GET_PLUGIN_CHAT через chrome.runtime.sendMessage()
+ * 2. Background получает сообщение и отвечает через sendResponse()
+ * 3. Компонент получает ответ через Promise и обрабатывает его
+ *
+ * Диагностика:
+ * - Логи sendMessageToBackgroundAsync покажут отправку и получение ответа
+ * - Логи loadChat покажут обработку ответа
+ * - Логи processChatResponse покажут разбор данных чата
+ */
+
 import { DraftStatus } from './DraftStatus';
 import { PluginDetails } from './PluginDetails';
 import { getPageKey } from '../../../../packages/shared/lib/utils/helpers';
@@ -60,11 +83,25 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
 }) => {
   // Состояние для активной вкладки в панели управления
   const [activeTab, setActiveTab] = useState<PanelView>('chat');
+  // Состояние для текущего pageKey с динамическим обновлением
+  const [currentPageKey, setCurrentPageKey] = useState(getPageKey(currentTabUrl));
+
+  // useEffect для обновления pageKey при изменении currentTabUrl
+  useEffect(() => {
+    const newPageKey = getPageKey(currentTabUrl);
+    console.log('[PluginControlPanel] currentTabUrl изменился:', {
+      oldPageKey: currentPageKey,
+      newPageKey,
+      currentTabUrl,
+      timestamp: new Date().toISOString()
+    });
+    setCurrentPageKey(newPageKey);
+  }, [currentTabUrl]);
   // Используем хук для ленивой синхронизации
   const { message, setMessage, isDraftSaved, isDraftLoading, draftError, loadDraft, clearDraft, draftText } =
     useLazyChatSync({
       pluginId: plugin.id,
-      pageKey: getPageKey(currentTabUrl),
+      pageKey: currentPageKey, // <-- Теперь динамический pageKey
       debounceMs: 1000, // 1 секунда задержки
     });
 
@@ -92,19 +129,311 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
 
   // Получаем ключ чата для текущего плагина и страницы
   const pluginId = plugin.id;
-  const pageKey = getPageKey(currentTabUrl);
 
-  // Вспомогательная функция для отправки сообщений в background без ожидания ответа
+  // Вспомогательная функция для отправки сообщений в background с ожиданием ответа
+  const sendMessageToBackgroundAsync = useCallback(async (message: any): Promise<any> => {
+    const messageId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+    const messageWithId = { ...message, messageId };
+
+    console.log('[PluginControlPanel] sendMessageToBackgroundAsync:', {
+      type: messageWithId.type,
+      pluginId: messageWithId.pluginId,
+      pageKey: messageWithId.pageKey,
+      messageId: messageWithId.messageId,
+      timestamp: new Date().toISOString()
+    });
+
+    try {
+      const response = await chrome.runtime.sendMessage(messageWithId);
+      console.log('[PluginControlPanel] sendMessageToBackgroundAsync - получен ответ:', {
+        response,
+        messageId,
+        timestamp: new Date().toISOString()
+      });
+      return response;
+    } catch (error) {
+      console.error('[PluginControlPanel] sendMessageToBackgroundAsync - ошибка:', error);
+      throw error;
+    }
+  }, []);
+
+  // Вспомогательная функция для отправки сообщений в background без ожидания ответа (для обратной совместимости)
   const sendMessageToBackground = useCallback((message: any): void => {
     const messageId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
     const messageWithId = { ...message, messageId };
 
-    console.log('[PluginControlPanel] sendMessageToBackground:', messageWithId);
+    console.log('[PluginControlPanel] sendMessageToBackground (legacy):', {
+      type: messageWithId.type,
+      pluginId: messageWithId.pluginId,
+      pageKey: messageWithId.pageKey,
+      messageId: messageWithId.messageId,
+      timestamp: new Date().toISOString()
+    });
     chrome.runtime.sendMessage(messageWithId);
   }, []);
 
+  // Функция для тестирования обработки сообщений с проблемными данными
+  const testMessageProcessing = useCallback(() => {
+    console.log('[PluginControlPanel] 🧪 ТЕСТИРОВАНИЕ обработки сообщений с проблемными данными');
+
+    // Тест 1: Сообщение с объектом вместо строки в text
+    const testMessageWithObject = {
+      messages: [{
+        id: 'test_obj_1',
+        text: { content: 'Это объект вместо строки', type: 'object' }, // Объект вместо строки
+        role: 'user',
+        timestamp: Date.now()
+      }]
+    };
+
+    // Тест 2: Сообщение с null в text
+    const testMessageWithNull = {
+      messages: [{
+        id: 'test_null_1',
+        text: null, // null вместо строки
+        role: 'user',
+        timestamp: Date.now()
+      }]
+    };
+
+    // Тест 3: Сообщение с undefined в text
+    const testMessageWithUndefined = {
+      messages: [{
+        id: 'test_undef_1',
+        text: undefined, // undefined вместо строки
+        role: 'user',
+        timestamp: Date.now()
+      }]
+    };
+
+    // Объявляем processChatResponse локально для избежания проблем с temporal dead zone
+    const localProcessChatResponse = (response: any) => {
+      console.log('[PluginControlPanel] ===== НАЧАЛО processChatResponse =====');
+      console.log('[PluginControlPanel] Анализ chatData:', {
+        response,
+        hasMessages: response && 'messages' in response,
+        hasChat: response && 'chat' in response,
+        messagesValue: response?.messages,
+        chatValue: response?.chat,
+        isMessagesArray: Array.isArray(response?.messages),
+        isChatArray: Array.isArray(response?.chat),
+        responseType: typeof response,
+        responseKeys: response ? Object.keys(response) : 'response is null/undefined',
+        timestamp: new Date().toISOString()
+      });
+
+      // Обработка случая пустого чата (background возвращает null)
+      if (response === null) {
+        console.log('[PluginControlPanel] ✅ Получен null - чат пустой, устанавливаем пустой массив сообщений');
+        setMessages([]);
+        return;
+      }
+
+      // Обработка разных форматов ответа с дополнительной диагностикой
+      let messagesArray = null;
+
+      // Список возможных путей к массиву сообщений в приоритете
+      const messagePaths = [
+        { path: ['messages'], description: 'messages' },
+        { path: ['chat'], description: 'chat' },
+        { path: ['chat', 'messages'], description: 'chat.messages' },
+        { path: ['data', 'messages'], description: 'data.messages' },
+        { path: ['result', 'messages'], description: 'result.messages' },
+        { path: ['items'], description: 'items' },
+        { path: ['history'], description: 'history' },
+        { path: ['logs'], description: 'logs' },
+      ];
+
+      // Функция для извлечения значения по пути
+      const getValueByPath = (obj: any, path: string[]): any => {
+        let current = obj;
+        for (const key of path) {
+          if (current && typeof current === 'object' && key in current) {
+            current = current[key];
+          } else {
+            return undefined;
+          }
+        }
+        return current;
+      };
+
+      // Если response является массивом напрямую
+      if (Array.isArray(response)) {
+        messagesArray = response;
+        console.log('[PluginControlPanel] ✅ Ответ является массивом напрямую:', {
+          length: messagesArray.length,
+          firstMessage: messagesArray[0] ? {
+            id: messagesArray[0].id,
+            content: messagesArray[0].content || messagesArray[0].text,
+            role: messagesArray[0].role,
+            timestamp: messagesArray[0].timestamp,
+          } : 'no messages'
+        });
+      } else if (response && typeof response === 'object') {
+        // Обработка ошибок от background
+        if (response.error) {
+          console.error('[PluginControlPanel] ❌ Background вернул ошибку:', response.error);
+          setError(`Ошибка от background: ${response.error}`);
+          setMessages([]);
+          return;
+        }
+
+        // Поиск массива сообщений по возможным путям
+        for (const { path, description } of messagePaths) {
+          const candidate = getValueByPath(response, path);
+          if (Array.isArray(candidate)) {
+            messagesArray = candidate;
+            console.log(`[PluginControlPanel] ✅ Найден массив сообщений по пути '${description}':`, {
+              length: messagesArray.length,
+              firstMessage: messagesArray[0] ? {
+                id: messagesArray[0].id,
+                content: messagesArray[0].content || messagesArray[0].text,
+                role: messagesArray[0].role,
+                timestamp: messagesArray[0].timestamp,
+              } : 'no messages'
+            });
+            break;
+          }
+        }
+
+        // Если не нашли массив, логируем структуру объекта для диагностики
+        if (!messagesArray) {
+          console.warn('[PluginControlPanel] ⚠️ Не найден массив сообщений в объекте ответа:', {
+            responseType: typeof response,
+            responseKeys: Object.keys(response),
+            responseSample: JSON.stringify(response).substring(0, 500),
+            timestamp: new Date().toISOString()
+          });
+          messagesArray = [];
+        }
+      } else {
+        // Response не является объектом или массивом
+        console.warn('[PluginControlPanel] ⚠️ Ответ имеет неподдерживаемый тип:', {
+          response,
+          responseType: typeof response,
+          responseStringified: JSON.stringify(response).substring(0, 200),
+          timestamp: new Date().toISOString()
+        });
+        messagesArray = [];
+      }
+
+      console.log('[PluginControlPanel] Финальный messagesArray:', {
+        messagesArray,
+        isArray: Array.isArray(messagesArray),
+        length: messagesArray?.length,
+        firstMessage: messagesArray?.[0],
+        firstMessageType: messagesArray?.[0] ? typeof messagesArray[0] : 'none',
+      });
+
+      // Конвертация сообщений из формата background в формат компонента
+      if (Array.isArray(messagesArray) && messagesArray.length > 0) {
+        console.log('[PluginControlPanel] Начинаем конвертацию сообщений:', messagesArray.length);
+
+        // Конвертируем сообщения из формата background в формат компонента
+        const convertedMessages: ChatMessage[] = messagesArray
+          .filter((msg: any) => {
+            if (!msg || typeof msg !== 'object') {
+              console.warn('[PluginControlPanel] Фильтруем некорректное сообщение:', msg);
+              return false;
+            }
+            return true;
+          })
+          .map((msg: any, index: number) => {
+            try {
+              // Строгая проверка и конвертация поля text
+              let textContent = msg.content || msg.text || '';
+
+              // Если text является объектом, конвертируем его в строку
+              if (typeof textContent === 'object') {
+                console.warn('[PluginControlPanel] text является объектом, конвертируем:', textContent);
+                textContent = JSON.stringify(textContent);
+              } else if (textContent === null || textContent === undefined) {
+                console.warn('[PluginControlPanel] text равен null/undefined, устанавливаем пустую строку');
+                textContent = '';
+              } else {
+                // Убеждаемся, что это строка
+                textContent = String(textContent);
+              }
+
+              const convertedMsg: ChatMessage = {
+                id: msg.id || String(msg.timestamp || Date.now() + index),
+                text: textContent,
+                isUser: msg.role ? msg.role === 'user' : !!msg.isUser,
+                timestamp: msg.timestamp || Date.now(),
+              };
+
+              console.log(`[PluginControlPanel] Конвертировано сообщение ${index}:`, {
+                id: convertedMsg.id,
+                textLength: convertedMsg.text.length,
+                textType: typeof convertedMsg.text,
+                isUser: convertedMsg.isUser
+              });
+
+              return convertedMsg;
+            } catch (conversionError) {
+              console.error(`[PluginControlPanel] Ошибка конвертации сообщения ${index}:`, conversionError, msg);
+              // Возвращаем безопасное сообщение в случае ошибки
+              return {
+                id: `error_${Date.now()}_${index}`,
+                text: '[ОШИБКА КОНВЕРТАЦИИ СООБЩЕНИЯ]',
+                isUser: false,
+                timestamp: Date.now(),
+              };
+            }
+          });
+
+        console.log('[PluginControlPanel] ✅ Успешная конвертация сообщений:', {
+          originalCount: messagesArray.length,
+          convertedCount: convertedMessages.length,
+          firstConverted: convertedMessages[0],
+          // Безопасная обработка текста сообщений с проверкой типов
+          allConverted: convertedMessages.map(m => {
+            try {
+              const textPreview = typeof m.text === 'string' ? m.text.substring(0, 50) : String(m.text || '').substring(0, 50);
+              return { id: m.id, text: textPreview, isUser: m.isUser, textType: typeof m.text };
+            } catch (textError) {
+              console.warn('[PluginControlPanel] Error processing message text:', textError, m);
+              return { id: m.id, text: '[ERROR: invalid text]', isUser: m.isUser, textType: typeof m.text };
+            }
+          })
+        });
+
+        setMessages(convertedMessages);
+      } else {
+        console.log('[PluginControlPanel] ⚠️ messagesArray пустой или не массив, устанавливаем пустой массив');
+        setMessages([]);
+      }
+
+      console.log('[PluginControlPanel] ===== ЗАВЕРШЕНИЕ processChatResponse =====');
+    };
+
+    try {
+      console.log('[PluginControlPanel] Тест 1: Обработка сообщения с объектом в text');
+      localProcessChatResponse(testMessageWithObject);
+    } catch (error) {
+      console.error('[PluginControlPanel] ❌ Тест 1 провалился:', error);
+    }
+
+    try {
+      console.log('[PluginControlPanel] Тест 2: Обработка сообщения с null в text');
+      localProcessChatResponse(testMessageWithNull);
+    } catch (error) {
+      console.error('[PluginControlPanel] ❌ Тест 2 провалился:', error);
+    }
+
+    try {
+      console.log('[PluginControlPanel] Тест 3: Обработка сообщения с undefined в text');
+      localProcessChatResponse(testMessageWithUndefined);
+    } catch (error) {
+      console.error('[PluginControlPanel] ❌ Тест 3 провалился:', error);
+    }
+
+    console.log('[PluginControlPanel] ✅ Тестирование обработки сообщений завершено');
+  }, []); // Убрали processChatResponse из зависимостей
+
   // Вспомогательная функция для обработки ответа чата
   const processChatResponse = useCallback((response: any) => {
+    console.log('[PluginControlPanel] ===== НАЧАЛО processChatResponse =====');
     console.log('[PluginControlPanel] Анализ chatData:', {
       response,
       hasMessages: response && 'messages' in response,
@@ -115,50 +444,100 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       isChatArray: Array.isArray(response?.chat),
       responseType: typeof response,
       responseKeys: response ? Object.keys(response) : 'response is null/undefined',
+      timestamp: new Date().toISOString()
     });
+
+    // Обработка случая пустого чата (background возвращает null)
+    if (response === null) {
+      console.log('[PluginControlPanel] ✅ Получен null - чат пустой, устанавливаем пустой массив сообщений');
+      setMessages([]);
+      return;
+    }
 
     // Обработка разных форматов ответа с дополнительной диагностикой
     let messagesArray = null;
 
-    if (response && Array.isArray(response.messages)) {
-      // Формат: { messages: [...] }
-      messagesArray = response.messages;
-      console.log('[PluginControlPanel] ✅ Используем формат с messages:', {
+    // Список возможных путей к массиву сообщений в приоритете
+    const messagePaths = [
+      { path: ['messages'], description: 'messages' },
+      { path: ['chat'], description: 'chat' },
+      { path: ['chat', 'messages'], description: 'chat.messages' },
+      { path: ['data', 'messages'], description: 'data.messages' },
+      { path: ['result', 'messages'], description: 'result.messages' },
+      { path: ['items'], description: 'items' },
+      { path: ['history'], description: 'history' },
+      { path: ['logs'], description: 'logs' },
+    ];
+
+    // Функция для извлечения значения по пути
+    const getValueByPath = (obj: any, path: string[]): any => {
+      let current = obj;
+      for (const key of path) {
+        if (current && typeof current === 'object' && key in current) {
+          current = current[key];
+        } else {
+          return undefined;
+        }
+      }
+      return current;
+    };
+
+    // Если response является массивом напрямую
+    if (Array.isArray(response)) {
+      messagesArray = response;
+      console.log('[PluginControlPanel] ✅ Ответ является массивом напрямую:', {
         length: messagesArray.length,
-        firstMessage: messagesArray[0],
-        sampleMessage: messagesArray[0] ? {
+        firstMessage: messagesArray[0] ? {
           id: messagesArray[0].id,
-          content: messagesArray[0].content,
+          content: messagesArray[0].content || messagesArray[0].text,
           role: messagesArray[0].role,
           timestamp: messagesArray[0].timestamp,
         } : 'no messages'
       });
-    } else if (response && Array.isArray(response.chat)) {
-      // Формат: { chat: [...] }
-      messagesArray = response.chat;
-      console.log('[PluginControlPanel] ✅ Используем формат с chat:', {
-        length: messagesArray.length,
-        firstMessage: messagesArray[0]
-      });
-    } else if (response && response.chat && Array.isArray(response.chat.messages)) {
-      // Формат: { chat: { messages: [...] } }
-      messagesArray = response.chat.messages;
-      console.log('[PluginControlPanel] ✅ Используем вложенный формат:', {
-        length: messagesArray.length,
-        firstMessage: messagesArray[0]
-      });
-    } else if (response && response.error) {
+    } else if (response && typeof response === 'object') {
       // Обработка ошибок от background
-      console.error('[PluginControlPanel] ❌ Background вернул ошибку:', response.error);
-      setError(`Ошибка от background: ${response.error}`);
-      setMessages([]);
-      return;
+      if (response.error) {
+        console.error('[PluginControlPanel] ❌ Background вернул ошибку:', response.error);
+        setError(`Ошибка от background: ${response.error}`);
+        setMessages([]);
+        return;
+      }
+
+      // Поиск массива сообщений по возможным путям
+      for (const { path, description } of messagePaths) {
+        const candidate = getValueByPath(response, path);
+        if (Array.isArray(candidate)) {
+          messagesArray = candidate;
+          console.log(`[PluginControlPanel] ✅ Найден массив сообщений по пути '${description}':`, {
+            length: messagesArray.length,
+            firstMessage: messagesArray[0] ? {
+              id: messagesArray[0].id,
+              content: messagesArray[0].content || messagesArray[0].text,
+              role: messagesArray[0].role,
+              timestamp: messagesArray[0].timestamp,
+            } : 'no messages'
+          });
+          break;
+        }
+      }
+
+      // Если не нашли массив, логируем структуру объекта для диагностики
+      if (!messagesArray) {
+        console.warn('[PluginControlPanel] ⚠️ Не найден массив сообщений в объекте ответа:', {
+          responseType: typeof response,
+          responseKeys: Object.keys(response),
+          responseSample: JSON.stringify(response).substring(0, 500),
+          timestamp: new Date().toISOString()
+        });
+        messagesArray = [];
+      }
     } else {
-      console.warn('[PluginControlPanel] ⚠️ Неизвестный формат ответа:', {
+      // Response не является объектом или массивом
+      console.warn('[PluginControlPanel] ⚠️ Ответ имеет неподдерживаемый тип:', {
         response,
         responseType: typeof response,
-        responseKeys: response ? Object.keys(response) : 'no keys',
-        responseStringified: JSON.stringify(response)
+        responseStringified: JSON.stringify(response).substring(0, 200),
+        timestamp: new Date().toISOString()
       });
       messagesArray = [];
     }
@@ -173,21 +552,75 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
 
     // Конвертация сообщений из формата background в формат компонента
     if (Array.isArray(messagesArray) && messagesArray.length > 0) {
+      console.log('[PluginControlPanel] Начинаем конвертацию сообщений:', messagesArray.length);
+
       // Конвертируем сообщения из формата background в формат компонента
       const convertedMessages: ChatMessage[] = messagesArray
-        .filter((msg: any) => msg && typeof msg === 'object') // Фильтруем null и не-объекты
-        .map((msg: any, index: number) => ({
-          id: msg.id || String(msg.timestamp || Date.now() + index),
-          text: msg.content || msg.text || '',
-          isUser: msg.role ? msg.role === 'user' : !!msg.isUser,
-          timestamp: msg.timestamp || Date.now(),
-        }));
+        .filter((msg: any) => {
+          if (!msg || typeof msg !== 'object') {
+            console.warn('[PluginControlPanel] Фильтруем некорректное сообщение:', msg);
+            return false;
+          }
+          return true;
+        })
+        .map((msg: any, index: number) => {
+          try {
+            // Строгая проверка и конвертация поля text
+            let textContent = msg.content || msg.text || '';
+
+            // Если text является объектом, конвертируем его в строку
+            if (typeof textContent === 'object') {
+              console.warn('[PluginControlPanel] text является объектом, конвертируем:', textContent);
+              textContent = JSON.stringify(textContent);
+            } else if (textContent === null || textContent === undefined) {
+              console.warn('[PluginControlPanel] text равен null/undefined, устанавливаем пустую строку');
+              textContent = '';
+            } else {
+              // Убеждаемся, что это строка
+              textContent = String(textContent);
+            }
+
+            const convertedMsg: ChatMessage = {
+              id: msg.id || String(msg.timestamp || Date.now() + index),
+              text: textContent,
+              isUser: msg.role ? msg.role === 'user' : !!msg.isUser,
+              timestamp: msg.timestamp || Date.now(),
+            };
+
+            console.log(`[PluginControlPanel] Конвертировано сообщение ${index}:`, {
+              id: convertedMsg.id,
+              textLength: convertedMsg.text.length,
+              textType: typeof convertedMsg.text,
+              isUser: convertedMsg.isUser
+            });
+
+            return convertedMsg;
+          } catch (conversionError) {
+            console.error(`[PluginControlPanel] Ошибка конвертации сообщения ${index}:`, conversionError, msg);
+            // Возвращаем безопасное сообщение в случае ошибки
+            return {
+              id: `error_${Date.now()}_${index}`,
+              text: '[ОШИБКА КОНВЕРТАЦИИ СООБЩЕНИЯ]',
+              isUser: false,
+              timestamp: Date.now(),
+            };
+          }
+        });
 
       console.log('[PluginControlPanel] ✅ Успешная конвертация сообщений:', {
         originalCount: messagesArray.length,
         convertedCount: convertedMessages.length,
         firstConverted: convertedMessages[0],
-        allConverted: convertedMessages.map(m => ({ id: m.id, text: m.text.substring(0, 50), isUser: m.isUser }))
+        // Безопасная обработка текста сообщений с проверкой типов
+        allConverted: convertedMessages.map(m => {
+          try {
+            const textPreview = typeof m.text === 'string' ? m.text.substring(0, 50) : String(m.text || '').substring(0, 50);
+            return { id: m.id, text: textPreview, isUser: m.isUser, textType: typeof m.text };
+          } catch (textError) {
+            console.warn('[PluginControlPanel] Error processing message text:', textError, m);
+            return { id: m.id, text: '[ERROR: invalid text]', isUser: m.isUser, textType: typeof m.text };
+          }
+        })
       });
 
       setMessages(convertedMessages);
@@ -195,54 +628,351 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       console.log('[PluginControlPanel] ⚠️ messagesArray пустой или не массив, устанавливаем пустой массив');
       setMessages([]);
     }
+
+    console.log('[PluginControlPanel] ===== ЗАВЕРШЕНИЕ processChatResponse =====');
   }, []);
 
   // Загрузка истории чата при монтировании или смене плагина/страницы
-  const loadChat = useCallback(() => {
+  const loadChat = useCallback(async () => {
     setLoading(true);
     setError(null);
 
-    console.log('[PluginControlPanel] loadChat запрос:', { pluginId, pageKey });
-
-    sendMessageToBackground({
-      type: 'GET_PLUGIN_CHAT',
+    console.log('[PluginControlPanel] ===== НАЧАЛО loadChat =====', {
       pluginId,
-      pageKey,
+      pageKey: currentPageKey,
+      currentTabUrl,
+      timestamp: new Date().toISOString(),
+      isRunning,
+      isPaused
     });
-  }, [pluginId, pageKey, sendMessageToBackground]);
+
+    try {
+      const response = await sendMessageToBackgroundAsync({
+        type: 'GET_PLUGIN_CHAT',
+        pluginId,
+        pageKey: currentPageKey,
+      });
+
+      console.log('[PluginControlPanel] loadChat - получен ответ от background:', response);
+
+      setLoading(false); // Останавливаем загрузку при получении ответа
+
+      if (response?.error) {
+        console.error('[PluginControlPanel] loadChat - ошибка в ответе:', response.error);
+        setError(`Ошибка загрузки чата: ${response.error}`);
+        setMessages([]);
+      } else {
+        console.log('[PluginControlPanel] loadChat - обрабатываем успешный ответ');
+        // Используем анонимную функцию вместо прямого вызова processChatResponse
+        // чтобы избежать проблемы с temporal dead zone
+        ((response: any) => {
+          console.log('[PluginControlPanel] ===== НАЧАЛО processChatResponse =====');
+          console.log('[PluginControlPanel] Анализ chatData:', {
+            response,
+            hasMessages: response && 'messages' in response,
+            hasChat: response && 'chat' in response,
+            messagesValue: response?.messages,
+            chatValue: response?.chat,
+            isMessagesArray: Array.isArray(response?.messages),
+            isChatArray: Array.isArray(response?.chat),
+            responseType: typeof response,
+            responseKeys: response ? Object.keys(response) : 'response is null/undefined',
+            timestamp: new Date().toISOString()
+          });
+
+          // Обработка случая пустого чата (background возвращает null)
+          if (response === null) {
+            console.log('[PluginControlPanel] ✅ Получен null - чат пустой, устанавливаем пустой массив сообщений');
+            setMessages([]);
+            return;
+          }
+
+          // Обработка разных форматов ответа с дополнительной диагностикой
+          let messagesArray = null;
+
+          // Список возможных путей к массиву сообщений в приоритете
+          const messagePaths = [
+            { path: ['messages'], description: 'messages' },
+            { path: ['chat'], description: 'chat' },
+            { path: ['chat', 'messages'], description: 'chat.messages' },
+            { path: ['data', 'messages'], description: 'data.messages' },
+            { path: ['result', 'messages'], description: 'result.messages' },
+            { path: ['items'], description: 'items' },
+            { path: ['history'], description: 'history' },
+            { path: ['logs'], description: 'logs' },
+          ];
+
+          // Функция для извлечения значения по пути
+          const getValueByPath = (obj: any, path: string[]): any => {
+            let current = obj;
+            for (const key of path) {
+              if (current && typeof current === 'object' && key in current) {
+                current = current[key];
+              } else {
+                return undefined;
+              }
+            }
+            return current;
+          };
+
+          // Если response является массивом напрямую
+          if (Array.isArray(response)) {
+            messagesArray = response;
+            console.log('[PluginControlPanel] ✅ Ответ является массивом напрямую:', {
+              length: messagesArray.length,
+              firstMessage: messagesArray[0] ? {
+                id: messagesArray[0].id,
+                content: messagesArray[0].content || messagesArray[0].text,
+                role: messagesArray[0].role,
+                timestamp: messagesArray[0].timestamp,
+              } : 'no messages'
+            });
+          } else if (response && typeof response === 'object') {
+            // Обработка ошибок от background
+            if (response.error) {
+              console.error('[PluginControlPanel] ❌ Background вернул ошибку:', response.error);
+              setError(`Ошибка от background: ${response.error}`);
+              setMessages([]);
+              return;
+            }
+
+            // Поиск массива сообщений по возможным путям
+            for (const { path, description } of messagePaths) {
+              const candidate = getValueByPath(response, path);
+              if (Array.isArray(candidate)) {
+                messagesArray = candidate;
+                console.log(`[PluginControlPanel] ✅ Найден массив сообщений по пути '${description}':`, {
+                  length: messagesArray.length,
+                  firstMessage: messagesArray[0] ? {
+                    id: messagesArray[0].id,
+                    content: messagesArray[0].content || messagesArray[0].text,
+                    role: messagesArray[0].role,
+                    timestamp: messagesArray[0].timestamp,
+                  } : 'no messages'
+                });
+                break;
+              }
+            }
+
+            // Если не нашли массив, логируем структуру объекта для диагностики
+            if (!messagesArray) {
+              console.warn('[PluginControlPanel] ⚠️ Не найден массив сообщений в объекте ответа:', {
+                responseType: typeof response,
+                responseKeys: Object.keys(response),
+                responseSample: JSON.stringify(response).substring(0, 500),
+                timestamp: new Date().toISOString()
+              });
+              messagesArray = [];
+            }
+          } else {
+            // Response не является объектом или массивом
+            console.warn('[PluginControlPanel] ⚠️ Ответ имеет неподдерживаемый тип:', {
+              response,
+              responseType: typeof response,
+              responseStringified: JSON.stringify(response).substring(0, 200),
+              timestamp: new Date().toISOString()
+            });
+            messagesArray = [];
+          }
+
+          console.log('[PluginControlPanel] Финальный messagesArray:', {
+            messagesArray,
+            isArray: Array.isArray(messagesArray),
+            length: messagesArray?.length,
+            firstMessage: messagesArray?.[0],
+            firstMessageType: messagesArray?.[0] ? typeof messagesArray[0] : 'none',
+          });
+
+          // Конвертация сообщений из формата background в формат компонента
+          if (Array.isArray(messagesArray) && messagesArray.length > 0) {
+            console.log('[PluginControlPanel] Начинаем конвертацию сообщений:', messagesArray.length);
+
+            // Конвертируем сообщения из формата background в формат компонента
+            const convertedMessages: ChatMessage[] = messagesArray
+              .filter((msg: any) => {
+                if (!msg || typeof msg !== 'object') {
+                  console.warn('[PluginControlPanel] Фильтруем некорректное сообщение:', msg);
+                  return false;
+                }
+                return true;
+              })
+              .map((msg: any, index: number) => {
+                try {
+                  // Строгая проверка и конвертация поля text
+                  let textContent = msg.content || msg.text || '';
+
+                  // Если text является объектом, конвертируем его в строку
+                  if (typeof textContent === 'object') {
+                    console.warn('[PluginControlPanel] text является объектом, конвертируем:', textContent);
+                    textContent = JSON.stringify(textContent);
+                  } else if (textContent === null || textContent === undefined) {
+                    console.warn('[PluginControlPanel] text равен null/undefined, устанавливаем пустую строку');
+                    textContent = '';
+                  } else {
+                    // Убеждаемся, что это строка
+                    textContent = String(textContent);
+                  }
+
+                  const convertedMsg: ChatMessage = {
+                    id: msg.id || String(msg.timestamp || Date.now() + index),
+                    text: textContent,
+                    isUser: msg.role ? msg.role === 'user' : !!msg.isUser,
+                    timestamp: msg.timestamp || Date.now(),
+                  };
+
+                  console.log(`[PluginControlPanel] Конвертировано сообщение ${index}:`, {
+                    id: convertedMsg.id,
+                    textLength: convertedMsg.text.length,
+                    textType: typeof convertedMsg.text,
+                    isUser: convertedMsg.isUser
+                  });
+
+                  return convertedMsg;
+                } catch (conversionError) {
+                  console.error(`[PluginControlPanel] Ошибка конвертации сообщения ${index}:`, conversionError, msg);
+                  // Возвращаем безопасное сообщение в случае ошибки
+                  return {
+                    id: `error_${Date.now()}_${index}`,
+                    text: '[ОШИБКА КОНВЕРТАЦИИ СООБЩЕНИЯ]',
+                    isUser: false,
+                    timestamp: Date.now(),
+                  };
+                }
+              });
+
+            console.log('[PluginControlPanel] ✅ Успешная конвертация сообщений:', {
+              originalCount: messagesArray.length,
+              convertedCount: convertedMessages.length,
+              firstConverted: convertedMessages[0],
+              // Безопасная обработка текста сообщений с проверкой типов
+              allConverted: convertedMessages.map(m => {
+                try {
+                  const textPreview = typeof m.text === 'string' ? m.text.substring(0, 50) : String(m.text || '').substring(0, 50);
+                  return { id: m.id, text: textPreview, isUser: m.isUser, textType: typeof m.text };
+                } catch (textError) {
+                  console.warn('[PluginControlPanel] Error processing message text:', textError, m);
+                  return { id: m.id, text: '[ERROR: invalid text]', isUser: m.isUser, textType: typeof m.text };
+                }
+              })
+            });
+
+            setMessages(convertedMessages);
+          } else {
+            console.log('[PluginControlPanel] ⚠️ messagesArray пустой или не массив, устанавливаем пустой массив');
+            setMessages([]);
+          }
+
+          console.log('[PluginControlPanel] ===== ЗАВЕРШЕНИЕ processChatResponse =====');
+        })(response);
+        console.log('[PluginControlPanel] loadChat: чат успешно загружен');
+      }
+
+    } catch (error) {
+      console.error('[PluginControlPanel] loadChat - ошибка при получении ответа:', error);
+
+      // Детальное логирование ошибки с трассировкой стека
+      console.error('[PluginControlPanel] loadChat - ERROR DETAILS:', {
+        error,
+        errorType: typeof error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : 'No stack trace',
+        errorName: error instanceof Error ? error.name : 'Unknown error type',
+        timestamp: new Date().toISOString(),
+        pluginId,
+        pageKey: currentPageKey
+      });
+
+      setLoading(false);
+
+      // Улучшенная обработка ошибок с проверкой типа
+      let errorMessage = 'Ошибка связи с background';
+      if (error instanceof Error) {
+        errorMessage += `: ${error.message}`;
+
+        // Специальная обработка для TypeError с substring
+        if (error.name === 'TypeError' && error.message.includes('substring')) {
+          errorMessage += ' (ошибка обработки текста - проверьте тип данных)';
+          console.error('[PluginControlPanel] CRITICAL: substring error detected:', {
+            originalError: error,
+            stack: error.stack,
+            context: { pluginId, pageKey: currentPageKey }
+          });
+        }
+      } else {
+        errorMessage += `: ${String(error)}`;
+      }
+
+      setError(errorMessage);
+      setMessages([]);
+    }
+
+    console.log('[PluginControlPanel] ===== loadChat ЗАВЕРШЕН =====');
+  }, [pluginId, currentPageKey, sendMessageToBackgroundAsync, currentTabUrl, isRunning, isPaused]);
 
   // Добавить useEffect для вызова loadChat при монтировании и смене pluginId/pageKey
   useEffect(() => {
-    loadChat();
+    console.log('[PluginControlPanel] useEffect[loadChat] - триггер вызова loadChat', {
+      pluginId,
+      pageKey: currentPageKey,
+      currentTabUrl,
+      timestamp: new Date().toISOString()
+    });
+
+    // Вызываем асинхронную функцию без await, так как useEffect не может быть async
+    loadChat().catch((error) => {
+      console.error('[PluginControlPanel] useEffect[loadChat] - ошибка при вызове loadChat:', error);
+    });
   }, [loadChat]);
+
+  // useEffect для перезагрузки чата при смене pageKey
+  useEffect(() => {
+    console.log('[PluginControlPanel] pageKey изменился, перезагружаем чат и черновик');
+    // Перезагружаем чат для новой страницы
+    loadChat().catch((error) => {
+      console.error('[PluginControlPanel] Ошибка при перезагрузке чата:', error);
+    });
+    // Перезагружаем черновик для новой страницы
+    loadDraft();
+  }, [currentPageKey, loadChat, loadDraft]);
 
   // Событийная синхронизация чата между вкладками и обработка результатов сохранения сообщений
   useEffect(() => {
-    const handleChatUpdate = (event: { type: string; pluginId: string; pageKey: string; messages?: ChatMessage[]; messageId?: string; response?: any }) => {
-      if (event?.type === 'PLUGIN_CHAT_UPDATED' && event.pluginId === pluginId && event.pageKey === pageKey) {
-        console.log('[PluginControlPanel] handleChatUpdate - обновление чата получено');
-        // Запрашиваем актуальные данные чата
-        sendMessageToBackground({
-          type: 'GET_PLUGIN_CHAT',
-          pluginId,
-          pageKey,
+    console.log('[PluginControlPanel] useEffect[handleChatUpdate] - регистрация слушателя сообщений', {
+      pluginId,
+      pageKey: currentPageKey,
+      timestamp: new Date().toISOString()
+    });
+
+    const handleChatUpdate = (event: { type: string; pluginId: string; pageKey: string; messages?: ChatMessage[]; messageId?: string; response?: any; success?: boolean; error?: string; message?: any; timestamp?: number }) => {
+      console.log('[PluginControlPanel] ===== handleChatUpdate - получено сообщение =====', {
+        type: event?.type,
+        pluginId: event?.pluginId,
+        pageKey: event?.pageKey,
+        messageId: event?.messageId,
+        hasResponse: !!event?.response,
+        responseType: event?.response ? typeof event.response : 'none',
+        timestamp: new Date().toISOString()
+      });
+
+      // Обработка обновлений чата от других компонентов/вкладок
+      if (event?.type === 'PLUGIN_CHAT_UPDATED' && event.pluginId === pluginId && event.pageKey === currentPageKey) {
+        console.log('[PluginControlPanel] handleChatUpdate - обновление чата получено, запрашиваем актуальные данные');
+        // Запрашиваем актуальные данные чата асинхронно
+        loadChat().catch((error) => {
+          console.error('[PluginControlPanel] handleChatUpdate - ошибка при загрузке чата:', error);
         });
       }
 
-      // Обработка ответов на GET_PLUGIN_CHAT с messageId
-      if (event?.type === 'GET_PLUGIN_CHAT_RESPONSE' && event.messageId && event.response) {
-        console.log('[PluginControlPanel] handleChatUpdate - получен ответ на GET_PLUGIN_CHAT:', event.response);
+      // NOTE: GET_PLUGIN_CHAT_RESPONSE больше не обрабатывается здесь,
+      // поскольку ответы на GET_PLUGIN_CHAT теперь обрабатываются через Promise в loadChat()
 
-        setLoading(false); // Останавливаем загрузку при получении ответа
-
-        if (event.response.error) {
-          console.error('[PluginControlPanel] handleChatUpdate error:', event.response.error);
-          setError(`Ошибка загрузки чата: ${event.response.error}`);
-          setMessages([]);
-        } else {
-          processChatResponse(event.response);
-          console.log('[PluginControlPanel] handleChatUpdate: чат успешно обновлен');
-        }
+      // Логируем все сообщения, которые приходят, но не обрабатываются
+      if (event?.type !== 'PLUGIN_CHAT_UPDATED' && event?.type !== 'GET_PLUGIN_CHAT_RESPONSE') {
+        console.log('[PluginControlPanel] handleChatUpdate - получено необработанное сообщение:', {
+          type: event?.type,
+          fullEvent: event,
+          timestamp: new Date().toISOString()
+        });
       }
 
       // Обработка результатов сохранения сообщений
@@ -270,6 +1000,53 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
           setError(`Ошибка удаления чата: ${event.error}`);
         }
       }
+
+      // === PYODIDE MESSAGE HANDLER ===
+      if (event?.type === 'PYODIDE_MESSAGE_UPDATE') {
+        console.log('[PluginControlPanel] PYODIDE_MESSAGE_UPDATE received:', event.message);
+
+        if (event.message?.content) {
+          try {
+            // Строгая проверка типа content для Pyodide сообщений
+            let content = event.message.content;
+
+            // Если content является объектом, конвертируем в строку
+            if (typeof content === 'object') {
+              console.warn('[PluginControlPanel] PYODIDE content является объектом, конвертируем:', content);
+              content = JSON.stringify(content);
+            } else if (content === null || content === undefined) {
+              console.warn('[PluginControlPanel] PYODIDE content равен null/undefined');
+              content = 'Пустое сообщение от Pyodide';
+            } else {
+              content = String(content);
+            }
+
+            const pyodideMessage: ChatMessage = {
+              id: event.message.id || `pyodide_${event.timestamp || Date.now()}_${Math.random()}`,
+              text: content,
+              isUser: false, // Python сообщения отображаем как от бота
+              timestamp: event.timestamp || Date.now(),
+            };
+
+            console.log('[PluginControlPanel] Adding Pyodide message to chat:', pyodideMessage);
+
+            setMessages(prev => [...prev, pyodideMessage]);
+            console.log('[PluginControlPanel] Pyodide message added to chat');
+          } catch (pyodideError) {
+            console.error('[PluginControlPanel] Ошибка обработки PYODIDE_MESSAGE_UPDATE:', pyodideError, event);
+            // Добавляем сообщение об ошибке вместо падения
+            const errorMessage: ChatMessage = {
+              id: `pyodide_error_${Date.now()}`,
+              text: `[ОШИБКА PYODIDE: ${pyodideError instanceof Error ? pyodideError.message : String(pyodideError)}]`,
+              isUser: false,
+              timestamp: Date.now(),
+            };
+            setMessages(prev => [...prev, errorMessage]);
+          }
+        } else {
+          console.warn('[PluginControlPanel] PYODIDE_MESSAGE_UPDATE без content:', event.message);
+        }
+      }
     };
 
     // Слушатель для обработки результатов операций с чатом
@@ -288,13 +1065,16 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     };
 
     chrome.runtime.onMessage.addListener(handleChatUpdate);
-    chrome.runtime.onMessage.addListener(handleChatOperationResult);
+    chrome.runtime.onMessage.removeListener(handleChatOperationResult);
+
+    console.log('[PluginControlPanel] useEffect[handleChatUpdate] - слушатели сообщений зарегистрированы');
 
     return () => {
+      console.log('[PluginControlPanel] useEffect[handleChatUpdate] - удаление слушателей сообщений');
       chrome.runtime.onMessage.removeListener(handleChatUpdate);
       chrome.runtime.onMessage.removeListener(handleChatOperationResult);
     };
-  }, [pluginId, pageKey, processChatResponse, sendMessageToBackground]);
+  }, [pluginId, currentPageKey, sendMessageToBackground, loadChat]);
 
   // Восстановление черновика при возврате на вкладку 'Чат'
   useEffect(() => {
@@ -307,7 +1087,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   useEffect(() => {
     console.log('[PluginControlPanel] === РЕНДЕР ===', {
       pluginId,
-      pageKey,
+      pageKey: currentPageKey,
       draftText,
       message,
       currentView,
@@ -315,6 +1095,93 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       isPaused,
     });
   });
+
+  // Глобальный обработчик ошибок для ловли проблем с substring
+  useEffect(() => {
+    const originalConsoleError = console.error;
+    console.error = (...args) => {
+      // Перехватываем ошибки substring
+      const errorMessage = args.join(' ');
+      if (errorMessage.includes('substring') && errorMessage.includes('is not a function')) {
+        console.error('[PluginControlPanel] 🔴 CRITICAL: substring error detected!');
+        console.error('[PluginControlPanel] Error details:', args);
+        console.error('[PluginControlPanel] Stack trace:', new Error().stack);
+        // Не блокируем оригинальную обработку ошибки
+      }
+      originalConsoleError.apply(console, args);
+    };
+
+    console.log('[PluginControlPanel] Глобальный перехватчик ошибок substring активирован');
+
+    return () => {
+      console.error = originalConsoleError;
+      console.log('[PluginControlPanel] Глобальный перехватчик ошибок substring деактивирован');
+    };
+  }, []);
+
+  // Слушатель для Pyodide сообщений через custom events
+  useEffect(() => {
+    console.log('[PluginControlPanel] Настройка слушателя для pyodide messages');
+
+    const handlePyodideCustomEvent = (event: any) => {
+      const data = event.detail;
+      console.log('[PluginControlPanel] Получен Pyodide custom event:', data);
+
+      if (data?.type === 'PYODIDE_MESSAGE_UPDATE') {
+        console.log('[PluginControlPanel] PYODIDE_MESSAGE_UPDATE received:', data.message);
+
+        if (data.message?.content) {
+          try {
+            // Строгая проверка типа content
+            let content = data.message.content;
+
+            // Если content является объектом, конвертируем в строку
+            if (typeof content === 'object') {
+              console.warn('[PluginControlPanel] Pyodide content является объектом, конвертируем:', content);
+              content = JSON.stringify(content);
+            } else if (content === null || content === undefined) {
+              console.warn('[PluginControlPanel] Pyodide content равен null/undefined');
+              content = 'Пустое сообщение от Pyodide';
+            } else {
+              content = String(content);
+            }
+
+            const pyodideMessage: ChatMessage = {
+              id: data.message.id || `pyodide_${data.timestamp || Date.now()}_${Math.random()}`,
+              text: content,
+              isUser: false, // Python сообщения отображаем как от бота
+              timestamp: data.timestamp || Date.now(),
+            };
+
+            console.log('[PluginControlPanel] Adding Pyodide message to chat:', pyodideMessage);
+
+            setMessages(prev => [...prev, pyodideMessage]);
+            console.log('[PluginControlPanel] Pyodide message added to chat');
+          } catch (pyodideError) {
+            console.error('[PluginControlPanel] Ошибка обработки Pyodide сообщения:', pyodideError, data);
+            // Добавляем сообщение об ошибке вместо падения
+            const errorMessage: ChatMessage = {
+              id: `pyodide_error_${Date.now()}`,
+              text: `[ОШИБКА PYODIDE: ${pyodideError instanceof Error ? pyodideError.message : String(pyodideError)}]`,
+              isUser: false,
+              timestamp: Date.now(),
+            };
+            setMessages(prev => [...prev, errorMessage]);
+          }
+        } else {
+          console.warn('[PluginControlPanel] Pyodide сообщение без content:', data.message);
+        }
+      }
+    };
+
+    window.addEventListener('PYODIDE_MESSAGE_UPDATE', handlePyodideCustomEvent);
+    console.log('[PluginControlPanel] Слушатель для Pyodide custom events зарегистрирован');
+
+    return () => {
+      window.removeEventListener('PYODIDE_MESSAGE_UPDATE', handlePyodideCustomEvent);
+      console.log('[PluginControlPanel] Слушатель для Pyodide custom events удален');
+    };
+  }, []);
 
   // --- Синхронизация message с draftText после загрузки черновика ---
   useEffect(() => {
@@ -348,7 +1215,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     sendMessageToBackground({
       type: 'SAVE_PLUGIN_CHAT_MESSAGE',
       pluginId,
-      pageKey,
+      pageKey: currentPageKey,
       message: {
         role: 'user',
         content: newMessage.text,
@@ -401,7 +1268,27 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   }, [messages]);
 
   useEffect(() => {
-    console.log('[PluginControlPanel] messages после setMessages:', messages);
+    console.log('[PluginControlPanel] useEffect[messages] - состояние messages обновлено:', {
+      messagesCount: messages.length,
+      firstMessage: messages[0] ? {
+        id: messages[0].id,
+        text: typeof messages[0].text === 'string' ? messages[0].text.substring(0, 50) : String(messages[0].text || '').substring(0, 50),
+        isUser: messages[0].isUser,
+        timestamp: messages[0].timestamp,
+        textType: typeof messages[0].text
+      } : null,
+      // Безопасная обработка всех сообщений с проверкой типов
+      allMessages: messages.map(m => {
+        try {
+          const textPreview = typeof m.text === 'string' ? m.text.substring(0, 30) : String(m.text || '').substring(0, 30);
+          return { id: m.id, text: textPreview, isUser: m.isUser, textType: typeof m.text };
+        } catch (msgError) {
+          console.warn('[PluginControlPanel] Error in message logging:', msgError, m);
+          return { id: m.id, text: '[LOGGING ERROR]', isUser: m.isUser, textType: typeof m.text };
+        }
+      }),
+      timestamp: new Date().toISOString()
+    });
   }, [messages]);
 
   // Фокус на поле ввода при открытии чата
@@ -437,7 +1324,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     sendMessageToBackground({
       type: 'DELETE_PLUGIN_CHAT',
       pluginId,
-      pageKey,
+      pageKey: currentPageKey,
     });
 
     // Очищаем локальное состояние сразу
@@ -508,6 +1395,14 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
               <button onClick={handleExportChat} disabled={loading || !!error}>
                 {loading ? 'Экспорт...' : error ? 'Ошибка' : 'Экспортировать'}
               </button>
+              <button
+                onClick={testMessageProcessing}
+                disabled={loading}
+                style={{ backgroundColor: '#ff6b35', marginLeft: '5px' }}
+                title="Протестировать обработку сообщений с проблемными данными"
+              >
+                🧪 Тест
+              </button>
             </div>
           </div>
           <div className="chat-messages">
@@ -542,6 +1437,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
           </div>
           <div className="chat-input">
             <textarea
+              id="plugin-message-input"
               ref={textareaRef}
               className="message-textarea"
               value={message}

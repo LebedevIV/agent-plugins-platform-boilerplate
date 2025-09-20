@@ -4,6 +4,7 @@ import { StorageEnum } from './base/enums.js';
 export interface PluginSettings {
   enabled: boolean;
   autorun: boolean;
+  htmlTransmissionMode?: 'chunks' | 'direct'; // Режим передачи HTML: чанками или напрямую
   [key: string]: unknown;
 }
 
@@ -16,6 +17,7 @@ export const getPluginSettingsByIdFallback = (pluginId: string, settings: Plugin
   settings[pluginId] ?? {
     enabled: true, // По умолчанию плагин включен
     autorun: false, // По умолчанию автоматический запуск выключен
+    htmlTransmissionMode: 'chunks', // По умолчанию передача чанками для обратной совместимости
   };
 
 // Создаем хранилище для настроек плагинов

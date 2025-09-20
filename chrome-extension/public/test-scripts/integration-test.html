@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Интеграционный тест Offscreen Document архитектуры</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #1a1a1a;
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            background: #2d2d2d;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            border: 1px solid #404040;
+        }
+        .controls {
+            background: #2d2d2d;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #404040;
+        }
+        .button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+            transition: background 0.3s;
+        }
+        .button:hover {
+            background: #0056b3;
+        }
+        .button.success {
+            background: #28a745;
+        }
+        .button.warning {
+            background: #ffc107;
+        }
+        .button.danger {
+            background: #dc3545;
+        }
+        .button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .log-section {
+            background: #2d2d2d;
+            border: 1px solid #404040;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .log-header {
+            background: #404040;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 8px 8px 0 0;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            text-align: left;
+            font-size: 16px;
+        }
+        .log-content {
+            padding: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+            display: block;
+            background: #1a1a1a;
+        }
+        .log-content.hidden {
+            display: none;
+        }
+        .log-entry {
+            padding: 5px 0;
+            border-bottom: 1px solid #333;
+            font-family: 'Courier New', monospace;
+        }
+        .log-success { color: #28a745; }
+        .log-error { color: #dc3545; }
+        .log-warning { color: #ffc107; }
+        .log-info { color: #17a2b8; }
+        .timestamp {
+            color: #888;
+            margin-right: 10px;
+        }
+        .summary {
+            background: #2d2d2d;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #404040;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .summary.visible {
+            display: block;
+        }
+        .progress-bar {
+            background: #333;
+            border-radius: 4px;
+            height: 20px;
+            margin-bottom: 10px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745 0%, #ffc107 50%, #dc3545 100%);
+            border-radius: 4px;
+            transition: width 0.5s;
+            width: 0%;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        .status-ready { background: #28a745; }
+        .status-testing { background: #007bff; animation: pulse 1s infinite; }
+        .status-error { background: #dc3545; }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .instructions {
+            background: #333;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #007bff;
+        }
+        .code-block {
+            background: #2d2d2d;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔧 Интеграционный тест Offscreen Document архитектуры</h1>
+            <div>Проверка новой архитектуры с Pyodide Worker и delegation pattern</div>
+            <div class="readiness-indicator">
+                <span class="status-indicator status-testing"></span>
+                <span id="status-text">Ожидание инициализации...</span>
+            </div>
+        </div>
+
+        <div class="instructions">
+            <h3>📋 Инструкции по тестированию:</h3>
+            <ol>
+                <li>Убедитесь, что расширение загружено в Chrome Extension Developer Mode</li>
+                <li>Откройте эту тестовую страницу</li>
+                <li>Нажмите "Запустить полный тест" или тестируйте компоненты по отдельности</li>
+                <li>Следите за результатами в логах ниже</li>
+                <li>В случае ошибок проверьте консоль браузера</li>
+            </ol>
+
+            <h4>🎯 Что тестируется:</h4>
+            <ul>
+                <li><strong>Build & Load</strong> - основные API расширений</li>
+                <li><strong>Offscreen Document</strong> - создание и управление</li>
+                <li><strong>Message Flow</strong> - связь background ↔ offscreen</li>
+                <li><strong>Pyodide Ready</strong> - инициализация Python runtime</li>
+                <li><strong>Workflow Execution</strong> - делегирование выполнения</li>
+            </ul>
+        </div>
+
+        <div class="controls">
+            <button id="run-full-test" class="button">🚀 Запустить полный тест</button>
+            <button id="run-build-test" class="button">🏗️ Тест: Build & Load</button>
+            <button id="run-offscreen-test" class="button">📄 Тест: Offscreen Document</button>
+            <button id="run-message-test" class="button">📤 Тест: Message Flow</button>
+            <button id="run-pyodide-test" class="button">🐍 Тест: Pyodide</button>
+            <button id="run-workflow-test" class="button">⚙️ Тест: Workflow</button>
+            <button id="clear-logs" class="button warning">🗑️ Очистить логи</button>
+        </div>
+
+        <div class="summary" id="summary-section">
+            <h3>📊 Сводка результатов тестирования</h3>
+            <div class="progress-bar">
+                <div class="progress-fill" id="readiness-bar"></div>
+            </div>
+            <div id="summary-content"></div>
+        </div>
+
+        <div class="log-section">
+            <button class="log-header">
+                <span>📋 Логи тестирования</span>
+                <span id="log-count">0 записей</span>
+            </button>
+            <div class="log-content" id="log-content"></div>
+        </div>
+    </div>
+
+    <script src="integration-test-helpers.js"></script>
+    <script src="integration-test.js"></script>
+    <script src="page-ui.js"></script>
+</body>
+</html>

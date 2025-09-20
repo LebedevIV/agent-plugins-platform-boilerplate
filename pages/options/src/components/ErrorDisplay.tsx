@@ -1,4 +1,4 @@
-import type React from 'react';
+import React from 'react';
 
 const ErrorDisplay: React.FC<{ error?: Error; resetError?: () => void }> = ({ error, resetError }) => (
   <div style={{ color: 'red', padding: 24 }}>

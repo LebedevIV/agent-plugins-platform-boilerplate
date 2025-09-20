@@ -23,12 +23,20 @@ export interface WorkflowContext {
   [key: string]: any; // Allow string indexing
 }
 
-export async function runWorkflow(pluginId: string) {
+export async function runWorkflow(
+  pluginId: string,
+  context: {
+    logger?: any;
+    hostApi?: any;
+    [key: string]: any;
+  } = {},
+  initialInput: { page_html?: string; [key: string]: any } = {}
+) {
   const runId = `workflow-${pluginId}-${Date.now()}`;
   const title = `Воркфлоу плагина: ${pluginId}`;
-  
-  // Create logger if available
-  const logger = (window as any).activeWorkflowLogger || {
+
+  // Use injected logger or fallback to console logging (pure function)
+  const logger = context.logger || {
     addMessage: (type: string, message: string, status?: string) => {
       console.log(`[${type}] ${message}`);
     },
@@ -38,42 +46,48 @@ export async function runWorkflow(pluginId: string) {
   };
 
   logger.addMessage('ENGINE', `▶️ Запуск воркфлоу...`);
-  
-  // Switch to logs tab if available
-  const logsTab = document.querySelector('.tab-button[data-tab="logs"]') as HTMLElement;
-  logsTab?.click?.();
+
+  // Document-independent logging - tab switching handled by caller if needed
+  // Removed document.querySelector access for environment independence
 
   const workflow = await loadWorkflowDefinition(pluginId, logger);
   if (!workflow) return;
 
-  // Get page HTML for plugins
-  let pageHtml = '';
-  try {
-    if (hostApi && typeof hostApi.getActivePageContent === 'function') {
-      const pageContent = await hostApi.getActivePageContent();
-      pageHtml = pageContent.html || '';
-      logger.addMessage('ENGINE', `📄 Получен HTML страницы (${pageHtml.length} символов)`);
+  // Try to get page HTML using injected hostApi or fallback to global
+  let pageHtml = initialInput.page_html || '';
+  if (!pageHtml) {
+    try {
+      const apiToUse = context.hostApi || hostApi;
+      if (apiToUse && typeof apiToUse.getActivePageContent === 'function') {
+        const pageContent = await apiToUse.getActivePageContent();
+        pageHtml = pageContent.html || '';
+        logger.addMessage('ENGINE', `📄 Получен HTML страницы (${pageHtml.length} символов)`);
+      }
+    } catch (error) {
+      logger.addMessage('WARNING', `⚠️ Не удалось получить HTML страницы: ${(error as Error).message}`);
     }
-  } catch (error) {
-    logger.addMessage('WARNING', `⚠️ Не удалось получить HTML страницы: ${(error as Error).message}`);
+  } else {
+    logger.addMessage('ENGINE', `📄 Используется предоставленный HTML (${pageHtml.length} символов)`);
   }
 
-  const context: WorkflowContext = { 
-    steps: {}, 
+  const workflowContext: WorkflowContext = {
+    steps: {},
     logger: logger,
-    page_html: pageHtml
+    page_html: pageHtml,
+    initialInput: initialInput
   };
 
   for (const step of workflow.steps) {
     logger.addMessage('ENGINE', `➡️ Выполнение шага: ${step.id} (инструмент: ${step.tool})`);
     try {
-      const toolInput = resolveInputs(step.input, context);
+      const toolInput = resolveInputs(step.input, workflowContext);
       let output;
       const [toolType, toolName] = step.tool.split('.');
 
       if (toolType === 'host') {
-        if (hostApi && typeof (hostApi as any)[toolName] === 'function') {
-          output = await (hostApi as any)[toolName](toolInput, context);
+        const apiToUse = context.hostApi || hostApi;
+        if (apiToUse && typeof (apiToUse as any)[toolName] === 'function') {
+          output = await (apiToUse as any)[toolName](toolInput, workflowContext);
         } else {
           throw new Error(`Host tool "${toolName}" не найден.`);
         }
@@ -82,7 +96,7 @@ export async function runWorkflow(pluginId: string) {
       } else {
         throw new Error(`Неизвестный тип инструмента: ${step.tool}`);
       }
-      context.steps[step.id] = { output };
+      workflowContext.steps[step.id] = { output };
       logger.addMessage('ENGINE', `✅ Шаг ${step.id} выполнен.`);
     } catch (error) {
       logger.addMessage('ERROR', `❌ Ошибка на шаге ${step.id}: ${(error as Error).message}`);
@@ -94,14 +108,14 @@ export async function runWorkflow(pluginId: string) {
   // Display final result
   try {
     const lastStep = workflow.steps[workflow.steps.length - 1];
-    if (lastStep && context.steps[lastStep.id]) {
-      const finalResult = context.steps[lastStep.id].output;
+    if (lastStep && workflowContext.steps[lastStep.id]) {
+      const finalResult = workflowContext.steps[lastStep.id].output;
       logger.renderResult(lastStep.id, finalResult);
     }
   } catch (error) {
     console.error('Ошибка при рендеринге результата:', error);
     const lastStep = workflow.steps[workflow.steps.length - 1];
-    const rawResult = context.steps[lastStep.id]?.output;
+    const rawResult = workflowContext.steps[lastStep.id]?.output;
     logger.addMessage('ENGINE', `Не удалось отобразить результат. Сырые данные: ${JSON.stringify(rawResult)}`, 'error');
   }
 
@@ -110,11 +124,25 @@ export async function runWorkflow(pluginId: string) {
 
 async function loadWorkflowDefinition(pluginId: string, logger: any): Promise<Workflow | null> {
   try {
-    const response = await fetch(chrome.runtime.getURL(require(`@platform-public/plugins/${pluginId}/workflow.json`)));
+    logger.addMessage('DEBUG', `[loadWorkflowDefinition] Начинаем загрузку для pluginId: ${pluginId}`);
+    logger.addMessage('DEBUG', `[loadWorkflowDefinition] Проверка наличия require: ${typeof require}`);
+    logger.addMessage('DEBUG', `[loadWorkflowDefinition] Проверка наличия chrome.runtime: ${!!chrome?.runtime}`);
+    logger.addMessage('DEBUG', `[loadWorkflowDefinition] Проверка наличия chrome.runtime.getURL: ${typeof chrome?.runtime?.getURL}`);
+
+    const workflowPath = `/plugins/${pluginId}/workflow.json`;
+
+    logger.addMessage('DEBUG', `[loadWorkflowDefinition] Путь к файлу: ${workflowPath}`);
+
+    // Попытка загрузки - напрямую через fetch с chrome.runtime.getURL
+    const fullUrl = chrome.runtime.getURL(workflowPath);
+    logger.addMessage('DEBUG', `[loadWorkflowDefinition] Полный URL: ${fullUrl}`);
+
+    const response = await fetch(fullUrl);
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     return await response.json();
   } catch (error) {
     logger.addMessage('ERROR', `Не удалось загрузить workflow.json: ${(error as Error).message}`);
+    logger.addMessage('DEBUG', `[loadWorkflowDefinition] Детали ошибки: ${error.stack}`);
     return null;
   }
 }

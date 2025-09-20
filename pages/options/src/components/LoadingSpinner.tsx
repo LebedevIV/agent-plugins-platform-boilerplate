@@ -1,4 +1,4 @@
-import type React from 'react';
+import React from 'react';
 
 const LoadingSpinner: React.FC = () => (
   <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center' }}>

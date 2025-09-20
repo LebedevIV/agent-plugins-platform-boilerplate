@@ -49,7 +49,7 @@ describe('Debug Side Panel - ToggleButton Issue', () => {
         console.log(`Кнопка ${i}:`, {
           className: btn.className,
           textContent: btn.textContent?.trim(),
-          innerHTML: btn.innerHTML.substring(0, 100)
+          innerHTML: typeof btn.innerHTML === 'string' ? btn.innerHTML.substring(0, 100) : String(btn.innerHTML || '')
         });
       }
       

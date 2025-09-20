@@ -4,7 +4,7 @@ import { cn } from '@extension/ui';
 import { useState, useRef, useEffect } from 'react';
 import type { Plugin } from '../hooks/usePlugins';
 import type { TabType } from '../hooks/useTabs';
-import type React from 'react';
+import React from 'react';
 import ToggleButton from './ToggleButton';
 
 interface IDELayoutProps {

@@ -70,7 +70,7 @@ export async function runPythonTool(pluginId: string, toolName: string, toolInpu
   const pyodideWorker = getWorker();
   const callId = `py_tool_run_${Date.now()}_${Math.random()}`;
   
-  const pyScriptUrl = chrome.runtime.getURL(require(`@platform-public/plugins/${pluginId}/mcp_server.py`));
+  const pyScriptUrl = chrome.runtime.getURL(`/plugins/${pluginId}/mcp_server.py`);
   const response = await fetch(pyScriptUrl);
   if (!response.ok) throw new Error(`Python script для плагина ${pluginId} не найден`);
   const pythonCode = await response.text();

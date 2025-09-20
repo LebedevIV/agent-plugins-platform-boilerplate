@@ -97,6 +97,19 @@ const pluginChatApi = {
     });
   },
 
+  // Получить чат по pluginId и pageKey (публичная функция для совместимости)
+  async getChat(pluginId: string, pageKey: string): Promise<PluginChat | null> {
+    const chatKey = `${pluginId}::${getPageKey(pageKey)}`;
+    console.log('[pluginChatApi] getChat: формирование chatKey', {
+      pluginId,
+      pageKey,
+      chatKey,
+      normalizedPageKey: getPageKey(pageKey)
+    });
+
+    return this.getOrLoadChat(chatKey);
+  },
+
   // Сохранить сообщение в чат
   async saveMessage(pluginId: string, pageKey: string, message: ChatMessage): Promise<{ success: boolean }> {
     const chatKey = `${pluginId}::${getPageKey(pageKey)}`;

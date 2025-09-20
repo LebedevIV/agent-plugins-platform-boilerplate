@@ -31,6 +31,16 @@ type Plugin = {
   [key: string]: unknown;
 };
 
+// Функция для получения ключа страницы (без параметров URL)
+const getPageKey = (url: string): string => {
+  try {
+    const urlObj = new URL(url);
+    return `${urlObj.protocol}//${urlObj.hostname}${urlObj.pathname}`;
+  } catch {
+    return url;
+  }
+};
+
 const SidePanel = () => {
   const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [selectedPlugin, setSelectedPlugin] = useState<Plugin | null>(null);
@@ -57,11 +67,109 @@ const SidePanel = () => {
     return unsubscribe;
   }, []);
 
-  const portRef = useRef<chrome.runtime.Port | null>(null);
+  // Реф для отслеживания активного порта
+  const activePortRef = useRef<chrome.runtime.Port | null>(null);
+  const portReadyRef = useRef<boolean>(false);
+  const messageQueueRef = useRef<any[]>([]);
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting'>('connecting');
 
+  // Функция проверки готовности порта
+  const isPortReady = useCallback((): boolean => {
+    return portReadyRef.current && activePortRef.current !== null;
+  }, []);
+
+  // Функция отправки сообщений через порт
+  const sendMessageViaPort = useCallback(async (message: any, retries = 3): Promise<any> => {
+    if (!isPortReady()) {
+      console.log('[SidePanel] Port not ready, queuing message:', message);
+      messageQueueRef.current.push(message);
+      return;
+    }
+
+    for (let i = 0; i < retries; i++) {
+      try {
+        if (activePortRef.current) {
+          activePortRef.current.postMessage(message);
+          console.log('[SidePanel] Message sent via port:', message);
+          return;
+        } else {
+          throw new Error('Port is not available');
+        }
+      } catch (error) {
+        console.warn(`[SidePanel] Port message attempt ${i + 1} failed:`, error);
+        if (i < retries - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500 * (i + 1)));
+        }
+      }
+    }
+
+    throw new Error('Failed to send message after all retries');
+  }, [isPortReady]);
+
+  // Функция для обработки накопленных сообщений
+  const processMessageQueue = useCallback(() => {
+    while (messageQueueRef.current.length > 0 && isPortReady()) {
+      const message = messageQueueRef.current.shift();
+      if (message) {
+        sendMessageViaPort(message).catch(error => {
+          console.error('[SidePanel] Failed to process queued message:', error);
+        });
+      }
+    }
+  }, [isPortReady, sendMessageViaPort]);
+
   // Функции для работы с уведомлениями
+
+  // Функции для сохранения и восстановления состояния sidepanel
+  const savePanelState = async (pageKey: string, pluginId: string) => {
+    const stateKey = `sidepanel_state_${pageKey}`;
+    const state = {
+      selectedPluginId: pluginId,
+      showControlPanel: true,
+      timestamp: Date.now()
+    };
+
+    console.log('[SidePanel] Сохраняем состояние panel для страницы:', pageKey, state);
+    await chrome.storage.local.set({ [stateKey]: state });
+  };
+
+  const clearPanelState = async (pageKey: string) => {
+    const stateKey = `sidepanel_state_${pageKey}`;
+    console.log('[SidePanel] Очищаем состояние panel для страницы:', pageKey);
+    await chrome.storage.local.remove(stateKey);
+  };
+
+  const restorePanelState = async (pageKey: string, plugins: Plugin[]) => {
+    const stateKey = `sidepanel_state_${pageKey}`;
+    const result = await chrome.storage.local.get(stateKey);
+    const savedState = result[stateKey];
+
+    console.log('[SidePanel] Проверяем сохраненное состояние для страницы:', pageKey, savedState);
+
+    if (savedState && savedState.selectedPluginId) {
+      // Найти плагин по ID
+      const plugin = plugins.find(p => p.id === savedState.selectedPluginId);
+
+      if (plugin && isPluginAllowedOnHost(plugin)) {
+        console.log('[SidePanel] Восстанавливаем состояние чата для страницы:', pageKey, {
+          pluginId: plugin.id,
+          pluginName: plugin.name
+        });
+        setSelectedPlugin(plugin);
+        setShowControlPanel(true);
+        return true;
+      } else {
+        console.log('[SidePanel] Плагин из сохраненного состояния не найден или не разрешен:', {
+          pluginId: savedState.selectedPluginId,
+          pluginFound: !!plugin,
+          isAllowed: plugin ? isPluginAllowedOnHost(plugin) : false
+        });
+      }
+    }
+
+    return false;
+  };
   const removeToast = useCallback((id: string) => {
     setToasts(prev => prev.filter(toast => toast.id !== id));
   }, []);
@@ -95,31 +203,146 @@ const SidePanel = () => {
     getCurrentTabUrl();
   }, []);
 
-  // Heartbeat механизм для поддержания надежного соединения
+  // Heartbeat механизм для поддержания надежного соединения с retry логикой
+  const pingWithRetry = useCallback(async (retries = 3, delay = 1000): Promise<boolean> => {
+    console.log('[SidePanel][HEARTBEAT] Starting heartbeat ping with retry');
+    for (let i = 0; i < retries; i++) {
+      try {
+        const pingTime = Date.now();
+        console.log(`[SidePanel][HEARTBEAT] Attempt ${i + 1}/${retries} at ${new Date(pingTime).toISOString()}`);
+
+        // Если порт готов, используем его для heartbeat
+        if (isPortReady()) {
+          await sendMessageViaPort({ type: 'PING' });
+          setConnectionStatus('connected');
+          console.log(`[SidePanel][HEARTBEAT] ✅ Success via port - latency: ${Date.now() - pingTime}ms`);
+          return true;
+        } else {
+          // Fallback на chrome.runtime.sendMessage
+          const response = await chrome.runtime.sendMessage({ type: 'PING' });
+          const pongTime = Date.now();
+          const latency = pongTime - pingTime;
+
+          if (chrome.runtime.lastError) {
+            throw new Error(chrome.runtime.lastError.message || 'Unknown runtime error');
+          }
+          if (response?.pong) {
+            console.log(`[SidePanel][HEARTBEAT] ✅ Success via fallback - latency: ${latency}ms, pong timestamp: ${response.timestamp}`);
+            setConnectionStatus('connected');
+            return true;
+          } else {
+            console.warn(`[SidePanel][HEARTBEAT] ⚠️ Invalid response - missing pong, response:`, response);
+          }
+        }
+      } catch (error) {
+        console.warn(`[SidePanel][HEARTBEAT] ❌ Attempt ${i + 1} failed:`, error);
+        if (i < retries - 1) {
+          console.log(`[SidePanel][HEARTBEAT] Waiting ${delay * (i + 1)}ms before retry`);
+          await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
+        }
+      }
+    }
+    console.error('[SidePanel][HEARTBEAT] 💥 All heartbeat attempts failed - connection lost');
+    setConnectionStatus('disconnected');
+    return false;
+  }, [isPortReady, sendMessageViaPort]);
+
+  // Функция переподключения порта
+  const reconnectPort = useCallback(async () => {
+    console.log('[SidePanel] Attempting to reconnect port...');
+    try {
+      if (activePortRef.current) {
+        activePortRef.current.disconnect();
+        activePortRef.current = null;
+      }
+
+      portReadyRef.current = false;
+
+      const port = chrome.runtime.connect();
+      activePortRef.current = port;
+
+      console.log('[SidePanel] New port created:', port.name);
+
+      // Порт готов сразу после создания
+      portReadyRef.current = true;
+
+      // Обработчик сообщений от порта
+      const messageListener = (msg: any) => {
+        console.log('[SidePanel] Received message from background via port:', msg);
+
+        if (msg.type === 'GET_PLUGINS_RESPONSE' && msg.plugins && Array.isArray(msg.plugins)) {
+          console.log('[SidePanel] Setting plugins from port message:', msg.plugins);
+          setPlugins(msg.plugins);
+          console.log('[SidePanel] ✅ Plugins loaded successfully');
+        } else if (msg.type === 'GET_PLUGINS_RESPONSE' && msg.error) {
+          console.error('[SidePanel] Error from background script:', msg.error);
+          addToastWithDeps('Ошибка загрузки плагинов', 'error');
+        }
+      };
+
+      // Обработчик отключения порта
+      const disconnectListener = () => {
+        console.log('[SidePanel] Port disconnected, will attempt reconnection');
+        portReadyRef.current = false;
+        activePortRef.current = null;
+        setConnectionStatus('disconnected');
+
+        // Переподключение через 1 секунду
+        setTimeout(() => {
+          reconnectPort();
+        }, 1000);
+      };
+
+      port.onMessage.addListener(messageListener);
+      port.onDisconnect.addListener(disconnectListener);
+
+      // Обработка накопленных сообщений
+      processMessageQueue();
+
+    } catch (error) {
+      console.error('[SidePanel] Failed to reconnect port:', error);
+      addToastWithDeps('Не удалось переподключить порт', 'error');
+    }
+  }, [processMessageQueue, addToastWithDeps]);
+
+  // Функция отправки сообщений с retry логикой
+  const sendMessageWithRetry = useCallback(async (message: any, retries = 3): Promise<any> => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const response = await chrome.runtime.sendMessage(message);
+        if (chrome.runtime.lastError) {
+          throw new Error(chrome.runtime.lastError.message || 'Unknown runtime error');
+        }
+        return response;
+      } catch (error) {
+        console.warn(`[SidePanel] Message send attempt ${i + 1} failed:`, error);
+        if (i < retries - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500 * (i + 1)));
+        }
+      }
+    }
+    throw new Error('Failed to send message after all retries');
+  }, []);
+
   const startHeartbeat = useCallback(() => {
     if (heartbeatIntervalRef.current) {
       clearInterval(heartbeatIntervalRef.current);
     }
 
+    console.log('[SidePanel][HEARTBEAT] 🚀 Starting heartbeat with 10s interval');
     heartbeatIntervalRef.current = setInterval(async () => {
-      try {
-        const response = await chrome.runtime.sendMessage({ type: 'PING' });
-        if (response?.pong) {
-          if (connectionStatus !== 'connected') {
-            console.log('[SidePanel] Соединение с background восстановлено');
-            setConnectionStatus('connected');
-          }
-        } else {
-          throw new Error('Invalid ping response');
-        }
-      } catch (error) {
-        if (connectionStatus !== 'disconnected') {
-          console.error('[SidePanel] Соединение с background потеряно:', error);
-          setConnectionStatus('disconnected');
+      const success = await pingWithRetry();
+      if (!success) {
+        console.warn('[SidePanel][HEARTBEAT] ⚠️ Heartbeat failed, attempting to reconnect port...');
+        // Попытка переподключения порта
+        try {
+          await reconnectPort();
+        } catch (error) {
+          console.error('[SidePanel][HEARTBEAT] ❌ Port reconnection failed:', error);
         }
       }
     }, 10000); // Проверка каждые 10 секунд
-  }, [connectionStatus]);
+  }, [pingWithRetry, reconnectPort]);
 
   // Остановка heartbeat
   const stopHeartbeat = useCallback(() => {
@@ -129,110 +352,55 @@ const SidePanel = () => {
     }
   }, []);
 
+  // useEffect для запуска heartbeat и порта
   useEffect(() => {
-    console.log('[SidePanel] Запуск heartbeat механизма');
+    console.log('[SidePanel] Запуск heartbeat механизма и подключения к порту');
     startHeartbeat();
 
     return () => {
-      console.log('[SidePanel] Остановка heartbeat механизма');
+      console.log('[SidePanel] Остановка heartbeat механизма и отключение порта');
       stopHeartbeat();
+      if (activePortRef.current) {
+        activePortRef.current.disconnect();
+      }
     };
   }, [startHeartbeat, stopHeartbeat]);
 
-  // Слушатель для ответов на GET_PLUGINS
-  useEffect(() => {
-    const handlePluginResponse = (message: any) => {
-      if (message.type === 'GET_PLUGINS_RESPONSE') {
-        // Очищаем таймаут при получении ответа
-        const timeoutId = (window as any).pluginsTimeoutId;
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-          (window as any).pluginsTimeoutId = null;
-        }
-
-        console.log('[SidePanel] Получен ответ GET_PLUGINS_RESPONSE:', message);
-        console.log('[SidePanel] Время получения ответа:', new Date().toISOString());
-
-        if (message.error) {
-          console.error('[SidePanel] ❌ Ошибка от background:', message.error);
-          addToastWithDeps('Ошибка загрузки плагинов: ' + message.error, 'error');
-          return;
-        }
-
-        if (message.plugins) {
-          console.log('[SidePanel] ✅ Успешный ответ получен');
-          console.log('[SidePanel] Устанавливаем плагины:', message.plugins.length, 'шт');
-          console.log('[SidePanel] Примеры плагинов:', message.plugins.slice(0, 2));
-          setPlugins(message.plugins);
-          console.log('[SidePanel] ✅ Загрузка плагинов успешно завершена');
-        } else {
-          console.error('[SidePanel] ❌ Пустой ответ от background:', message);
-          addToastWithDeps('Получен некорректный ответ от background', 'error');
-        }
-      }
-    };
-
-    chrome.runtime.onMessage.addListener(handlePluginResponse);
-
-    return () => {
-      chrome.runtime.onMessage.removeListener(handlePluginResponse);
-    };
-  }, []);
 
   useEffect(() => {
-    console.log('[SidePanel] useEffect: Начинаем загрузку плагинов через Message API');
+    console.log('[SidePanel] useEffect: Starting port-based plugin loading');
 
-    // Функция для загрузки плагинов через Message API
-    const loadPluginsViaMessageAPI = async () => {
+    const loadPlugins = async () => {
       try {
-        console.log('[SidePanel] === НАЧАЛО ЗАГРУЗКИ ПЛАГИНОВ ===');
-        console.log('[SidePanel] Отправляем GET_PLUGINS сообщение в background');
-        console.log('[SidePanel] Время отправки:', new Date().toISOString());
+        console.log('[SidePanel] Connecting to background script via port...');
 
-        // Проверяем соединение с background перед отправкой
-        try {
-          await chrome.runtime.sendMessage({ type: 'PING' });
-          console.log('[SidePanel] Background доступен');
-        } catch (pingError) {
-          console.warn('[SidePanel] Background недоступен:', pingError);
-          throw new Error('Background script недоступен');
+        // Инициализируем порт
+        await reconnectPort();
+
+        // Ждем готовности порта и отправляем сообщение
+        const maxWaitTime = 5000;
+        const checkInterval = 100;
+        let waitedTime = 0;
+
+        while (!isPortReady() && waitedTime < maxWaitTime) {
+          await new Promise(resolve => setTimeout(resolve, checkInterval));
+          waitedTime += checkInterval;
         }
 
-        // Отправляем запрос на получение плагинов
-        console.log('[SidePanel] Отправляем GET_PLUGINS сообщение в background');
-        console.log('[SidePanel] Время отправки:', new Date().toISOString());
-
-        const requestId = Date.now().toString();
-        await chrome.runtime.sendMessage({
-          type: 'GET_PLUGINS',
-          requestId
-        });
-
-        console.log('[SidePanel] Сообщение GET_PLUGINS отправлено, ожидаем ответ через слушатель');
-
-        // Устанавливаем таймаут на случай, если ответ не придет
-        const timeoutId = setTimeout(() => {
-          console.error('[SidePanel] ❌ Таймаут ожидания ответа GET_PLUGINS (5000ms)');
-          addToastWithDeps('Таймаут загрузки плагинов', 'error');
-        }, 5000);
-
-        // Сохраняем таймаут для очистки при получении ответа
-        (window as any).pluginsTimeoutId = timeoutId;
+        if (isPortReady()) {
+          await sendMessageViaPort({ type: 'GET_PLUGINS' });
+          console.log('[SidePanel] Sent GET_PLUGINS message via port');
+        } else {
+          throw new Error('Port not ready after waiting');
+        }
       } catch (error) {
-        console.error('[SidePanel] ❌ Исключение при загрузке плагинов:', error);
-        console.error('[SidePanel] Детали ошибки:', {
-          error,
-          message: (error as Error).message,
-          stack: (error as Error).stack,
-          name: (error as Error).name
-        });
+        console.error('[SidePanel] Error in port-based plugin loading:', error);
         addToastWithDeps('Ошибка связи с background script', 'error');
       }
     };
 
-    // Загружаем плагины
-    loadPluginsViaMessageAPI();
-  }, []);
+    loadPlugins();
+  }, [reconnectPort, isPortReady, sendMessageViaPort, addToastWithDeps]);
 
   useEffect(() => {
     // Функция для обновления URL
@@ -281,7 +449,7 @@ const SidePanel = () => {
       // Способ 3: через background script
       if (!activeTab) {
         try {
-          const response = await chrome.runtime.sendMessage({ type: 'GET_ACTIVE_TAB_URL' });
+          const response = await sendMessageWithRetry({ type: 'GET_ACTIVE_TAB_URL' });
           console.log('[SidePanel] Способ 3 - ответ от background:', response);
           if (response?.url) {
             setCurrentTabUrl(response.url);
@@ -365,6 +533,12 @@ const SidePanel = () => {
     setSelectedPlugin(plugin);
     setShowControlPanel(true);
     setPanelView('chat'); // По умолчанию открываем вкладку "Чат"
+
+    // Сохраняем состояние для текущей страницы
+    if (currentTabUrl) {
+      const pageKey = getPageKey(currentTabUrl);
+      await savePanelState(pageKey, plugin.id);
+    }
   };
 
   const handleStartPlugin = async () => {
@@ -377,7 +551,7 @@ const SidePanel = () => {
       const pluginName = selectedPlugin.name || selectedPlugin.manifest?.name || selectedPlugin.id;
       // const logger = createRunLogger(`workflow-${selectedPlugin.id}`, `Воркфлоу плагина: ${pluginName}`); // Удалено
 
-      await chrome.runtime.sendMessage({
+      await sendMessageWithRetry({
         type: 'RUN_WORKFLOW',
         pluginId: selectedPlugin.id,
       });
@@ -412,7 +586,7 @@ const SidePanel = () => {
     if (!selectedPlugin) return;
 
     try {
-      await chrome.runtime.sendMessage({
+      await sendMessageWithRetry({
         type: 'STOP_WORKFLOW',
         pluginId: selectedPlugin.id,
       });
@@ -430,13 +604,19 @@ const SidePanel = () => {
     setShowControlPanel(false);
     setSelectedPlugin(null);
     setPanelView('chat'); // Сбрасываем на "Чат" при закрытии
+
+    // Очищаем сохраненное состояние для текущей страницы
+    if (currentTabUrl) {
+      const pageKey = getPageKey(currentTabUrl);
+      clearPanelState(pageKey);
+    }
   };
 
   // Функция для обновления настроек плагина
   const handleUpdatePluginSetting = async (pluginId: string, setting: string, value: boolean): Promise<void> => {
     try {
       // Отправляем сообщение в background script для обновления настроек
-      const response = await chrome.runtime.sendMessage({
+      const response = await sendMessageWithRetry({
         type: 'UPDATE_PLUGIN_SETTING',
         pluginId,
         setting,
@@ -485,6 +665,84 @@ const SidePanel = () => {
       throw error;
     }
   };
+
+
+  // HANDLER для сообщений от Pyodide через background - перенос messages в PluginControlPanel
+  useEffect(() => {
+    const handlePyodideMessage = (message: any, sender: any, sendResponse: any) => {
+      console.log('[SidePanel] Принято сообщение от Pyodide:', message);
+
+      if (message.type === 'PYODIDE_MESSAGE') {
+        if (!selectedPlugin) {
+          console.warn('[SidePanel][PYODIDE_MESSAGE] Игнорируем: selectedPlugin не установлен');
+          return true;
+        }
+
+        console.log('[SidePanel] PYODIDE_MESSAGE получено:', message.message);
+
+        // Проверяем наличие message.content
+        if (!message.message || !message.message.content) {
+          console.warn('[SidePanel][PYODIDE_MESSAGE] Игнорируем: message.content отсутствует или пустой', {
+            hasMessage: !!message.message,
+            hasContent: !!(message.message && message.message.content)
+          });
+          return true;
+        }
+
+        // Отправляем событие в PluginControlPanel через custom event
+        console.log('[SidePanel] Отправляем PYODIDE_MESSAGE_UPDATE в PluginControlPanel');
+
+        const customEvent = new CustomEvent('PYODIDE_MESSAGE_UPDATE', {
+          detail: {
+            type: 'PYODIDE_MESSAGE_UPDATE',
+            message: message.message,
+            timestamp: message.timestamp
+          }
+        });
+
+        window.dispatchEvent(customEvent);
+        console.log('[SidePanel] Событие PYODIDE_MESSAGE_UPDATE отправлено');
+
+        return true;
+      }
+      return false;
+    };
+
+    chrome.runtime.onMessage.addListener(handlePyodideMessage);
+    console.log('[SidePanel] Handler для PYODIDE_MESSAGE зарегистрирован');
+
+    return () => {
+      chrome.runtime.onMessage.removeListener(handlePyodideMessage);
+      console.log('[SidePanel] Handler для PYODIDE_MESSAGE удален');
+    };
+  }, [selectedPlugin]);
+
+  // useEffect для восстановления состояния sidepanel при возвращении на страницу
+  useEffect(() => {
+    console.log('[SidePanel] currentTabUrl изменился:', currentTabUrl);
+
+    const restoreState = async () => {
+      if (!currentTabUrl || plugins.length === 0) return;
+
+      const pageKey = getPageKey(currentTabUrl);
+      const restored = await restorePanelState(pageKey, plugins);
+
+      if (!restored) {
+        console.log('[SidePanel] Состояние не восстановлено, проверяем сброс плагина');
+
+        // Проверить, нужно ли сбросить состояние плагина
+        if (selectedPlugin && !isPluginAllowedOnHost(selectedPlugin)) {
+          console.log('[SidePanel] Плагин не разрешен для новой страницы, сбрасываем состояние');
+          setSelectedPlugin(null);
+          setShowControlPanel(false);
+          setRunningPlugin(null);
+          setPausedPlugin(null);
+        }
+      }
+    };
+
+    restoreState();
+  }, [currentTabUrl, plugins, selectedPlugin]);
 
   return (
     <LocalErrorBoundary>

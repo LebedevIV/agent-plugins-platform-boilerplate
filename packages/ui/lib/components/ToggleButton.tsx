@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils';
+import { cn } from '../utils';
 import { useStorage } from '@extension/shared';
 import { exampleThemeStorage } from '@extension/storage';
 import type { ComponentPropsWithoutRef } from 'react';
@@ -6,7 +6,7 @@ import type { ComponentPropsWithoutRef } from 'react';
 type ToggleButtonProps = ComponentPropsWithoutRef<'button'>;
 
 export const ToggleButton = ({ className, children, ...props }: ToggleButtonProps) => {
-  const { isLight } = useStorage();
+  const { isLight } = useStorage(exampleThemeStorage);
 
   return (
     <button

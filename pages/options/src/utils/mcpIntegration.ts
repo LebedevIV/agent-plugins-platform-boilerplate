@@ -98,7 +98,7 @@ export class MCPService {
   private static getDefaultKeyForService(service: string): string | null {
     const serviceKeyMap: Record<string, string> = {
       'gemini-flash': 'gemini-flash',
-      'gemini-pro': 'gemini-25',
+      'gemini-pro': 'gemini-pro',
       'google-gemini': 'gemini-flash',
       'anthropic': 'claude', // Для будущих реализаций
       'openai': 'gpt', // Для будущих реализаций
@@ -186,7 +186,7 @@ export class AIServiceManager {
    */
   static async queryGemini(prompt: string, useFlash: boolean = true): Promise<MCPResponse> {
     const service = useFlash ? 'gemini-flash' : 'gemini-pro';
-    const keyId = useFlash ? 'gemini-flash' : 'gemini-25';
+    const keyId = useFlash ? 'gemini-flash' : 'gemini-pro';
 
     return await MCPService.executeRequest({
       service,

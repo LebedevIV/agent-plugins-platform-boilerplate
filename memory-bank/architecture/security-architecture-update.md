@@ -48,7 +48,7 @@
 {
   "encryptedApiKeys": {
     "gemini-flash": "encrypted_key_data...",
-    "gemini-25": "encrypted_key_data...",
+    "gemini-pro": "encrypted_key_data...",
     "custom-key-1": "encrypted_key_data..."
   },
   "customKeys": [

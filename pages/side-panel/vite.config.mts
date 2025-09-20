@@ -13,7 +13,7 @@ export default {
   },
   publicDir: resolve(rootDir, 'public'),
   build: {
-    outDir: resolve(rootDir, '..', '..', 'dist', 'side-panel'),
+    outDir: resolve(rootDir, '..', '..', 'chrome-extension', 'public', 'side-panel'),
     sourcemap: true,
     minify: true,
     reportCompressedSize: true,
