@@ -564,54 +564,60 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
           return true;
         })
         .map((msg: any, index: number) => {
-          try {
-            // Строгая проверка и конвертация поля text
-            let textContent = msg.content || msg.text || '';
-            let messageTimestamp = msg.timestamp || Date.now();
+           try {
+             // Строгая проверка и конвертация поля text
+             let textContent = msg.content || msg.text || '';
+             let messageTimestamp = msg.timestamp || Date.now();
 
-            // Если text является объектом, конвертируем его в строку
-            if (typeof textContent === 'object') {
-              console.warn('[PluginControlPanel] text является объектом, конвертируем:', textContent);
-              textContent = JSON.stringify(textContent);
-            } else if (textContent === null || textContent === undefined) {
-              console.warn('[PluginControlPanel] text равен null/undefined, устанавливаем пустую строку');
-              textContent = '';
-            } else {
-              // Убеждаемся, что это строка
-              textContent = String(textContent);
+             // Если text является объектом, конвертируем его в строку
+             if (typeof textContent === 'object') {
+               console.warn('[PluginControlPanel] text является объектом, конвертируем:', textContent);
+               textContent = JSON.stringify(textContent);
+             } else if (textContent === null || textContent === undefined) {
+               console.warn('[PluginControlPanel] text равен null/undefined, устанавливаем пустую строку');
+               textContent = '';
+             } else {
+               // Убеждаемся, что это строка
+               textContent = String(textContent);
 
-              // Проверяем, является ли строка JSON с сообщением плагина
-              try {
-                const parsedContent = JSON.parse(textContent);
-                if (typeof parsedContent === 'object' && parsedContent !== null && 'content' in parsedContent) {
-                  console.log('[PluginControlPanel] Распарсен JSON из content:', parsedContent);
-                  textContent = String(parsedContent.content || '');
-                  // Используем timestamp из распарсенного объекта, если он есть
-                  if (parsedContent.timestamp && typeof parsedContent.timestamp === 'number') {
-                    messageTimestamp = parsedContent.timestamp;
-                  }
-                }
-              } catch (jsonParseError) {
-                // Не JSON, оставляем как есть
-                console.log('[PluginControlPanel] content не является JSON, оставляем как есть');
-              }
-            }
+               console.log(`[PluginControlPanel] Raw textContent before JSON parse for message ${index}:`, textContent);
 
-            const convertedMsg: ChatMessage = {
-              id: msg.id || String(messageTimestamp + index),
-              text: textContent,
-              isUser: msg.role ? msg.role === 'user' : !!msg.isUser,
-              timestamp: messageTimestamp,
-            };
+               // Проверяем, является ли строка JSON с сообщением плагина
+               try {
+                 const parsedContent = JSON.parse(textContent);
+                 if (typeof parsedContent === 'object' && parsedContent !== null && 'content' in parsedContent) {
+                   console.log('[PluginControlPanel] Распарсен JSON из content:', parsedContent);
+                   textContent = String(parsedContent.content || '');
+                   // Используем timestamp из распарсенного объекта, если он есть
+                   if (parsedContent.timestamp && typeof parsedContent.timestamp === 'number') {
+                     messageTimestamp = parsedContent.timestamp;
+                   }
+                 }
+               } catch (jsonParseError) {
+                 // Не JSON, оставляем как есть
+                 console.log('[PluginControlPanel] content не является JSON, оставляем как есть');
+               }
 
-            console.log(`[PluginControlPanel] Конвертировано сообщение ${index}:`, {
-              id: convertedMsg.id,
-              textLength: convertedMsg.text.length,
-              textType: typeof convertedMsg.text,
-              isUser: convertedMsg.isUser
-            });
+               console.log(`[PluginControlPanel] TextContent after JSON parse for message ${index}:`, textContent);
+             }
 
-            return convertedMsg;
+             const convertedMsg: ChatMessage = {
+               id: msg.id || String(messageTimestamp + index),
+               text: textContent,
+               isUser: msg.role ? msg.role === 'user' : !!msg.isUser,
+               timestamp: messageTimestamp,
+             };
+
+             console.log(`[PluginControlPanel] Конвертировано сообщение ${index}:`, {
+               id: convertedMsg.id,
+               textLength: convertedMsg.text.length,
+               textType: typeof convertedMsg.text,
+               isUser: convertedMsg.isUser
+             });
+
+             console.log(`[PluginControlPanel] Final converted text for message ${index}:`, convertedMsg.text);
+
+             return convertedMsg;
           } catch (conversionError) {
             console.error(`[PluginControlPanel] Ошибка конвертации сообщения ${index}:`, conversionError, msg);
             // Возвращаем безопасное сообщение в случае ошибки
@@ -1253,11 +1259,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
 
   // --- Синхронизация message с draftText после загрузки черновика ---
   useEffect(() => {
-    // Если draftText пустой, подставляем автотестовый текст
-    if (typeof draftText === 'string' && draftText === '') {
-      setMessage('Тестовое сообщение для диагностики');
-      console.log('[PluginControlPanel] draftText пустой, подставлен автотестовый текст');
-    } else if (typeof draftText === 'string') {
+    if (typeof draftText === 'string') {
       setMessage(draftText);
       console.log('[PluginControlPanel] draftText подставлен в поле ввода:', draftText);
     }
@@ -1466,7 +1468,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
               <button
                 onClick={testMessageProcessing}
                 disabled={loading}
-                style={{ backgroundColor: '#ff6b35', marginLeft: '5px' }}
+                style={{ backgroundColor: '#ff6b35', marginLeft: '5px', display: 'none' }}
                 title="Протестировать обработку сообщений с проблемными данными"
               >
                 🧪 Тест
@@ -1491,11 +1493,18 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
                 let displayText = msg.text;
                 let displayTimestamp = msg.timestamp;
 
+                console.log('[PluginControlPanel] Raw message text before parsing for message', idx, ':', msg.text);
+
                 try {
                   const parsed = JSON.parse(displayText);
                   if (typeof parsed === 'object' && parsed !== null && 'content' in parsed) {
                     console.log('[PluginControlPanel] Парсинг JSON в рендере:', parsed);
-                    displayText = String(parsed.content || '');
+                    let content = parsed.content;
+                    if (typeof content === 'object') {
+                      displayText = JSON.stringify(content);
+                    } else {
+                      displayText = String(content || '');
+                    }
                     if (parsed.timestamp && typeof parsed.timestamp === 'number') {
                       displayTimestamp = parsed.timestamp;
                     }
@@ -1507,12 +1516,16 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
                     const stringFields = Object.values(parsed).filter(val => typeof val === 'string');
                     if (stringFields.length > 0) {
                       displayText = String(stringFields[0]);
+                    } else {
+                      displayText = JSON.stringify(parsed);
                     }
                   }
                 } catch (parseError) {
                   // Не JSON, оставляем как есть
                   console.log('[PluginControlPanel] Текст не является JSON, рендерим как есть');
                 }
+
+                console.log('[PluginControlPanel] Display text after parsing for message', idx, ':', displayText);
 
                 return (
                   <div
