@@ -2667,13 +2667,10 @@ def analyze_ozon_product() -> Dict[str, Any]:
         truncated_composition = composition[:100] + ('...' if len(composition) > 100 else '')
         chat_message(f"📝 Описание: {truncated_description}\n📝 Состав: {truncated_composition}")
 
-        # Добавляем название нейросети перед оценкой
-        chat_message(f"🤖 Ответ нейросети (Gemini AI):")
-
-        # Отправляем результаты AI анализа соответствия
+        # Отправляем результаты AI анализа соответствия в одном сообщении
         score_str = str(score) if score is not None else 'N/A'
         reasoning_str = str(reasoning) if reasoning is not None else 'Объяснение не доступно'
-        chat_message(f"📊 Оценка соответствия: {score_str}/10\n{reasoning_str}")
+        chat_message(f"🤖 Ответ нейросети (Gemini AI):\n📊 Оценка соответствия: {score_str}/10\n{reasoning_str}")
 
         # Логируем в консоль полную информацию для разработчиков
         title_preview = product_info['title'][:50] + "..." if safe_len(product_info['title']) > 50 else product_info['title']
