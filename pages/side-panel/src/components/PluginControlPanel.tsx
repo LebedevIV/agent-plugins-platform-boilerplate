@@ -567,6 +567,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
           try {
             // Строгая проверка и конвертация поля text
             let textContent = msg.content || msg.text || '';
+            let messageTimestamp = msg.timestamp || Date.now();
 
             // Если text является объектом, конвертируем его в строку
             if (typeof textContent === 'object') {
@@ -578,13 +579,29 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
             } else {
               // Убеждаемся, что это строка
               textContent = String(textContent);
+
+              // Проверяем, является ли строка JSON с сообщением плагина
+              try {
+                const parsedContent = JSON.parse(textContent);
+                if (typeof parsedContent === 'object' && parsedContent !== null && 'content' in parsedContent) {
+                  console.log('[PluginControlPanel] Распарсен JSON из content:', parsedContent);
+                  textContent = String(parsedContent.content || '');
+                  // Используем timestamp из распарсенного объекта, если он есть
+                  if (parsedContent.timestamp && typeof parsedContent.timestamp === 'number') {
+                    messageTimestamp = parsedContent.timestamp;
+                  }
+                }
+              } catch (jsonParseError) {
+                // Не JSON, оставляем как есть
+                console.log('[PluginControlPanel] content не является JSON, оставляем как есть');
+              }
             }
 
             const convertedMsg: ChatMessage = {
-              id: msg.id || String(msg.timestamp || Date.now() + index),
+              id: msg.id || String(messageTimestamp + index),
               text: textContent,
               isUser: msg.role ? msg.role === 'user' : !!msg.isUser,
-              timestamp: msg.timestamp || Date.now(),
+              timestamp: messageTimestamp,
             };
 
             console.log(`[PluginControlPanel] Конвертировано сообщение ${index}:`, {
@@ -800,7 +817,8 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
                 try {
                   // Строгая проверка и конвертация поля text
                   let textContent = msg.content || msg.text || '';
-
+                  let messageTimestamp = msg.timestamp || Date.now();
+   
                   // Если text является объектом, конвертируем его в строку
                   if (typeof textContent === 'object') {
                     console.warn('[PluginControlPanel] text является объектом, конвертируем:', textContent);
@@ -811,13 +829,29 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
                   } else {
                     // Убеждаемся, что это строка
                     textContent = String(textContent);
+   
+                    // Проверяем, является ли строка JSON с сообщением плагина
+                    try {
+                      const parsedContent = JSON.parse(textContent);
+                      if (typeof parsedContent === 'object' && parsedContent !== null && 'content' in parsedContent) {
+                        console.log('[PluginControlPanel] Распаршен JSON из content:', parsedContent);
+                        textContent = String(parsedContent.content || '');
+                        // Используем timestamp из распарсенного объекта, если он есть
+                        if (parsedContent.timestamp && typeof parsedContent.timestamp === 'number') {
+                          messageTimestamp = parsedContent.timestamp;
+                        }
+                      }
+                    } catch (jsonParseError) {
+                      // Не JSON, оставляем как есть
+                      console.log('[PluginControlPanel] content не является JSON, оставляем как есть');
+                    }
                   }
-
+   
                   const convertedMsg: ChatMessage = {
-                    id: msg.id || String(msg.timestamp || Date.now() + index),
+                    id: msg.id || String(messageTimestamp + index),
                     text: textContent,
                     isUser: msg.role ? msg.role === 'user' : !!msg.isUser,
-                    timestamp: msg.timestamp || Date.now(),
+                    timestamp: messageTimestamp,
                   };
 
                   console.log(`[PluginControlPanel] Конвертировано сообщение ${index}:`, {
@@ -1009,6 +1043,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
           try {
             // Строгая проверка типа content для Pyodide сообщений
             let content = event.message.content;
+            let messageTimestamp = event.timestamp || Date.now();
 
             // Если content является объектом, конвертируем в строку
             if (typeof content === 'object') {
@@ -1019,13 +1054,29 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
               content = 'Пустое сообщение от Pyodide';
             } else {
               content = String(content);
+
+              // Проверяем, является ли строка JSON с сообщением плагина
+              try {
+                const parsedContent = JSON.parse(content);
+                if (typeof parsedContent === 'object' && parsedContent !== null && 'content' in parsedContent) {
+                  console.log('[PluginControlPanel] Распарсен JSON из PYODIDE content:', parsedContent);
+                  content = String(parsedContent.content || '');
+                  // Используем timestamp из распарсенного объекта, если он есть
+                  if (parsedContent.timestamp && typeof parsedContent.timestamp === 'number') {
+                    messageTimestamp = parsedContent.timestamp;
+                  }
+                }
+              } catch (jsonParseError) {
+                // Не JSON, оставляем как есть
+                console.log('[PluginControlPanel] PYODIDE content не является JSON, оставляем как есть');
+              }
             }
 
             const pyodideMessage: ChatMessage = {
-              id: event.message.id || `pyodide_${event.timestamp || Date.now()}_${Math.random()}`,
+              id: event.message.id || `pyodide_${messageTimestamp}_${Math.random()}`,
               text: content,
               isUser: false, // Python сообщения отображаем как от бота
-              timestamp: event.timestamp || Date.now(),
+              timestamp: messageTimestamp,
             };
 
             console.log('[PluginControlPanel] Adding Pyodide message to chat:', pyodideMessage);
@@ -1134,6 +1185,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
           try {
             // Строгая проверка типа content
             let content = data.message.content;
+            let messageTimestamp = data.timestamp || Date.now();
 
             // Если content является объектом, конвертируем в строку
             if (typeof content === 'object') {
@@ -1144,13 +1196,29 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
               content = 'Пустое сообщение от Pyodide';
             } else {
               content = String(content);
+
+              // Проверяем, является ли строка JSON с сообщением плагина
+              try {
+                const parsedContent = JSON.parse(content);
+                if (typeof parsedContent === 'object' && parsedContent !== null && 'content' in parsedContent) {
+                  console.log('[PluginControlPanel] Распарсен JSON из Pyodide content:', parsedContent);
+                  content = String(parsedContent.content || '');
+                  // Используем timestamp из распарсенного объекта, если он есть
+                  if (parsedContent.timestamp && typeof parsedContent.timestamp === 'number') {
+                    messageTimestamp = parsedContent.timestamp;
+                  }
+                }
+              } catch (jsonParseError) {
+                // Не JSON, оставляем как есть
+                console.log('[PluginControlPanel] Pyodide content не является JSON, оставляем как есть');
+              }
             }
 
             const pyodideMessage: ChatMessage = {
-              id: data.message.id || `pyodide_${data.timestamp || Date.now()}_${Math.random()}`,
+              id: data.message.id || `pyodide_${messageTimestamp}_${Math.random()}`,
               text: content,
               isUser: false, // Python сообщения отображаем как от бота
-              timestamp: data.timestamp || Date.now(),
+              timestamp: messageTimestamp,
             };
 
             console.log('[PluginControlPanel] Adding Pyodide message to chat:', pyodideMessage);
@@ -1418,15 +1486,43 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
             <div className="messages-container">
               {messages.map((msg, idx) => {
                 console.log('[PluginControlPanel] render message:', idx, msg);
+
+                // Парсинг JSON в тексте сообщения перед рендерингом
+                let displayText = msg.text;
+                let displayTimestamp = msg.timestamp;
+
+                try {
+                  const parsed = JSON.parse(displayText);
+                  if (typeof parsed === 'object' && parsed !== null && 'content' in parsed) {
+                    console.log('[PluginControlPanel] Парсинг JSON в рендере:', parsed);
+                    displayText = String(parsed.content || '');
+                    if (parsed.timestamp && typeof parsed.timestamp === 'number') {
+                      displayTimestamp = parsed.timestamp;
+                    }
+                  } else if (typeof parsed === 'string') {
+                    // Если JSON содержит просто строку
+                    displayText = parsed;
+                  } else if (typeof parsed === 'object' && parsed !== null) {
+                    // Если JSON содержит объект без поля content, берем первое строковое поле
+                    const stringFields = Object.values(parsed).filter(val => typeof val === 'string');
+                    if (stringFields.length > 0) {
+                      displayText = String(stringFields[0]);
+                    }
+                  }
+                } catch (parseError) {
+                  // Не JSON, оставляем как есть
+                  console.log('[PluginControlPanel] Текст не является JSON, рендерим как есть');
+                }
+
                 return (
                   <div
                     key={msg.id || idx}
                     className={`chat-message ${msg.isUser ? 'user' : 'bot'}`}
                   >
                     <div className="message-content">
-                      <span className="message-text">{msg.text}</span>
+                      <span className="message-text">{displayText}</span>
                       <span className="message-time">
-                        {new Date(msg.timestamp).toLocaleTimeString()}
+                        {new Date(displayTimestamp).toLocaleTimeString()}
                       </span>
                     </div>
                   </div>
