@@ -4,6 +4,7 @@
 import { ensureOffscreenDocument } from './offscreen-manager';
 import { TransferMetadataManager } from './transfer-metadata-manager';
 import { getPluginSettings } from '../../packages/storage/lib/plugin-settings';
+import { pluginChatApi } from './plugin-chat-api';
 
 // ===============================================================================
 // GLOBAL SETTINGS TYPES AND FUNCTIONS
@@ -46,6 +47,35 @@ async function getGlobalSettings(): Promise<GlobalSettings> {
 
 const MAX_DIRECT_SIZE = 50 * 1024 * 1024; // 50MB безопасный лимит для прямой передачи
 const WARN_SIZE = 10 * 1024 * 1024; // 10MB - предупреждение о большом размере
+
+// ===============================================================================
+// CHAT UTILITY FUNCTIONS
+// ===============================================================================
+
+/**
+ * Нормализует pageKey для обеспечения консистентности
+ */
+function getPageKey(pageKey: string): string {
+  if (!pageKey) return 'unknown_page';
+  // Удаляем лишние слеши и пробелы
+  return pageKey.replace(/^\/+|\/+$/g, '').replace(/\s+/g, '_');
+}
+
+/**
+ * Отправляет уведомление об обновлении чата всем слушателям
+ */
+function broadcastChatUpdate(pluginId: string, pageKey: string): void {
+  console.log('[background] Broadcasting chat update:', { pluginId, pageKey });
+
+  chrome.runtime.sendMessage({
+    type: 'PLUGIN_CHAT_UPDATED',
+    pluginId,
+    pageKey,
+    timestamp: Date.now()
+  }).catch(error => {
+    console.warn('[background] Failed to broadcast chat update:', error);
+  });
+}
 
 // ===============================================================================
 // HTML DIRECT TRANSMISSION - Alternative to chunked transmission
@@ -3188,13 +3218,17 @@ class BackgroundController {
         case 'HOST_CALL':
           await this.handleHostCall(message, sendResponse);
           break;
-          
+
+        case 'DELETE_PLUGIN_CHAT':
+          await this.handleDeletePluginChat(message, sendResponse);
+          break;
+
         case 'LOG_MESSAGE':
         case 'WORKFLOW_RESULT':
           // Forward to UI
           chrome.runtime.sendMessage(message);
           break;
-          
+
         default:
           console.warn('[Background] Unknown message type:', (message as any).type);
       }
@@ -3425,6 +3459,55 @@ class BackgroundController {
       }).catch(err => {
         console.error('[HOST_CALL] Failed to send error response to offscreen:', err);
         trackSendResponse({ success: false, error: 'Failed to send error response' });
+      });
+    }
+  }
+
+  private async handleDeletePluginChat(
+    message: any,
+    sendResponse: (response?: any) => void
+  ): Promise<void> {
+    try {
+      const { pluginId, pageKey, messageId } = message;
+
+      if (!pluginId || !pageKey) {
+        throw new Error('Missing required fields: pluginId and pageKey are required');
+      }
+
+      const normPageKey = getPageKey(pageKey);
+
+      console.log('[background] DELETE_PLUGIN_CHAT pageKey:', pageKey, 'messageId:', messageId, 'norm:', normPageKey);
+
+      // Выполняем удаление чата
+      await pluginChatApi.deleteChat(pluginId, normPageKey);
+
+      // Отправляем успешный ответ UI
+      chrome.runtime.sendMessage({
+        type: 'DELETE_PLUGIN_CHAT_RESPONSE',
+        messageId,
+        success: true,
+        pluginId,
+        pageKey: normPageKey,
+        timestamp: Date.now()
+      });
+
+      // Отправляем уведомление об обновлении чата всем слушателям
+      broadcastChatUpdate(pluginId, normPageKey);
+
+      console.log('[background] DELETE_PLUGIN_CHAT completed successfully for:', { pluginId, pageKey: normPageKey });
+
+    } catch (error) {
+      console.error('[background] DELETE_PLUGIN_CHAT failed:', error);
+
+      // Отправляем ответ об ошибке
+      chrome.runtime.sendMessage({
+        type: 'DELETE_PLUGIN_CHAT_RESPONSE',
+        messageId: message.messageId,
+        success: false,
+        error: (error as Error).message,
+        pluginId: message.pluginId,
+        pageKey: message.pageKey,
+        timestamp: Date.now()
       });
     }
   }

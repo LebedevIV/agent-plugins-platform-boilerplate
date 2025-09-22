@@ -919,6 +919,19 @@ const runPluginIfEnabled = async (pluginId: string) => {
   }
 };
 
+// Обработчик для удаления чата плагина
+const handleDeletePluginChat = async (message: any, sendResponse: (response?: any) => void) => {
+  console.log('[background] DELETE_PLUGIN_CHAT processing:', message.pluginId, message.pageKey);
+  try {
+    const result = await pluginChatApi.deleteChat(message.pluginId, message.pageKey);
+    console.log('[background] DELETE_PLUGIN_CHAT completed successfully for:', { pluginId: message.pluginId, pageKey: message.pageKey });
+    sendResponse(result);
+  } catch (error) {
+    console.error('[background] DELETE_PLUGIN_CHAT error:', error);
+    sendResponse({ error: (error as Error).message });
+  }
+};
+
 // Обработчик для автозапуска плагинов при загрузке страницы
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url && (tab.url.startsWith('http') || tab.url.startsWith('https'))) {
@@ -1643,6 +1656,19 @@ chrome.runtime.onMessage.addListener(
             messageId: msg.messageId,
             type: 'SAVE_PLUGIN_CHAT_MESSAGE_RESPONSE'
           });
+        }
+      })();
+      return true;
+    }
+
+    if (msg.type === 'DELETE_PLUGIN_CHAT') {
+      console.log('[background] Processing DELETE_PLUGIN_CHAT request for:', msg.pluginId, msg.pageKey);
+      (async () => {
+        try {
+          await handleDeletePluginChat(msg, sendResponse);
+        } catch (error: unknown) {
+          console.error('[background] Error in DELETE_PLUGIN_CHAT:', error);
+          sendResponse({ error: (error as Error).message });
         }
       })();
       return true;
