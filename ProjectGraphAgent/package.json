@@ -1,7 +1,7 @@
 {
   "name": "project-graph-agent",
-  "version": "1.0.463",
-  "description": "Jsonnet-driven project control system for AI agents",
+  "version": "1.0.964",
+  "description": "Jsonnet-driven project control system for AI agents - Integrated with Agent Plugins Platform v1.0.964",
   "main": "scripts/graph_generator.mjs",
   "type": "module",
   "scripts": {
@@ -16,7 +16,8 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/LebedevIV/ProjectGraphAgent.git"
+    "url": "https://github.com/your-username/agent-plugins-platform.git",
+    "directory": "ProjectGraphAgent"
   },
   "keywords": [
     "ai",
@@ -25,19 +26,24 @@
     "jsonnet",
     "graph",
     "automation",
-    "drift-detection"
+    "drift-detection",
+    "browser-extension",
+    "pyodide",
+    "mcp-protocol",
+    "react-19",
+    "typescript"
   ],
   "author": "Igor Lebedev",
   "license": "MIT",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
   "dependencies": {
     "jsonnet": "^0.5.0-beta",
     "minimatch": "^9.0.3"
   },
   "bugs": {
-    "url": "https://github.com/LebedevIV/ProjectGraphAgent/issues"
+    "url": "https://github.com/your-username/agent-plugins-platform/issues"
   },
-  "homepage": "https://github.com/LebedevIV/ProjectGraphAgent#readme"
+  "homepage": "https://github.com/your-username/agent-plugins-platform/tree/main/ProjectGraphAgent#readme"
 }

@@ -1,68 +1,134 @@
-# Техническая архитектура Ozon Analyzer Plugin
+# Technical Architecture - Agent Plugins Platform
 
-## 🏗️ Обзор архитектуры
+## 🏗️ Platform Architecture Overview
 
-Ozon Analyzer представляет собой высокооптимизированную систему для комплексного анализа товаров на маркетплейсе Ozon. Архитектура построена на принципе разделения ответственности с акцентом на производительность и надежность.
+The Agent Plugins Platform is a comprehensive browser extension system that enables Python plugin execution using Pyodide and MCP protocol. The architecture focuses on performance, reliability, and extensibility with modern web technologies.
 
-## 📊 Архитектурная схема
+**Core Technologies:**
+- **Browser Extension**: Chrome/Firefox with Manifest V3
+- **Python Runtime**: Pyodide (Python in WebAssembly)
+- **Frontend**: React 19 with TypeScript
+- **Build System**: Vite with SWC
+- **AI Integration**: MCP Protocol for seamless agent communication
+
+## 📊 Platform Architecture Diagram
 
 ```mermaid
 graph TB
-    subgraph "Пользовательский интерфейс"
-        UI[SidePanel Interface]
-        SM[Status Monitor]
+    subgraph "Browser Extension Layer"
+        UI[React 19 UI Components]
+        BG[Background Service Worker]
+        SP[Side Panel Interface]
+        DT[DevTools Panel]
     end
 
-    subgraph "Движок воркфлоу"
+    subgraph "Core Engine Layer"
         WE[Workflow Engine]
-        WS[Workflow Steps Controller]
-        CE[Conditional Execution]
-    end
-
-    subgraph "Выполнение Python"
-        PW[Pyodide Worker]
+        PM[Plugin Manager]
+        CM[Context Manager]
         MM[Memory Manager]
-        BP[Batch Processor]
-        AC[AICache]
     end
 
-    subgraph "AI сервисы"
+    subgraph "Python Runtime Layer"
+        PW[Pyodide Workers]
+        BP[Batch Processor]
+        AC[AICache System]
+        PC[Plugin Container]
+    end
+
+    subgraph "AI Integration Layer"
+        MCP[MCP Protocol Handler]
+        AIH[AI Handler]
+        FC[Fallback Chain]
         GP[Google Gemini]
         OP[OpenAI GPT]
-        FC[Fallback Chain]
+        AN[Anthropic Claude]
     end
 
-    subgraph "Мониторинг системы"
-        MC[Metrics Collector]
+    subgraph "Infrastructure Layer"
+        MS[Metrics System]
         AM[Alert Manager]
-        LT[Logger]
+        LT[Logger System]
         PT[Performance Tracker]
-        NE[Network Tracker]
+        DB[IndexedDB Storage]
     end
 
-    UI --> WE
-    WE --> WS
-    WS --> CE
-    CE --> PW
-    PW --> MM
+    UI --> BG
+    BG --> SP
+    BG --> DT
+    BG --> WE
+    WE --> PM
+    PM --> CM
+    CM --> MM
+    WE --> PW
     PW --> BP
     PW --> AC
-    BP --> GP
-    BP --> OP
-    GP --> FC
-    OP --> FC
-    WE --> MC
-    PW --> MC
-    MC --> AM
-    MC --> LT
-    MC --> PT
-    MC --> NE
+    PW --> PC
+    PC --> MCP
+    MCP --> AIH
+    AIH --> FC
+    FC --> GP
+    FC --> OP
+    FC --> AN
+    WE --> MS
+    PW --> MS
+    AIH --> MS
+    MS --> AM
+    MS --> LT
+    MS --> PT
+    MS --> DB
 
     style UI fill:#e1f5fe
     style WE fill:#f3e5f5
     style PW fill:#fff3e0
-    style GP fill:#e8f5e8
-    style MC fill:#ffebee
+    style AIH fill:#e8f5e8
+    style MS fill:#ffebee
+```
+
+## 🔌 Plugin Architecture
+
+```mermaid
+graph LR
+    subgraph "Plugin System"
+        PS[Plugin System]
+        PR[Plugin Registry]
+        PL[Plugin Loader]
+        PV[Plugin Validator]
+        PE[Plugin Executor]
+    end
+
+    subgraph "Plugin Types"
+        PY[Python Plugins]
+        JS[JavaScript Plugins]
+        WF[Workflow Plugins]
+        AI[AI Agent Plugins]
+    end
+
+    subgraph "Plugin Lifecycle"
+        DI[Discovery]
+        LD[Loading]
+        VL[Validation]
+        EX[Execution]
+        UN[Unloading]
+    end
+
+    PS --> PR
+    PR --> PL
+    PL --> PV
+    PV --> PE
+    PE --> PY
+    PE --> JS
+    PE --> WF
+    PE --> AI
+
+    DI --> LD
+    LD --> VL
+    VL --> EX
+    EX --> UN
+
+    style PS fill:#e1f5fe
+    style PY fill:#fff3e0
+    style DI fill:#f3e5f5
 ```
 
 ## 🔄 Поток данных и взаимодействия
@@ -106,63 +172,118 @@ sequenceDiagram
     AI->>M: Успешность ответов
 ```
 
-## 🧩 Детальное описание компонентов
+## 🛠️ Technology Stack
 
-### 1. Пользовательский интерфейс (SidePanel)
+### **Frontend Technologies**
+- **React 19**: Latest React with concurrent features and improved performance
+- **TypeScript 5.7**: Full type safety and modern language features
+- **Vite 6.0**: Lightning-fast build tool with HMR (Hot Module Replacement)
+- **SWC**: Super-fast TypeScript/JavaScript compiler and bundler
 
-**Файлы**: `pages/side-panel/`, `chrome-extension/public/plugins/ozon-analyzer/`
+### **Backend Runtime**
+- **Pyodide**: Python runtime in WebAssembly for browser execution
+- **WebAssembly**: High-performance execution environment
+- **MCP Protocol**: Model Context Protocol for AI agent communication
+- **IndexedDB**: Client-side storage for persistence
 
-**Основные функции**:
-- Визуализация прогресса анализа
-- Отображение результатов в real-time
-- Интерактивные элементы управления
-- Обработка пользовательских настроек
+### **Development & Build Tools**
+- **PNPM 10.11**: Fast, disk space efficient package manager
+- **Turbo**: High-performance build system for monorepos
+- **ESLint + Prettier**: Code quality and formatting
+- **Vitest**: Modern testing framework
 
-**Ключевые метрики**:
-- Время отклика UI: <100ms
-- Память на вкладку: <50MB
-- Количество одновременных анализов: до 3
+### **Browser Extension**
+- **Manifest V3**: Latest Chrome extension manifest standard
+- **Service Workers**: Background processing with improved performance
+- **Content Scripts**: DOM manipulation and data extraction
+- **Side Panel API**: Modern UI integration
 
+## 🧩 Core Platform Components
+
+### 1. User Interface Layer (React 19 + TypeScript)
+
+**Core Components**:
+- **SidePanel Interface**: Main UI for plugin interaction
+- **DevTools Panel**: Developer debugging interface
+- **Background Service Worker**: Extension lifecycle management
+- **Content Scripts**: DOM manipulation and data extraction
+
+**Key Features**:
+- **Real-time Updates**: Instant UI updates during plugin execution
+- **Interactive Controls**: Plugin configuration and management
+- **Status Monitoring**: Live progress and performance metrics
+- **Error Handling**: User-friendly error messages and recovery
+
+**Performance Metrics**:
+- UI Response Time: <100ms
+- Memory per Tab: <50MB
+- Concurrent Plugin Executions: up to 3
+- Bundle Size: <2MB (gzipped)
+
+**TypeScript Interfaces**:
 ```typescript
-interface SidePanelProps {
-    pluginId: 'ozon-analyzer';
+interface PluginExecutionContext {
+    pluginId: string;
     workflowStatus: WorkflowState;
     analysisResults: AnalysisReport;
     userPreferences: PluginSettings;
+    performanceMetrics: PerformanceData;
+}
+
+interface WorkflowState {
+    currentStep: string;
+    progress: number;
+    estimatedTimeRemaining: number;
+    errors: Error[];
 }
 ```
 
-### 2. Движок воркфлоу (Workflow Engine)
+### 2. Workflow Engine (TypeScript)
 
-**Файл**: `core/workflow-engine.js`
+**Location**: `core/workflow-engine.ts`
 
-**Архитектура**:
-- Декларативное описание шагов в `workflow.json`
-- Условное выполнение с выражением `run_if`
-- Гибкая система контекстов и переменных
-- Продвинутое логирование и обработка ошибок
+**Architecture**:
+- **Declarative Workflows**: JSON-based workflow definitions
+- **Conditional Execution**: Dynamic step execution based on conditions
+- **Context Management**: Shared state across workflow steps
+- **Error Handling**: Comprehensive error recovery and logging
 
-**Ключевые особенности**:
-```javascript
-// Декларативное определение шагов
-{
-    "id": "analyze",
-    "tool": "python.analyze_ozon_product",
-    "inputs": { "page_html": "{{input.page_html}}" }
+**Key Features**:
+```typescript
+interface WorkflowStep {
+    id: string;
+    tool: string; // "python.analyze_ozon_product" | "javascript.process_data"
+    inputs: Record<string, any>;
+    run_if?: string; // Conditional execution expression
+    retry_count?: number;
+    timeout_seconds?: number;
 }
 
-// Условное выполнение
-{
-    "id": "deep-analysis",
-    "run_if": "{{steps.analyze.output.deep_analysis_offer.available}} == true",
-    "tool": "python.perform_deep_analysis"
+interface WorkflowDefinition {
+    id: string;
+    version: string;
+    steps: WorkflowStep[];
+    variables: Record<string, any>;
+    metadata: {
+        author: string;
+        description: string;
+        performance_targets: PerformanceTarget[];
+    };
 }
 ```
 
-**Оптимизации**:
-- **Параллельное выполнение**: одновременные AI запросы
-- **Контекстное кеширование**: LRU для переменных workflow
-- **Устойчивость к ошибкам**: graceful degradation
+**Advanced Capabilities**:
+- **Parallel Execution**: Concurrent AI requests and processing
+- **Dynamic Variables**: Template-based variable substitution
+- **Conditional Logic**: Complex branching based on previous step results
+- **Error Recovery**: Automatic retry with exponential backoff
+- **Performance Monitoring**: Built-in performance tracking
+
+**Optimizations**:
+- **LRU Caching**: Context variables cached with TTL
+- **Memory Pooling**: Reusable objects for reduced GC pressure
+- **Batch Processing**: Grouped AI requests for efficiency
+- **Graceful Degradation**: Fallback mechanisms for failed steps
 
 ### 3. Pyodide Worker и оптимизации
 

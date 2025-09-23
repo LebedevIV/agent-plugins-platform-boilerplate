@@ -1,8 +1,8 @@
-# Agent Plugins Platform
+# Agent Plugins Platform v1.0.964
 
-A comprehensive platform for developing and managing AI agent plugins with automatic internationalization and protection systems.
+Browser extension that enables Python plugin execution using Pyodide and MCP protocol with automatic internationalization and protection systems.
 
-I apologize for abandoning it for so long - personal circumstances + I was waiting for development plans https://github.com/nanobrowser/nanobrowser so as not to duplicate functionality.
+Modern development platform featuring React 19, TypeScript, Vite, and advanced AI integration capabilities.
 
 ## 🌍 **Internationalization & Protection Systems**
 
@@ -26,46 +26,98 @@ I apologize for abandoning it for so long - personal circumstances + I was waiti
 
 ## 🚀 **Quick Start**
 
-### **1. Protect .cursor Directory**
+### **System Requirements**
+- **Node.js**: ≥20.0.0
+- **PNPM**: ≥10.11.0
+- **Modern Browser**: Chrome/Firefox with extension support
+
+### **1. Installation & Setup**
 ```bash
-# Complete protection (recommended)
-node .cursor/rules/protect-cursor.cjs protect
+# Clone repository
+git clone https://github.com/your-username/agent-plugins-platform.git
+cd agent-plugins-platform
+
+# Install dependencies
+pnpm install
+
+# Copy environment files
+pnpm copy-env
+
+# Set global environment variables
+pnpm set-global-env
+```
+
+### **2. Development**
+```bash
+# Start development server
+pnpm dev
+
+# Build for production
+pnpm build
+
+# Build for Firefox
+pnpm build:firefox
+
+# Create distribution packages
+pnpm zip
+```
+
+### **3. Cursor Protection System**
+```bash
+# Complete .cursor protection (recommended)
+pnpm protect-cursor
 
 # Check protection status
-node .cursor/rules/protect-cursor.cjs check
+pnpm check-cursor
 
-# Install protection system
-node .cursor/rules/protect-cursor.cjs install
+# Install Git hooks for automatic protection
+pnpm install-cursor-hooks
 ```
 
-### **2. Save Context in English**
+### **4. Testing & Quality**
 ```bash
-# Save context with automatic translation
-node .cursor/rules/save-context.cjs save
+# Run type checking
+pnpm type-check
 
-# Only translate without committing
-node .cursor/rules/save-context.cjs translate-only
+# Lint code
+pnpm lint
+
+# Fix linting issues
+pnpm lint:fix
+
+# Format code
+pnpm format
+
+# Run end-to-end tests
+pnpm e2e
 ```
 
-### **3. Create Rules with Auto Translation**
-```bash
-# Create rule with automatic translation
-node .cursor/rules/create-rule.cjs "создай правило для архитектуры"
+## 🏗️ **Architecture & Technology Stack**
 
-# Interactive mode for guided creation
-node .cursor/rules/auto-translate-requests.cjs interactive
-```
+### **Core Technologies**
+- **Browser Extension**: Chrome/Firefox extension with Manifest V3
+- **Python Runtime**: Pyodide (Python in WebAssembly)
+- **MCP Protocol**: Model Context Protocol for AI agent communication
+- **Frontend Framework**: React 19 with TypeScript
+- **Build System**: Vite with SWC for fast development
+- **Package Manager**: PNPM with workspace support
+- **Monorepo**: Turbo for orchestrating multiple packages
 
-### **4. Use NPM Scripts**
-```bash
-npm run protect-cursor    # Complete .cursor protection
-npm run check-cursor      # Check .cursor status
-npm run install-cursor-hooks # Install Git hooks
-npm run create-rule       # Create rule with auto translation
-npm run interactive-rules # Interactive rule creation
-```
+### **AI Integration**
+- **Plugin System**: Extensible architecture for AI agents
+- **Context Management**: Automatic translation and protection
+- **Workflow Engine**: Declarative task execution with conditional logic
+- **Memory Management**: LRU caching and object pooling
+- **Batch Processing**: Optimized AI request grouping
 
-## 🛡️ **Protection Features**
+### **Development Features**
+- **Hot Reload**: Instant updates during development
+- **Type Safety**: Full TypeScript support
+- **Code Quality**: ESLint, Prettier, and automated formatting
+- **Testing**: End-to-end testing framework
+- **Version Management**: Automated version bumping
+
+## 🛡️ **Protection & Security Features**
 
 ### **For .cursor Directory**
 - ✅ **Automatic translation** of all files to English
@@ -87,6 +139,32 @@ npm run interactive-rules # Interactive rule creation
 - ✅ **Command-line interface** for quick creation
 
 ## 📋 **Available Commands**
+
+### **Development Commands**
+- `pnpm dev` - Start development server with hot reload
+- `pnpm build` - Build for production with version update
+- `pnpm build:firefox` - Build for Firefox
+- `pnpm zip` - Create distribution packages
+- `pnpm type-check` - Run TypeScript type checking
+- `pnpm lint` - Lint code for quality issues
+- `pnpm lint:fix` - Automatically fix linting issues
+- `pnpm format` - Format code with Prettier
+
+### **Cursor Protection Commands**
+- `pnpm protect-cursor` - Complete .cursor directory protection
+- `pnpm check-cursor` - Check protection status
+- `pnpm install-cursor-hooks` - Install Git hooks for automatic protection
+
+### **Environment Commands**
+- `pnpm copy-env` - Copy environment configuration files
+- `pnpm set-global-env` - Set global environment variables
+- `pnpm update-version` - Update project version
+
+### **Testing Commands**
+- `pnpm e2e` - Run end-to-end tests
+- `pnpm e2e:firefox` - Run tests for Firefox build
+
+### **Natural Language Commands**
 
 ### **Context Management**
 - `Сохрани контекст` - Save context in English (automatic translation)
@@ -127,27 +205,28 @@ npm run interactive-rules # Interactive rule creation
 ## 📁 **File Structure**
 
 ```
-.cursor/
-├── rules/
-│   ├── cursor-protector.cjs           # Main translation engine
-│   ├── cursor-git-hook.cjs            # Git hooks
-│   ├── protect-cursor.cjs             # Protection manager
-│   ├── context-translator.cjs         # Context translator
-│   ├── request-translator.cjs         # Request translator
-│   ├── auto-translate-requests.cjs    # Interactive system
-│   ├── create-rule.cjs                # Quick rule creator
-│   ├── command-sync.cjs               # Command synchronization
-│   ├── save-context.cjs               # Context saver
-│   └── doc/                           # Documentation
-├── backup/                            # Backup directory
-└── [protected files]                  # All files in English
+agent-plugins-platform/
+├── .cursor/                           # Cursor protection system
+│   ├── rules/                         # Protection scripts
+│   ├── backup/                        # Translation backups
+│   └── [protected files]              # All files in English
+├── memory-bank/                       # Project knowledge base
+│   ├── core/                          # Core documentation
+│   └── [other memory-bank files]      # Specialized docs
+├── chrome-extension/                  # Main extension code
+├── platform-core/                     # Core platform logic
+├── packages/                          # Shared packages
+├── docs/                              # Documentation
+├── bash-scripts/                      # Build and utility scripts
+├── ProjectGraphAgent/                 # Project control system
+└── [config files]                     # Package.json, tsconfig, etc.
 
-memory-bank/
-├── core/
-│   ├── activeContext.md               # Active context (English)
-│   ├── progress.md                    # Progress tracking (English)
-│   └── backup/                        # Context backups
-└── [other memory-bank files]
+Core Components:
+├── chrome-extension/public/plugins/   # Python plugins (Pyodide)
+├── core/                              # Core JavaScript modules
+├── bridge/                            # Pyodide communication bridge
+├── src/                               # Source code
+└── tests/                             # Test suites
 ```
 
 ## 🌟 **Key Benefits**
@@ -231,26 +310,108 @@ node .cursor/rules/request-translator.cjs analyze "your request"
 ls -la .git/hooks/
 ```
 
-## 🎯 **Future Enhancements**
+## 🔌 **Plugin System**
 
-- **API integration** with translation services
-- **Machine learning** for better translations
-- **Real-time translation** during editing
-- **Multi-language support** for other languages
-- **IDE plugins** for real-time protection
+### **Python Plugins with Pyodide**
+- **Full Python runtime** in browser via WebAssembly
+- **MCP Protocol** for seamless AI agent communication
+- **Workflow Engine** with declarative task definitions
+- **Batch Processing** for optimized AI requests
+- **Memory Management** with LRU caching and pooling
+
+### **Available Plugins**
+- **Ozon Analyzer** - E-commerce data analysis and optimization
+- **Extensible Architecture** - Easy plugin development
+- **Hot Reload** - Instant plugin updates during development
+- **Error Handling** - Robust error recovery and logging
+
+### **Plugin Development**
+```bash
+# Plugin structure
+chrome-extension/public/plugins/
+├── [plugin-name]/
+│   ├── mcp_server.py          # Main plugin logic
+│   ├── workflow.json          # Declarative workflow
+│   ├── requirements.txt       # Python dependencies
+│   └── [plugin files]         # Additional resources
+```
+
+## 🔮 **Current Features & Roadmap**
+
+### **Implemented Features**
+- ✅ **React 19 + TypeScript** - Modern frontend stack
+- ✅ **Pyodide Integration** - Python in browser
+- ✅ **MCP Protocol** - AI agent communication
+- ✅ **Workflow Engine** - Declarative task execution
+- ✅ **Cursor Protection** - Automatic translation system
+- ✅ **Multi-browser Support** - Chrome and Firefox
+- ✅ **Development Tools** - Hot reload, linting, formatting
+- ✅ **Testing Framework** - End-to-end testing
+- ✅ **Version Management** - Automated versioning
+- ✅ **Performance Optimization** - Caching, batching, pooling
+
+### **Planned Enhancements**
+- 🔄 **Enhanced AI Integration** - More AI service providers
+- 🔄 **Plugin Marketplace** - Community plugin sharing
+- 🔄 **Advanced Debugging** - Plugin debugging tools
+- 🔄 **Performance Monitoring** - Real-time metrics
+- 🔄 **Mobile Support** - Extension for mobile browsers
 
 ## 🤝 **Contributing**
 
-This platform is designed for international collaboration. All contributions should:
-- Use English for all documentation and code comments
-- Follow the established protection systems
-- Maintain AI/LLM compatibility
-- Support global accessibility
+We welcome contributions from the international developer community! To contribute:
 
-## 📄 **License**
+### **Development Setup**
+```bash
+# Fork the repository
+git clone https://github.com/your-username/agent-plugins-platform.git
+cd agent-plugins-platform
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+# Install dependencies
+pnpm install
+
+# Set up development environment
+pnpm copy-env && pnpm set-global-env
+
+# Start development
+pnpm dev
+```
+
+### **Contribution Guidelines**
+- **Language**: Use English for all code, documentation, and comments
+- **Protection**: Follow the Cursor protection system for all contributions
+- **Testing**: Add tests for new features and ensure existing tests pass
+- **Documentation**: Update documentation for any changes
+- **Commits**: Use conventional commit messages
+- **AI Compatibility**: Ensure all content is AI/LLM friendly
+
+### **Plugin Development**
+```bash
+# Create new plugin structure
+mkdir chrome-extension/public/plugins/your-plugin-name
+cd chrome-extension/public/plugins/your-plugin-name
+
+# Add mcp_server.py with your plugin logic
+# Add workflow.json for declarative workflows
+# Add requirements.txt for Python dependencies
+```
+
+## 📄 **License & Repository**
+
+- **License**: MIT License - see LICENSE file for details
+- **Repository**: https://github.com/your-username/agent-plugins-platform.git
+- **Issues**: Report bugs and request features via GitHub Issues
+- **Discussions**: Join community discussions on GitHub Discussions
+
+## 🎯 **Support & Community**
+
+- **Documentation**: Comprehensive guides in `/docs` folder
+- **Examples**: Sample plugins and usage examples
+- **Troubleshooting**: Common issues and solutions in documentation
+- **Community**: International developer community support
 
 ---
 
-**Ready for international collaboration with automatic AI/LLM compatibility!** 🌍🤖
+**🌍🤖 Modern AI Agent Platform - Ready for International Collaboration!**
+
+*Version 1.0.964 • React 19 • TypeScript • Pyodide • MCP Protocol • Multi-browser Support*
