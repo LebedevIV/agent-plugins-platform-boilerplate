@@ -166,8 +166,15 @@ const sendHtmlDirectly = async (
 ): Promise<void> => {
   console.log('[background][DIRECT_TRANSMISSION] Sending HTML directly to offscreen for transfer:', transferId);
   console.log('[background][DIRECT_TRANSMISSION] HTML size:', html.length, 'chars');
+  console.log('[background][DIRECT_TRANSMISSION] Transmission mode: DIRECT');
 
   try {
+    // Проверяем размер HTML для прямой передачи
+    if (html.length > CHUNK_SIZE * MAX_CHUNKS) {
+      console.warn('[background][DIRECT_TRANSMISSION] ⚠️ HTML too large for direct transmission, using chunks instead');
+      throw new Error('HTML слишком большой для прямой передачи, используем чанки');
+    }
+
     // Создаем сообщение для прямой передачи HTML
     const directMessage = {
       type: 'HTML_DIRECT',
@@ -197,6 +204,25 @@ const sendHtmlDirectly = async (
     }
     console.log('[background][DIRECT_TRANSMISSION] Direct HTML transmission completed successfully');
 
+    // Ждем подтверждения получения HTML от offscreen
+    console.log('[background][DIRECT_TRANSMISSION] Waiting for HTML receipt confirmation...');
+    const confirmResponse = await chrome.runtime.sendMessage({
+      type: 'CONFIRM_HTML_RECEIPT',
+      transferId,
+      pluginId,
+      pageKey,
+      requestId,
+      timestamp: Date.now()
+    });
+
+    if (chrome.runtime.lastError) {
+      console.warn('[background][DIRECT_TRANSMISSION] Confirmation failed:', chrome.runtime.lastError.message);
+    } else if (confirmResponse?.confirmed) {
+      console.log('[background][DIRECT_TRANSMISSION] ✅ HTML receipt confirmed by offscreen');
+    } else {
+      console.warn('[background][DIRECT_TRANSMISSION] ⚠️ HTML receipt not confirmed by offscreen');
+    }
+
     // Запускаем workflow в offscreen document с прямой передачей
     try {
       // Получить API ключ для передачи в offscreen
@@ -208,7 +234,7 @@ const sendHtmlDirectly = async (
         console.warn('[background][DIRECT_TRANSMISSION] ⚠️ Failed to get API key:', keyError);
       }
 
-      await executeWorkflowInOffscreen(pluginId, pageKey, transferId, requestId, false, undefined, geminiApiKey);
+      await executeWorkflowInOffscreen(pluginId, pageKey, transferId, requestId, false, html, geminiApiKey);
       console.log('[background][DIRECT_TRANSMISSION] Workflow execution initiated successfully');
     } catch (workflowError) {
       console.error('[background][DIRECT_TRANSMISSION] Failed to execute workflow:', workflowError);
@@ -217,7 +243,9 @@ const sendHtmlDirectly = async (
 
   } catch (error) {
     console.error('[background][DIRECT_TRANSMISSION] Failed to send HTML directly:', error);
-    throw error;
+    // Если прямая передача не удалась, пробуем отправить чанками как fallback
+    console.log('[background][DIRECT_TRANSMISSION] Direct transmission failed, falling back to chunked transmission');
+    throw error; // Передаем ошибку дальше для обработки в RUN_WORKFLOW
   }
 };
 
@@ -1368,24 +1396,84 @@ chrome.runtime.onMessage.addListener(
           return true;
         }
 
-        // ШАГ 5: ЧИТАТЬ НАСТРОЙКУ htmlTransmissionMode ИЗ STORAGE
-        console.log('[background][RUN_WORKFLOW] Reading htmlTransmissionMode setting...');
+        // ШАГ 5: ЧИТАТЬ НАСТРОЙКУ htmlTransmissionMode ИЗ STORAGE С ДЕТАЛЬНЫМ ЛОГИРОВАНИЕМ
+        console.log('[background][RUN_WORKFLOW] 🔍 Reading htmlTransmissionMode setting...');
+        console.log('[background][RUN_WORKFLOW] 📊 Timestamp:', new Date().toISOString());
 
         let htmlTransmissionMode = 'chunks'; // По умолчанию используем chunks
         try {
+          console.log('[background][RUN_WORKFLOW] 📦 Executing chrome.storage.local.get() for htmlTransmissionMode...');
+
           // Читать настройки напрямую из chrome.storage.local, как делает UI
           const settings = await chrome.storage.local.get(['htmlTransmissionMode']);
+
+          console.log('[background][RUN_WORKFLOW] 📊 FULL STORAGE READ RESULT:');
+          console.log('[background][RUN_WORKFLOW] Raw settings object:', settings);
+          console.log('[background][RUN_WORKFLOW] Keys in storage:', Object.keys(settings));
+          console.log('[background][RUN_WORKFLOW] htmlTransmissionMode value from storage:', settings.htmlTransmissionMode);
+          console.log('[background][RUN_WORKFLOW] Type of htmlTransmissionMode value:', typeof settings.htmlTransmissionMode);
+
           htmlTransmissionMode = settings.htmlTransmissionMode || 'chunks';
 
-          console.log('[background][RUN_WORKFLOW] htmlTransmissionMode setting:', htmlTransmissionMode);
+          console.log('[background][RUN_WORKFLOW] 🔍 DETAILED ANALYSIS:');
+          console.log('[background][RUN_WORKFLOW] - Final htmlTransmissionMode value:', htmlTransmissionMode);
+          console.log('[background][RUN_WORKFLOW] - Final htmlTransmissionMode type:', typeof htmlTransmissionMode);
+          console.log('[background][RUN_WORKFLOW] - Is htmlTransmissionMode "direct"?', htmlTransmissionMode === 'direct');
+          console.log('[background][RUN_WORKFLOW] - Is htmlTransmissionMode "chunks"?', htmlTransmissionMode === 'chunks');
+          console.log('[background][RUN_WORKFLOW] - Using transmission mode:', htmlTransmissionMode, '(fallback to chunks if not set)');
+
+          // Проверяем все ключи в storage для диагностики
+          console.log('[background][RUN_WORKFLOW] 🔍 CHECKING ALL STORAGE KEYS:');
+          const allStorage = await chrome.storage.local.get(null);
+          console.log('[background][RUN_WORKFLOW] Total keys in storage:', Object.keys(allStorage).length);
+          console.log('[background][RUN_WORKFLOW] All storage keys:', Object.keys(allStorage));
+
+          // Ищем любые ключи, связанные с htmlTransmission
+          const htmlTransmissionKeys = Object.keys(allStorage).filter(key =>
+            key.toLowerCase().includes('html') ||
+            key.toLowerCase().includes('transmission') ||
+            key.toLowerCase().includes('mode')
+          );
+          console.log('[background][RUN_WORKFLOW] HTML/Transmission related keys found:', htmlTransmissionKeys);
+
+          // Логируем значения этих ключей
+          htmlTransmissionKeys.forEach(key => {
+            console.log(`[background][RUN_WORKFLOW] ${key}:`, allStorage[key]);
+          });
+
         } catch (settingsError) {
-          console.warn('[background][RUN_WORKFLOW] Failed to read htmlTransmissionMode, using default:', settingsError);
+          console.error('[background][RUN_WORKFLOW] ❌ ERROR reading htmlTransmissionMode:');
+          console.error('[background][RUN_WORKFLOW] Error message:', (settingsError as Error).message);
+          console.error('[background][RUN_WORKFLOW] Error stack:', (settingsError as Error).stack);
+          console.error('[background][RUN_WORKFLOW] Error timestamp:', new Date().toISOString());
+          console.warn('[background][RUN_WORKFLOW] Fallback to chunks mode due to error');
         }
 
-        // ШАГ 6: УСЛОВНАЯ ЛОГИКА ВЫБОРА МЕТОДА ПЕРЕДАЧИ
+        // ШАГ 6: УСЛОВНАЯ ЛОГИКА ВЫБОРА МЕТОДА ПЕРЕДАЧИ С ДЕТАЛЬНЫМ ЛОГИРОВАНИЕМ
         console.log('[background][RUN_WORKFLOW] ===== CHOOSING TRANSMISSION METHOD =====');
-        console.log('[background][RUN_WORKFLOW] HTML size:', pageHtml.length, 'chars');
-        console.log('[background][RUN_WORKFLOW] Transmission mode:', htmlTransmissionMode);
+        console.log('[background][RUN_WORKFLOW] 📊 HTML size:', pageHtml.length, 'chars');
+        console.log('[background][RUN_WORKFLOW] 📊 Transmission mode:', htmlTransmissionMode);
+        console.log('[background][RUN_WORKFLOW] 📊 Timestamp:', new Date().toISOString());
+
+        // Дополнительное логирование fallback логики
+        if (htmlTransmissionMode === 'chunks') {
+          console.log('[background][RUN_WORKFLOW] 🔄 FALLBACK LOGIC ANALYSIS:');
+          console.log('[background][RUN_WORKFLOW] - htmlTransmissionMode is "chunks" (default/fallback)');
+          console.log('[background][RUN_WORKFLOW] - This could mean:');
+          console.log('[background][RUN_WORKFLOW]   1. Setting was not found in storage');
+          console.log('[background][RUN_WORKFLOW]   2. Setting was explicitly set to "chunks"');
+          console.log('[background][RUN_WORKFLOW]   3. Setting read failed and default was used');
+          console.log('[background][RUN_WORKFLOW]   4. Storage is empty or corrupted');
+          console.log('[background][RUN_WORKFLOW] - Expected value should be "direct" if set in options');
+        } else if (htmlTransmissionMode === 'direct') {
+          console.log('[background][RUN_WORKFLOW] ✅ CORRECT SETTING DETECTED:');
+          console.log('[background][RUN_WORKFLOW] - htmlTransmissionMode is "direct" (user preference)');
+          console.log('[background][RUN_WORKFLOW] - This indicates setting was read correctly from storage');
+        } else {
+          console.log('[background][RUN_WORKFLOW] ⚠️ UNEXPECTED VALUE:');
+          console.log('[background][RUN_WORKFLOW] - htmlTransmissionMode has unexpected value:', htmlTransmissionMode);
+          console.log('[background][RUN_WORKFLOW] - Expected "direct" or "chunks", got:', typeof htmlTransmissionMode);
+        }
 
         // ШАГ 7: Обеспечить наличие Offscreen Document
         if (!offscreenSupported()) {
@@ -1419,24 +1507,56 @@ chrome.runtime.onMessage.addListener(
         if (htmlTransmissionMode === 'direct') {
           // ПРЯМАЯ ПЕРЕДАЧА HTML
           console.log('[background][RUN_WORKFLOW] 📨 Using DIRECT HTML transmission');
-          await sendHtmlDirectly(msg.pluginId, pageKey, pageHtml, requestId, transferId);
-          console.log('[background][RUN_WORKFLOW] ✅ Direct transmission completed');
+          console.log('[background][RUN_WORKFLOW] HTML size:', pageHtml.length, 'chars');
 
-          // CONFIRMATION: Проверяем успешность передачи
           try {
-            const confirmResponse = await chrome.runtime.sendMessage({
-              type: 'CONFIRM_HTML_RECEIPT',
-              transferId,
-              pluginId: msg.pluginId,
-              timestamp: Date.now()
-            });
-            if (chrome.runtime.lastError) {
-              console.warn('[background][RUN_WORKFLOW] Confirmation failed:', chrome.runtime.lastError.message);
-            } else if (confirmResponse?.confirmed) {
-              console.log('[background][RUN_WORKFLOW] ✅ HTML receipt confirmed by offscreen');
-            }
-          } catch (confirmError) {
-            console.warn('[background][RUN_WORKFLOW] Confirmation check failed:', confirmError);
+            await sendHtmlDirectly(msg.pluginId, pageKey, pageHtml, requestId, transferId);
+            console.log('[background][RUN_WORKFLOW] ✅ Direct transmission completed');
+          } catch (directError) {
+            console.log('[background][RUN_WORKFLOW] ❌ Direct transmission failed, switching to chunked mode');
+            console.log('[background][RUN_WORKFLOW] Error:', directError);
+            console.log('[background][RUN_WORKFLOW] 📊 Fallback timestamp:', new Date().toISOString());
+            console.log('[background][RUN_WORKFLOW] 🔄 FALLBACK ANALYSIS:');
+            console.log('[background][RUN_WORKFLOW] - Direct transmission failed with error:', (directError as Error).message);
+            console.log('[background][RUN_WORKFLOW] - Falling back to chunked transmission');
+            console.log('[background][RUN_WORKFLOW] - This is expected behavior when direct mode fails');
+
+            // Fallback: Переходим на чанки при неудаче прямой передачи
+            console.log('[background][RUN_WORKFLOW] 📦 Using CHUNKED HTML transmission as fallback');
+            const chunkingResult = createChunks(pageHtml, CHUNK_SIZE);
+            console.log('[background][RUN_WORKFLOW] Created chunks:', chunkingResult.totalChunks);
+
+            // Храним transfer для отслеживания
+            const transferState = {
+              chunks: chunkingResult.chunks,
+              received: new Set<number>(),
+              totalChunks: chunkingResult.totalChunks,
+              metadata: {
+                pluginId: msg.pluginId,
+                pageKey: pageKey,
+                requestId: requestId,
+                totalSize: chunkingResult.totalSize,
+                timestamp: Date.now(),
+                fallbackFromDirect: true
+              },
+              resolve: () => {
+                console.log(`[CHUNKING] Transfer ${transferId} completed successfully`);
+                activeTransfers.delete(transferId);
+              },
+              reject: (error: any) => {
+                console.error(`[CHUNKING] Transfer ${transferId} failed:`, error);
+                activeTransfers.delete(transferId);
+              },
+              timeout: 0,
+              createdAt: Date.now(),
+              lastAccessed: Date.now()
+            };
+
+            activeTransfers.set(transferId, transferState);
+
+            // Отправляем chunks
+            await sendChunksToOffscreen(transferId, chunkingResult.chunks, transferState.metadata);
+            console.log('[background][RUN_WORKFLOW] ✅ Chunked transmission completed (fallback mode)');
           }
         } else {
           // CHUNKED ПЕРЕДАЧА HTML
@@ -2231,14 +2351,62 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
         throw new Error('Плагин отключен');
       }
 
-      // ЧИТАТЬ НАСТРОЙКУ htmlTransmissionMode ИЗ STORAGE
-      let htmlTransmissionMode = 'chunks';
+      // ЧИТАТЬ НАСТРОЙКУ htmlTransmissionMode ИЗ STORAGE С ДЕТАЛЬНЫМ ЛОГИРОВАНИЕМ
+      console.log('[background][PORT][RUN_WORKFLOW] 🔍 Reading htmlTransmissionMode setting via port...');
+      console.log('[background][PORT][RUN_WORKFLOW] 📊 Timestamp:', new Date().toISOString());
+
+      let htmlTransmissionMode = 'chunks'; // Унифицировано с основным обработчиком
       try {
+        console.log('[background][PORT][RUN_WORKFLOW] 📦 Executing chrome.storage.local.get() for htmlTransmissionMode...');
+
         // Читать настройки напрямую из chrome.storage.local, как делает UI
         const settings = await chrome.storage.local.get(['htmlTransmissionMode']);
+
+        console.log('[background][PORT][RUN_WORKFLOW] 📊 FULL STORAGE READ RESULT:');
+        console.log('[background][PORT][RUN_WORKFLOW] Raw settings object:', settings);
+        console.log('[background][PORT][RUN_WORKFLOW] Keys in storage:', Object.keys(settings));
+        console.log('[background][PORT][RUN_WORKFLOW] htmlTransmissionMode value from storage:', settings.htmlTransmissionMode);
+        console.log('[background][PORT][RUN_WORKFLOW] Type of htmlTransmissionMode value:', typeof settings.htmlTransmissionMode);
+
         htmlTransmissionMode = settings.htmlTransmissionMode || 'chunks';
+
+        console.log('[background][PORT][RUN_WORKFLOW] 🔍 DETAILED ANALYSIS:');
+        console.log('[background][PORT][RUN_WORKFLOW] - Final htmlTransmissionMode value:', htmlTransmissionMode);
+        console.log('[background][PORT][RUN_WORKFLOW] - Final htmlTransmissionMode type:', typeof htmlTransmissionMode);
+        console.log('[background][PORT][RUN_WORKFLOW] - Is htmlTransmissionMode "direct"?', htmlTransmissionMode === 'direct');
+        console.log('[background][PORT][RUN_WORKFLOW] - Is htmlTransmissionMode "chunks"?', htmlTransmissionMode === 'chunks');
+        console.log('[background][PORT][RUN_WORKFLOW] - Using transmission mode:', htmlTransmissionMode, '(fallback to chunks if not set)');
+
+        // Проверяем все ключи в storage для диагностики
+        console.log('[background][PORT][RUN_WORKFLOW] 🔍 CHECKING ALL STORAGE KEYS:');
+        const allStorage = await chrome.storage.local.get(null);
+        console.log('[background][PORT][RUN_WORKFLOW] Total keys in storage:', Object.keys(allStorage).length);
+        console.log('[background][PORT][RUN_WORKFLOW] All storage keys:', Object.keys(allStorage));
+
+        // Ищем любые ключи, связанные с htmlTransmission
+        const htmlTransmissionKeys = Object.keys(allStorage).filter(key =>
+          key.toLowerCase().includes('html') ||
+          key.toLowerCase().includes('transmission') ||
+          key.toLowerCase().includes('mode')
+        );
+        console.log('[background][PORT][RUN_WORKFLOW] HTML/Transmission related keys found:', htmlTransmissionKeys);
+
+        // Логируем значения этих ключей
+        htmlTransmissionKeys.forEach(key => {
+          console.log(`[background][PORT][RUN_WORKFLOW] ${key}:`, allStorage[key]);
+        });
+
       } catch (settingsError) {
-        console.warn('[background][PORT][RUN_WORKFLOW] Failed to read htmlTransmissionMode:', settingsError);
+        console.error('[background][PORT][RUN_WORKFLOW] ❌ ERROR reading htmlTransmissionMode:');
+        console.error('[background][PORT][RUN_WORKFLOW] Error message:', (settingsError as Error).message);
+        console.error('[background][PORT][RUN_WORKFLOW] Error stack:', (settingsError as Error).stack);
+        console.error('[background][PORT][RUN_WORKFLOW] Error timestamp:', new Date().toISOString());
+        console.warn('[background][PORT][RUN_WORKFLOW] Fallback to chunks mode due to error');
+        console.warn('[background][PORT][RUN_WORKFLOW] Error details:', {
+          message: (settingsError as Error).message,
+          stack: (settingsError as Error).stack,
+          timestamp: Date.now()
+        });
       }
 
       // Обеспечить наличие Offscreen Document
@@ -2262,7 +2430,32 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
         return { success: false, error: 'Offscreen document creation failed' };
       }
 
-      // ВЫПОЛНИТЬ ПЕРЕДАЧУ В ЗАВИСИМОСТИ ОТ НАСТРОЙКИ
+      // ВЫПОЛНИТЬ ПЕРЕДАЧУ В ЗАВИСИМОСТИ ОТ НАСТРОЙКИ С ДЕТАЛЬНЫМ ЛОГИРОВАНИЕМ
+      console.log('[background][PORT][RUN_WORKFLOW] ===== CHOOSING TRANSMISSION METHOD =====');
+      console.log('[background][PORT][RUN_WORKFLOW] 📊 HTML size:', pageHtml.length, 'chars');
+      console.log('[background][PORT][RUN_WORKFLOW] 📊 Transmission mode:', htmlTransmissionMode);
+      console.log('[background][PORT][RUN_WORKFLOW] 📊 Timestamp:', new Date().toISOString());
+
+      // Дополнительное логирование fallback логики
+      if (htmlTransmissionMode === 'chunks') {
+        console.log('[background][PORT][RUN_WORKFLOW] 🔄 FALLBACK LOGIC ANALYSIS:');
+        console.log('[background][PORT][RUN_WORKFLOW] - htmlTransmissionMode is "chunks" (default/fallback)');
+        console.log('[background][PORT][RUN_WORKFLOW] - This could mean:');
+        console.log('[background][PORT][RUN_WORKFLOW]   1. Setting was not found in storage');
+        console.log('[background][PORT][RUN_WORKFLOW]   2. Setting was explicitly set to "chunks"');
+        console.log('[background][PORT][RUN_WORKFLOW]   3. Setting read failed and default was used');
+        console.log('[background][PORT][RUN_WORKFLOW]   4. Storage is empty or corrupted');
+        console.log('[background][PORT][RUN_WORKFLOW] - Expected value should be "direct" if set in options');
+      } else if (htmlTransmissionMode === 'direct') {
+        console.log('[background][PORT][RUN_WORKFLOW] ✅ CORRECT SETTING DETECTED:');
+        console.log('[background][PORT][RUN_WORKFLOW] - htmlTransmissionMode is "direct" (user preference)');
+        console.log('[background][PORT][RUN_WORKFLOW] - This indicates setting was read correctly from storage');
+      } else {
+        console.log('[background][PORT][RUN_WORKFLOW] ⚠️ UNEXPECTED VALUE:');
+        console.log('[background][PORT][RUN_WORKFLOW] - htmlTransmissionMode has unexpected value:', htmlTransmissionMode);
+        console.log('[background][PORT][RUN_WORKFLOW] - Expected "direct" or "chunks", got:', typeof htmlTransmissionMode);
+      }
+
       const requestId = message.requestId || `workflow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const transferId = `${requestId}_html_${Date.now()}`;
 

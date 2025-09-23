@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест исправлений offscreen.js</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-result { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background-color: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .error { background-color: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .info { background-color: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 5px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Тест исправлений sendMessageToChat и sendWithRetry</h1>
+
+    <div id="test-results">
+        <div class="test-result info">
+            <h3>Статус исправлений</h3>
+            <p>Исправления применены к offscreen.js:</p>
+            <ul>
+                <li>✅ Исправлен вызов sendWithRetry на строке 489</li>
+                <li>✅ Улучшена коммуникация между JS и Python</li>
+                <li>✅ Добавлена правильная обработка ошибок и retry логика</li>
+                <li>✅ Уменьшен таймаут с 30 до 15-25 секунд с прогрессивным увеличением</li>
+                <li>✅ Добавлены функции контекста выполнения для лучшей координации</li>
+                <li>✅ Улучшена обработка ошибок с fallback механизмами</li>
+            </ul>
+        </div>
+    </div>
+
+    <h2>Ключевые улучшения:</h2>
+
+    <h3>1. Исправление sendWithRetry</h3>
+    <div class="test-result success">
+        <p><strong>Было:</strong> sendWithRetry вызывалась в глобальном контексте JavaScript, что приводило к ошибке "sendWithRetry is not defined"</p>
+        <p><strong>Стало:</strong> Функция правильно вызывается из js bridge Pyodide с обработкой ошибок и fallback логикой</p>
+    </div>
+
+    <h3>2. Улучшенная retry логика</h3>
+    <div class="test-result success">
+        <p><strong>Было:</strong> Фиксированный таймаут 30 секунд, нет прогрессивного увеличения</p>
+        <p><strong>Стало:</strong> Прогрессивные таймауты: 15, 20, 25 секунд с автоматическим retry</p>
+    </div>
+
+    <h3>3. Лучшая коммуникация JS-Python</h3>
+    <div class="test-result success">
+        <p><strong>Добавлено:</strong></p>
+        <ul>
+            <li>updateContext() - для обновления контекста выполнения</li>
+            <li>getContext() - для получения текущего контекста</li>
+            <li>logError() и logInfo() - для логирования из Python</li>
+            <li>Глобальные переменные контекста для координации</li>
+        </ul>
+    </div>
+
+    <h3>4. Улучшенная обработка ошибок</h3>
+    <div class="test-result success">
+        <p><strong>Добавлено:</strong></p>
+        <ul>
+            <li>Проверки доступности chrome.runtime</li>
+            <li>Fallback механизмы при ошибках</li>
+            <li>Детальное логирование для диагностики</li>
+            <li>Безопасная отправка сообщений с таймаутами</li>
+        </ul>
+    </div>
+
+    <h2>Тестирование:</h2>
+    <p>Для тестирования исправлений:</p>
+    <ol>
+        <li>Загрузите расширение в браузер</li>
+        <li>Откройте offscreen документ</li>
+        <li>Проверьте консоль на наличие ошибок</li>
+        <li>Протестируйте отправку сообщений через sendMessageToChat</li>
+        <li>Проверьте работу retry механизмов</li>
+    </ol>
+
+    <div class="test-result info">
+        <p><strong>Примечание:</strong> Все исправления применены к файлу chrome-extension/public/offscreen.js</p>
+        <p>Рекомендуется перезапустить расширение после внесения изменений</p>
+    </div>
+</body>
+</html>

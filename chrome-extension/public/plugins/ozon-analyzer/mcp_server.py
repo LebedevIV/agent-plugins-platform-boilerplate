@@ -2279,68 +2279,175 @@ def analyze_ozon_product() -> Dict[str, Any]:
             chat_message(f"Ошибка преобразования метаданных: {e}")
             raise ValueError(f"Метаданные должны быть числами: {e}")
 
-        # Шаг 2: Чтение всех чанков из Python globals
-        console_log(f"Чтение {chunk_count} чанков из Python globals")
-        chunks = []
-        total_chunks_size = 0
-        chunk_diagnostics = []  # Для сбора диагностики всех чанков
+        # Шаг 2: Определение режима передачи и чтение данных
+        console_log("Определение режима передачи данных...")
 
-        for i in range(chunk_count):
-            chunk_key = f'page_html_chunk_{i}'
-            console_log(f"===== ЧТЕНИЕ ЧАНКА {i} =====")
-            console_log(f"Ключ чанка: {chunk_key}")
+        # Проверяем, есть ли метаданные о режиме передачи
+        transmission_mode = 'chunks'  # По умолчанию
+        direct_html_data = None
 
-            # Чтение чанка через globals()
+        try:
+            # Проверяем наличие прямого HTML (режим 'direct')
+            direct_html_data = globals().get('page_html_direct', None)
+            if direct_html_data and isinstance(direct_html_data, str) and len(direct_html_data) > 100:
+                transmission_mode = 'direct'
+                console_log(f"✅ Обнаружен режим DIRECT передачи, размер HTML: {len(direct_html_data)} символов")
+                console_log(f"📊 Режим передачи: {transmission_mode} - HTML передан целиком")
+                console_log(f"📋 Проверка качества прямого HTML: {type(direct_html_data)}")
+            else:
+                console_log(f"📦 Режим CHUNKS передачи, количество чанков: {chunk_count}")
+                console_log(f"📊 Режим передачи: {transmission_mode} - HTML разбит на {chunk_count} чанков")
+                console_log(f"📋 Прямой HTML не найден или некорректен: {direct_html_data}")
+        except Exception as e:
+            console_log(f"⚠️ Не удалось определить режим передачи: {e}")
+            console_log(f"📋 Диагностика ошибки: {type(e).__name__}: {e}")
+
+        # Логируем выбранный режим
+        console_log(f"🎯 ИСПОЛЬЗУЕМЫЙ РЕЖИМ ПЕРЕДАЧИ: {transmission_mode}")
+
+        # Координация режимов передачи
+        console_log("🔄 Координация режимов передачи данных...")
+        if transmission_mode == 'direct':
+            console_log("📨 Режим DIRECT: Ожидание прямой передачи HTML")
+            console_log("📋 Координация: Проверяем наличие page_html_direct в globals")
+            console_log("📋 Состояние: Ожидание завершения прямой передачи")
+
+            # Проверяем метаданные прямой передачи
             try:
-                chunk = globals()[chunk_key]
-                console_log(f"{chunk_key} прочитан: тип={type(chunk).__name__}, длина={len(str(chunk))} символов")
-            except KeyError as e:
-                chat_message(f"{chunk_key} отсутствует в globals(): {e}")
-                raise ValueError(f"{chunk_key} отсутствует в globals(): {e}")
+                direct_metadata = globals().get('page_html_direct_metadata', {})
+                if isinstance(direct_metadata, dict):
+                    direct_size = direct_metadata.get('size', 'unknown')
+                    direct_timestamp = direct_metadata.get('timestamp', 'unknown')
+                    console_log(f"📋 Метаданные прямой передачи: размер={direct_size}, время={direct_timestamp}")
             except Exception as e:
-                chat_message(f"Ошибка чтения {chunk_key}: {e}")
-                raise ValueError(f"Ошибка чтения {chunk_key}: {e}")
+                console_log(f"⚠️ Не удалось прочитать метаданные прямой передачи: {e}")
 
-            # Дополнительная валидация
-            if chunk is None:
-                chat_message(f"Чанк {chunk_key} равен None")
-                console_log("Доступ через globals() завершен с ошибкой")
-                raise ValueError(f"Чанк {chunk_key} отсутствует в globals")
+        else:
+            console_log("📦 Режим CHUNKS: Ожидание передачи чанков")
+            console_log(f"📋 Координация: Ожидаем {chunk_count} чанков (page_html_chunk_0 до page_html_chunk_{chunk_count-1})")
+            console_log("📋 Состояние: Ожидание завершения всех чанков")
 
-            # Проверка типа и конвертация
+            # Проверяем метаданные чанковой передачи
             try:
-                if not isinstance(chunk, str):
-                    console_log(f"Конвертация чанка {i} из {type(chunk)} в строку")
-                    chunk_str = str(chunk)
-                else:
-                    chunk_str = chunk
-
-                console_log(f"Чанк {i} прочитан: тип={type(chunk).__name__}, длина={len(chunk_str)}")
-
+                chunk_metadata = globals().get('page_html_chunks_metadata', {})
+                if isinstance(chunk_metadata, dict):
+                    chunk_size = chunk_metadata.get('chunk_size', 'unknown')
+                    chunk_timestamp = chunk_metadata.get('timestamp', 'unknown')
+                    console_log(f"📋 Метаданные чанковой передачи: размер_чанка={chunk_size}, время={chunk_timestamp}")
             except Exception as e:
-                chat_message(f"Ошибка конвертации чанка {chunk_key}: {e}")
-                console_log(f"Состояние на момент ошибки: прочитано {len(chunks)} чанков")
-                raise ValueError(f"Не удалось конвертировать чанк {chunk_key}: {e}")
+                console_log(f"⚠️ Не удалось прочитать метаданные чанковой передачи: {e}")
 
-            # Проверка целостности чанка
-            if len(chunk_str.strip()) == 0:
-                console_log(f"Чанк {chunk_key} пустой после strip")
-            elif len(chunk_str) < 10:
-                console_log(f"Чанк {chunk_key} слишком короткий: {len(chunk_str)} символов")
+        console_log(f"🔄 Координация завершена для режима {transmission_mode}")
 
-            # Сохранение диагностики
-            chunk_diagnostics.append({
-                'chunk_index': i,
-                'chunk_key': chunk_key,
-                'original_type': type(chunk).__name__,
-                'final_length': len(chunk_str),
-                'method_used': 'globals()',
-                'is_empty': len(chunk_str.strip()) == 0
-            })
+        # Финальная проверка готовности данных
+        console_log("🔍 Финальная проверка готовности данных...")
+        if transmission_mode == 'direct':
+            if direct_html_data and len(direct_html_data) > 100:
+                console_log("✅ Данные готовы для обработки в режиме DIRECT")
+            else:
+                console_log("❌ Данные не готовы - прямая передача не удалась")
+                raise ValueError("Прямая передача не удалась - HTML не получен или поврежден")
+        else:
+            if chunk_count > 0 and total_length > 0:
+                console_log(f"✅ Данные готовы для обработки в режиме CHUNKS ({chunk_count} чанков)")
+            else:
+                console_log("❌ Данные не готовы - чанковая передача не удалась")
+                raise ValueError("Чанковая передача не удалась - отсутствуют чанки или метаданные")
 
-            chunks.append(chunk_str)
-            total_chunks_size += len(chunk_str)
-            console_log(f"Чанк {i} добавлен: накоплено {len(chunks)} чанков, размер={total_chunks_size} символов")
+        if transmission_mode == 'direct' and direct_html_data:
+            # Прямая передача HTML
+            console_log("📨 Обработка прямой передачи HTML")
+            console_log(f"📋 Проверка качества прямого HTML: {type(direct_html_data)}")
+
+            # Дополнительная валидация прямого HTML
+            if not isinstance(direct_html_data, str):
+                console_log(f"⚠️ Прямой HTML не является строкой: {type(direct_html_data)} - пытаемся конвертировать")
+                try:
+                    direct_html_data = str(direct_html_data)
+                    console_log("✅ Успешная конвертация в строку")
+                except Exception as e:
+                    console_log(f"❌ Не удалось конвертировать прямой HTML: {e}")
+                    raise ValueError(f"Прямой HTML не может быть преобразован в строку: {e}")
+
+            if len(direct_html_data) < 100:
+                console_log(f"⚠️ Прямой HTML слишком короткий: {len(direct_html_data)} символов")
+                console_log("🔄 Переходим на чанковый режим как fallback")
+                transmission_mode = 'chunks'
+            else:
+                page_html = direct_html_data
+                console_log(f"✅ HTML получен напрямую: {len(page_html)} символов")
+                console_log("📊 Проверка целостности прямого HTML:")
+                _check_html_integrity(page_html, "direct_transmission")
+
+        else:
+            # Чанковая передача HTML
+            console_log(f"📦 Чтение {chunk_count} чанков из Python globals")
+            chunks = []
+            total_chunks_size = 0
+            chunk_diagnostics = []  # Для сбора диагностики всех чанков
+
+            for i in range(chunk_count):
+                chunk_key = f'page_html_chunk_{i}'
+                console_log(f"===== ЧТЕНИЕ ЧАНКА {i} =====")
+                console_log(f"Ключ чанка: {chunk_key}")
+
+                # Чтение чанка через globals()
+                try:
+                    chunk = globals()[chunk_key]
+                    console_log(f"{chunk_key} прочитан: тип={type(chunk).__name__}, длина={len(str(chunk))} символов")
+                except KeyError as e:
+                    chat_message(f"{chunk_key} отсутствует в globals(): {e}")
+                    raise ValueError(f"{chunk_key} отсутствует в globals(): {e}")
+                except Exception as e:
+                    chat_message(f"Ошибка чтения {chunk_key}: {e}")
+                    raise ValueError(f"Ошибка чтения {chunk_key}: {e}")
+
+                # Дополнительная валидация
+                if chunk is None:
+                    chat_message(f"Чанк {chunk_key} равен None")
+                    console_log("Доступ через globals() завершен с ошибкой")
+                    raise ValueError(f"Чанк {chunk_key} отсутствует в globals")
+
+                # Проверка типа и конвертация
+                try:
+                    if not isinstance(chunk, str):
+                        console_log(f"Конвертация чанка {i} из {type(chunk)} в строку")
+                        chunk_str = str(chunk)
+                    else:
+                        chunk_str = chunk
+
+                    console_log(f"Чанк {i} прочитан: тип={type(chunk).__name__}, длина={len(chunk_str)}")
+
+                except Exception as e:
+                    chat_message(f"Ошибка конвертации чанка {chunk_key}: {e}")
+                    console_log(f"Состояние на момент ошибки: прочитано {len(chunks)} чанков")
+                    raise ValueError(f"Не удалось конвертировать чанк {chunk_key}: {e}")
+
+                # Проверка целостности чанка
+                if len(chunk_str.strip()) == 0:
+                    console_log(f"Чанк {chunk_key} пустой после strip")
+                elif len(chunk_str) < 10:
+                    console_log(f"Чанк {chunk_key} слишком короткий: {len(chunk_str)} символов")
+
+                # Сохранение диагностики
+                chunk_diagnostics.append({
+                    'chunk_index': i,
+                    'chunk_key': chunk_key,
+                    'original_type': type(chunk).__name__,
+                    'final_length': len(chunk_str),
+                    'method_used': 'globals()',
+                    'is_empty': len(chunk_str.strip()) == 0
+                })
+
+                chunks.append(chunk_str)
+                total_chunks_size += len(chunk_str)
+                console_log(f"Чанк {i} добавлен: накоплено {len(chunks)} чанков, размер={total_chunks_size} символов")
+
+            # Безопасная сборка полного HTML из чанков
+            console_log("🔧 Безопасная сборка полного HTML из чанков")
+            page_html = _safe_assemble_chunks(chunks, total_length, "ozon_analyzer")
+            assembled_length = len(page_html)
+            console_log(f"✅ HTML безопасно собран: длина={assembled_length} символов")
 
         # Итоговый отчет по чанкам
         console_log("===== ОТЧЕТ ПО ЧАНКАМ =====")
@@ -2786,7 +2893,7 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
     1. Научную обоснованность заявленных свойств.
     2. Потенциальные побочные эффекты и противопоказания.
     3. Эффективность по сравнению с аналогами.
-    Верни детальный анализ в структурированном виде (используй Markdown).
+    Верни детальный максимально подробный обоснованный анализ в структурированном виде (используй Markdown).
     """
 
     try:
@@ -2814,6 +2921,88 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
 # Эти функции не предназначены для прямого вызова из `workflow.json`.
 # Они инкапсулируют внутреннюю логику плагина.
 # ==============================================================================
+
+def _safe_assemble_chunks(chunks: List[str], expected_length: int, source_name: str) -> str:
+    """
+    Безопасная сборка HTML из чанков с обработкой ошибок и проверкой целостности.
+    """
+    try:
+        console_log(f"🔧 Сборка {len(chunks)} чанков ({source_name})")
+
+        if not chunks:
+            raise ValueError("Список чанков пустой")
+
+        # Проверка каждого чанка
+        valid_chunks = []
+        corrupted_chunks = []
+
+        for i, chunk in enumerate(chunks):
+            if chunk is None:
+                console_log(f"⚠️ Чанк {i} равен None - пропускаем")
+                corrupted_chunks.append(i)
+                continue
+
+            if not isinstance(chunk, str):
+                console_log(f"⚠️ Чанк {i} не является строкой (тип: {type(chunk)}) - конвертируем")
+                try:
+                    chunk = str(chunk)
+                except Exception as e:
+                    console_log(f"❌ Не удалось конвертировать чанк {i}: {e}")
+                    corrupted_chunks.append(i)
+                    continue
+
+            if len(chunk.strip()) == 0:
+                console_log(f"⚠️ Чанк {i} пустой - пропускаем")
+                corrupted_chunks.append(i)
+                continue
+
+            valid_chunks.append(chunk)
+
+        if corrupted_chunks:
+            console_log(f"⚠️ Найдено поврежденных чанков: {corrupted_chunks}")
+            console_log(f"✅ Валидных чанков: {len(valid_chunks)}")
+
+        if not valid_chunks:
+            raise ValueError("Все чанки повреждены или отсутствуют")
+
+        # Сборка HTML
+        console_log("🔧 Начинаем сборку HTML...")
+        assembled_html = ''.join(valid_chunks)
+        actual_length = len(assembled_html)
+
+        console_log(f"✅ HTML собран: {actual_length} символов")
+
+        # Проверка целостности
+        _check_html_integrity(assembled_html, f"assembled_{source_name}")
+
+        # Проверка соответствия ожидаемой длине
+        if actual_length != expected_length:
+            console_log(f"⚠️ Разница в длине: ожидалось {expected_length}, получено {actual_length}")
+            length_diff = abs(actual_length - expected_length)
+            if length_diff > 0:
+                console_log(f"⚠️ Отклонение: {length_diff} символов ({length_diff/expected_length*100:.1f}%)")
+                if actual_length < expected_length:
+                    console_log("⚠️ СТРОКА ОБРЕЗАНА! Возможно потеря данных.")
+                else:
+                    console_log("ℹ️ Строка длиннее ожидаемой. Возможно, добавлены лишние данные.")
+
+        # Дополнительная проверка структуры
+        if actual_length > 0:
+            # Проверяем на наличие основных HTML тегов
+            has_html = '<html' in assembled_html.lower()
+            has_body = '<body' in assembled_html.lower()
+            has_head = '<head' in assembled_html.lower()
+
+            console_log(f"📊 Структура собранного HTML: HTML={has_html}, HEAD={has_head}, BODY={has_body}")
+
+            if not (has_html or has_body or has_head):
+                console_log("⚠️ В собранном HTML отсутствуют базовые структурные элементы")
+
+        return assembled_html
+
+    except Exception as e:
+        console_log(f"❌ Критическая ошибка при сборке чанков: {e}")
+        raise ValueError(f"Не удалось собрать чанки: {e}")
 
 def _check_html_integrity(html_content: str, source_name: str) -> None:
     """

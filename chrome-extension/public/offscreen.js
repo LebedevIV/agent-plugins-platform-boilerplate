@@ -94,6 +94,29 @@ let currentPageKey = 'unknown_page';
 // Глобальная переменная для хранения текущей функции отправки ответа
 let globalSendResponse = null;
 
+// Переменная для отслеживания retry попыток в sendMessageToChat
+let retryCount = 0;
+
+// Глобальные переменные для лучшей коммуникации между JS и Python
+let currentExecutionContext = {
+  pluginId: 'ozon-analyzer',
+  pageKey: 'unknown_page',
+  requestId: null,
+  geminiApiKey: null,
+  messageId: null
+};
+
+// Функция для обновления контекста выполнения
+function updateExecutionContext(updates) {
+  Object.assign(currentExecutionContext, updates);
+  logDebug('PYODIDE', 'Execution context updated:', currentExecutionContext);
+}
+
+// Функция для безопасного получения контекста выполнения
+function getExecutionContext() {
+  return { ...currentExecutionContext };
+}
+
 // Константы для улучшения стабильности ответов
 const RESPONSE_DELAY = 100; // 100мс задержка перед отправкой ответа
 const MAX_RESPONSE_RETRIES = 3; // Максимум попыток отправки ответа
@@ -448,8 +471,24 @@ async function initializePyodide() {
 
     // Setup js bridge for Python scripts compatibility
     logInfo('PYODIDE', 'Setting up js bridge for Python scripts...');
-    pyodide.globals.set('js', {
-      sendMessageToChat: async (message) => {
+
+    // Создаем улучшенный js bridge с лучшей обработкой контекста
+    const jsBridge = {
+      // Функция для обновления контекста выполнения
+      updateContext: (context) => {
+        updateExecutionContext(context);
+        logDebug('PYODIDE', 'Context updated from Python:', context);
+        return true;
+      },
+
+      // Функция для получения текущего контекста
+      getContext: () => {
+        const context = getExecutionContext();
+        logDebug('PYODIDE', 'Context requested by Python:', context);
+        return context;
+      },
+
+      sendMessageToChat: (message) => {
         console.log('[DIAGNOSTIC] ===== PYODIDE sendMessageToChat CALLED =====');
         console.log('[DIAGNOSTIC] Raw message from Python:', message);
         logDebug('PYODIDE', 'JS bridge attempting to send message');
@@ -476,10 +515,116 @@ async function initializePyodide() {
 
           return new Promise((resolve, reject) => {
             const timeoutId = setTimeout(() => {
-              logError('PYODIDE', `sendMessageToChat timeout after 10s for messageId: ${messageId}, pluginId: ${currentPluginId}, pageKey: ${currentPageKey}`);
+              logError('PYODIDE', `sendMessageToChat timeout after 30s for messageId: ${messageId}, pluginId: ${currentPluginId}, pageKey: ${currentPageKey}`);
               logError('PYODIDE', `Timeout details: content length=${content.length}, type=${typeof content}`);
-              resolve({ success: false, error: 'timeout' });
-            }, 10000); // 10 секунд таймаут (увеличен с 5 секунд)
+
+              // Улучшенная retry логика с прогрессивным таймаутом
+              if (retryCount < 2) { // Максимум 3 попытки (0, 1, 2)
+                retryCount++;
+                const retryTimeout = 15000 + (retryCount * 5000); // 15, 20, 25 секунд
+                logInfo('PYODIDE', `Retrying sendMessageToChat (attempt ${retryCount + 1}/3) with ${retryTimeout}ms timeout`);
+
+                // Создаем новую Promise для retry
+                const retryPromise = new Promise((retryResolve, retryReject) => {
+                  const retryTimeoutId = setTimeout(() => {
+                    logError('PYODIDE', `Retry timeout after ${retryTimeout}ms for messageId: ${messageId}`);
+                    if (retryCount < 2) {
+                      retryCount++;
+                      // Рекурсивный вызов для следующей попытки
+                      const nextRetryPromise = createSendPromise(content, messageId, currentPluginId, currentPageKey, retryCount);
+                      nextRetryPromise.then(retryResolve).catch(retryReject);
+                    } else {
+                      retryResolve({ success: false, error: 'All retry attempts failed' });
+                    }
+                  }, retryTimeout);
+
+                  try {
+                    const pyodideMessage = {
+                      type: 'PYODIDE_MESSAGE',
+                      messageId: `${messageId}_retry${retryCount}`,
+                      pluginId: currentPluginId,
+                      pageKey: currentPageKey,
+                      message: {
+                        role: 'plugin',
+                        content: content,
+                        timestamp: Date.now()
+                      }
+                    };
+
+                    if (chrome.runtime.lastError) {
+                      logError('PYODIDE', 'Cannot send retry message - runtime error:', chrome.runtime.lastError);
+                      retryResolve({ success: false, error: chrome.runtime.lastError.message });
+                      return;
+                    }
+
+                    chrome.runtime.sendMessage(pyodideMessage, (response) => {
+                      clearTimeout(retryTimeoutId);
+                      if (chrome.runtime.lastError) {
+                        logError('PYODIDE', 'Retry Promise rejected in sendMessageToChat:', chrome.runtime.lastError.message);
+                        retryResolve({ success: false, error: chrome.runtime.lastError.message });
+                      } else {
+                        retryResolve({ success: true, data: response });
+                      }
+                    });
+                  } catch (error) {
+                    clearTimeout(retryTimeoutId);
+                    logError('PYODIDE', 'Retry Promise rejected in sendMessageToChat:', error);
+                    retryResolve({ success: false, error: error.message });
+                  }
+                });
+
+                retryPromise.then(resolve).catch(reject);
+                return;
+              }
+
+              logError('PYODIDE', `All retry attempts failed for messageId: ${messageId}`);
+              resolve({ success: false, error: 'Timeout after 3 attempts' });
+            }, 30000); // 30 секунд таймаут для первой попытки
+
+            // Вспомогательная функция для создания Promise отправки
+            function createSendPromise(content, messageId, currentPluginId, currentPageKey, attempt) {
+              return new Promise((sendResolve, sendReject) => {
+                const attemptTimeout = 15000 + (attempt * 5000);
+                const attemptTimeoutId = setTimeout(() => {
+                  logError('PYODIDE', `Send attempt ${attempt + 1} timeout after ${attemptTimeout}ms for messageId: ${messageId}`);
+                  sendResolve({ success: false, error: `Timeout after ${attemptTimeout}ms` });
+                }, attemptTimeout);
+
+                try {
+                  const pyodideMessage = {
+                    type: 'PYODIDE_MESSAGE',
+                    messageId: `${messageId}_attempt${attempt}`,
+                    pluginId: currentPluginId,
+                    pageKey: currentPageKey,
+                    message: {
+                      role: 'plugin',
+                      content: content,
+                      timestamp: Date.now()
+                    }
+                  };
+
+                  if (chrome.runtime.lastError) {
+                    logError('PYODIDE', 'Cannot send message - runtime error:', chrome.runtime.lastError);
+                    sendResolve({ success: false, error: chrome.runtime.lastError.message });
+                    return;
+                  }
+
+                  chrome.runtime.sendMessage(pyodideMessage, (response) => {
+                    clearTimeout(attemptTimeoutId);
+                    if (chrome.runtime.lastError) {
+                      logError('PYODIDE', `Promise rejected in sendMessageToChat attempt ${attempt + 1}:`, chrome.runtime.lastError.message);
+                      sendResolve({ success: false, error: chrome.runtime.lastError.message });
+                    } else {
+                      sendResolve({ success: true, data: response });
+                    }
+                  });
+                } catch (error) {
+                  clearTimeout(attemptTimeoutId);
+                  logError('PYODIDE', `Promise rejected in sendMessageToChat attempt ${attempt + 1}:`, error);
+                  sendResolve({ success: false, error: error.message });
+                }
+              });
+            }
 
             try {
               const pyodideMessage = {
@@ -495,19 +640,29 @@ async function initializePyodide() {
               };
               console.log('[DIAGNOSTIC] Sending PYODIDE_MESSAGE:', pyodideMessage);
 
-              chrome.runtime.sendMessage(pyodideMessage, (response) => {
-                console.log('[DIAGNOSTIC] PYODIDE_MESSAGE response received:', response);
+              // Добавить проверку соединения
+              if (chrome.runtime.lastError) {
+                logError('PYODIDE', 'Cannot send message - runtime error:', chrome.runtime.lastError);
+                resolve({ success: false, error: chrome.runtime.lastError.message });
+                return;
+              }
+
+              // Улучшить обработку Promise
+              try {
+                chrome.runtime.sendMessage(pyodideMessage, (response) => {
+                  clearTimeout(timeoutId);
+                  if (chrome.runtime.lastError) {
+                    logError('PYODIDE', 'Promise rejected in sendMessageToChat:', chrome.runtime.lastError.message);
+                    resolve({ success: false, error: chrome.runtime.lastError.message });
+                  } else {
+                    resolve({ success: true, data: response });
+                  }
+                });
+              } catch (error) {
                 clearTimeout(timeoutId);
-                if (chrome.runtime.lastError) {
-                  console.log('[DIAGNOSTIC] PYODIDE_MESSAGE chrome.runtime error:', chrome.runtime.lastError);
-                  logError('PYODIDE', 'sendMessageToChat chrome.runtime error:', chrome.runtime.lastError);
-                  resolve({ success: false, error: chrome.runtime.lastError.message });
-                } else {
-                  console.log('[DIAGNOSTIC] PYODIDE_MESSAGE sent successfully with ID:', messageId);
-                  logInfo('PYODIDE', `PYODIDE_MESSAGE отправлено successfully с ID: ${messageId}`);
-                  resolve({ success: true, response: response });
-                }
-              });
+                logError('PYODIDE', 'Promise rejected in sendMessageToChat:', error);
+                resolve({ success: false, error: error.message });
+              }
             } catch (error) {
               clearTimeout(timeoutId);
               logError('PYODIDE', 'Unexpected error in sendMessageToChat:', error);
@@ -518,6 +673,72 @@ async function initializePyodide() {
           console.log('[DIAGNOSTIC] Unexpected error in sendMessageToChat:', error);
           logError('PYODIDE', 'Unexpected error in sendMessageToChat:', error);
           return Promise.resolve({ success: false, error: error.message });
+        }
+      },
+
+      // Функция для повторных попыток отправки сообщений
+      sendWithRetry: async (content, messageId, currentPluginId, currentPageKey, retryAttempt) => {
+        logDebug('PYODIDE', `sendWithRetry called with attempt ${retryAttempt + 1}/3 for messageId: ${messageId}`);
+
+        // Сброс retryCount для новой попытки
+        const originalRetryCount = retryCount;
+        retryCount = retryAttempt;
+
+        const maxRetries = 3;
+        const currentAttempt = retryAttempt + 1;
+
+        try {
+          // Проверяем доступность js bridge
+          const jsBridge = pyodide.globals.get('js');
+          if (!jsBridge || typeof jsBridge.sendMessageToChat !== 'function') {
+            throw new Error('sendMessageToChat not available in js bridge');
+          }
+
+          logDebug('PYODIDE', `sendWithRetry: Attempting to send message, attempt ${currentAttempt}/${maxRetries}`);
+
+          // Попытка отправки сообщения
+          const result = await jsBridge.sendMessageToChat(content);
+
+          logInfo('PYODIDE', `sendWithRetry completed successfully on attempt ${currentAttempt} for messageId: ${messageId}`);
+          return result;
+
+        } catch (error) {
+          logError('PYODIDE', `sendWithRetry failed on attempt ${currentAttempt}/${maxRetries} for messageId: ${messageId}:`, error);
+
+          // Восстанавливаем оригинальное значение retryCount
+          retryCount = originalRetryCount;
+
+          // Улучшенная обработка ошибок с экспоненциальной задержкой
+          if (currentAttempt < maxRetries) {
+            const delay = Math.min(1000 * Math.pow(2, retryAttempt), 10000); // Экспоненциальная задержка, максимум 10 секунд
+            logInfo('PYODIDE', `Retrying after ${delay}ms, attempt ${currentAttempt + 1}/${maxRetries}`);
+
+            await new Promise(resolve => setTimeout(resolve, delay));
+
+            try {
+              // Проверяем, что js bridge все еще доступен
+              const jsBridge = pyodide.globals.get('js');
+              if (jsBridge && typeof jsBridge.sendMessageToChat === 'function') {
+                // Рекурсивный вызов с увеличенным счетчиком попыток
+                return await sendWithRetry(content, messageId, currentPluginId, currentPageKey, retryAttempt + 1);
+              } else {
+                throw new Error('js bridge became unavailable during retry');
+              }
+            } catch (retryError) {
+              logError('PYODIDE', `Retry attempt ${currentAttempt + 1} also failed:`, retryError);
+
+              // Если это последняя попытка, пробрасываем ошибку
+              if (currentAttempt >= maxRetries) {
+                throw new Error(`All ${maxRetries} retry attempts failed. Last error: ${retryError.message}`);
+              }
+
+              throw retryError;
+            }
+          }
+
+          // Все попытки исчерпаны
+          logError('PYODIDE', `All ${maxRetries} retry attempts exhausted for messageId: ${messageId}`);
+          throw new Error(`sendWithRetry failed after ${maxRetries} attempts: ${error.message}`);
         }
       },
       host_fetch: (url) => {
@@ -696,8 +917,26 @@ async function initializePyodide() {
         // For offscreen context, return default value
         logDebug('PYODIDE', 'Returning default value for setting:', jsSettingName, jsDefaultValue);
         return Promise.resolve(pyodide.toPy(jsDefaultValue));
+      },
+
+      // Функция для логирования ошибок из Python
+      logError: (message, error) => {
+        logError('PYTHON', `Python error: ${message}`, error?.toJs ? error.toJs() : error);
+        return true;
+      },
+
+      // Функция для логирования из Python
+      logInfo: (message) => {
+        logInfo('PYTHON', `Python log: ${message}`);
+        return true;
       }
-    });
+    };
+
+    // Устанавливаем js bridge в глобальные переменные Pyodide
+    pyodide.globals.set('js', jsBridge);
+
+    // Делаем sendWithRetry доступной в глобальном контексте для Python кода
+    pyodide.globals.set('sendWithRetry', jsBridge.sendWithRetry);
 
     logInfo('PYODIDE', 'js bridge setup completed');
 
@@ -781,6 +1020,39 @@ function handleChunkedMessage(message, sendResponse) {
   return false;
 }
 
+// Асинхронная функция для отправки подтверждений чанков без блокировки
+async function sendChunkAcknowledgment(transferId, chunkIndex) {
+  const ackMessage = {
+    type: 'HTML_CHUNK_ACK',
+    transferId,
+    chunkIndex,
+    received: true,
+    messageId: `ack_${Date.now()}_${transferId}_${chunkIndex}`,
+    timestamp: Date.now()
+  };
+
+  try {
+    // Используем safeSendMessage с коротким таймаутом и retry логикой
+    const result = await safeSendMessage(ackMessage, {
+      timeout: 5000,    // 5 секунд таймаут для подтверждений
+      retries: 3,       // 3 повторные попытки
+      retryDelay: 500,  // 500мс между попытками
+      silent: true      // Тихий режим - не логировать повторяющиеся ошибки
+    });
+
+    if (result.success) {
+      logDebug('CHUNKING', `HTML_CHUNK_ACK sent successfully for chunk ${chunkIndex}, transfer ${transferId}`);
+    } else {
+      logWarn('CHUNKING', `HTML_CHUNK_ACK failed for chunk ${chunkIndex}, transfer ${transferId}: ${result.error}`);
+    }
+
+    return result;
+  } catch (error) {
+    logError('CHUNKING', `Critical error sending HTML_CHUNK_ACK for chunk ${chunkIndex}, transfer ${transferId}:`, error);
+    throw error;
+  }
+}
+
 // Function to handle individual HTML chunks
 function handleHtmlChunk(chunkMessage) {
   const { transferId, chunkIndex, totalChunks, chunkData, metadata } = chunkMessage;
@@ -811,19 +1083,10 @@ function handleHtmlChunk(chunkMessage) {
 
   logDebug('CHUNKING', `Stored chunk ${chunkIndex + 1}/${totalChunks} for transfer ${transferId}`);
 
-  // Send acknowledgment - SYNCHRONOUS to prevent channel closure errors
-  try {
-    chrome.runtime.sendMessage({
-      type: 'HTML_CHUNK_ACK',
-      transferId,
-      chunkIndex,
-      received: true,
-      messageId: `ack_${Date.now()}_${transferId}_${chunkIndex}`
-    });
-    logDebug('CHUNKING', `HTML_CHUNK_ACK sent synchronously for chunk ${chunkIndex}`);
-  } catch (error) {
+  // Send acknowledgment - ASYNCHRONOUS to prevent blocking chunk processing
+  sendChunkAcknowledgment(transferId, chunkIndex).catch(error => {
     logError('CHUNKING', `Failed to send HTML_CHUNK_ACK for chunk ${chunkIndex}:`, error);
-  }
+  });
 
   // Check if transfer is complete
   if (transfer.receivedChunks === totalChunks) {

@@ -47,13 +47,26 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   React.useEffect(() => {
     const loadHtmlTransmissionMode = async () => {
       try {
-        console.log('[SettingsTab][DEBUG] 🔍 Loading htmlTransmissionMode from chrome.storage.local...');
+        console.log('[SettingsTab][DEBUG] 🔍 Загружаем htmlTransmissionMode из chrome.storage.local...');
+        console.log('[SettingsTab][DEBUG]   - Начальное состояние компонента:', htmlTransmissionMode);
+
         const result = await chrome.storage.local.get(['htmlTransmissionMode']);
+        console.log('[SettingsTab][DEBUG]   - Результат из storage:', result);
+        console.log('[SettingsTab][DEBUG]   - Сырое значение из storage:', result.htmlTransmissionMode);
+        console.log('[SettingsTab][DEBUG]   - Тип значения из storage:', typeof result.htmlTransmissionMode);
+
         const mode = (result.htmlTransmissionMode as HtmlTransmissionMode) || 'direct';
-        console.log('[SettingsTab][DEBUG] 📊 Loaded htmlTransmissionMode:', mode, '(from storage:', result.htmlTransmissionMode, ')');
+        console.log('[SettingsTab][DEBUG] 📊 htmlTransmissionMode загружен:');
+        console.log('[SettingsTab][DEBUG]   - Финальное значение:', mode);
+        console.log('[SettingsTab][DEBUG]   - Использовано значение по умолчанию:', mode === 'direct' && !result.htmlTransmissionMode ? 'Да' : 'Нет');
+        console.log('[SettingsTab][DEBUG]   - Обновляем состояние компонента...');
+
         setHtmlTransmissionMode(mode);
+        console.log('[SettingsTab][DEBUG] ✅ Загрузка htmlTransmissionMode завершена успешно');
       } catch (error) {
-        console.error('[SettingsTab][DEBUG] ❌ Error loading htmlTransmissionMode:', error);
+        console.error('[SettingsTab][DEBUG] ❌ Ошибка при загрузке htmlTransmissionMode:', error);
+        console.error('[SettingsTab][DEBUG]   - Текущее состояние компонента:', htmlTransmissionMode);
+        console.error('[SettingsTab][DEBUG]   - Ошибка:', error);
       }
     };
 
@@ -63,12 +76,22 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   // Сохранение настройки htmlTransmissionMode
   const saveHtmlTransmissionMode = async (mode: HtmlTransmissionMode) => {
     try {
-      console.log('[SettingsTab][DEBUG] 💾 Saving htmlTransmissionMode:', mode);
+      console.log('[SettingsTab][DEBUG] 💾 Перед сохранением htmlTransmissionMode:');
+      console.log('[SettingsTab][DEBUG]   - Новое значение:', mode);
+      console.log('[SettingsTab][DEBUG]   - Текущее состояние:', htmlTransmissionMode);
+      console.log('[SettingsTab][DEBUG]   - Тип режима:', typeof mode);
+
+      console.log('[SettingsTab][DEBUG] 💾 Сохраняем htmlTransmissionMode в chrome.storage.local...');
       await chrome.storage.local.set({ htmlTransmissionMode: mode });
-      console.log('[SettingsTab][DEBUG] ✅ htmlTransmissionMode saved to chrome.storage.local');
+      console.log('[SettingsTab][DEBUG] ✅ htmlTransmissionMode успешно сохранен в chrome.storage.local');
+      console.log('[SettingsTab][DEBUG]   - Сохраненное значение:', mode);
+      console.log('[SettingsTab][DEBUG]   - Подтверждение: состояние компонента обновлено');
+
       setHtmlTransmissionMode(mode);
     } catch (error) {
-      console.error('[SettingsTab][DEBUG] ❌ Error saving htmlTransmissionMode:', error);
+      console.error('[SettingsTab][DEBUG] ❌ Ошибка при сохранении htmlTransmissionMode:', error);
+      console.error('[SettingsTab][DEBUG]   - Пытались сохранить:', mode);
+      console.error('[SettingsTab][DEBUG]   - Текущее состояние:', htmlTransmissionMode);
     }
   };
 
@@ -86,7 +109,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             {/* HTML Transmission Mode Toggle */}
             <ToggleButton
               checked={htmlTransmissionMode === 'direct'}
-              onChange={(checked) => saveHtmlTransmissionMode(checked ? 'direct' : 'direct')}
+              onChange={(checked) => saveHtmlTransmissionMode(checked ? 'direct' : 'chunks')}
               label="Отправлять HTML целиком"
             />
             <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px', marginLeft: '40px' }}>
