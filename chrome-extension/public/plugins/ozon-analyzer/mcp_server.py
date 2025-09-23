@@ -2672,6 +2672,28 @@ def analyze_ozon_product() -> Dict[str, Any]:
         reasoning_str = str(reasoning) if reasoning is not None else 'Объяснение не доступно'
         chat_message(f"🤖 Ответ нейросети (Gemini AI):\n📊 Оценка соответствия: {score_str}/10\n{reasoning_str}")
 
+        # Отправляем информацию об аналогах в чат
+        if analogs and len(analogs) > 0:
+            analogs_message = "🔍 Найденные аналоги:\n"
+            for i, analog in enumerate(analogs[:3], 1):  # Показываем максимум 3 аналога
+                if isinstance(analog, dict) and not analog.get('error', False):
+                    name = analog.get('name', 'Название не указано')
+                    price_range = analog.get('price_range', 'Цена не указана')
+                    similarity = analog.get('similarity_score', 'N/A')
+                    key_features = analog.get('key_features', [])
+
+                    analogs_message += f"{i}. **{name}**\n"
+                    analogs_message += f"   💰 {price_range}\n"
+                    analogs_message += f"   📊 Схожесть: {similarity}%\n"
+                    if key_features and len(key_features) > 0:
+                        features_str = ', '.join(key_features[:3])  # Максимум 3 особенности
+                        analogs_message += f"   ✨ {features_str}\n"
+                    analogs_message += "\n"
+
+            chat_message(analogs_message.strip())
+        else:
+            chat_message("🔍 Аналоги не найдены или информация недоступна")
+
         # Логируем в консоль полную информацию для разработчиков
         title_preview = product_info['title'][:50] + "..." if safe_len(product_info['title']) > 50 else product_info['title']
         desc_length = safe_len(description)
