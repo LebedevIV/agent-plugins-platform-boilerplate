@@ -1373,9 +1373,9 @@ chrome.runtime.onMessage.addListener(
 
         let htmlTransmissionMode = 'chunks'; // По умолчанию используем chunks
         try {
-          const allSettings = await pluginSettingsStorage.get();
-          const pluginSettings = allSettings[msg.pluginId] || {};
-          htmlTransmissionMode = pluginSettings.htmlTransmissionMode || 'chunks';
+          // Читать настройки напрямую из chrome.storage.local, как делает UI
+          const settings = await chrome.storage.local.get(['htmlTransmissionMode']);
+          htmlTransmissionMode = settings.htmlTransmissionMode || 'chunks';
 
           console.log('[background][RUN_WORKFLOW] htmlTransmissionMode setting:', htmlTransmissionMode);
         } catch (settingsError) {
@@ -2207,9 +2207,9 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
       // ЧИТАТЬ НАСТРОЙКУ htmlTransmissionMode ИЗ STORAGE
       let htmlTransmissionMode = 'chunks';
       try {
-        const allSettings = await pluginSettingsStorage.get();
-        const pluginSettings = allSettings[message.pluginId] || {};
-        htmlTransmissionMode = pluginSettings.htmlTransmissionMode || 'chunks';
+        // Читать настройки напрямую из chrome.storage.local, как делает UI
+        const settings = await chrome.storage.local.get(['htmlTransmissionMode']);
+        htmlTransmissionMode = settings.htmlTransmissionMode || 'chunks';
       } catch (settingsError) {
         console.warn('[background][PORT][RUN_WORKFLOW] Failed to read htmlTransmissionMode:', settingsError);
       }

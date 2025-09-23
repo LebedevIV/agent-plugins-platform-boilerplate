@@ -3328,13 +3328,6 @@ class BackgroundController {
         });
       }
 
-      // Store workflow data for later when HTML is assembled
-      this.pendingWorkflows.set(transferId, {
-        requestId,
-        pluginId: message.pluginId,
-        pageHtml
-      });
-
       // Wait to ensure chunks are processed and acknowledged
       console.log(`[Background][DIAG] ⏳ WAITING for chunks processing and acknowledgments (1s delay)`);
       await this.delay(1000);

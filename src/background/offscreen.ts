@@ -42,8 +42,11 @@ class EnhancedChunkManager {
   private readonly TRANSFER_TIMEOUT = 300000; // 300s timeout (increased from 60s)
 
   constructor() {
-    // Start cleanup interval
-    setInterval(() => this.cleanup(), this.TRANSFER_TIMEOUT);
+    // Start cleanup interval for both transfers and HTML_DIRECT storage
+    setInterval(() => {
+      this.cleanup();
+      cleanupHtmlDirectStorage(); // Cleanup expired HTML_DIRECT entries
+    }, Math.min(this.TRANSFER_TIMEOUT, 60000)); // Run every minute or transfer timeout, whichever is smaller
   }
 
   private delay(ms: number): Promise<void> {
@@ -646,7 +649,7 @@ class ConnectionMonitor {
       const latency = Date.now() - startTime;
       this.lastHeartbeat = Date.now();
 
-      if (response?.pong) {
+      if ((response as any)?.pong) {
         this.updateConnectionStatus('healthy', latency);
       } else {
         throw new Error('Invalid ping response');
@@ -697,7 +700,7 @@ class ConnectionMonitor {
             timestamp: Date.now()
           }, 3000, true);
 
-          if (recoveryResponse?.pong) {
+          if ((recoveryResponse as any)?.pong) {
             console.log(`[ConnectionMonitor] ✅ Auto-recovery successful on attempt ${this.recoveryAttempts}`);
             this.updateConnectionStatus('healthy');
             return;
@@ -822,6 +825,14 @@ const workflowEngine = new SimpleWorkflowEngine();
 // Global uptime tracking for offscreen
 let offscreenStartTime = Date.now();
 
+// Global storage for HTML data from HTML_DIRECT messages
+const htmlDirectStorage = new Map<string, {
+  html: string;
+  timestamp: number;
+  pluginId: string;
+  requestId: string;
+}>();
+
 interface ExecuteWorkflowMessage {
   type: 'EXECUTE_WORKFLOW';
   data: {
@@ -935,15 +946,55 @@ async function handleExecuteWorkflow(data: ExecuteWorkflowMessage['data']) {
       // console.log(`[offscreen] - Sample (first 200 chars): "${pageHtml.substring(0, 200)}"`);
 
     } else {
-      // console.log(`[offscreen] 📄 Using direct HTML (no chunks)`);
-      // console.log(`[offscreen] - Length: ${pageHtml?.length || 0} characters`);
-    }
+       // ENHANCED HTML SOURCE PRIORITY SYSTEM
+       console.log(`[offscreen][DIAG] 🔍 No chunks mode - checking HTML sources in priority order`);
 
-    // Validate final HTML
+       // Priority 1: Check HTML_DIRECT storage first
+       if (htmlDirectStorage.has(data.transferId)) {
+         const htmlDirectData = htmlDirectStorage.get(data.transferId)!;
+         console.log(`[offscreen][DIAG] ✅ Found HTML in HTML_DIRECT storage for transfer ${data.transferId}`);
+         console.log(`[offscreen][DIAG] - Plugin ID: ${htmlDirectData.pluginId}`);
+         console.log(`[offscreen][DIAG] - Request ID: ${htmlDirectData.requestId}`);
+         console.log(`[offscreen][DIAG] - Stored at: ${new Date(htmlDirectData.timestamp).toISOString()}`);
+         console.log(`[offscreen][DIAG] - HTML length: ${htmlDirectData.html.length} characters`);
+
+         pageHtml = htmlDirectData.html;
+
+         // Clean up storage after use to prevent memory leaks
+         cleanupHtmlDirectStorage(data.transferId);
+
+       } else {
+         console.log(`[offscreen][DIAG] 📄 Using direct HTML from EXECUTE_WORKFLOW message (no chunks, no HTML_DIRECT storage)`);
+         console.log(`[offscreen][DIAG] - Length: ${pageHtml?.length || 0} characters`);
+         console.log(`[offscreen][DIAG] - Available HTML_DIRECT transfers: [${Array.from(htmlDirectStorage.keys()).join(', ')}]`);
+       }
+     }
+
+    // Validate final HTML with enhanced diagnostics
     if (!pageHtml || pageHtml.length === 0) {
-      // console.log(`[offscreen] ❌ ERROR: Final HTML is empty or undefined!`);
-      throw new Error('Assembled HTML is empty');
-    }
+       console.error(`[offscreen][DIAG] ❌ ERROR: Final HTML is empty or undefined!`);
+       console.error(`[offscreen][DIAG] 🔍 HTML Source Analysis:`, {
+         dataUseChunks: data.useChunks,
+         dataHasPageHtml: !!data.pageHtml,
+         dataPageHtmlLength: data.pageHtml?.length || 0,
+         dataHasAssembledHtml: !!data.assembledHtml,
+         dataAssembledHtmlLength: data.assembledHtml?.length || 0,
+         chunkManagerHasTransfer: chunkManager['transfers'].has(data.transferId),
+         htmlDirectStorageHasTransfer: htmlDirectStorage.has(data.transferId),
+         htmlDirectStorageSize: htmlDirectStorage.size,
+         availableHtmlDirectTransfers: Array.from(htmlDirectStorage.keys())
+       });
+       throw new Error('Assembled HTML is empty');
+     }
+
+     // Log final HTML source for diagnostics
+     console.log(`[offscreen][DIAG] 📄 Final HTML source determined:`, {
+       source: data.useChunks ? 'chunks' : (htmlDirectStorage.has(data.transferId) ? 'html_direct' : 'direct_message'),
+       length: pageHtml.length,
+       transferId: data.transferId,
+       pluginId: data.pluginId,
+       requestId: data.requestId
+     });
 
     // Execute workflow
     console.log(`[offscreen][DIAG] 🚀 Executing workflow for plugin: ${data.pluginId}, request: ${data.requestId}`);
@@ -1094,20 +1145,34 @@ async function handleHeartbeatCheck(message: HeartbeatMessage) {
 }
 
 function collectOffscreenHealthData() {
-  // Collect offscreen script health metrics
-  const transferCount = chunkManager['transfers'].size;
-  const uptime = Date.now() - offscreenStartTime;
+   // Collect offscreen script health metrics
+   const transferCount = chunkManager['transfers'].size;
+   const uptime = Date.now() - offscreenStartTime;
+   const htmlDirectCount = htmlDirectStorage.size;
 
-  // Count active workflows (simplified - we could track this better)
-  const workflowCount = 0; // SimpleWorkflowEngine doesn't track active workflows
+   // Count active workflows (simplified - we could track this better)
+   const workflowCount = 0; // SimpleWorkflowEngine doesn't track active workflows
 
-  return {
-    transfers: transferCount,
-    workflows: workflowCount,
-    memoryUsage: getMemoryUsage(),
-    uptime
-  };
-}
+   // Log detailed HTML_DIRECT storage state for diagnostics
+   console.log(`[offscreen][HEALTH] 📊 HTML_DIRECT Storage Diagnostics:`, {
+     totalEntries: htmlDirectCount,
+     entries: Array.from(htmlDirectStorage.entries()).map(([transferId, data]) => ({
+       transferId,
+       pluginId: data.pluginId,
+       requestId: data.requestId,
+       age: Date.now() - data.timestamp,
+       htmlSize: data.html.length
+     }))
+   });
+
+   return {
+     transfers: transferCount,
+     workflows: workflowCount,
+     htmlDirectStorage: htmlDirectCount,
+     memoryUsage: getMemoryUsage(),
+     uptime
+   };
+ }
 
 function getMemoryUsage(): number | undefined {
   try {
@@ -1118,6 +1183,90 @@ function getMemoryUsage(): number | undefined {
     // Memory monitoring not available
   }
   return undefined;
+}
+
+// Handle HTML_DIRECT message
+async function handleHtmlDirect(message: any) {
+  console.log(`[offscreen][HTML_DIRECT] ===== RECEIVED HTML_DIRECT MESSAGE =====`);
+  console.log(`[offscreen][HTML_DIRECT] Transfer ID: ${message.transferId}`);
+  console.log(`[offscreen][HTML_DIRECT] Plugin ID: ${message.pluginId}`);
+  console.log(`[offscreen][HTML_DIRECT] Request ID: ${message.requestId}`);
+  console.log(`[offscreen][HTML_DIRECT] HTML Length: ${message.html?.length || 0} characters`);
+  console.log(`[offscreen][HTML_DIRECT] Timestamp: ${new Date().toISOString()}`);
+
+  // Validate required fields
+  if (!message.transferId || typeof message.transferId !== 'string') {
+    throw new Error(`Invalid transferId: expected string, got ${typeof message.transferId}`);
+  }
+  if (!message.pluginId || typeof message.pluginId !== 'string') {
+    throw new Error(`Invalid pluginId: expected string, got ${typeof message.pluginId}`);
+  }
+  if (!message.requestId || typeof message.requestId !== 'string') {
+    throw new Error(`Invalid requestId: expected string, got ${typeof message.requestId}`);
+  }
+  if (!message.html || typeof message.html !== 'string') {
+    throw new Error(`Invalid html: expected string, got ${typeof message.html}`);
+  }
+
+  // Store HTML data in global storage
+  htmlDirectStorage.set(message.transferId, {
+    html: message.html,
+    timestamp: Date.now(),
+    pluginId: message.pluginId,
+    requestId: message.requestId
+  });
+
+  console.log(`[offscreen][HTML_DIRECT] ✅ HTML stored for transfer ${message.transferId}`);
+  console.log(`[offscreen][HTML_DIRECT] Storage size: ${htmlDirectStorage.size} items`);
+
+  // Send acknowledgment
+  trackSendResponse({
+    success: true,
+    transferId: message.transferId,
+    stored: true,
+    timestamp: Date.now()
+  });
+}
+
+/**
+ * Cleanup HTML_DIRECT storage by removing specific transfer or expired entries
+ * @param transferId Optional specific transfer ID to remove. If not provided, removes expired entries
+ */
+function cleanupHtmlDirectStorage(transferId?: string): void {
+  const now = Date.now();
+  const expiredThreshold = 300000; // 5 minutes timeout for HTML_DIRECT storage
+  const removedTransfers: string[] = [];
+
+  if (transferId) {
+    // Remove specific transfer
+    if (htmlDirectStorage.has(transferId)) {
+      htmlDirectStorage.delete(transferId);
+      removedTransfers.push(transferId);
+      console.log(`[offscreen][HTML_DIRECT] 🧹 Cleaned up specific transfer ${transferId} from HTML_DIRECT storage`);
+    }
+  } else {
+    // Remove expired entries
+    const entries = Array.from(htmlDirectStorage.entries());
+    for (const [id, data] of entries) {
+      if (now - data.timestamp > expiredThreshold) {
+        htmlDirectStorage.delete(id);
+        removedTransfers.push(id);
+      }
+    }
+
+    if (removedTransfers.length > 0) {
+      console.log(`[offscreen][HTML_DIRECT] 🧹 Cleaned up ${removedTransfers.length} expired transfers from HTML_DIRECT storage: [${removedTransfers.join(', ')}]`);
+    }
+  }
+
+  // Log current storage state
+  if (removedTransfers.length > 0) {
+    console.log(`[offscreen][HTML_DIRECT] 📊 HTML_DIRECT storage state after cleanup: ${htmlDirectStorage.size} items remaining`);
+    if (htmlDirectStorage.size > 0) {
+      const remainingTransfers = Array.from(htmlDirectStorage.keys());
+      console.log(`[offscreen][HTML_DIRECT] 📊 Remaining transfers: [${remainingTransfers.join(', ')}]`);
+    }
+  }
 }
 
 // Handle HTML_CHUNK message
@@ -1228,6 +1377,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       trackSendResponse({ received: true });
       break;
 
+    case 'HTML_DIRECT':
+      console.log(`[offscreen][DIAG] 📨 ROUTING TO HTML_DIRECT HANDLER`);
+      handleHtmlDirect(message)
+        .then(() => {
+          console.log(`[offscreen][DIAG] ✅ HTML_DIRECT handler completed successfully`);
+          trackSendResponse({ success: true });
+        })
+        .catch(error => {
+          console.error(`[offscreen][DIAG] ❌ HTML_DIRECT handler failed:`, error);
+          trackSendResponse({ success: false, error: error.message });
+        });
+      return true; // Keep channel open for async responses
+
     case 'HEARTBEAT_CHECK':
       console.log(`[offscreen][DIAG] 📨 ROUTING TO HEARTBEAT_CHECK HANDLER`);
       handleHeartbeatCheck(message as HeartbeatMessage)
@@ -1253,7 +1415,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     default:
       console.warn(`[offscreen][DIAG] ⚠️ UNKNOWN MESSAGE TYPE:`, message.type);
-      console.warn(`[offscreen][DIAG] Available handlers: EXECUTE_WORKFLOW, HTML_CHUNK, HEARTBEAT_CHECK, CONNECTION_PING, CONNECTION_RECOVERY_PING`);
+      console.warn(`[offscreen][DIAG] Available handlers: EXECUTE_WORKFLOW, HTML_CHUNK, HTML_DIRECT, HEARTBEAT_CHECK, CONNECTION_PING, CONNECTION_RECOVERY_PING`);
       console.warn(`[offscreen][DIAG] Message keys:`, Object.keys(message));
       trackSendResponse({ success: false, error: `Unknown message type: ${message.type}` });
       break;

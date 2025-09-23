@@ -28,6 +28,63 @@ const MODEL_NAME_MAPPING = {
 // Global state for chunked HTML transfers
 const htmlTransfers = new Map();
 
+// Глобальное хранилище для HTML данных из HTML_DIRECT сообщений
+const htmlDirectStorage = new Map();
+
+// Функция очистки устаревших HTML_DIRECT записей
+function cleanupHtmlDirectStorage() {
+  const now = Date.now();
+  const expiredThreshold = 300000; // 5 минут таймаут
+  const expiredTransfers = [];
+
+  for (const [transferId, data] of htmlDirectStorage.entries()) {
+    if (now - data.timestamp > expiredThreshold) {
+      expiredTransfers.push(transferId);
+    }
+  }
+
+  expiredTransfers.forEach(transferId => {
+    htmlDirectStorage.delete(transferId);
+  });
+
+  if (expiredTransfers.length > 0) {
+    console.log(`[offscreen] 🧹 Очищено ${expiredTransfers.length} устаревших HTML_DIRECT записей`);
+  }
+}
+
+// Обработчик HTML_DIRECT сообщений
+async function handleHtmlDirect(message) {
+  console.log(`[offscreen][HTML_DIRECT] ===== HTML_DIRECT СООБЩЕНИЕ ПОЛУЧЕНО =====`);
+  console.log(`[offscreen][HTML_DIRECT] Transfer ID: ${message.transferId}`);
+  console.log(`[offscreen][HTML_DIRECT] Plugin ID: ${message.pluginId}`);
+  console.log(`[offscreen][HTML_DIRECT] Request ID: ${message.requestId}`);
+  console.log(`[offscreen][HTML_DIRECT] HTML длина: ${message.htmlData?.length || 0} символов`);
+
+  // Сохраняем HTML данные в глобальное хранилище
+  htmlDirectStorage.set(message.transferId, {
+    html: message.htmlData,
+    pluginId: message.pluginId,
+    pageKey: message.pageKey,
+    requestId: message.requestId,
+    timestamp: Date.now()
+  });
+
+  console.log(`[offscreen][HTML_DIRECT] ✅ HTML сохранен для transfer ${message.transferId}`);
+  console.log(`[offscreen][HTML_DIRECT] Размер хранилища: ${htmlDirectStorage.size} элементов`);
+
+  // Отправляем подтверждение получения
+  try {
+    chrome.runtime.sendMessage({
+      type: 'CONFIRM_HTML_RECEIPT',
+      transferId: message.transferId,
+      timestamp: Date.now()
+    });
+    console.log(`[offscreen][HTML_DIRECT] Подтверждение отправлено для ${message.transferId}`);
+  } catch (error) {
+    console.error(`[offscreen][HTML_DIRECT] Ошибка отправки подтверждения:`, error);
+  }
+}
+
 let pyodide = null;
 
 // Глобальные переменные для хранения текущих pluginId и pageKey
@@ -1242,9 +1299,31 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     return true;
   }
 
+  // Handle HTML_DIRECT messages
+  if (message.type === 'HTML_DIRECT') {
+    logInfo('HTML_DIRECT', `Received HTML_DIRECT message: transferId=${message.transferId}, pluginId=${message.pluginId}`);
+    handleHtmlDirect(message);
+    trackSendResponse({ success: true, messageId: messageId });
+    return true;
+  }
+
   // Handle chunked messages first
   if (message.type === 'HTML_CHUNK' || message.type === 'HTML_CHUNK_COMPLETE' || message.type === 'START_WORKFLOW_AFTER_CHUNKS') {
     return handleChunkedMessage(message, sendResponse);
+  }
+
+  // Handle HTML_DIRECT messages
+  if (message.type === 'HTML_DIRECT') {
+    handleHtmlDirect(message)
+      .then(() => {
+        console.log(`[offscreen][HTML_DIRECT] Обработчик завершен успешно`);
+        sendResponse({ success: true });
+      })
+      .catch(error => {
+        console.error(`[offscreen][HTML_DIRECT] Ошибка обработчика:`, error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true; // Keep channel open for async response
   }
 
   if (message.type === 'TEST_PYODIDE_DIRECT_EXEC') {
@@ -1426,9 +1505,10 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     // ДОБАВИТЬ ЭТУ СТРОКУ:
     window.geminiApiKey = message.geminiApiKey;
 
-    // ПОЛУЧАЕМ HTML ДАННЫЕ ИЗ CHUNKS ИЛИ НАПРЯМУЮ
+    // ПОЛУЧАЕМ HTML ДАННЫЕ ИЗ HTML_DIRECT STORAGE ИЛИ НАПРЯМУЮ
     let workflowPayload;
     if (useChunks && transferId) {
+      // Используем chunks если указано
       logInfo('EXECUTION', 'Using enhanced chunking - preparing chunk metadata');
 
       // ЖДЕМ ДОСТУПНОСТИ CHUNKS И ПОДГОТАВЛИВАЕМ METADATA ДЛЯ PYTHON
@@ -1468,12 +1548,23 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       if (!workflowPayload) {
         throw new Error(`Timeout waiting for chunk data preparation (transferId: ${transferId})`);
       }
-    } else if (message.pageHtml) {
-      // ПРЯМАЯ ПЕРЕДАЧА HTML ДАННЫХ (FALLBACK)
-      workflowPayload = { page_html: message.pageHtml };
-      logInfo('EXECUTION', `Using direct pageHtml from message: ${message.pageHtml.length} chars`);
+    } else if (htmlDirectStorage.has(transferId)) {
+      // ПРИОРИТЕТ 1: Используем HTML_DIRECT storage
+      const htmlDirectData = htmlDirectStorage.get(transferId);
+      workflowPayload = { page_html: htmlDirectData.html };
+      console.log(`[offscreen] ✅ Найден HTML в HTML_DIRECT storage для transfer ${transferId}`);
+      console.log(`[offscreen] Длина HTML: ${htmlDirectData.html.length} символов`);
+
+      // Очищаем использованные данные для предотвращения утечек памяти
+      htmlDirectStorage.delete(transferId);
+      cleanupHtmlDirectStorage();
+    } else if (message.pageHtml || message.htmlData || message.html) {
+      // ПРИОРИТЕТ 2: Прямая передача HTML данных
+      const pageHtml = message.pageHtml || message.htmlData || message.html;
+      workflowPayload = { page_html: pageHtml };
+      console.log(`[offscreen] 📄 Используем прямой pageHtml: ${pageHtml.length} символов`);
     } else {
-      throw new Error('No HTML data provided - neither chunks nor direct pageHtml available');
+      throw new Error('Нет HTML данных - ни chunks, ни HTML_DIRECT storage, ни прямой pageHtml/htmlData/html недоступны');
     }
 
      logInfo('EXECUTION', `Starting workflow-engine with pluginId: ${pluginId}`);
