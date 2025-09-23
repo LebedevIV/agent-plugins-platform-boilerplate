@@ -135,21 +135,8 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     const messageId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
     const messageWithId = { ...message, messageId };
 
-    console.log('[PluginControlPanel] sendMessageToBackgroundAsync:', {
-      type: messageWithId.type,
-      pluginId: messageWithId.pluginId,
-      pageKey: messageWithId.pageKey,
-      messageId: messageWithId.messageId,
-      timestamp: new Date().toISOString()
-    });
-
     try {
       const response = await chrome.runtime.sendMessage(messageWithId);
-      console.log('[PluginControlPanel] sendMessageToBackgroundAsync - получен ответ:', {
-        response,
-        messageId,
-        timestamp: new Date().toISOString()
-      });
       return response;
     } catch (error) {
       console.error('[PluginControlPanel] sendMessageToBackgroundAsync - ошибка:', error);
@@ -162,13 +149,6 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     const messageId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
     const messageWithId = { ...message, messageId };
 
-    console.log('[PluginControlPanel] sendMessageToBackground (legacy):', {
-      type: messageWithId.type,
-      pluginId: messageWithId.pluginId,
-      pageKey: messageWithId.pageKey,
-      messageId: messageWithId.messageId,
-      timestamp: new Date().toISOString()
-    });
     chrome.runtime.sendMessage(messageWithId);
   }, []);
 
@@ -670,6 +650,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     });
 
     try {
+      console.log('[PluginControlPanel] loadChat - отправляем запрос GET_PLUGIN_CHAT');
       const response = await sendMessageToBackgroundAsync({
         type: 'GET_PLUGIN_CHAT',
         pluginId,
@@ -677,8 +658,14 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       });
 
       console.log('[PluginControlPanel] loadChat - получен ответ от background:', response);
+      console.log('[PluginControlPanel] loadChat - ТЕКУЩЕЕ СОСТОЯНИЕ ПЕРЕД СБРОСОМ LOADING В loadChat:', {
+        loading,
+        messagesCount: messages.length,
+        timestamp: new Date().toISOString()
+      });
 
       setLoading(false); // Останавливаем загрузку при получении ответа
+      console.log('[PluginControlPanel] loadChat - loading сброшен в false');
 
       if (response?.error) {
         console.error('[PluginControlPanel] loadChat - ошибка в ответе:', response.error);
@@ -909,6 +896,13 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
 
     } catch (error) {
       console.error('[PluginControlPanel] loadChat - ошибка при получении ответа:', error);
+      console.error('[PluginControlPanel] loadChat - ТЕКУЩЕЕ СОСТОЯНИЕ В CATCH:', {
+        loading,
+        messagesCount: messages.length,
+        errorType: typeof error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString()
+      });
 
       // Детальное логирование ошибки с трассировкой стека
       console.error('[PluginControlPanel] loadChat - ERROR DETAILS:', {
@@ -923,6 +917,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       });
 
       setLoading(false);
+      console.log('[PluginControlPanel] loadChat - loading сброшен в false в catch блоке');
 
       // Улучшенная обработка ошибок с проверкой типа
       let errorMessage = 'Ошибка связи с background';
@@ -997,6 +992,15 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       // Обработка обновлений чата от других компонентов/вкладок
       if (event?.type === 'PLUGIN_CHAT_UPDATED' && event.pluginId === pluginId && event.pageKey === currentPageKey) {
         console.log('[PluginControlPanel] handleChatUpdate - обновление чата получено, запрашиваем актуальные данные');
+        console.log('[PluginControlPanel] handleChatUpdate - ТЕКУЩЕЕ СОСТОЯНИЕ ПЕРЕД СБРОСОМ:', {
+          loading,
+          messagesCount: messages.length,
+          currentPageKey,
+          pluginId,
+          timestamp: new Date().toISOString()
+        });
+        setLoading(false); // Гарантированный сброс loading перед загрузкой чата
+        console.log('[PluginControlPanel] handleChatUpdate - loading сброшен, вызываем loadChat');
         // Запрашиваем актуальные данные чата асинхронно
         loadChat().catch((error) => {
           console.error('[PluginControlPanel] handleChatUpdate - ошибка при загрузке чата:', error);
@@ -1030,8 +1034,15 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       // Обработка результатов удаления чата
       if (event?.type === 'DELETE_PLUGIN_CHAT_RESPONSE') {
         console.log('[PluginControlPanel] handleChatUpdate - результат удаления чата:', event);
+        console.log('[PluginControlPanel] handleChatUpdate - ТЕКУЩЕЕ СОСТОЯНИЕ ПЕРЕД ОБРАБОТКОЙ DELETE_RESPONSE:', {
+          loading,
+          messagesCount: messages.length,
+          eventSuccess: event.success,
+          timestamp: new Date().toISOString()
+        });
 
         setLoading(false); // Останавливаем загрузку
+        console.log('[PluginControlPanel] handleChatUpdate - loading сброшен в false для DELETE_PLUGIN_CHAT_RESPONSE');
 
         if (event.success) {
           console.log('[PluginControlPanel] handleChatUpdate: чат успешно удален');
@@ -1370,7 +1381,6 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
 
   const handleTextareaChange = (event: React.ChangeEvent<HTMLTextAreaElement>): void => {
     setMessage(event.target.value); // Используем хук вместо setMessage
-    console.log('[PluginControlPanel] handleTextareaChange: новое значение', event.target.value);
     // Автоматическое изменение высоты
     const textarea = event.target;
     textarea.style.height = 'auto';
@@ -1400,7 +1410,6 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     // Очищаем локальное состояние сразу
     setMessages([]);
     clearDraft(); // Очищаем черновик
-    console.log('[PluginControlPanel] handleClearChat: запрос на очистку чата отправлен');
   };
 
   // Экспорт чата в JSON

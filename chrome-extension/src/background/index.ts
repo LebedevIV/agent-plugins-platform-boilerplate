@@ -18,6 +18,15 @@ console.log('[background] Storage modules loaded');
 
 console.log('[background] Starting Offscreen Document integration - REFACTORED BACKGROUND ARCHITECTURE');
 
+// Функция для отправки обновлений чата плагина
+const broadcastChatUpdate = (pluginId: string, pageKey: string) => {
+  chrome.runtime.sendMessage({
+    type: 'PLUGIN_CHAT_UPDATED',
+    pluginId,
+    pageKey,
+  });
+};
+
 // === OFFSCREEN API FEATURE DETECTION ===
 
 // Enhanced production-ready feature detection функция для проверки доступности offscreen API
@@ -925,6 +934,10 @@ const handleDeletePluginChat = async (message: any, sendResponse: (response?: an
   try {
     const result = await pluginChatApi.deleteChat(message.pluginId, message.pageKey);
     console.log('[background] DELETE_PLUGIN_CHAT completed successfully for:', { pluginId: message.pluginId, pageKey: message.pageKey });
+
+    // Отправляем событие обновления чата после успешного удаления
+    broadcastChatUpdate(message.pluginId, message.pageKey);
+
     sendResponse(result);
   } catch (error) {
     console.error('[background] DELETE_PLUGIN_CHAT error:', error);
@@ -1635,12 +1648,7 @@ chrome.runtime.onMessage.addListener(
           console.log('[background] SAVE_PLUGIN_CHAT_MESSAGE: draft cleared after message save');
 
           // Отправляем событие обновления чата для всех слушателей
-          chrome.runtime.sendMessage({
-            type: 'PLUGIN_CHAT_UPDATED',
-            pluginId: msg.pluginId,
-            pageKey: msg.pageKey,
-            messageId: msg.messageId
-          });
+          broadcastChatUpdate(msg.pluginId, msg.pageKey);
 
           // Отправляем ответ на сохранение сообщения
           sendResponse({
@@ -1710,16 +1718,9 @@ chrome.runtime.onMessage.addListener(
           });
 
           console.log('[background][PYODIDE_MESSAGE] ✅ Message saved successfully:', result);
-
+ 
           // Отправляем событие обновления чата для всех слушателей
-          chrome.runtime.sendMessage({
-            type: 'PLUGIN_CHAT_UPDATED',
-            pluginId: msg.pluginId,
-            pageKey: msg.pageKey,
-            messageId: messageId
-          }).catch((error) => {
-            console.warn('[background][PYODIDE_MESSAGE] Failed to send PLUGIN_CHAT_UPDATED event:', error);
-          });
+          broadcastChatUpdate(msg.pluginId, msg.pageKey);
 
           // Отправляем ответ
           sendResponse({
@@ -2431,14 +2432,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
         console.log('[background][PORT][PYODIDE_MESSAGE] ✅ Message saved successfully:', result);
 
         // Отправляем событие обновления чата для всех слушателей
-        chrome.runtime.sendMessage({
-          type: 'PLUGIN_CHAT_UPDATED',
-          pluginId: message.pluginId,
-          pageKey: message.pageKey,
-          messageId: messageId
-        }).catch((error) => {
-          console.warn('[background][PORT][PYODIDE_MESSAGE] Failed to send PLUGIN_CHAT_UPDATED event:', error);
-        });
+        broadcastChatUpdate(message.pluginId, message.pageKey);
 
         // Возвращаем успешный ответ
         return {
