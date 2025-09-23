@@ -793,3 +793,13 @@ code {
 .theme-light .tab-button {
   color: var(--color-text-light-secondary);
 }
+
+/* Fix for scroll issue in main content panel */
+[data-panel] {
+  overflow: visible !important;
+}
+
+[data-panel] .ide-main-content {
+  overflow-y: auto !important;
+  height: 100% !important;
+}
