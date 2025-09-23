@@ -245,7 +245,7 @@
                 const result = await chrome.storage.local.get(['htmlTransmissionMode']);
                 currentSettings = result;
 
-                const mode = result.htmlTransmissionMode || 'chunks';
+                const mode = result.htmlTransmissionMode || 'direct';
                 const checkbox = document.getElementById('htmlTransmissionMode');
                 checkbox.checked = mode === 'direct';
 

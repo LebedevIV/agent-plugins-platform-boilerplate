@@ -17,7 +17,7 @@ export const getPluginSettingsByIdFallback = (pluginId: string, settings: Plugin
   settings[pluginId] ?? {
     enabled: true, // По умолчанию плагин включен
     autorun: false, // По умолчанию автоматический запуск выключен
-    htmlTransmissionMode: 'chunks', // По умолчанию передача чанками для обратной совместимости
+    htmlTransmissionMode: 'direct', // По умолчанию прямая передача HTML
   };
 
 // Создаем хранилище для настроек плагинов

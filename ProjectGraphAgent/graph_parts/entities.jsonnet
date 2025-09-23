@@ -309,5 +309,76 @@ local DefaultMetadata = templates.DefaultMetadata;
 
     // --- Tests ---
     // Note: Test configurations are managed separately and not included in this graph
+
+    // --- HTML Transmission Settings ---
+    'html-transmission-settings': Component(
+        name='HTMLTransmissionSettings',
+        path='pages/options/src/components/SettingsTab.tsx',
+        purpose='Настройка режима передачи HTML содержимого в плагины (целиком или чанками).',
+        metadata=Metadata(1.0, 'Gemini-1.5-Pro')
+    ) + {
+        sections: [
+            { name: 'htmlTransmissionMode', purpose: 'Переменная состояния режима передачи HTML' },
+            { name: 'loadHtmlTransmissionMode', purpose: 'Загрузка настроек из chrome.storage.local' },
+            { name: 'saveHtmlTransmissionMode', purpose: 'Сохранение настроек в хранилище' },
+            { name: 'ToggleButton', purpose: 'UI компонент переключения режимов' }
+        ],
+        configuration: {
+            modes: {
+                direct: {
+                    name: 'Прямая передача',
+                    description: 'HTML передается целиком одним сообщением',
+                    default: true,
+                    performance: 'Быстрее для большинства страниц',
+                    limitations: 'Не работает с HTML >50MB'
+                },
+                chunks: {
+                    name: 'Передача чанками',
+                    description: 'HTML разбивается на части по 32KB',
+                    default: false,
+                    performance: 'Стабильнее для больших документов',
+                    limitations: 'Медленнее из-за накладных расходов'
+                }
+            },
+            storage: 'chrome.storage.local',
+            fallback: 'direct'
+        },
+        chain_of_usage: [
+            {
+                component: 'SettingsTab.tsx',
+                action: 'Пользователь изменяет переключатель',
+                result: 'Сохранение в chrome.storage.local'
+            },
+            {
+                component: 'background.ts',
+                action: 'RUN_WORKFLOW получает настройки',
+                result: 'Выбор метода sendHtmlDirectly или sendInChunks'
+            },
+            {
+                component: 'offscreen.js',
+                action: 'Получение EXECUTE_WORKFLOW с HTML',
+                result: 'Выполнение Python кода с данными'
+            }
+        ],
+        validation: {
+            allowed_values: ['direct', 'chunks'],
+            default_value: 'direct',
+            storage_key: 'htmlTransmissionMode'
+        }
+    },
+
+    'memory-bank/ui/html-transmission-settings.md': FileEntity(
+        kind='UIDocumentation',
+        path='memory-bank/ui/html-transmission-settings.md',
+        purpose: 'Документация UI компонентов и интерфейса настройки передачи HTML.',
+        metadata=Metadata(1.0, 'Gemini-1.5-Pro')
+    ) + {
+        sections: [
+            { name: 'UI Components', purpose: 'Описание пользовательского интерфейса настроек' },
+            { name: 'ToggleButton', purpose: 'Компонент переключения режимов передачи' },
+            { name: 'State Management', purpose: 'Управление состоянием в React компонентах' },
+            { name: 'Storage Integration', purpose: 'Интеграция с chrome.storage API' }
+        ]
+    },
     // ... other entities
 }

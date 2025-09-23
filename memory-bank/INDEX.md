@@ -34,6 +34,7 @@
 - side-panel-improvements.md - Side panel improvements
 - chat-context-fix.md - Chat context
 - lazy-chat-sync.md - Lazy synchronization
+- html-transmission-settings.md - HTML transmission configuration and usage chain
 
 ### 📅 [Planning](./planning/) - Planning
 - future-plans.md - Development plans
@@ -52,6 +53,7 @@
 
 - **Current Status**: [activeContext.md](./core/activeContext.md)
 - **Progress**: [progress.md](./core/progress.md)
+- **HTML Transmission**: [html-transmission-settings.md](./ui/html-transmission-settings.md)
 - **Errors**: [errors.md](./errors/errors.md)
 - **Architecture**: [architecture-decisions.md](./architecture/architecture-decisions.md)
 - **Testing**: [testing-results.md](./development/testing-results.md)
@@ -65,6 +67,11 @@
 See [MEMORY_BANK_STRUCTURE.md](./MEMORY_BANK_STRUCTURE.md) for detailed organization rules.
 
 Last updated: 2025-09-23
+
+### **Documentation Updates**
+- **HTML Transmission Settings**: New comprehensive documentation for HTML transmission configuration
+- **UI Documentation**: Added UI-specific documentation for HTML transmission settings
+- **ProjectGraphAgent**: Updated with HTML transmission entity and validation rules
 
 ## 🔄 Recent Updates
 

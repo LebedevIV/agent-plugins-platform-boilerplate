@@ -208,10 +208,17 @@ def safe_len(text):
 def chat_message(message: str, message_type: str = None):
     """Отправка сообщения в чат (только для финальных результатов и ошибок)."""
     try:
-        # Отправляем чистое читаемое сообщение без префиксов
+        console_log(f"📤 Отправка в чат: {message[:100]}...")
         js.sendMessageToChat({"content": message})
-    except Exception:
-        console_log(f"Ошибка отправки в чат: {message}")
+        console_log(f"✅ Сообщение успешно отправлено в чат ({len(message)} символов)")
+    except Exception as e:
+        console_log(f"❌ ОШИБКА отправки в чат: {message[:200]}... Ошибка: {str(e)}")
+        # Отправляем ошибку в чат для пользователя
+        try:
+            error_msg = f"⚠️ Ошибка отправки сообщения в чат: {str(e)[:100]}..."
+            js.sendMessageToChat({"content": error_msg})
+        except:
+            pass  # Игнорируем ошибки при отправке сообщения об ошибке
 
 class OptimizedLogger:
     """Оптимизированный логгер для уменьшения повторяющихся сообщений."""
@@ -2665,14 +2672,21 @@ def analyze_ozon_product() -> Dict[str, Any]:
         # Отправляем описание и состав в одном сообщении
         truncated_description = description[:100] + ('...' if len(description) > 100 else '')
         truncated_composition = composition[:100] + ('...' if len(composition) > 100 else '')
+        console_log("[DIAGNOSTIC] ===== ОТПРАВКА СООБЩЕНИЯ С ОПИСАНИЕМ И СОСТАВОМ =====")
         chat_message(f"📝 Описание: {truncated_description}\n📝 Состав: {truncated_composition}")
 
-        # Отправляем результаты AI анализа соответствия в одном сообщении
+        # Проверяем, что переменные корректны
         score_str = str(score) if score is not None else 'N/A'
         reasoning_str = str(reasoning) if reasoning is not None else 'Объяснение не доступно'
-        chat_message(f"🤖 Ответ нейросети (Gemini AI):\n📊 Оценка соответствия: {score_str}/10\n{reasoning_str}")
+
+        console_log("[DIAGNOSTIC] ===== ОТПРАВКА СООБЩЕНИЯ С РЕЗУЛЬТАТАМИ AI =====")
+        if score_str == 'N/A' and reasoning_str == 'Объяснение не доступно':
+            chat_message("⚠️ Не удалось получить результаты анализа от нейросети")
+        else:
+            chat_message(f"🤖 Ответ нейросети (Gemini AI):\n📊 Оценка соответствия: {score_str}/10\n{reasoning_str}")
 
         # Отправляем информацию об аналогах в чат
+        console_log("[DIAGNOSTIC] ===== ОТПРАВКА СООБЩЕНИЯ С АНАЛОГАМИ =====")
         if analogs and len(analogs) > 0:
             analogs_message = "🔍 Найденные аналоги:\n"
             for i, analog in enumerate(analogs[:3], 1):  # Показываем максимум 3 аналога
@@ -3078,14 +3092,17 @@ async def _analyze_composition_vs_description(description: str, composition: str
         console_log(f"[DIAGNOSTIC] Модель: compliance_check")
         console_log(f"[DIAGNOSTIC] Длина промпта: {safe_len(prompt)} символов")
         console_log(f"[DIAGNOSTIC] Промпт начинается: {prompt[:100]}...")
+        console_log("[DIAGNOSTIC] ===== НАЧАЛО ВЫЗОВА _call_ai_model() =====")
         # Используем псевдоним "compliance_check" для проверки соответствия описания и состава
         result_str = await ozon_analyzer_server._call_ai_model("compliance_check", prompt)
+        console_log("[DIAGNOSTIC] ===== КОНЕЦ ВЫЗОВА _call_ai_model() =====")
 
         # [DIAGNOSTIC] ===== РЕЗУЛЬТАТ ВЫЗОВА AI МОДЕЛИ =====
         console_log("[DIAGNOSTIC] ===== РЕЗУЛЬТАТ ВЫЗОВА AI МОДЕЛИ =====")
         console_log(f"[DIAGNOSTIC] Результат compliance_check: {result_str}")
         console_log(f"[DIAGNOSTIC] Тип результата: {type(result_str)}")
         console_log(f"[DIAGNOSTIC] Длина результата: {safe_len(result_str)} символов")
+        console_log("[DIAGNOSTIC] ===== ПОЛУЧЕН ОТВЕТ ОТ AI, НАЧИНАЕМ ОБРАБОТКУ =====")
 
         # Проверка типа данных от AI и конвертация при необходимости
         if not isinstance(result_str, str):
@@ -3211,6 +3228,8 @@ async def _analyze_composition_vs_description(description: str, composition: str
 
     except Exception as e:
         console_log(f"Критическая ошибка в _analyze_composition_vs_description: {str(e)}")
+        # Отправляем ошибку AI в чат для пользователя
+        chat_message(f"⚠️ Произошла ошибка при анализе товара: {str(e)[:100]}...")
         # Безопасная конвертация типов данных для избежания ошибок len()
         try:
             desc_len = safe_len(description)
@@ -3744,7 +3763,9 @@ async def _find_similar_products(categories: List[str], composition: str) -> Lis
                 return _generate_fallback_analogs(categories, product_type)
 
     except Exception as e:
-        chat_message(f"❌ Критическая ошибка при поиске аналогов: {str(e)}")
+        error_msg = f"❌ Критическая ошибка при поиске аналогов: {str(e)[:100]}..."
+        console_log(error_msg)
+        chat_message(error_msg)
         return [{"name": f"Ошибка поиска аналогов: {str(e)}", "error": True}]
 
 def _categorize_product_by_composition(composition: str) -> str:

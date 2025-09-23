@@ -28,7 +28,7 @@ async function getGlobalSettings(): Promise<GlobalSettings> {
       'htmlTransmissionMode'
     ]);
 
-    const htmlTransmissionMode = settings.htmlTransmissionMode || 'chunks';
+    const htmlTransmissionMode = settings.htmlTransmissionMode || 'direct';
     console.log(`[background][GLOBAL_SETTINGS] ✅ Successfully loaded global settings: htmlTransmissionMode=${htmlTransmissionMode}`);
 
     return {
@@ -36,8 +36,8 @@ async function getGlobalSettings(): Promise<GlobalSettings> {
     };
   } catch (error) {
     console.error('[background][GLOBAL_SETTINGS] ❌ Failed to load global settings from chrome.storage.local:', error);
-    console.warn('[background][GLOBAL_SETTINGS] 🔄 Using fallback: htmlTransmissionMode=chunks');
-    return { htmlTransmissionMode: 'chunks' }; // fallback
+    console.warn('[background][GLOBAL_SETTINGS] 🔄 Using fallback: htmlTransmissionMode=direct');
+    return { htmlTransmissionMode: 'direct' }; // fallback
   }
 }
 
@@ -2850,7 +2850,8 @@ class BackgroundController {
       }
     }, this.CLEANUP_INTERVAL);
 
-      // Очистка устаревших метаданных трансферов
+    // Очистка устаревших метаданных трансферов
+    {
       try {
         await this.metadataManager.cleanupExpired();
       } catch (error) {
@@ -2887,8 +2888,18 @@ class BackgroundController {
           avgAge: `${metadataStats.avgAge}h`
         });
       }
+      if (metadataStats.total > 0) {
+        console.log(`[Background][METADATA_STATS] 📊 Metadata statistics:`, {
+          total: metadataStats.total,
+          active: metadataStats.active,
+          completed: metadataStats.completed,
+          recovered: metadataStats.recovered,
+          avgAge: `${metadataStats.avgAge}h`
+        });
+      }
+    }
     }, 30000); // Every 30 seconds
-  }
+}
   
   private async routeMessage(
     message: BackgroundMessage, 

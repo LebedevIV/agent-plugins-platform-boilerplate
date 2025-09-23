@@ -41,7 +41,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   console.log('[SettingsTab] theme:', theme, 'setTheme:', typeof setTheme);
 
   // Состояние для настройки htmlTransmissionMode
-  const [htmlTransmissionMode, setHtmlTransmissionMode] = React.useState<HtmlTransmissionMode>('chunks');
+  const [htmlTransmissionMode, setHtmlTransmissionMode] = React.useState<HtmlTransmissionMode>('direct');
 
   // Загрузка настройки htmlTransmissionMode при монтировании компонента
   React.useEffect(() => {
@@ -49,7 +49,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       try {
         console.log('[SettingsTab][DEBUG] 🔍 Loading htmlTransmissionMode from chrome.storage.local...');
         const result = await chrome.storage.local.get(['htmlTransmissionMode']);
-        const mode = (result.htmlTransmissionMode as HtmlTransmissionMode) || 'chunks';
+        const mode = (result.htmlTransmissionMode as HtmlTransmissionMode) || 'direct';
         console.log('[SettingsTab][DEBUG] 📊 Loaded htmlTransmissionMode:', mode, '(from storage:', result.htmlTransmissionMode, ')');
         setHtmlTransmissionMode(mode);
       } catch (error) {
@@ -86,7 +86,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             {/* HTML Transmission Mode Toggle */}
             <ToggleButton
               checked={htmlTransmissionMode === 'direct'}
-              onChange={(checked) => saveHtmlTransmissionMode(checked ? 'direct' : 'chunks')}
+              onChange={(checked) => saveHtmlTransmissionMode(checked ? 'direct' : 'direct')}
               label="Отправлять HTML целиком"
             />
             <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px', marginLeft: '40px' }}>

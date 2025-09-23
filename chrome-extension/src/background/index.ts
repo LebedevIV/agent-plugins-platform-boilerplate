@@ -1718,9 +1718,36 @@ chrome.runtime.onMessage.addListener(
           });
 
           console.log('[background][PYODIDE_MESSAGE] ✅ Message saved successfully:', result);
- 
-          // Отправляем событие обновления чата для всех слушателей
-          broadcastChatUpdate(msg.pluginId, msg.pageKey);
+
+          // Проверяем, что сообщение действительно сохранено в storage перед обновлением UI
+          const chatKey = `${msg.pluginId}::${getPageKey(msg.pageKey)}`;
+          const verificationResult = await new Promise<boolean>((resolve) => {
+            chrome.storage.local.get([chatKey], (storageResult) => {
+              const savedChat = storageResult[chatKey];
+              const savedMessage = savedChat?.messages?.find((m: any) => m.id === messageId);
+              const messageExists = !!(savedMessage && savedMessage.content === msg.message);
+              console.log('[background][PYODIDE_MESSAGE] 🔍 Storage verification:', {
+                chatKey,
+                messageExists,
+                savedMessageContent: savedMessage?.content?.substring(0, 50) + (savedMessage?.content?.length > 50 ? '...' : ''),
+                totalMessages: savedChat?.messages?.length
+              });
+              resolve(messageExists);
+            });
+          });
+
+          if (verificationResult) {
+            console.log('[background][PYODIDE_MESSAGE] ✅ Message verified in storage, updating UI');
+            // Отправляем событие обновления чата для всех слушателей только после подтверждения сохранения
+            broadcastChatUpdate(msg.pluginId, msg.pageKey);
+          } else {
+            console.error('[background][PYODIDE_MESSAGE] ❌ Message not found in storage, skipping UI update');
+            sendResponse({
+              error: 'Message not verified in storage',
+              type: 'PYODIDE_MESSAGE_RESPONSE'
+            });
+            return;
+          }
 
           // Отправляем ответ
           sendResponse({
@@ -2431,8 +2458,34 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
 
         console.log('[background][PORT][PYODIDE_MESSAGE] ✅ Message saved successfully:', result);
 
-        // Отправляем событие обновления чата для всех слушателей
-        broadcastChatUpdate(message.pluginId, message.pageKey);
+        // Проверяем, что сообщение действительно сохранено в storage перед обновлением UI
+        const chatKey = `${message.pluginId}::${getPageKey(message.pageKey)}`;
+        const verificationResult = await new Promise<boolean>((resolve) => {
+          chrome.storage.local.get([chatKey], (storageResult) => {
+            const savedChat = storageResult[chatKey];
+            const savedMessage = savedChat?.messages?.find((m: any) => m.id === messageId);
+            const messageExists = !!(savedMessage && savedMessage.content === message.message);
+            console.log('[background][PORT][PYODIDE_MESSAGE] 🔍 Storage verification:', {
+              chatKey,
+              messageExists,
+              savedMessageContent: savedMessage?.content?.substring(0, 50) + (savedMessage?.content?.length > 50 ? '...' : ''),
+              totalMessages: savedChat?.messages?.length
+            });
+            resolve(messageExists);
+          });
+        });
+
+        if (verificationResult) {
+          console.log('[background][PORT][PYODIDE_MESSAGE] ✅ Message verified in storage, updating UI');
+          // Отправляем событие обновления чата для всех слушателей только после подтверждения сохранения
+          broadcastChatUpdate(message.pluginId, message.pageKey);
+        } else {
+          console.error('[background][PORT][PYODIDE_MESSAGE] ❌ Message not found in storage, skipping UI update');
+          return {
+            error: 'Message not verified in storage',
+            type: 'PYODIDE_MESSAGE_RESPONSE'
+          };
+        }
 
         // Возвращаем успешный ответ
         return {
