@@ -1,6 +1,6 @@
 {
   "name": "@extension/i18n",
-  "version": "0.5.1013",
+  "version": "0.5.1014",
   "description": "chrome extension - internationalization",
   "type": "module",
   "private": true,

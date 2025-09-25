@@ -2339,49 +2339,31 @@ def analyze_ozon_product() -> Dict[str, Any]:
 
         console_log(f"🔄 Координация завершена для режима {transmission_mode}")
 
-        # Финальная проверка готовности данных
-        console_log("🔍 Финальная проверка готовности данных...")
-        if transmission_mode == 'direct':
-            if direct_html_data and len(direct_html_data) > 100:
-                console_log("✅ Данные готовы для обработки в режиме DIRECT")
-            else:
-                console_log("❌ Данные не готовы - прямая передача не удалась")
-                raise ValueError("Прямая передача не удалась - HTML не получен или поврежден")
-        else:
-            if chunk_count > 0 and total_length > 0:
-                console_log(f"✅ Данные готовы для обработки в режиме CHUNKS ({chunk_count} чанков)")
-            else:
-                console_log("❌ Данные не готовы - чанковая передача не удалась")
-                raise ValueError("Чанковая передача не удалась - отсутствуют чанки или метаданные")
+        # Финальная проверка готовности данных и сборка HTML
+        console_log("🔍 Финальная проверка готовности данных и сборка HTML...")
 
-        if transmission_mode == 'direct' and direct_html_data:
-            # Прямая передача HTML
+        if transmission_mode == 'direct':
+            # Режим прямой передачи - HTML уже готов
             console_log("📨 Обработка прямой передачи HTML")
             console_log(f"📋 Проверка качества прямого HTML: {type(direct_html_data)}")
 
-            # Дополнительная валидация прямого HTML
-            if not isinstance(direct_html_data, str):
-                console_log(f"⚠️ Прямой HTML не является строкой: {type(direct_html_data)} - пытаемся конвертировать")
-                try:
-                    direct_html_data = str(direct_html_data)
-                    console_log("✅ Успешная конвертация в строку")
-                except Exception as e:
-                    console_log(f"❌ Не удалось конвертировать прямой HTML: {e}")
-                    raise ValueError(f"Прямой HTML не может быть преобразован в строку: {e}")
-
-            if len(direct_html_data) < 100:
-                console_log(f"⚠️ Прямой HTML слишком короткий: {len(direct_html_data)} символов")
-                console_log("🔄 Переходим на чанковый режим как fallback")
-                transmission_mode = 'chunks'
-            else:
+            if direct_html_data and len(direct_html_data) > 100:
                 page_html = direct_html_data
                 console_log(f"✅ HTML получен напрямую: {len(page_html)} символов")
                 console_log("📊 Проверка целостности прямого HTML:")
                 _check_html_integrity(page_html, "direct_transmission")
+            else:
+                console_log("❌ Данные не готовы - прямая передача не удалась")
+                raise ValueError("Прямая передача не удалась - HTML не получен или поврежден")
 
         else:
-            # Чанковая передача HTML
-            console_log(f"📦 Чтение {chunk_count} чанков из Python globals")
+            # Режим чанковой передачи - нужно собрать HTML из чанков
+            console_log(f"📦 Режим CHUNKS: чтение {chunk_count} чанков из Python globals")
+
+            if chunk_count <= 0 or total_length <= 0:
+                console_log("❌ Данные не готовы - чанковая передача не удалась")
+                raise ValueError("Чанковая передача не удалась - отсутствуют чанки или метаданные")
+
             chunks = []
             total_chunks_size = 0
             chunk_diagnostics = []  # Для сбора диагностики всех чанков
@@ -2465,30 +2447,42 @@ def analyze_ozon_product() -> Dict[str, Any]:
         methods_used = list(set(d['method_used'] for d in chunk_diagnostics if d['method_used']))
         console_log(f"Методы доступа к чанкам: {methods_used}")
 
-        # Шаг 3: Сборка полного HTML из чанков
-        console_log("Сборка полного HTML из чанков")
-        page_html = ''.join(chunks)
-        assembled_length = len(page_html)
-        console_log(f"HTML собран: длина={assembled_length} символов")
+        # Шаг 3: Проверка целостности HTML в зависимости от режима
+        console_log("Расширенная проверка целостности HTML")
 
-        # Шаг 4: Расширенная проверка целостности собранного HTML
-        console_log("Расширенная проверка целостности собранного HTML")
-        console_log(f"Ожидаемая длина: {total_length} символов")
-        console_log(f"Собранная длина: {assembled_length} символов")
+        if transmission_mode == 'chunks':
+            # Итоговый отчет по чанкам только в режиме chunks
+            console_log("===== ОТЧЕТ ПО ЧАНКАМ =====")
+            console_log(f"Всего прочитано: {len(chunks)} чанков")
+            console_log(f"Общий размер: {total_chunks_size} символов")
 
-        # Детальная проверка соответствия длины
-        length_difference = assembled_length - total_length
-        length_match_percent = (assembled_length / total_length * 100) if total_length > 0 else 0
+            # Проверка на пустые чанки
+            empty_chunks = [d for d in chunk_diagnostics if d['is_empty']]
+            if empty_chunks:
+                console_log(f"Найдено пустых чанков: {len(empty_chunks)}")
+                for ec in empty_chunks:
+                    console_log(f"Пустой чанк: {ec['chunk_key']}")
 
-        console_log(f"Разница в длине: {length_difference} символов ({length_match_percent:.1f}%)")
+            # Проверка последовательности методов доступа
+            methods_used = list(set(d['method_used'] for d in chunk_diagnostics if d['method_used']))
+            console_log(f"Методы доступа к чанкам: {methods_used}")
 
-        if assembled_length != total_length:
-            if assembled_length < total_length:
-                chat_message("СТРОКА ОБРЕЗАНА! Возможна потеря данных.")
-                console_log(f"Потеряно: {total_length - assembled_length} символов")
-            else:
-                console_log("Строка длиннее ожидаемой. Возможно, добавлены лишние данные.")
-                console_log(f"Лишние: {assembled_length - total_length} символов")
+            # Проверка соответствия длины только в режиме chunks
+            assembled_length = len(page_html)
+            length_difference = assembled_length - total_length
+            length_match_percent = (assembled_length / total_length * 100) if total_length > 0 else 0
+
+            console_log(f"Ожидаемая длина: {total_length} символов")
+            console_log(f"Собранная длина: {assembled_length} символов")
+            console_log(f"Разница в длине: {length_difference} символов ({length_match_percent:.1f}%)")
+
+            if assembled_length != total_length:
+                if assembled_length < total_length:
+                    chat_message("СТРОКА ОБРЕЗАНА! Возможна потеря данных.")
+                    console_log(f"Потеряно: {total_length - assembled_length} символов")
+                else:
+                    console_log("Строка длиннее ожидаемой. Возможно, добавлены лишние данные.")
+                    console_log(f"Лишние: {assembled_length - total_length} символов")
 
         # Расширенная проверка структуры HTML
         console_log("Анализ структуры HTML...")
