@@ -241,17 +241,27 @@
         // Загрузка настроек
         async function loadSettings() {
             try {
-                console.log('[options][DEBUG] 🔍 Loading settings from chrome.storage.local...');
-                const result = await chrome.storage.local.get(['htmlTransmissionMode']);
+                console.log('[options][DEBUG] 🔍 Loading settings from chrome.storage...');
+
+                // Проверяем оба storage
+                const [syncResult, localResult] = await Promise.all([
+                    chrome.storage.sync.get(['htmlTransmissionMode']),
+                    chrome.storage.local.get(['htmlTransmissionMode'])
+                ]);
+
+                console.log('[options][DEBUG] 📊 Storage state check:');
+                console.log('[options][DEBUG]   - sync storage:', syncResult.htmlTransmissionMode);
+                console.log('[options][DEBUG]   - local storage:', localResult.htmlTransmissionMode);
+
+                // Используем local storage как основной (как сейчас)
+                const result = localResult;
                 currentSettings = result;
 
                 const mode = result.htmlTransmissionMode || 'direct';
                 const checkbox = document.getElementById('htmlTransmissionMode');
                 checkbox.checked = mode === 'direct';
 
-                console.log('[options][DEBUG] 📊 Loaded htmlTransmissionMode:', mode, '(from storage:', result.htmlTransmissionMode, ')');
-                console.log('[options][DEBUG] 🎯 Checkbox checked state:', checkbox.checked);
-
+                console.log('[options][DEBUG] 📊 Final loaded htmlTransmissionMode:', mode, '(checkbox checked:', checkbox.checked, ')');
                 updateModeDisplay(mode);
                 showNotification('Настройки загружены');
             } catch (error) {
@@ -266,7 +276,12 @@
                 const checkbox = document.getElementById('htmlTransmissionMode');
                 const mode = checkbox.checked ? 'direct' : 'chunks';
 
-                console.log('[options][DEBUG] 💾 Saving htmlTransmissionMode:', mode, '(checkbox checked:', checkbox.checked, ')');
+                console.log('[options][DEBUG] 💾 Preparing to save htmlTransmissionMode:', mode);
+                console.log('[options][DEBUG] 📊 Checkbox state: checked=' + checkbox.checked + ', mode=' + mode);
+
+                // Показать текущее состояние storage перед сохранением
+                const beforeSave = await chrome.storage.local.get(['htmlTransmissionMode']);
+                console.log('[options][DEBUG] 📊 Before save - local storage:', beforeSave.htmlTransmissionMode);
 
                 await chrome.storage.local.set({
                     htmlTransmissionMode: mode
@@ -274,13 +289,17 @@
 
                 console.log('[options][DEBUG] ✅ Settings saved to chrome.storage.local');
 
+                // Верификация после сохранения
+                const afterSave = await chrome.storage.local.get(['htmlTransmissionMode']);
+                console.log('[options][DEBUG] 🔍 Verification - local storage after save:', afterSave.htmlTransmissionMode);
+
+                // Также проверить sync storage
+                const syncCheck = await chrome.storage.sync.get(['htmlTransmissionMode']);
+                console.log('[options][DEBUG] 🔍 Verification - sync storage after save:', syncCheck.htmlTransmissionMode);
+
                 currentSettings.htmlTransmissionMode = mode;
                 updateModeDisplay(mode);
                 showNotification('Настройки сохранены');
-
-                // Дополнительная верификация сохранения
-                const verification = await chrome.storage.local.get(['htmlTransmissionMode']);
-                console.log('[options][DEBUG] 🔍 Verification - saved value:', verification.htmlTransmissionMode);
 
             } catch (error) {
                 console.error('[options][DEBUG] ❌ Error saving settings:', error);
@@ -310,7 +329,10 @@
             await loadSettings();
 
             // Добавляем обработчик события для переключателя
-            document.getElementById('htmlTransmissionMode').addEventListener('change', saveSettings);
+            document.getElementById('htmlTransmissionMode').addEventListener('change', function() {
+                console.log('[options][DEBUG] 🎛️ Checkbox state changed - new checked state:', this.checked);
+                saveSettings();
+            });
 
             console.log('Настройки инициализированы');
         }

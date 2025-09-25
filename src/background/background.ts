@@ -19,23 +19,34 @@ interface GlobalSettings {
 }
 
 /**
- * Получает глобальные настройки расширения из chrome.storage.local
+ * Получает глобальные настройки расширения из chrome.storage (сначала sync, потом local)
  */
 async function getGlobalSettings(): Promise<GlobalSettings> {
   try {
-    console.log('[background][GLOBAL_SETTINGS] Reading global settings from chrome.storage.local...');
-    const settings = await chrome.storage.local.get([
-      'htmlTransmissionMode'
-    ]);
+    console.log('[background][GLOBAL_SETTINGS] Reading global settings from chrome.storage (sync first, then local)...');
 
-    const htmlTransmissionMode = settings.htmlTransmissionMode || 'direct';
-    console.log(`[background][GLOBAL_SETTINGS] ✅ Successfully loaded global settings: htmlTransmissionMode=${htmlTransmissionMode}`);
+    // First try sync storage
+    const syncResult = await chrome.storage.sync.get(['htmlTransmissionMode']);
+
+    if (syncResult.htmlTransmissionMode !== undefined) {
+      console.log(`[background][GLOBAL_SETTINGS] ✅ Found settings in sync storage: htmlTransmissionMode=${syncResult.htmlTransmissionMode}`);
+      return {
+        htmlTransmissionMode: syncResult.htmlTransmissionMode
+      };
+    }
+
+    // Fall back to local storage
+    console.log('[background][GLOBAL_SETTINGS] 🔄 Settings not found in sync, trying local storage...');
+    const localResult = await chrome.storage.local.get(['htmlTransmissionMode']);
+
+    const htmlTransmissionMode = localResult.htmlTransmissionMode || 'direct';
+    console.log(`[background][GLOBAL_SETTINGS] ✅ Successfully loaded global settings from local: htmlTransmissionMode=${htmlTransmissionMode}`);
 
     return {
       htmlTransmissionMode
     };
   } catch (error) {
-    console.error('[background][GLOBAL_SETTINGS] ❌ Failed to load global settings from chrome.storage.local:', error);
+    console.error('[background][GLOBAL_SETTINGS] ❌ Failed to load global settings from chrome.storage:', error);
     console.warn('[background][GLOBAL_SETTINGS] 🔄 Using fallback: htmlTransmissionMode=direct');
     return { htmlTransmissionMode: 'direct' }; // fallback
   }

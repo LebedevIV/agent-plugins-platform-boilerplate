@@ -55,10 +55,18 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         console.log('[SettingsTab][DEBUG]   - Сырое значение из storage:', result.htmlTransmissionMode);
         console.log('[SettingsTab][DEBUG]   - Тип значения из storage:', typeof result.htmlTransmissionMode);
 
-        const mode = (result.htmlTransmissionMode as HtmlTransmissionMode) || 'direct';
+        let mode = result.htmlTransmissionMode as HtmlTransmissionMode;
+
+        // Если ключа нет в storage, устанавливаем значение по умолчанию и сохраняем
+        if (mode === undefined) {
+          mode = 'direct';
+          console.log('[SettingsTab][DEBUG]   - Ключ htmlTransmissionMode не найден, устанавливаем значение по умолчанию "direct"');
+          await chrome.storage.local.set({ htmlTransmissionMode: mode });
+          console.log('[SettingsTab][DEBUG]   - Значение по умолчанию сохранено в storage');
+        }
+
         console.log('[SettingsTab][DEBUG] 📊 htmlTransmissionMode загружен:');
         console.log('[SettingsTab][DEBUG]   - Финальное значение:', mode);
-        console.log('[SettingsTab][DEBUG]   - Использовано значение по умолчанию:', mode === 'direct' && !result.htmlTransmissionMode ? 'Да' : 'Нет');
         console.log('[SettingsTab][DEBUG]   - Обновляем состояние компонента...');
 
         setHtmlTransmissionMode(mode);
@@ -75,23 +83,23 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
 
   // Сохранение настройки htmlTransmissionMode
   const saveHtmlTransmissionMode = async (mode: HtmlTransmissionMode) => {
+    // Сначала обновляем локальное состояние для немедленного отклика UI
+    setHtmlTransmissionMode(mode);
+
     try {
       console.log('[SettingsTab][DEBUG] 💾 Перед сохранением htmlTransmissionMode:');
       console.log('[SettingsTab][DEBUG]   - Новое значение:', mode);
-      console.log('[SettingsTab][DEBUG]   - Текущее состояние:', htmlTransmissionMode);
       console.log('[SettingsTab][DEBUG]   - Тип режима:', typeof mode);
 
       console.log('[SettingsTab][DEBUG] 💾 Сохраняем htmlTransmissionMode в chrome.storage.local...');
       await chrome.storage.local.set({ htmlTransmissionMode: mode });
       console.log('[SettingsTab][DEBUG] ✅ htmlTransmissionMode успешно сохранен в chrome.storage.local');
       console.log('[SettingsTab][DEBUG]   - Сохраненное значение:', mode);
-      console.log('[SettingsTab][DEBUG]   - Подтверждение: состояние компонента обновлено');
-
-      setHtmlTransmissionMode(mode);
     } catch (error) {
       console.error('[SettingsTab][DEBUG] ❌ Ошибка при сохранении htmlTransmissionMode:', error);
       console.error('[SettingsTab][DEBUG]   - Пытались сохранить:', mode);
-      console.error('[SettingsTab][DEBUG]   - Текущее состояние:', htmlTransmissionMode);
+      // Состояние уже обновлено выше, так что UI останется в новом состоянии
+      // даже если сохранение провалилось
     }
   };
 
@@ -109,7 +117,16 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             {/* HTML Transmission Mode Toggle */}
             <ToggleButton
               checked={htmlTransmissionMode === 'direct'}
-              onChange={(checked) => saveHtmlTransmissionMode(checked ? 'direct' : 'chunks')}
+              onChange={async (checked) => {
+                const mode = checked ? 'direct' : 'chunks';
+                console.log('[SettingsTab] ToggleButton onChange triggered:', { checked, mode });
+                try {
+                  await saveHtmlTransmissionMode(mode);
+                  console.log('[SettingsTab] Successfully saved htmlTransmissionMode:', mode);
+                } catch (error) {
+                  console.error('[SettingsTab] Error saving htmlTransmissionMode:', error);
+                }
+              }}
               label="Отправлять HTML целиком"
             />
             <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px', marginLeft: '40px' }}>
