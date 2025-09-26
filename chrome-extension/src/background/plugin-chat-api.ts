@@ -294,6 +294,7 @@ const pluginChatApi = {
 };
 
 export interface ChatMessage {
+  id?: string;
   role: 'user' | 'plugin';
   content: string;
   timestamp: number;

@@ -1857,10 +1857,10 @@ chrome.runtime.onMessage.addListener(
           // Сохраняем сообщение в чат плагина
           const result = await pluginChatApi.saveMessage(msg.pluginId, msg.pageKey, {
             content: messageContent,
-            sender: 'plugin',
-            timestamp: msg.timestamp || Date.now(),
-            type: 'plugin_message'
-          } as any);
+            role: 'plugin',
+            id: messageId,
+            timestamp: msg.timestamp || Date.now()
+          });
 
           console.log('[background][PYODIDE_MESSAGE] ✅ Message saved successfully:', result);
 
@@ -2681,10 +2681,10 @@ async function handleMessage(message: any, sender: any): Promise<any> {
         // Сохраняем сообщение в чат плагина
         const result = await pluginChatApi.saveMessage(message.pluginId, message.pageKey, {
           content: messageContent,
-          sender: 'plugin',
-          timestamp: message.timestamp || Date.now(),
-          type: 'plugin_message'
-        } as any);
+          role: 'plugin',
+          id: messageId,
+          timestamp: message.timestamp || Date.now()
+        });
 
         console.log('[background][PORT][PYODIDE_MESSAGE] ✅ Message saved successfully:', result);
 
