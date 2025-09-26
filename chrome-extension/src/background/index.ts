@@ -16,6 +16,12 @@ import { exampleThemeStorage, pluginSettingsStorage, getPluginSettings } from '@
 import { ensureOffscreenDocument } from '../../../src/background/offscreen-manager';
 console.log('[background] Storage modules loaded');
 
+// Интерфейсы для сообщений
+interface ExtensionMessage {
+  type: string;
+  [key: string]: any;
+}
+
 console.log('[background] Starting Offscreen Document integration - REFACTORED BACKGROUND ARCHITECTURE');
 
 // Функция для отправки обновлений чата плагина
@@ -213,11 +219,11 @@ const sendHtmlDirectly = async (
       pageKey,
       requestId,
       timestamp: Date.now()
-    });
+    }) as any;
 
     if (chrome.runtime.lastError) {
-      console.warn('[background][DIRECT_TRANSMISSION] Confirmation failed:', chrome.runtime.lastError.message);
-    } else if (confirmResponse?.confirmed) {
+      console.warn('[background][DIRECT_TRANSMISSION] Confirmation failed:', (chrome.runtime.lastError as any).message);
+    } else if ((confirmResponse as any)?.confirmed) {
       console.log('[background][DIRECT_TRANSMISSION] ✅ HTML receipt confirmed by offscreen');
     } else {
       console.warn('[background][DIRECT_TRANSMISSION] ⚠️ HTML receipt not confirmed by offscreen');
@@ -226,14 +232,15 @@ const sendHtmlDirectly = async (
     // Запускаем workflow в offscreen document с прямой передачей
     try {
       // Получить API ключ для передачи в offscreen
-      let geminiApiKey;
+      let geminiApiKey: string | undefined;
       try {
-        geminiApiKey = await getApiKeyForModel('gemini-flash');
+        geminiApiKey = await getApiKeyForModel('gemini-flash') || undefined;
         console.log('[background][DIRECT_TRANSMISSION] ✅ API key retrieved for workflow');
       } catch (keyError) {
         console.warn('[background][DIRECT_TRANSMISSION] ⚠️ Failed to get API key:', keyError);
+        geminiApiKey = undefined;
       }
-
+  
       await executeWorkflowInOffscreen(pluginId, pageKey, transferId, requestId, false, html, geminiApiKey);
       console.log('[background][DIRECT_TRANSMISSION] Workflow execution initiated successfully');
     } catch (workflowError) {
@@ -286,10 +293,10 @@ const activeTransfers = new Map<string, any>();
 function diagnoseTransferState(transferId: string): {
   exists: boolean;
   isValid: boolean;
-  diagnostics: Record<string, any>;
+  diagnostics: any;
 } {
   const transfer = activeTransfers.get(transferId);
-  const diagnostics = {
+  const diagnostics: any = {
     transferId,
     timestamp: Date.now(),
     exists: !!transfer,
@@ -821,7 +828,7 @@ async function processRecoveredAssembledTransfer(msg: any, transfer: any): Promi
     console.log(`[RECOVERY_PROCESSING] ✅ Recovery data validated - pluginId: ${pluginId}, pageKey: ${pageKey}`);
 
     // ПОДГОТОВКА EXECUTE_WORKFLOW СООБЩЕНИЯ
-    const executeMessage = {
+    const executeMessage: any = {
       type: 'EXECUTE_WORKFLOW',
       pluginId,
       pageKey,
@@ -829,6 +836,7 @@ async function processRecoveredAssembledTransfer(msg: any, transfer: any): Promi
       transferId: transferId,
       useChunks: false, // Данные уже собраны
       pageHtml: transfer.assembledData || transfer.html,
+      assembledData: transfer.assembledData || transfer.html,
       recovery: true,
       recoverySource: transfer.isRecovery ? 'fallback_recovery' : 'recovered',
       timestamp: Date.now()
@@ -1275,6 +1283,17 @@ async function sendChunksToOffscreen(
   }
 }
 
+// Функция для обработки старых версий Chrome (< 109)
+async function handleLegacyChrome(message: any): Promise<void> {
+  console.log('[LEGACY_CHROME] Handling legacy Chrome workflow:', message.type);
+
+  // Для старых версий просто логируем и игнорируем
+  console.warn('[LEGACY_CHROME] Legacy Chrome detected - workflow execution skipped');
+  console.warn('[LEGACY_CHROME] Please upgrade to Chrome 109+ for full functionality');
+
+  // Можно добавить дополнительную логику для fallback поведения
+}
+
 // Функция для запуска workflow в offscreen document
 async function executeWorkflowInOffscreen(
   pluginId: string,
@@ -1292,7 +1311,7 @@ async function executeWorkflowInOffscreen(
   console.log(`[WORKFLOW_EXECUTION] HTML data length: ${htmlData?.length || 0}`);
 
   // Получить API ключ для Gemini
-  let geminiApiKey = apiKey;
+  let geminiApiKey: string | null | undefined = apiKey;
   if (!geminiApiKey) {
     try {
       console.log('[WORKFLOW_EXECUTION] 🔑 Getting Gemini API key...');
@@ -1837,12 +1856,11 @@ chrome.runtime.onMessage.addListener(
 
           // Сохраняем сообщение в чат плагина
           const result = await pluginChatApi.saveMessage(msg.pluginId, msg.pageKey, {
-            id: messageId,
             content: messageContent,
             sender: 'plugin',
             timestamp: msg.timestamp || Date.now(),
             type: 'plugin_message'
-          });
+          } as any);
 
           console.log('[background][PYODIDE_MESSAGE] ✅ Message saved successfully:', result);
 
@@ -1929,7 +1947,7 @@ chrome.runtime.onMessage.addListener(
           console.log('[background][HTML_ASSEMBLED] ✅ HTML assembly confirmed, launching workflow...');
 
           // Теперь запускаем EXECUTE_WORKFLOW с собранным HTML
-          const executeWorkflowMessage = {
+          const executeWorkflowMessage: any = {
             type: 'EXECUTE_WORKFLOW',
             pluginId: msg.pluginId,
             pageKey: msg.pageKey,
@@ -2319,7 +2337,7 @@ async function sendChunksSequentially(transferId: string): Promise<void> {
 */
 
 // Функция для обработки сообщений через порт (аналогично основному message handler)
-async function handleMessage(message: any, sender: chrome.runtime.MessageSender): Promise<any> {
+async function handleMessage(message: any, sender: any): Promise<any> {
   console.debug('[background][PORT] Processing message:', message);
 
   // Обработка RUN_WORKFLOW сообщений
@@ -2662,12 +2680,11 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
 
         // Сохраняем сообщение в чат плагина
         const result = await pluginChatApi.saveMessage(message.pluginId, message.pageKey, {
-          id: messageId,
           content: messageContent,
           sender: 'plugin',
           timestamp: message.timestamp || Date.now(),
           type: 'plugin_message'
-        });
+        } as any);
 
         console.log('[background][PORT][PYODIDE_MESSAGE] ✅ Message saved successfully:', result);
 
@@ -2751,7 +2768,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
         console.log('[background][PORT][HTML_ASSEMBLED] ✅ HTML assembly confirmed, launching workflow...');
 
         // Теперь запускаем EXECUTE_WORKFLOW с собранным HTML
-        const executeWorkflowMessage = {
+        const executeWorkflowMessage: any = {
           type: 'EXECUTE_WORKFLOW',
           pluginId: message.pluginId,
           pageKey: message.pageKey,
