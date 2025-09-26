@@ -21,6 +21,9 @@ from re import Match
 # Импорт для доступа к Pyodide globals
 import pyodide
 
+# Импорт для получения стека вызовов
+import traceback
+
 # Импорт парсеров HTML для fallback (html.parser встроен в Python)
 try:
     from html.parser import HTMLParser
@@ -2305,6 +2308,16 @@ def analyze_ozon_product() -> Dict[str, Any]:
         # Логируем выбранный режим
         console_log(f"🎯 ИСПОЛЬЗУЕМЫЙ РЕЖИМ ПЕРЕДАЧИ: {transmission_mode}")
 
+        # Детальное логирование режима передачи и ключевых переменных
+        console_log(f"[DIAGNOSTIC] ===== ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ РЕЖИМА ПЕРЕДАЧИ =====")
+        console_log(f"[DIAGNOSTIC] transmission_mode: {transmission_mode}")
+        console_log(f"[DIAGNOSTIC] chunk_count: {chunk_count}")
+        console_log(f"[DIAGNOSTIC] total_length: {total_length}")
+        console_log(f"[DIAGNOSTIC] direct_html_data is not None: {direct_html_data is not None}")
+        if direct_html_data:
+            console_log(f"[DIAGNOSTIC] direct_html_data length: {len(direct_html_data)}")
+        console_log(f"[DIAGNOSTIC] ===== КОНЕЦ ДЕТАЛЬНОГО ЛОГИРОВАНИЯ =====")
+
         # Координация режимов передачи
         console_log("🔄 Координация режимов передачи данных...")
         if transmission_mode == 'direct':
@@ -2476,9 +2489,22 @@ def analyze_ozon_product() -> Dict[str, Any]:
             console_log(f"Собранная длина: {assembled_length} символов")
             console_log(f"Разница в длине: {length_difference} символов ({length_match_percent:.1f}%)")
 
-            if assembled_length != total_length:
+            # Детальное логирование перед отправкой сообщения об обрезке
+            console_log(f"[DIAGNOSTIC] ===== ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ ПЕРЕД ОТПРАВКОЙ СООБЩЕНИЯ =====")
+            console_log(f"[DIAGNOSTIC] transmission_mode: {transmission_mode}")
+            console_log(f"[DIAGNOSTIC] assembled_length: {assembled_length}")
+            console_log(f"[DIAGNOSTIC] total_length: {total_length}")
+            console_log(f"[DIAGNOSTIC] length_difference: {length_difference}")
+            console_log(f"[DIAGNOSTIC] length_match_percent: {length_match_percent:.1f}%")
+            console_log(f"[DIAGNOSTIC] Условие transmission_mode == 'chunks': {transmission_mode == 'chunks'}")
+            console_log(f"[DIAGNOSTIC] Стек вызовов:")
+            for line in traceback.format_stack()[-5:]:  # Последние 5 кадров стека
+                console_log(f"[DIAGNOSTIC]   {line.strip()}")
+            console_log(f"[DIAGNOSTIC] ===== КОНЕЦ ДЕТАЛЬНОГО ЛОГИРОВАНИЯ =====")
+
+            if assembled_length != total_length and chunk_count > 0:
                 if assembled_length < total_length:
-                    chat_message("СТРОКА ОБРЕЗАНА! Возможна потеря данных.")
+                    console_log("СТРОКА ОБРЕЗАНА! Возможна потеря данных.")
                     console_log(f"Потеряно: {total_length - assembled_length} символов")
                 else:
                     console_log("Строка длиннее ожидаемой. Возможно, добавлены лишние данные.")
