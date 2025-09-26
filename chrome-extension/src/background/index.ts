@@ -1825,13 +1825,20 @@ chrome.runtime.onMessage.addListener(
             return;
           }
 
+          // Обрабатываем сообщение - если это объект, сериализуем в строку
+          let messageContent = msg.message;
+          if (typeof msg.message === 'object') {
+            messageContent = JSON.stringify(msg.message, null, 2);
+            console.log('[background][PYODIDE_MESSAGE] 📦 Message object serialized to JSON string');
+          }
+
           // Генерируем messageId
           const messageId = `pyodide_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
           // Сохраняем сообщение в чат плагина
           const result = await pluginChatApi.saveMessage(msg.pluginId, msg.pageKey, {
             id: messageId,
-            content: msg.message,
+            content: messageContent,
             sender: 'plugin',
             timestamp: msg.timestamp || Date.now(),
             type: 'plugin_message'
@@ -1845,10 +1852,16 @@ chrome.runtime.onMessage.addListener(
             chrome.storage.local.get([chatKey], (storageResult) => {
               const savedChat = storageResult[chatKey];
               const savedMessage = savedChat?.messages?.find((m: any) => m.id === messageId);
-              const messageExists = !!(savedMessage && savedMessage.content === msg.message);
+              // Исправлено: сравниваем сериализованные версии для корректной работы с объектами
+              const originalContent = typeof msg.message === 'object' ? JSON.stringify(msg.message) : msg.message;
+              const savedContent = typeof savedMessage?.content === 'object' ? JSON.stringify(savedMessage.content) : savedMessage?.content;
+              const messageExists = !!(savedMessage && savedContent === originalContent);
+
               console.log('[background][PYODIDE_MESSAGE] 🔍 Storage verification:', {
                 chatKey,
                 messageExists,
+                originalType: typeof msg.message,
+                savedType: typeof savedMessage?.content,
                 savedMessageContent: typeof savedMessage?.content === 'string' ? savedMessage.content.substring(0, 50) + (savedMessage.content.length > 50 ? '...' : '') : String(savedMessage?.content || ''),
                 totalMessages: savedChat?.messages?.length
               });
@@ -2637,13 +2650,20 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
           return { error: 'Missing required fields: pluginId, pageKey, or message' };
         }
 
+        // Обрабатываем сообщение - если это объект, сериализуем в строку
+        let messageContent = message.message;
+        if (typeof message.message === 'object') {
+          messageContent = JSON.stringify(message.message, null, 2);
+          console.log('[background][PORT][PYODIDE_MESSAGE] 📦 Message object serialized to JSON string');
+        }
+
         // Генерируем messageId
         const messageId = `pyodide_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         // Сохраняем сообщение в чат плагина
         const result = await pluginChatApi.saveMessage(message.pluginId, message.pageKey, {
           id: messageId,
-          content: message.message,
+          content: messageContent,
           sender: 'plugin',
           timestamp: message.timestamp || Date.now(),
           type: 'plugin_message'
@@ -2657,10 +2677,16 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
           chrome.storage.local.get([chatKey], (storageResult) => {
             const savedChat = storageResult[chatKey];
             const savedMessage = savedChat?.messages?.find((m: any) => m.id === messageId);
-            const messageExists = !!(savedMessage && savedMessage.content === message.message);
+            // Исправлено: сравниваем сериализованные версии для корректной работы с объектами
+            const originalContent = typeof message.message === 'object' ? JSON.stringify(message.message) : message.message;
+            const savedContent = typeof savedMessage?.content === 'object' ? JSON.stringify(savedMessage.content) : savedMessage?.content;
+            const messageExists = !!(savedMessage && savedContent === originalContent);
+
             console.log('[background][PORT][PYODIDE_MESSAGE] 🔍 Storage verification:', {
               chatKey,
               messageExists,
+              originalType: typeof message.message,
+              savedType: typeof savedMessage?.content,
               savedMessageContent: typeof savedMessage?.content === 'string' ? savedMessage.content.substring(0, 50) + (savedMessage.content.length > 50 ? '...' : '') : String(savedMessage?.content || ''),
               totalMessages: savedChat?.messages?.length
             });
