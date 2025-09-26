@@ -1849,7 +1849,7 @@ chrome.runtime.onMessage.addListener(
               console.log('[background][PYODIDE_MESSAGE] 🔍 Storage verification:', {
                 chatKey,
                 messageExists,
-                savedMessageContent: savedMessage?.content?.substring(0, 50) + (savedMessage?.content?.length > 50 ? '...' : ''),
+                savedMessageContent: typeof savedMessage?.content === 'string' ? savedMessage.content.substring(0, 50) + (savedMessage.content.length > 50 ? '...' : '') : String(savedMessage?.content || ''),
                 totalMessages: savedChat?.messages?.length
               });
               resolve(messageExists);
@@ -2661,7 +2661,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
             console.log('[background][PORT][PYODIDE_MESSAGE] 🔍 Storage verification:', {
               chatKey,
               messageExists,
-              savedMessageContent: savedMessage?.content?.substring(0, 50) + (savedMessage?.content?.length > 50 ? '...' : ''),
+              savedMessageContent: typeof savedMessage?.content === 'string' ? savedMessage.content.substring(0, 50) + (savedMessage.content.length > 50 ? '...' : '') : String(savedMessage?.content || ''),
               totalMessages: savedChat?.messages?.length
             });
             resolve(messageExists);

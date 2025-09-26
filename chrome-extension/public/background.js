@@ -3889,6 +3889,34 @@ ${JSON.stringify(msg.data, null, 2)}
           console.log("[background][CHUNKING] Chunk acknowledgment received:", msg);
           handleChunkAcknowledgment(msg);
           return true;
+        } else if (msg.type === "CONFIRM_HTML_RECEIPT") {
+          console.log("[background][CONFIRM_HTML_RECEIPT] HTML receipt confirmed from offscreen:", msg);
+          if (msg.transferId) {
+            console.log(`[background][CONFIRM_HTML_RECEIPT] ✅ HTML transfer ${msg.transferId} confirmed by offscreen document`);
+
+            // Update transfer status in active transfers if exists
+            const transfer = activeTransfers.get(msg.transferId);
+            if (transfer) {
+              transfer.htmlReceiptConfirmed = true;
+              transfer.lastAccessed = Date.now();
+              console.log(`[background][CONFIRM_HTML_RECEIPT] Transfer ${msg.transferId} status updated: htmlReceiptConfirmed=true`);
+            } else {
+              console.log(`[background][CONFIRM_HTML_RECEIPT] Transfer ${msg.transferId} not found in active transfers (may have been cleaned up)`);
+            }
+
+            // Cleanup direct data storage if it exists
+            if (typeof cleanupDirectData === 'function') {
+              try {
+                cleanupDirectData(msg.transferId);
+                console.log(`[background][CONFIRM_HTML_RECEIPT] Direct data storage cleaned up for transfer ${msg.transferId}`);
+              } catch (cleanupError) {
+                console.warn(`[background][CONFIRM_HTML_RECEIPT] Error cleaning up direct data:`, cleanupError);
+              }
+            }
+          } else {
+            console.warn("[background][CONFIRM_HTML_RECEIPT] Missing transferId in confirmation message");
+          }
+          return true;
         } else if (msg.type === "PYODIDE_MESSAGE_SERVICE_WORKER") {
           console.log("[background][PYODIDE_SERVICE_WORKER] PYODIDE_MESSAGE received from offscreen:", msg);
           if (msg.pluginId && msg.pageKey && msg.data) {
