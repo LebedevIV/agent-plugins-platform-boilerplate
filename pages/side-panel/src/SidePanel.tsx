@@ -797,6 +797,7 @@ const SidePanel = () => {
                      plugin={plugin}
                      selected={selectedPlugin?.id === plugin.id}
                      onClick={() => handlePluginClick(plugin)}
+                     isLight={isLight}
                    />
                 ));
               })()}

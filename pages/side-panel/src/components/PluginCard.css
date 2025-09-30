@@ -1,0 +1,71 @@
+/* PluginCard стили */
+.plugin-card {
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+  background: var(--background, #ffffff);
+  border: 2px solid var(--border, #e2e8f0);
+  color: var(--text-primary, #1e293b);
+}
+
+.plugin-card.selected {
+  background: var(--surface, #f8fafc);
+  box-shadow: 0 2px 8px rgba(0, 200, 255, 0.10);
+}
+
+.plugin-card:hover {
+  background: var(--surface, #f8fafc);
+}
+
+.plugin-card.dark {
+  background: var(--background, #0f172a);
+  border-color: var(--border, #334155);
+  color: var(--text-primary, #f1f5f9);
+}
+
+.plugin-card.dark.selected {
+  background: var(--surface, #1e293b);
+}
+
+.plugin-card.dark:hover {
+  background: var(--surface, #1e293b);
+}
+
+.plugin-card-name {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--text-primary, #1e293b);
+}
+
+.plugin-card.dark .plugin-card-name {
+  color: var(--text-primary, #f1f5f9);
+}
+
+.plugin-card-version {
+  font-size: 13px;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.plugin-card-description {
+  margin: 8px 0;
+  font-size: 14px;
+  color: var(--text-primary, #1e293b);
+}
+
+.plugin-card.dark .plugin-card-description {
+  color: var(--text-primary, #f1f5f9);
+}
+
+.plugin-card-status {
+  font-size: 12px;
+}
+
+.plugin-card-status.enabled {
+  color: var(--success, #10b981);
+}
+
+.plugin-card-status.disabled {
+  color: var(--error, #ef4444);
+}
