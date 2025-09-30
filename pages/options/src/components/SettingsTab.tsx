@@ -18,7 +18,7 @@ interface SettingsTabProps {
   getStatusText: (status: string) => string;
   getStatusClass: (status: string) => string;
   theme: 'light' | 'dark' | 'system';
-  setTheme: (theme: 'light' | 'dark' | 'system') => void;
+  onThemeChange: (theme: string) => void;
   locale?: 'en' | 'ru';
 }
 
@@ -34,11 +34,11 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   getStatusText,
   getStatusClass,
   theme,
-  setTheme,
+  onThemeChange,
   locale = 'en',
 }) => {
   const { t } = useTranslations(locale);
-  console.log('[SettingsTab] theme:', theme, 'setTheme:', typeof setTheme);
+  console.log('[SettingsTab] theme:', theme, 'onThemeChange:', typeof onThemeChange);
 
   // Состояние для настройки htmlTransmissionMode
   const [htmlTransmissionMode, setHtmlTransmissionMode] = React.useState<HtmlTransmissionMode>('direct');
@@ -103,8 +103,8 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
     }
   };
 
-  if (!theme || typeof setTheme !== 'function') {
-    return <div className="settings-section">Ошибка: theme/setTheme не переданы</div>;
+  if (!theme || typeof onThemeChange !== 'function') {
+    return <div className="settings-section">Ошибка: theme/onThemeChange не переданы</div>;
   }
 
   return (
@@ -156,7 +156,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           <div className="setting-item">
             <label>
               {t('options_settings_general_theme')}
-              <select value={theme} onChange={e => setTheme(e.target.value as 'light' | 'dark' | 'system')}>
+              <select value={theme} onChange={e => onThemeChange(e.target.value)}>
                 <option value="light">{t('options_settings_general_theme_light')}</option>
                 <option value="dark">{t('options_settings_general_theme_dark')}</option>
                 <option value="system">{t('options_settings_general_theme_system')}</option>

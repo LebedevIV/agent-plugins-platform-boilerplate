@@ -57,6 +57,7 @@ export const APPOptions: React.FC<{ isLight: boolean }> = ({ isLight }) => {
             error={error}
             locale={locale}
             onUpdatePluginSetting={updatePluginSetting}
+            isLight={isLight}
           />
         )}
 

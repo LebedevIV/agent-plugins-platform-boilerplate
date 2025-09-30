@@ -12,10 +12,13 @@ import ThemeSwitcher from './components/ThemeSwitcher';
 import { useStorage } from '@extension/shared';
 import { exampleThemeStorage } from '@extension/storage';
 
-type ThemeStorageState = {
-  theme: 'light' | 'dark';
-  isLight: boolean;
-};
+// Определяем функцию для определения системной темы
+function getSystemTheme(): boolean {
+  if (typeof window !== 'undefined' && window.matchMedia) {
+    return window.matchMedia('(prefers-color-scheme: light)').matches;
+  }
+  return true;
+}
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -125,7 +128,15 @@ const Options = function () {
                       getStatusText={getStatusText}
                       getStatusClass={getStatusClass}
                       theme={theme === 'system' ? (isLight ? 'light' : 'dark') : theme}
-                      setTheme={(newTheme) => setTheme(newTheme)}
+                      onThemeChange={async (newTheme: string) => {
+                        if (!['light', 'dark', 'system'].includes(newTheme)) return;
+                        const validTheme = newTheme as 'light' | 'dark' | 'system';
+                        setTheme(validTheme);
+                        await exampleThemeStorage.set({
+                          theme: validTheme,
+                          isLight: validTheme === 'system' ? getSystemTheme() : validTheme === 'light'
+                        });
+                      }}
                     />
                   </div>
                 </div>
@@ -139,6 +150,7 @@ const Options = function () {
                       onSelectPlugin={selectPlugin}
                       loading={loading}
                       error={error}
+                      isLight={isLight}
                     />
                   </div>
                 </div>
