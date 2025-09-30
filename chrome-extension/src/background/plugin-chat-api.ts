@@ -8,6 +8,9 @@
 import { getPageKey } from '../../../packages/shared/lib/utils/helpers';
 
 const pluginChatApi = {
+  // Очередь для последовательной обработки сообщений (предотвращает race condition)
+  _messageSaveQueue: new Map<string, Promise<any>>(),
+
   // Создание чата при начале ввода (ленивая инициализация)
   async createChatIfNotExists(pluginId: string, pageKey: string): Promise<PluginChat> {
     const chatKey = `${pluginId}::${getPageKey(pageKey)}`;
@@ -111,8 +114,16 @@ const pluginChatApi = {
   },
 
   // Сохранить сообщение в чат
-  async saveMessage(pluginId: string, pageKey: string, message: ChatMessage): Promise<{ success: boolean }> {
+  async saveMessage(pluginId: string, pageKey: string, message: ChatMessage): Promise<{ success: boolean, verified: boolean, messageId: string, verificationReason?: string }> {
     const chatKey = `${pluginId}::${getPageKey(pageKey)}`;
+
+    // Ожидаем завершения предыдущей операции сохранения для этого чата
+    const queueKey = chatKey;
+    if (this._messageSaveQueue.has(queueKey)) {
+      console.log('[pluginChatApi][saveMessage] Ожидание предыдущей операции сохранения', { queueKey });
+      await this._messageSaveQueue.get(queueKey);
+    }
+
     console.log('[pluginChatApi][saveMessage] BEFORE', {
       chatKey,
       pluginId,
@@ -162,11 +173,12 @@ const pluginChatApi = {
       return { success: false };
     }
 
-    await new Promise<void>(resolve => {
-      chrome.storage.local.set({ [chatKey]: chat }, () => {
+    // Создаём Promise для сохранения и верификации
+    const savePromise = new Promise<{ success: boolean, verified: boolean, messageId: string, verificationReason?: string }>((resolve) => {
+      chrome.storage.local.set({ [chatKey]: chat }, async () => {
         if (chrome.runtime.lastError) {
           console.error('[pluginChatApi][saveMessage] chrome.storage error:', chrome.runtime.lastError);
-          resolve();
+          resolve({ success: false, verified: false, messageId: message.id || '', verificationReason: 'storage_error' });
           return;
         }
 
@@ -176,21 +188,23 @@ const pluginChatApi = {
           success: true
         });
 
-        // Проверка: что реально лежит в storage после set
-        chrome.storage.local.get([chatKey], result => {
-          const savedChat = result[chatKey];
-          console.log('[pluginChatApi][saveMessage] ПРОВЕРКА storage после set:', {
-            savedChat,
-            savedChatType: typeof savedChat,
-            savedMessagesLength: savedChat?.messages?.length,
-            savedMessages: savedChat?.messages,
-            lastSavedMessage: savedChat?.messages?.[savedChat.messages.length - 1]
-          });
-        });
-        resolve();
+        // ВЕРИФИКАЦИЯ с retry logic: проверяем, что сообщение действительно сохранено
+        // Механизм повторных попыток с увеличивающимися задержками для обработки быстрого потока от Pyodide
+        const result = await this.verifyMessageWithRetry(chatKey, message);
+        resolve(result);
       });
     });
-    return { success: true };
+
+    // Добавляем Promise в очередь для последовательной обработки
+    this._messageSaveQueue.set(queueKey, savePromise);
+
+    // После завершения операции удаляем её из очереди
+    savePromise.finally(() => {
+      this._messageSaveQueue.delete(queueKey);
+      console.log('[pluginChatApi][saveMessage] Операция завершена, удалена из очереди', { queueKey });
+    });
+
+    return savePromise;
   },
 
   // Удалить чат
@@ -252,6 +266,163 @@ const pluginChatApi = {
     return { success: true };
   },
 
+  // Вспомогательный метод для верификации сообщения с retry logic
+  async verifyMessageWithRetry(chatKey: string, message: ChatMessage): Promise<{ success: boolean, verified: boolean, messageId: string, verificationReason?: string }> {
+    const retryDelays = [200, 400, 600, 800, 1000];
+    let isVerified = false;
+    let verificationReason = 'unknown';
+    let lastSavedChat = null;
+
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      const delay = retryDelays[attempt - 1];
+      console.log(`[pluginChatApi][saveMessage] ВЕРИФИКАЦИЯ попытка ${attempt}/5, задержка ${delay}ms`, {
+        chatKey,
+        messageId: message.id
+      });
+
+      await new Promise(resolve => setTimeout(resolve, delay));
+
+      const result = await new Promise<any>(resolve => {
+        chrome.storage.local.get([chatKey], resolve);
+      });
+
+      const savedChat = result[chatKey];
+      lastSavedChat = savedChat;
+
+      if (!savedChat) {
+        verificationReason = 'chat_not_found';
+        console.warn(`[pluginChatApi][saveMessage] ВЕРИФИКАЦИЯ попытка ${attempt}: чат не найден в storage`, {
+          chatKey,
+          attempt,
+          delay,
+          allStorageKeys: Object.keys(result)
+        });
+
+        // Дополнительная диагностика: проверим все ключи в storage
+        chrome.storage.local.get(null, allData => {
+          const relatedKeys = Object.keys(allData).filter(key => key.includes(chatKey.split('::')[0]));
+          console.log(`[pluginChatApi][saveMessage] ВЕРИФИКАЦИЯ попытка ${attempt} - диагностика storage:`, {
+            allKeys: Object.keys(allData),
+            relatedKeys,
+            chatKey,
+            pluginId: chatKey.split('::')[0]
+          });
+        });
+      } else if (!savedChat.messages || !Array.isArray(savedChat.messages)) {
+        verificationReason = 'messages_array_missing';
+        console.warn(`[pluginChatApi][saveMessage] ВЕРИФИКАЦИЯ попытка ${attempt}: массив сообщений отсутствует`, {
+          savedChat,
+          messagesType: typeof savedChat.messages,
+          attempt
+        });
+      } else {
+        // Ищем сообщение по ID
+        let savedMessage = savedChat.messages.find((m: ChatMessage) => m.id === message.id);
+
+        // Если не нашли по ID, пробуем найти по содержимому (fallback для быстрого потока сообщений)
+        if (!savedMessage && attempt >= 3) {
+          console.log(`[pluginChatApi][saveMessage] ВЕРИФИКАЦИЯ попытка ${attempt}: не найдено по ID, пробуем fallback по содержимому`);
+          savedMessage = savedChat.messages.find((m: ChatMessage) =>
+            m.content === message.content &&
+            m.role === message.role &&
+            Math.abs(m.timestamp - message.timestamp) < 2000 // 2 сек допуск для быстрого потока
+          );
+
+          if (savedMessage) {
+            console.log(`[pluginChatApi][saveMessage] ВЕРИФИКАЦИЯ попытка ${attempt}: сообщение найдено по содержимому (fallback)`, {
+              originalId: message.id,
+              foundId: savedMessage.id,
+              contentMatch: true,
+              roleMatch: savedMessage.role === message.role,
+              timestampDiff: Math.abs(savedMessage.timestamp - message.timestamp)
+            });
+          }
+        }
+
+        if (savedMessage) {
+          // Дополнительная проверка: сравниваем содержимое сообщения
+          const contentMatches = savedMessage.content === message.content;
+          const roleMatches = savedMessage.role === message.role;
+          const timestampMatches = Math.abs(savedMessage.timestamp - message.timestamp) < 1000; // 1 сек допуск
+
+          if (contentMatches && roleMatches && timestampMatches) {
+            isVerified = true;
+            verificationReason = savedMessage.id === message.id ? 'full_match' : 'content_fallback_match';
+            console.log(`[pluginChatApi][saveMessage] ВЕРИФИКАЦИЯ попытка ${attempt}: сообщение успешно верифицировано`, {
+              attempt,
+              messageId: message.id,
+              foundById: savedMessage.id === message.id,
+              verificationReason
+            });
+            break; // Выходим из цикла retry
+          } else {
+            verificationReason = 'content_mismatch';
+            console.warn(`[pluginChatApi][saveMessage] ВЕРИФИКАЦИЯ попытка ${attempt}: содержимое сообщения не совпадает`, {
+              attempt,
+              contentMatches,
+              roleMatches,
+              timestampMatches,
+              saved: savedMessage,
+              expected: message
+            });
+          }
+        } else {
+          verificationReason = 'message_not_found_by_id';
+          console.warn(`[pluginChatApi][saveMessage] ВЕРИФИКАЦИЯ попытка ${attempt}: сообщение не найдено ни по ID, ни по содержимому`, {
+            attempt,
+            messageId: message.id,
+            availableIds: savedChat.messages.map(m => m.id),
+            messagesCount: savedChat.messages.length,
+            lastMessage: savedChat.messages[savedChat.messages.length - 1],
+            expectedContentLength: message.content.length,
+            expectedRole: message.role,
+            expectedTimestamp: message.timestamp
+          });
+
+          // Дополнительная диагностика при message_not_found_by_id
+          console.log(`[pluginChatApi][saveMessage] ВЕРИФИКАЦИЯ попытка ${attempt} - детальная диагностика:`, {
+            savedChatMessages: savedChat.messages.slice(-3), // последние 3 сообщения
+            expectedMessage: message,
+            messageId: message.id,
+            idComparison: savedChat.messages.map(m => ({ id: m.id, equals: m.id === message.id })).slice(-3)
+          });
+        }
+      }
+
+      // Если это последняя попытка и не верифицировано - fallback механизм
+      if (attempt === 5 && !isVerified) {
+        console.warn('[pluginChatApi][saveMessage] ВЕРИФИКАЦИЯ: все 5 попыток исчерпаны, сообщение не верифицировано - применяем fallback механизм', {
+          chatKey,
+          messageId: message.id,
+          finalVerificationReason: verificationReason,
+          lastSavedChat
+        });
+        // Fallback: все равно обновляем UI с предупреждением о неверифицированном сообщении
+        // Сообщение уже добавлено в chat.messages выше, так что UI обновится
+      }
+    }
+
+    console.log('[pluginChatApi][saveMessage] ВЕРИФИКАЦИЯ завершена:', {
+      chatKey,
+      messageId: message.id,
+      savedChatExists: !!lastSavedChat,
+      savedMessagesLength: lastSavedChat?.messages?.length,
+      lastSavedMessage: lastSavedChat?.messages?.[lastSavedChat.messages?.length - 1],
+      verified: isVerified,
+      verificationReason,
+      messageExists: !!lastSavedChat?.messages?.find((m: ChatMessage) => m.id === message.id),
+      totalAttempts: 5
+    });
+
+    return {
+      success: true,
+      verified: isVerified,
+      messageId: message.id || '',
+      verificationReason
+    };
+  },
+
+  // Удалить чат
   // Получить список всех черновиков для плагина
   async listDraftsForPlugin(pluginId: string): Promise<ChatDraft[]> {
     return new Promise(resolve => {
