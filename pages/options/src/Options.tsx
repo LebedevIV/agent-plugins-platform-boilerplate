@@ -25,6 +25,7 @@ const Options = function () {
   const { t } = useTranslations('ru');
    const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
    const [isLight, setIsLight] = useState(true);
+   const themeClass = theme === 'dark' || (theme === 'system' && !isLight) ? 'theme-dark' : 'theme-light';
 
    // AI Keys management
    const {
@@ -74,92 +75,94 @@ const Options = function () {
 
   return (
     <LocalErrorBoundary>
-      <PanelGroup
-        direction="horizontal"
-        className="ide-layout"
-        onLayout={handleLayout}
-        autoSaveId={showRightPanel ? "options-panel-layout-plugins" : "options-panel-layout-settings"}
-        id="options-panel-group">
-        <Panel
-          defaultSize={20}
-          minSize={15}
-          id="sidebar-left-panel"
-          className="flex flex-col">
-          <div className="ide-sidebar-left" id="sidebar-left-content">
-            <div className="tab-nav" id="tab-navigation">
-              <button
-                id="settings-tab-button"
-                className={`tab-button ${activeTab === 'settings' ? 'active' : ''}`}
-                onClick={() => setActiveTab('settings')}>
-                {t('options_settings_title')}
-              </button>
-              <button
-                id="plugins-tab-button"
-                className={`tab-button ${activeTab === 'plugins' ? 'active' : ''}`}
-                onClick={() => setActiveTab('plugins')}>
-                {t('options_plugins_title')}
-              </button>
+      <div className={themeClass}>
+        <PanelGroup
+          direction="horizontal"
+          className="ide-layout"
+          onLayout={handleLayout}
+          autoSaveId={showRightPanel ? "options-panel-layout-plugins" : "options-panel-layout-settings"}
+          id="options-panel-group">
+          <Panel
+            defaultSize={20}
+            minSize={15}
+            id="sidebar-left-panel"
+            className="flex flex-col">
+            <div className="ide-sidebar-left" id="sidebar-left-content">
+              <div className="tab-nav" id="tab-navigation">
+                <button
+                  id="settings-tab-button"
+                  className={`tab-button ${activeTab === 'settings' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('settings')}>
+                  {t('options_settings_title')}
+                </button>
+                <button
+                  id="plugins-tab-button"
+                  className={`tab-button ${activeTab === 'plugins' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('plugins')}>
+                  {t('options_plugins_title')}
+                </button>
+              </div>
             </div>
-          </div>
-          <div id="theme-switcher" className="mb-auto p-2 flex justify-center">
-            <ThemeSwitcher theme={theme} isLight={isLight} onToggle={exampleThemeStorage.toggle} />
-          </div>
-        </Panel>
-        <PanelResizeHandle id="sidebar-left-resize-handle" />
-        <Panel defaultSize={showRightPanel ? 30 : 80} id="main-content-panel">
-          <div className="ide-main-content" id="main-content">
-            {activeTab === 'settings' && (
-              <div className="tab-content active" id="settings-tab-content">
-                <div id="settings-tab">
-                  <SettingsTab
-                    aiKeys={aiKeys}
-                    customKeys={customKeys}
-                    onSave={saveAIKeys}
-                    onTest={testAIKeys}
-                    onAddCustomKey={addCustomKey}
-                    onRemoveCustomKey={removeCustomKey}
-                    onUpdateKey={updateKey}
-                    onUpdateCustomKeyName={updateCustomKeyName}
-                    getStatusText={getStatusText}
-                    getStatusClass={getStatusClass}
-                    theme={theme === 'system' ? (isLight ? 'light' : 'dark') : theme}
-                    setTheme={(newTheme) => setTheme(newTheme)}
-                  />
-                </div>
-              </div>
-            )}
-            {activeTab === 'plugins' && (
-              <div className="tab-content active" id="plugins-tab-content">
-                <div id="plugins-tab">
-                  <PluginsTab
-                    plugins={plugins}
-                    selectedPlugin={selectedPlugin}
-                    onSelectPlugin={selectPlugin}
-                    loading={loading}
-                    error={error}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        </Panel>
-        {showRightPanel && (
-          <>
-            <PanelResizeHandle id="sidebar-right-resize-handle" />
-            <Panel defaultSize={50} minSize={30} id="sidebar-right-panel">
-              <div className="ide-sidebar-right" id="sidebar-right-content">
-                {activeTab === 'plugins' && (
-                  <div id="plugin-details-container">
-                    <div id="plugin-details">
-                      <PluginDetails selectedPlugin={selectedPlugin} />
-                    </div>
+            <div id="theme-switcher" className="mb-auto p-2 flex justify-center">
+              <ThemeSwitcher theme={theme} isLight={isLight} onToggle={exampleThemeStorage.toggle} />
+            </div>
+          </Panel>
+          <PanelResizeHandle id="sidebar-left-resize-handle" />
+          <Panel defaultSize={showRightPanel ? 30 : 80} id="main-content-panel">
+            <div className="ide-main-content" id="main-content">
+              {activeTab === 'settings' && (
+                <div className="tab-content active" id="settings-tab-content">
+                  <div id="settings-tab">
+                    <SettingsTab
+                      aiKeys={aiKeys}
+                      customKeys={customKeys}
+                      onSave={saveAIKeys}
+                      onTest={testAIKeys}
+                      onAddCustomKey={addCustomKey}
+                      onRemoveCustomKey={removeCustomKey}
+                      onUpdateKey={updateKey}
+                      onUpdateCustomKeyName={updateCustomKeyName}
+                      getStatusText={getStatusText}
+                      getStatusClass={getStatusClass}
+                      theme={theme === 'system' ? (isLight ? 'light' : 'dark') : theme}
+                      setTheme={(newTheme) => setTheme(newTheme)}
+                    />
                   </div>
-                )}
-              </div>
-            </Panel>
-          </>
-        )}
-      </PanelGroup>
+                </div>
+              )}
+              {activeTab === 'plugins' && (
+                <div className="tab-content active" id="plugins-tab-content">
+                  <div id="plugins-tab">
+                    <PluginsTab
+                      plugins={plugins}
+                      selectedPlugin={selectedPlugin}
+                      onSelectPlugin={selectPlugin}
+                      loading={loading}
+                      error={error}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </Panel>
+          {showRightPanel && (
+            <>
+              <PanelResizeHandle id="sidebar-right-resize-handle" />
+              <Panel defaultSize={50} minSize={30} id="sidebar-right-panel">
+                <div className="ide-sidebar-right" id="sidebar-right-content">
+                  {activeTab === 'plugins' && (
+                    <div id="plugin-details-container">
+                      <div id="plugin-details">
+                        <PluginDetails selectedPlugin={selectedPlugin} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Panel>
+            </>
+          )}
+        </PanelGroup>
+      </div>
     </LocalErrorBoundary>
   );
 };
