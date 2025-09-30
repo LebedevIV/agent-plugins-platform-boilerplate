@@ -68,6 +68,7 @@ const Options = function () {
     return unsubscribe;
   }, []);
 
+
   // Определяем, показывать ли правую панель (только для вкладки plugins)
   const showRightPanel = activeTab === 'plugins';
 

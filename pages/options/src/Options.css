@@ -28,10 +28,12 @@ code {
 /* IDE Layout */
 .ide-layout {
   display: flex;
-  height: 100vh;
+  height: 100vh !important; /* Жёстко привязываем к viewport */
+  max-height: 100vh;
   gap: 0;
   background-color: #2d3748;
   position: relative;
+  overflow: hidden;
 }
 
 /* Resizable panels */
@@ -794,14 +796,39 @@ code {
   color: var(--color-text-light-secondary);
 }
 
-/* Fix for scroll issue in main content panel */
-[data-panel] {
-  overflow: visible !important;
+/* Fix для прокрутки основного контента - Flex layout решение */
+#main-content-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%; /* Наследуем от layout */
+    max-height: 100%;
+    overflow: hidden;
 }
 
-[data-panel] .ide-main-content {
-  overflow-y: auto !important;
-  height: 100% !important;
+.ide-main-content {
+    flex: 1;
+    min-height: 0; /* КРИТИЧНО для flex - отключает auto-растягивание */
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 8px;
+}
+
+/* Стилизация scrollbar для темной темы */
+.theme-dark .ide-main-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.theme-dark .ide-main-content::-webkit-scrollbar-track {
+    background: #1f2937;
+}
+
+.theme-dark .ide-main-content::-webkit-scrollbar-thumb {
+    background: #4b5563;
+    border-radius: 4px;
+}
+
+.theme-dark .ide-main-content::-webkit-scrollbar-thumb:hover {
+    background: #6b7280;
 }
 
 /* Settings Dark Theme */
