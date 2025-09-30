@@ -44,8 +44,10 @@ export type StorageConfigType<D = string> = {
   };
 };
 
+export type Theme = 'light' | 'dark' | 'system';
+
 export interface ThemeStateType {
-  theme: 'light' | 'dark' | 'system';
+  theme: Theme;
   isLight: boolean;
 }
 
