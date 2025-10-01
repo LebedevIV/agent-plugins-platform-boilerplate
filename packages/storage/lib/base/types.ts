@@ -54,3 +54,14 @@ export interface ThemeStateType {
 export type ThemeStorageType = BaseStorageType<ThemeStateType> & {
   toggle: () => Promise<void>;
 };
+
+export type ChatAlignment = 'left' | 'center' | 'right';
+
+export interface ChatAlignmentStateType {
+  alignment: ChatAlignment;
+}
+
+export type ChatAlignmentStorageType = BaseStorageType<ChatAlignmentStateType> & {
+  setAlignment: (alignment: ChatAlignment) => Promise<void>;
+  getAlignment: () => Promise<ChatAlignment>;
+};

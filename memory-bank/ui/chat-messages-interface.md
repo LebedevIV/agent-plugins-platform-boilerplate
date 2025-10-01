@@ -300,6 +300,133 @@ graph TD
 }
 ```
 
+## Настройка выравнивания текста чата
+
+### Управление через Options
+
+**Интерфейс настройки выравнивания** доступен в разделе Options расширения Chrome. Пользователь может выбрать предпочтительное выравнивание текста для сообщений чата через выпадающий список.
+
+```html
+<!-- Пример интерфейса настройки -->
+<select id="text-align-select" class="form-select">
+  <option value="left">По левому краю</option>
+  <option value="center">По центру</option>
+  <option value="right">По правому краю</option>
+  <option value="justify">По ширине</option>
+</select>
+```
+
+**Расположение настройки:** `pages/options/src/components/TextAlignmentControl.tsx`
+
+### Техническая реализация
+
+**Динамическое применение стилей** осуществляется через CSS custom properties и JavaScript обработчики событий.
+
+```typescript
+// Пример реализации в TypeScript
+interface TextAlignmentOptions {
+  left: 'left';
+  center: 'center';
+  right: 'right';
+  justify: 'justify';
+}
+
+class ChatTextAlignmentManager {
+  private currentAlignment: string = 'left';
+
+  applyAlignment(alignment: string) {
+    const chatContainer = document.querySelector('.messages-container');
+    if (chatContainer) {
+      chatContainer.style.setProperty('--text-align', alignment);
+    }
+    this.currentAlignment = alignment;
+  }
+
+  getCurrentAlignment(): string {
+    return this.currentAlignment;
+  }
+}
+```
+
+**CSS переменная для выравнивания:**
+```css
+.messages-container {
+  --text-align: left; /* Значение по умолчанию */
+}
+
+.message-text {
+  text-align: var(--text-align, left);
+}
+```
+
+### Опции выравнивания
+
+**Доступные варианты:**
+
+| Опция | Значение | Описание |
+|-------|----------|----------|
+| `left` | `text-align: left` | Выравнивание по левому краю (стандарт) |
+| `center` | `text-align: center` | Центрирование текста |
+| `right` | `text-align: right` | Выравнивание по правому краю |
+| `justify` | `text-align: justify` | Выравнивание по ширине с переносами |
+
+**Визуальное сравнение:**
+
+```
+Left alignment (по умолчанию):
+Текст сообщения выровнен по левому краю для естественного чтения.
+
+   Center alignment:
+Текст сообщения центрирован для декоративного эффекта.
+
+      Right alignment:
+  Текст сообщения выровнен по правому краю.
+
+Justify alignment:
+Текст сообщения выровнен по ширине контейнера с автоматическими переносами слов.
+```
+
+### Сохранение настроек
+
+**Механизм сохранения** использует `chrome.storage.sync` для синхронизации настроек между устройствами.
+
+```typescript
+// Сохранение настройки
+const saveTextAlignment = async (alignment: string) => {
+  try {
+    await chrome.storage.sync.set({
+      'chat-text-alignment': alignment
+    });
+  } catch (error) {
+    console.error('Failed to save text alignment:', error);
+  }
+};
+
+// Загрузка настройки при инициализации
+const loadTextAlignment = async (): Promise<string> => {
+  try {
+    const result = await chrome.storage.sync.get(['chat-text-alignment']);
+    return result['chat-text-alignment'] || 'left';
+  } catch (error) {
+    console.error('Failed to load text alignment:', error);
+    return 'left';
+  }
+};
+```
+
+**Хранение данных:**
+- **Ключ:** `chat-text-alignment`
+- **Тип:** `string`
+- **Значения по умолчанию:** `'left'`
+- **Синхронизация:** Да (через `chrome.storage.sync`)
+
+**Восстановление при загрузке:**
+```javascript
+document.addEventListener('DOMContentLoaded', async () => {
+  const alignment = await loadTextAlignment();
+  chatAlignmentManager.applyAlignment(alignment);
+});
+```
 ## Анимации и переходы
 
 ### Анимация появления сообщения

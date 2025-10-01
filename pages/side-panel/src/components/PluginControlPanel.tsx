@@ -29,6 +29,7 @@ import { saveAs } from 'file-saver';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import './PluginControlPanel.css';
 import type React from 'react';
+import { exampleChatAlignmentStorage, type ChatAlignment } from '@extension/storage';
 
 // Определение типа Plugin для PluginControlPanel
 type Plugin = {
@@ -86,6 +87,8 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   // Состояние для текущего pageKey с динамическим обновлением
   const [currentPageKey, setCurrentPageKey] = useState(getPageKey(currentTabUrl));
 
+  const [chatTextAlign, setChatTextAlign] = useState<ChatAlignment>('left');
+
   // useEffect для обновления pageKey при изменении currentTabUrl
   useEffect(() => {
     const newPageKey = getPageKey(currentTabUrl);
@@ -97,6 +100,21 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     });
     setCurrentPageKey(newPageKey);
   }, [currentTabUrl]);
+
+  useEffect(() => {
+    const loadAlignment = async () => {
+      const alignment = await exampleChatAlignmentStorage.getAlignment();
+      setChatTextAlign(alignment);
+    };
+
+    loadAlignment();
+
+    const unsubscribe = exampleChatAlignmentStorage.subscribe(() => {
+      loadAlignment();
+    });
+
+    return unsubscribe;
+  }, []);
   // Используем хук для ленивой синхронизации
   const { message, setMessage, isDraftSaved, isDraftLoading, draftError, loadDraft, clearDraft, draftText } =
     useLazyChatSync({
@@ -1420,7 +1438,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   };
 
   return (
-    <div className="plugin-control-panel">
+    <div className="plugin-control-panel" style={{ '--chat-text-align': chatTextAlign }}>
       <div className="panel-header">
         <div className="plugin-info">
           <img

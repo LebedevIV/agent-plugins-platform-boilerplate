@@ -3,6 +3,7 @@ import { cn } from '@extension/ui';
 import type { AIKey } from '../hooks/useAIKeys';
 import { useTranslations } from '../hooks/useTranslations';
 import ToggleButton from './ToggleButton';
+import { exampleChatAlignmentStorage, type ChatAlignment } from '@extension/storage';
 
 type HtmlTransmissionMode = 'chunks' | 'direct';
 
@@ -43,6 +44,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   // Состояние для настройки htmlTransmissionMode
   const [htmlTransmissionMode, setHtmlTransmissionMode] = React.useState<HtmlTransmissionMode>('direct');
 
+  // Состояние для настройки chatAlignment
+  const [chatAlignment, setChatAlignment] = React.useState<ChatAlignment>('left');
+
   // Загрузка настройки htmlTransmissionMode при монтировании компонента
   React.useEffect(() => {
     const loadHtmlTransmissionMode = async () => {
@@ -79,6 +83,22 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
     };
 
     loadHtmlTransmissionMode();
+  }, []);
+
+  // useEffect для загрузки и подписки на изменения chatAlignment
+  React.useEffect(() => {
+    const loadAlignment = async () => {
+      const alignment = await exampleChatAlignmentStorage.getAlignment();
+      setChatAlignment(alignment);
+    };
+
+    loadAlignment();
+
+    const unsubscribe = exampleChatAlignmentStorage.subscribe(() => {
+      loadAlignment();
+    });
+
+    return unsubscribe;
   }, []);
 
   // Сохранение настройки htmlTransmissionMode
@@ -160,6 +180,22 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                 <option value="light">{t('options_settings_general_theme_light')}</option>
                 <option value="dark">{t('options_settings_general_theme_dark')}</option>
                 <option value="system">{t('options_settings_general_theme_system')}</option>
+              </select>
+            </label>
+          </div>
+          <div className="setting-item">
+            <label>Chat text alignment:
+              <select
+                value={chatAlignment}
+                onChange={(e) => {
+                  const newAlignment = e.target.value as ChatAlignment;
+                  setChatAlignment(newAlignment);
+                  exampleChatAlignmentStorage.setAlignment(newAlignment);
+                }}
+              >
+                <option value="left">Left</option>
+                <option value="center">Center</option>
+                <option value="right">Right</option>
               </select>
             </label>
           </div>
