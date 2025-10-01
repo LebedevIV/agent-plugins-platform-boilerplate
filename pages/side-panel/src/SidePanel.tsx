@@ -754,7 +754,7 @@ const SidePanel = () => {
       <div className={cn('App', isDark ? 'bg-gray-800' : 'bg-slate-50')}>
         <header className={cn('App-header', isDark ? 'text-gray-100' : 'text-gray-900')}>
           <div className="header-controls">
-            <ThemeSwitcher theme={theme} isLight={isLight} onToggle={exampleThemeStorage.toggle} />
+            <ThemeSwitcher theme={theme} isLight={isLight} onToggle={exampleThemeStorage.toggle} isInSidebar={true} />
 
             <button onClick={() => chrome.runtime.openOptionsPage()} className="settings-btn" title="Открыть настройки">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

@@ -108,7 +108,7 @@ const Options = function () {
               </div>
             </div>
             <div id="theme-switcher" className="mb-auto p-2 flex justify-center">
-              <ThemeSwitcher theme={theme} isLight={isLight} onToggle={exampleThemeStorage.toggle} />
+              <ThemeSwitcher theme={theme} isLight={isLight} onToggle={exampleThemeStorage.toggle} isInSidebar={false} />
             </div>
           </Panel>
           <PanelResizeHandle id="sidebar-left-resize-handle" />
