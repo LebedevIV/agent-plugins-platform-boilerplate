@@ -736,6 +736,134 @@
   box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
 }
 
+/* Media control buttons in style of media player */
+.control-buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+}
+
+.media-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 20px;
+  font-weight: 600;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  position: relative;
+  overflow: hidden;
+  background: var(--media-btn-bg, #64748b);
+  color: var(--media-btn-text, white);
+}
+
+.media-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0));
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  border-radius: 50%;
+}
+
+.media-btn:hover:not(:disabled) {
+  transform: scale(1.1) translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.media-btn:hover:not(:disabled)::before {
+  opacity: 1;
+}
+
+.media-btn:active:not(:disabled) {
+  transform: scale(0.95) translateY(0);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.media-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Specific button colors based on mode */
+.media-btn.start-mode {
+  /* Start button - green */
+  background: var(--media-start-bg, #10b981);
+}
+
+.media-btn.start-mode[disabled] {
+  background: var(--media-start-disabled-bg, #64748b);
+}
+
+.media-btn.stop-mode {
+  /* Stop button - red */
+  background: var(--media-stop-bg, #ef4444);
+}
+
+.media-btn.pause-mode {
+  /* Pause button - yellow */
+  background: var(--media-pause-bg, #f59e0b);
+}
+
+.media-btn.close-mode {
+  /* Close button - gray */
+  background: var(--media-close-bg, #6b7280);
+  font-size: 18px;
+}
+
+.media-btn.close-mode:hover:not(:disabled) {
+  background: var(--media-close-hover-bg, #dc2626);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .control-buttons {
+    gap: 6px;
+    padding: 2px;
+  }
+
+  .media-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+  }
+
+  .media-btn:nth-child(4) {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .control-buttons {
+    gap: 4px;
+    flex-wrap: wrap;
+    justify-content: space-around;
+  }
+
+  .media-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+  }
+
+  .media-btn:nth-child(4) {
+    font-size: 14px;
+  }
+}
+
 /* Light theme variables */
 .App.bg-slate-50 .plugin-control-panel {
   --bg-color: #ffffff;
@@ -774,6 +902,15 @@
   --scroll-track: #f1f5f9;
   --scroll-thumb: #cbd5e1;
   --scroll-thumb-hover: #94a3b8;
+  /* Media button variables for light theme */
+  --media-btn-bg: #64748b;
+  --media-btn-text: white;
+  --media-start-bg: #10b981;
+  --media-start-disabled-bg: #cbd5e1;
+  --media-pause-bg: #f59e0b;
+  --media-stop-bg: #ef4444;
+  --media-close-bg: #6b7280;
+  --media-close-hover-bg: #dc2626;
 }
 
 /* Dark theme variables */
@@ -814,4 +951,13 @@
   --scroll-track: #1e293b;
   --scroll-thumb: #475569;
   --scroll-thumb-hover: #64748b;
-} 
+  /* Media button variables for dark theme */
+  --media-btn-bg: #64748b;
+  --media-btn-text: white;
+  --media-start-bg: #059669;
+  --media-start-disabled-bg: #64748b;
+  --media-pause-bg: #d97706;
+  --media-stop-bg: #dc2626;
+  --media-close-bg: #6b7280;
+  --media-close-hover-bg: #b91c1c;
+}

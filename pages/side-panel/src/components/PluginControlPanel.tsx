@@ -1454,16 +1454,37 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
           <h3>{pluginName}</h3>
         </div>
         <div className="control-buttons">
-          <button onClick={handleStart} disabled={isRunning || isPaused}>
-            {isRunning ? 'Остановить' : 'Запустить'}
+          <button
+            className={`media-btn ${isRunning ? 'stop-mode' : 'start-mode'}`}
+            onClick={handleStart}
+            disabled={isRunning || isPaused}
+            title={isRunning ? 'Остановить' : 'Запустить'}
+          >
+            {isRunning ? '⏹️' : '▶️'}
           </button>
-          <button onClick={onPause} disabled={!isRunning || isPaused}>
-            Пауза
+          <button
+            className="media-btn pause-mode"
+            onClick={onPause}
+            disabled={!isRunning || isPaused}
+            title="Пауза"
+          >
+            ⏸️
           </button>
-          <button onClick={onStop} disabled={!isRunning}>
-            Остановить
+          <button
+            className="media-btn stop-mode"
+            onClick={onStop}
+            disabled={!isRunning}
+            title="Остановить"
+          >
+            ⏹️
           </button>
-          <button onClick={onClose}>Закрыть</button>
+          <button
+            className="media-btn close-mode"
+            onClick={onClose}
+            title="Закрыть"
+          >
+            ✕
+          </button>
         </div>
       </div>
       <div className="panel-tabs">
