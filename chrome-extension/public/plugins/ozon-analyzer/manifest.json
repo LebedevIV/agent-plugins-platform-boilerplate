@@ -2,7 +2,7 @@
   "name": "Ozon Analyzer",
   "version": "1.1.0",
   "description": "Анализатор товаров Ozon с проверкой соответствия описания и состава",
-  "author": "APP Team",
+  "author": "Igor Lebedev",
   "main_server": "mcp_server.py",
   "host_permissions": [
     "*://*.ozon.ru/*",
@@ -20,6 +20,7 @@
   },
   "settings": {
     "enable_deep_analysis": true,
-    "auto_request_deep_analysis": true
+    "auto_request_deep_analysis": true,
+    "response_language": "ru"  
   }
 }

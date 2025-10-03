@@ -1,4 +1,4 @@
-import { PluginDetails } from './PluginDetails';
+import PluginDetails from './PluginDetails';
 import { useTranslations } from '../hooks/useTranslations';
 import { cn } from '@extension/ui';
 import { useState, useRef, useEffect } from 'react';

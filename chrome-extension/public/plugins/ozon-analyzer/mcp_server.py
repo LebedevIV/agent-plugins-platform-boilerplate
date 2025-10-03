@@ -2954,19 +2954,49 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
     if not description or not composition:
         return { "status": "error", "message": "Описание или состав не были переданы для глубокого анализа."}
 
-    console_log("Запускаю глубокий анализ...")
+    # Получение настройки языка
+    response_language = safe_js_get_setting("response_language", "ru")
+    console_log(f"[LANGUAGE] Настройка языка в perform_deep_analysis: {response_language}")
 
-    # Промпт для "экспертного" анализа.
-    prompt = f"""
-    Проведи глубокий анализ товара с медицинской и научной точки зрения.
-    Описание: {description}
-    Состав: {composition}
-    Проанализируй:
-    1. Научную обоснованность заявленных свойств.
-    2. Потенциальные побочные эффекты и противопоказания.
-    3. Эффективность по сравнению с аналогами.
-    Верни детальный максимально подробный обоснованный анализ в структурированном виде (используй Markdown).
-    """
+    # Определение языка контента для режима "auto"
+    content_language = "ru"  # По умолчанию русский
+    if response_language == "auto":
+        # Проверяем наличие русских букв в описании и составе
+        russian_chars = re.findall(r'[а-яА-ЯёЁ]', description + " " + composition)
+        if russian_chars:
+            content_language = "ru"
+            console_log("[LANGUAGE] Автоопределение в perform_deep_analysis: русский язык (найдены русские буквы)")
+        else:
+            content_language = "en"
+            console_log("[LANGUAGE] Автоопределение в perform_deep_analysis: английский язык (русские буквы не найдены)")
+    else:
+        content_language = response_language
+
+    console_log(f"Глубокий анализ: desc='{description[:100]}...', comp='{composition[:100]}...', язык={content_language}")
+
+    # Оптимизированный промпт с учетом выбранного языка
+    if content_language == "ru":
+        prompt = f"""
+        Проведи глубокий анализ товара с медицинской и научной точки зрения.
+        Описание: {description}
+        Состав: {composition}
+        Проанализируй:
+        1. Научную обоснованность заявленных свойств.
+        2. Потенциальные побочные эффекты и противопоказания.
+        3. Эффективность по сравнению с аналогами.
+        Верни детальный максимально подробный обоснованный анализ в структурированном виде (используй Markdown).
+        """
+    else:  # English
+        prompt = f"""
+        Conduct a deep analysis of the product from a medical and scientific perspective.
+        Description: {description}
+        Composition: {composition}
+        Analyze:
+        1. Scientific validity of the claimed properties.
+        2. Potential side effects and contraindications.
+        3. Effectiveness compared to analogs.
+        Return a detailed, maximally comprehensive, reasoned analysis in a structured form (use Markdown).
+        """
 
     try:
         # "deep_analysis" - это псевдоним из `manifest.json` этого плагина.
@@ -3302,7 +3332,25 @@ async def _analyze_composition_vs_description(description: str, composition: str
         console_log("[DIAGNOSTIC] ===== ВЫХОД ИЗ _analyze_composition_vs_description (пустые данные) =====")
         return { "score": 0, "reasoning": "Не удалось извлечь описание или состав товара." }
 
-    console_log(f"Анализ соответствия: desc='{description[:100]}...', comp='{composition[:100]}...'")
+    # Получение настройки языка
+    response_language = safe_js_get_setting("response_language", "ru")
+    console_log(f"[LANGUAGE] Настройка языка: {response_language}")
+
+    # Определение языка контента для режима "auto"
+    content_language = "ru"  # По умолчанию русский
+    if response_language == "auto":
+        # Проверяем наличие русских букв в описании и составе
+        russian_chars = re.findall(r'[а-яА-ЯёЁ]', description + " " + composition)
+        if russian_chars:
+            content_language = "ru"
+            console_log("[LANGUAGE] Автоопределение: русский язык (найдены русские буквы)")
+        else:
+            content_language = "en"
+            console_log("[LANGUAGE] Автоопределение: английский язык (русские буквы не найдены)")
+    else:
+        content_language = response_language
+
+    console_log(f"Анализ соответствия: desc='{description[:100]}...', comp='{composition[:100]}...', язык={content_language}")
 
     # Предварительный анализ для сокращения размера промпта
     analysis_cache_key = f"pre_analysis:{hash(description[:100] + composition[:100])}"
@@ -3315,19 +3363,33 @@ async def _analyze_composition_vs_description(description: str, composition: str
     else:
         key_elements = pre_analyzed
 
-    # Оптимизированный промпт с преданализированными данными
-    prompt = f"""
-    Проведи глубокий анализ (reasoning) соответствия Описания и Состава товара с медицинской и научной точки зрения:
-    Описание: {description}
-    Состав: {composition}
-    Проанализируй:
-    1. Научную обоснованность заявленных свойств.
-    2. Потенциальные побочные эффекты и противопоказания.
-    3. Эффективность по сравнению с аналогами.
-    Отвечай честно. Общую уверенность в ответе вырази в confidence.
-    На основании этого анализа оцени соответствие Описания и Состава по шкале 1-10 (score) и верни JSON: {{"score": число, "reasoning": "подробное_обоснование_оценки", "confidence": значение_0_1}}
-    Требуется вернуть ТОЛЬКО валидный JSON без какого-либо дополнительного текста, объяснений или форматирования.
-    """
+    # Оптимизированный промпт с учетом выбранного языка
+    if content_language == "ru":
+        prompt = f"""
+        Проведи глубокий анализ (reasoning) соответствия Описания и Состава товара с медицинской и научной точки зрения:
+        Описание: {description}
+        Состав: {composition}
+        Проанализируй:
+        1. Научную обоснованность заявленных свойств.
+        2. Потенциальные побочные эффекты и противопоказания.
+        3. Эффективность по сравнению с аналогами.
+        Отвечай честно. Общую уверенность в ответе вырази в confidence.
+        На основании этого анализа оцени соответствие Описания и Состава по шкале 1-10 (score) и верни JSON: {{"score": число, "reasoning": "подробное_обоснование_оценки", "confidence": значение_0_1}}
+        Требуется вернуть ТОЛЬКО валидный JSON без какого-либо дополнительного текста, объяснений или форматирования.
+        """
+    else:  # English
+        prompt = f"""
+        Conduct a deep analysis (reasoning) of the correspondence between the Product Description and Composition from a medical and scientific perspective:
+        Description: {description}
+        Composition: {composition}
+        Analyze:
+        1. Scientific validity of the claimed properties.
+        2. Potential side effects and contraindications.
+        3. Effectiveness compared to analogs.
+        Answer honestly. Express overall confidence in the answer as confidence.
+        Based on this analysis, evaluate the correspondence between Description and Composition on a scale of 1-10 (score) and return JSON: {{"score": number, "reasoning": "detailed_justification_of_score", "confidence": value_0_1}}
+        You must return ONLY valid JSON without any additional text, explanations, or formatting.
+        """
 
     # prompt = f"""
     # Проведи глубокий анализ соответствия Описания и Состава товара с медицинской и научной точки зрения.
@@ -3904,23 +3966,56 @@ async def _find_similar_products(categories: List[str], composition: str) -> Lis
     if not categories or not composition:
         return [{"name": "Недостаточно данных для поиска аналогов", "reason": "missing_categories_or_composition"}]
 
+    # Получение настройки языка
+    response_language = safe_js_get_setting("response_language", "ru")
+    console_log(f"[LANGUAGE] Настройка языка в _find_similar_products: {response_language}")
+
+    # Определение языка контента для режима "auto"
+    content_language = "ru"  # По умолчанию русский
+    if response_language == "auto":
+        # Проверяем наличие русских букв в категориях и составе
+        russian_chars = re.findall(r'[а-яА-ЯёЁ]', " ".join(categories) + " " + composition)
+        if russian_chars:
+            content_language = "ru"
+            console_log("[LANGUAGE] Автоопределение в _find_similar_products: русский язык (найдены русские буквы)")
+        else:
+            content_language = "en"
+            console_log("[LANGUAGE] Автоопределение в _find_similar_products: английский язык (русские буквы не найдены)")
+    else:
+        content_language = response_language
+
     # Быстрые категоризации по типу продукта
     product_type = _categorize_product_by_composition(composition)
 
-    # Параллельный поиск по разным аспектам
-    search_prompt = f"""
-    Найди 3-5 аналогичных реальных товаров на основе:
-    Категории: {', '.join(categories)}
-    Тип продукта: {product_type}
-    Состав: {composition[:1000]}...
+    # Параллельный поиск по разным аспектам с учетом выбранного языка
+    if content_language == "ru":
+        search_prompt = f"""
+        Найди 3-5 аналогичных реальных товаров на основе:
+        Категории: {', '.join(categories)}
+        Тип продукта: {product_type}
+        Состав: {composition[:1000]}...
 
-    Только не выдумывай несуществующие товары, а ищи только те аналогичные товары которые реально были в маркетплейсах.
-    Проанализируй характеристики аналогичных товаров и верни результаты в формате JSON. Если знаешь точную ссылку на товар - укажи её, иначе оставь поле url пустым:
-    {{"analogs": [
-        {{"name": "Название товара", "price_range": "Цена от-до", "url": "https://www.ozon.ru/product/... или пустая строка", "key_features": ["особенности"], "similarity_score": 85}},
-        ...
-    ]}}
-    """
+        Только не выдумывай несуществующие товары, а ищи только те аналогичные товары которые реально были в маркетплейсах.
+        Проанализируй характеристики аналогичных товаров и верни результаты в формате JSON. Если знаешь точную ссылку на товар - укажи её, иначе оставь поле url пустым:
+        {{"analogs": [
+            {{"name": "Название товара", "price_range": "Цена от-до", "url": "https://www.ozon.ru/product/... или пустая строка", "key_features": ["особенности"], "similarity_score": 85}},
+            ...
+        ]}}
+        """
+    else:  # English
+        search_prompt = f"""
+        Find 3-5 similar real products based on:
+        Categories: {', '.join(categories)}
+        Product type: {product_type}
+        Composition: {composition[:1000]}...
+
+        Do not invent non-existent products, but only look for those similar products that were actually in marketplaces.
+        Analyze the characteristics of similar products and return the results in JSON format. If you know the exact link to the product - specify it, otherwise leave the url field empty:
+        {{"analogs": [
+            {{"name": "Product name", "price_range": "Price from-to", "url": "https://www.ozon.ru/product/... or empty string", "key_features": ["features"], "similarity_score": 85}},
+            ...
+        ]}}
+        """
 
     try:
         # Логирование запроса к Gemini API в полном формате
@@ -3946,7 +4041,7 @@ async def _find_similar_products(categories: List[str], composition: str) -> Lis
         if response is None:
             chat_message("⚠️ AI вернул пустой ответ при поиске аналогов, используем резервные данные")
             console_log("AI вернул None - переходим на fallback")
-            return _generate_fallback_analogs(categories, product_type)
+            return _generate_fallback_analogs(categories, product_type, content_language)
 
         # Проверка типа данных от AI
         if not isinstance(response, str):
@@ -3961,7 +4056,7 @@ async def _find_similar_products(categories: List[str], composition: str) -> Lis
         if not response or len(response.strip()) == 0:
             chat_message("⚠️ AI вернул пустой ответ при поиске аналогов, используем резервные данные")
             console_log(f"Пустой ответ от AI: '{response}' (длина: {len(response) if response else 0})")
-            return _generate_fallback_analogs(categories, product_type)
+            return _generate_fallback_analogs(categories, product_type, content_language)
 
         # ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ ОТВЕТА ОТ AI В _find_similar_products
         console_log("[FIND_SIMILAR] ===== НАЧАЛО ОБРАБОТКИ ОТВЕТА AI =====")
@@ -3990,10 +4085,10 @@ async def _find_similar_products(categories: List[str], composition: str) -> Lis
                 else:
                     # Fallback - генерируем на основе состава
                     chat_message("⚠️ AI не вернул аналоги, используем резервные данные")
-                    return _generate_fallback_analogs(categories, product_type)
+                    return _generate_fallback_analogs(categories, product_type, content_language)
             else:
                 chat_message(f"⚠️ AI вернул некорректный ответ при поиске аналогов: {type(response)}")
-                return _generate_fallback_analogs(categories, product_type)
+                return _generate_fallback_analogs(categories, product_type, content_language)
 
         except json.JSONDecodeError as je:
             console_log(f"JSON парсинг ошибка в _find_similar_products: {str(je)}")
@@ -4033,10 +4128,10 @@ async def _find_similar_products(categories: List[str], composition: str) -> Lis
                 if analogs:
                     return analogs[:5]  # Ограничение до 5 результатов
                 else:
-                    return _generate_fallback_analogs(categories, product_type)
+                    return _generate_fallback_analogs(categories, product_type, content_language)
             except Exception as fix_error:
                 console_log(f"Автоматическое исправление JSON не удалось: {str(fix_error)}")
-                return _generate_fallback_analogs(categories, product_type)
+                return _generate_fallback_analogs(categories, product_type, content_language)
 
     except Exception as e:
         error_msg = f"❌ Критическая ошибка при поиске аналогов: {str(e)[:100]}..."
@@ -4067,30 +4162,48 @@ def _categorize_product_by_composition(composition: str) -> str:
     else:
         return "general_cosmetics"
 
-def _generate_fallback_analogs(categories: List[str], product_type: str) -> List[Dict[str, Any]]:
-    """Генерация фоллбэк-аналогов на основе категорий и типа продукта."""
+def _generate_fallback_analogs(categories: List[str], product_type: str, content_language: str = "ru") -> List[Dict[str, Any]]:
+    """Генерация фоллбэк-аналогов на основе категорий и типа продукта с учетом языка."""
     # Таблица соответствий для быстрого поиска аналогов
-    analogs_by_type = {
-        "косметика_anti_aging": [
-            {"name": "Коллагеновый крем Anti-Age", "price_range": "500-2000 ₽", "similarity_score": 80},
-            {"name": "Крем с гиалуроновой кислотой", "price_range": "300-1500 ₽", "similarity_score": 75}
-        ],
-        "косметика_витамины": [
-            {"name": "Витаминный комплекс для кожи", "price_range": "400-1800 ₽", "similarity_score": 78},
-            {"name": "C-витаминовая сыворотка", "price_range": "600-2500 ₽", "similarity_score": 85}
-        ],
-        "general_cosmetics": [
-            {"name": "Аналогичный товар", "price_range": "ценовой диапазон похожих товаров", "similarity_score": 70},
-            {"name": "Продукт схожей категории", "price_range": "средний рынок", "similarity_score": 65}
-        ]
-    }
+    if content_language == "ru":
+        analogs_by_type = {
+            "косметика_anti_aging": [
+                {"name": "Коллагеновый крем Anti-Age", "price_range": "500-2000 ₽", "similarity_score": 80},
+                {"name": "Крем с гиалуроновой кислотой", "price_range": "300-1500 ₽", "similarity_score": 75}
+            ],
+            "косметика_витамины": [
+                {"name": "Витаминный комплекс для кожи", "price_range": "400-1800 ₽", "similarity_score": 78},
+                {"name": "C-витаминовая сыворотка", "price_range": "600-2500 ₽", "similarity_score": 85}
+            ],
+            "general_cosmetics": [
+                {"name": "Аналогичный товар", "price_range": "ценовой диапазон похожих товаров", "similarity_score": 70},
+                {"name": "Продукт схожей категории", "price_range": "средний рынок", "similarity_score": 65}
+            ]
+        }
+        no_category_text = "без категории"
+    else:  # English
+        analogs_by_type = {
+            "косметика_anti_aging": [
+                {"name": "Collagen Anti-Age Cream", "price_range": "500-2000 RUB", "similarity_score": 80},
+                {"name": "Cream with Hyaluronic Acid", "price_range": "300-1500 RUB", "similarity_score": 75}
+            ],
+            "косметика_витамины": [
+                {"name": "Vitamin Complex for Skin", "price_range": "400-1800 RUB", "similarity_score": 78},
+                {"name": "Vitamin C Serum", "price_range": "600-2500 RUB", "similarity_score": 85}
+            ],
+            "general_cosmetics": [
+                {"name": "Similar Product", "price_range": "price range of similar products", "similarity_score": 70},
+                {"name": "Product of similar category", "price_range": "average market", "similarity_score": 65}
+            ]
+        }
+        no_category_text = "no category"
 
     # Возвращаем аналоги по типу или общие если тип неизвестен
     analogs = analogs_by_type.get(product_type, analogs_by_type["general_cosmetics"])
 
     # Добавляем категориальную информацию
     for analog in analogs:
-        analog["category_match"] = categories[0] if categories else "без категории"
+        analog["category_match"] = categories[0] if categories else no_category_text
 
     return analogs[:3]  # Ограничение до 3 результатов
 

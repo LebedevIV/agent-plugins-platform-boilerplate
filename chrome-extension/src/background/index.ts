@@ -2142,27 +2142,34 @@ const handleHostApiMessage = async (
           console.log('[HOST API] Get setting requested:', { settingName, pluginId });
 
           const currentPlugin = pluginId || 'ozon-analyzer';
-          const manifestUrl = chrome.runtime.getURL(`public/plugins/${currentPlugin}/manifest.json`);
 
-          let manifestResponse;
+          // Сначала загружаем manifest.json для получения дефолтных значений
+          const manifestUrl = chrome.runtime.getURL(`public/plugins/${currentPlugin}/manifest.json`);
+          let manifestDefaults: Partial<PluginSettings> = {};
+
           try {
-            manifestResponse = await fetch(manifestUrl);
+            const manifestResponse = await fetch(manifestUrl);
             if (!manifestResponse.ok) {
               throw new Error(`Failed to load manifest: ${manifestResponse.status}`);
             }
+            const manifest = await manifestResponse.json();
+            const manifestSettings = manifest.settings || {};
+
+            // Конвертируем настройки из manifest в формат PluginSettings
+            manifestDefaults = {
+              response_language: manifestSettings.response_language,
+              enable_deep_analysis: manifestSettings.enable_deep_analysis,
+              auto_request_deep_analysis: manifestSettings.auto_request_deep_analysis,
+            };
           } catch (error) {
-            console.error('[HOST API] Error loading manifest:', error);
-            sendResponse({
-              error: true,
-              error_message: `Не удалось загрузить настройки плагина ${currentPlugin}: ${(error as Error).message}`
-            });
-            return true;
+            console.warn('[HOST API] Could not load manifest defaults, using built-in defaults:', error);
           }
 
-          const manifest = await manifestResponse.json();
-          const settings = manifest.settings || {};
+          // Получаем настройки из chrome.storage.local с fallback на manifest.json дефолты
+          const pluginSettings = await getPluginSettings(currentPlugin, manifestDefaults);
 
-          let settingValue = settings[settingName];
+          // Возвращаем запрошенную настройку
+          let settingValue = (pluginSettings as any)[settingName];
 
           if (settingValue === undefined) {
             settingValue = defaultValue;
