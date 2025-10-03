@@ -131,7 +131,7 @@ const PluginDetails = (props: PluginDetailsProps) => {
         <h2>{selectedPlugin.name}</h2>
         <div className="details-header-divider"></div>
         <div className="plugin-detail-content active">
-          <div className="detail-section">
+          <div className="detail-section" id="plugin-info">
             <p>
               <strong>Версия:</strong> v{selectedPlugin.version}
             </p>
@@ -150,7 +150,7 @@ const PluginDetails = (props: PluginDetailsProps) => {
           </div>
 
           {/* Настройки плагина */}
-          <div className="detail-section">
+          <div className="detail-section" id="plugin-settings">
             <h3>Настройки плагина</h3>
             <div className="setting-item">
               <ToggleButton
@@ -190,7 +190,7 @@ const PluginDetails = (props: PluginDetailsProps) => {
 
           {/* Пользовательские настройки для Ozon Analyzer */}
           {selectedPlugin.id === 'ozon-analyzer' && (
-            <div className="detail-section">
+            <div className="detail-section" id="ozon-custom-settings">
               <h3>{t('options.plugins.ozonAnalyzer.customSettings')}</h3>
               <div className="setting-item">
                 <ToggleButton
@@ -255,14 +255,14 @@ const PluginDetails = (props: PluginDetailsProps) => {
             </div>
           )}
 
-          <div className="detail-section">
+          <div className="detail-section" id="plugin-description">
             <h3>Описание</h3>
             <p>{selectedPlugin.description}</p>
           </div>
 
           {/* Сайты/домены, на которых работает плагин */}
           {hostPermissions.length > 0 && (
-            <div className="detail-section">
+            <div className="detail-section" id="plugin-host-permissions">
               <h3>Сайты/домены</h3>
               <ul>
                 {hostPermissions.map((host: string, idx: number) => (
@@ -273,7 +273,7 @@ const PluginDetails = (props: PluginDetailsProps) => {
           )}
 
           {selectedPlugin.manifest?.permissions && (
-            <div className="detail-section">
+            <div className="detail-section" id="plugin-permissions">
               <h3>Разрешения</h3>
               <ul>
                 {selectedPlugin.manifest.permissions.map((permission: string, idx: number) => (
