@@ -187,6 +187,49 @@ def safe_dict_get(data: Any, key: str, default: Any = None) -> Any:
     except AttributeError:
         return default
 
+
+def clean_reasoning_for_chat(reasoning: str) -> str:
+    """
+    Очищает markdown-символы из reasoning перед отображением в чате.
+
+    - Убирает жирный текст: **text** → text
+    - Убирает курсив: *text* → text
+    - Преобразует заголовки: # Title → • Title
+    - Преобразует маркированные списки: * item → • item
+    - Преобразует нумерованные списки: 1. item → • item
+    - Убирает множественные переносы строк
+    - Убирает лишние пробелы
+    """
+    if not isinstance(reasoning, str):
+        return str(reasoning) if reasoning is not None else ""
+
+    # Убираем жирный текст
+    reasoning = re.sub(r'\*\*(.*?)\*\*', r'\1', reasoning)
+
+    # Убираем курсив (одинарные звездочки, но не в середине слов)
+    reasoning = re.sub(r'(?<!\*)\*(?!\*)([^*\n]+?)(?<!\*)\*(?!\*)', r'\1', reasoning)
+
+    # Преобразовываем заголовки
+    reasoning = re.sub(r'^#+\s+(.+)$', r'• \1', reasoning, flags=re.MULTILINE)
+
+    # Преобразовываем маркированные списки
+    reasoning = re.sub(r'^\*\s+(.+)$', r'• \1', reasoning, flags=re.MULTILINE)
+
+    # Преобразовываем нумерованные списки
+    reasoning = re.sub(r'^\d+\.\s+(.+)$', r'• \1', reasoning, flags=re.MULTILINE)
+
+    # Убираем множественные переносы строк
+    reasoning = re.sub(r'\n\s*\n\s*\n+', '\n\n', reasoning)
+
+    # Убираем лишние пробелы в начале и конце строк
+    reasoning = re.sub(r'^\s+', '', reasoning, flags=re.MULTILINE)
+    reasoning = re.sub(r'\s+$', '', reasoning, flags=re.MULTILINE)
+
+    # Убираем множественные пробелы
+    reasoning = re.sub(r' +', ' ', reasoning)
+
+    return reasoning.strip()
+
 # ==============================================================================
 # Оптимизированная система логирования для уменьшения повторяющихся сообщений
 # ==============================================================================
@@ -2810,7 +2853,7 @@ def analyze_ozon_product() -> Dict[str, Any]:
         if score_str == 'N/A' and reasoning_str == 'Объяснение не доступно':
             chat_message("⚠️ Не удалось получить результаты анализа от нейросети")
         else:
-            chat_message(f"🤖 Ответ нейросети (Gemini AI):\n📊 Оценка соответствия: {score_str}/10\n{reasoning_str}")
+            chat_message(f"🤖 Ответ нейросети (Gemini AI):\n📊 Оценка соответствия: {score_str}/10\n{clean_reasoning_for_chat(reasoning_str)}")
 
         # Отправляем информацию об аналогах в чат
         console_log("[DIAGNOSTIC] ===== ОТПРАВКА СООБЩЕНИЯ С АНАЛОГАМИ =====")
@@ -3273,7 +3316,8 @@ async def _analyze_composition_vs_description(description: str, composition: str
     2. Потенциальные побочные эффекты и противопоказания.
     3. Эффективность по сравнению с аналогами.
     Отвечай честно. Общую уверенность в ответе вырази в confidence.
-    На основании этого анализа оцени соответствие Описания и Состава по шкале 1-10 (score) и верни JSON: {{"score": число, "reasoning": "объяснение", "confidence": значение_0_1}}
+    На основании этого анализа оцени соответствие Описания и Состава по шкале 1-10 (score) и верни валидный JSON: {{"score": число, "reasoning": "подробное_обоснование_оценки", "confidence": значение_0_1}}
+    Требуется вернуть ТОЛЬКО валидный JSON без какого-либо дополнительного текста, объяснений или форматирования.
     """
 
     # prompt = f"""
