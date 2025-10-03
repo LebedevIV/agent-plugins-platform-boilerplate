@@ -2868,6 +2868,15 @@ def analyze_ozon_product() -> Dict[str, Any]:
 
                     analogs_message += f"{i}. **{name}**\n"
                     analogs_message += f"   💰 {price_range}\n"
+                    url = analog.get('url', '')
+                    if url and url.startswith('http') and not any(x in url.lower() for x in ['пример', 'example', 'placeholder']):
+                        analogs_message += f"   🔗 {url}\n"
+                    elif url and any(x in url.lower() for x in ['пример', 'example', 'placeholder']):
+                        analogs_message += f"   🔗 Примерная ссылка (требуется уточнение)\n"
+                    elif url and not url.startswith('http'):
+                        analogs_message += f"   🔗 Некорректная ссылка\n"
+                    else:
+                        analogs_message += f"   🔗 Ссылка не найдена\n"
                     analogs_message += f"   📊 Схожесть: {similarity}%\n"
                     if key_features and len(key_features) > 0:
                         features_str = ', '.join(key_features[:3])  # Максимум 3 особенности
@@ -3900,14 +3909,15 @@ async def _find_similar_products(categories: List[str], composition: str) -> Lis
 
     # Параллельный поиск по разным аспектам
     search_prompt = f"""
-    Найди 3-5 аналогичных товаров на основе:
+    Найди 3-5 аналогичных реальных товаров на основе:
     Категории: {', '.join(categories)}
     Тип продукта: {product_type}
     Состав: {composition[:1000]}...
 
-    Проанализируй характеристики аналогичных товаров и верни результаты в формате JSON:
+    Только не выдумывай несуществующие товары, а ищи только те аналогичные товары которые реально были в маркетплейсах.
+    Проанализируй характеристики аналогичных товаров и верни результаты в формате JSON. Если знаешь точную ссылку на товар - укажи её, иначе оставь поле url пустым:
     {{"analogs": [
-        {{"name": "Название товара", "price_range": "Цена от-до", "key_features": ["особенности"], "similarity_score": 85}},
+        {{"name": "Название товара", "price_range": "Цена от-до", "url": "https://www.ozon.ru/product/... или пустая строка", "key_features": ["особенности"], "similarity_score": 85}},
         ...
     ]}}
     """
