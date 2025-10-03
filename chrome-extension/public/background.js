@@ -1559,7 +1559,7 @@ function checkAiAlerts(stats) {
 const MODEL_CONFIGS = {
   "gemini-flash": {
     provider: "google",
-    model_name: "gemini-2.5-flash-lite:generateContent",
+    model_name: "gemini-flash-lite-latest:generateContent",
     endpoint: "https://generativelanguage.googleapis.com/v1beta/models/",
     api_key_env: "GOOGLE_AI_API_KEY"
   },

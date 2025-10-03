@@ -19,7 +19,7 @@ const ANALYSIS_TYPE_MAPPING = {
 
 // Маппинг технических имён на конкретные модели API
 const MODEL_NAME_MAPPING = {
-  'gemini-flash': 'gemini-2.5-flash-lite:generateContent',
+  'gemini-flash': 'gemini-flash-lite-latest:generateContent',
   'gemini-pro': 'gemini-2.5-pro:generateContent'
 };
 
