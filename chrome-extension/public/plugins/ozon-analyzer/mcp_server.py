@@ -634,7 +634,7 @@ class OzonAnalyzerServer:
             console_log(f"[BRIDGE DIAGNOSTIC] Prompt preview: {prompt[:200]}...")
 
             # Асинхронный вызов AI модели
-            response_proxy = await js.llm_call(model_alias, {"prompt": prompt})
+            response_proxy = await js.llm_call(model_alias, {"prompt": prompt, "maxOutputTokens": 4096})
 
             console_log(f"[BRIDGE DIAGNOSTIC] js.llm_call returned: {response_proxy}")
             console_log(f"[BRIDGE DIAGNOSTIC] Response proxy type: {type(response_proxy)}")
@@ -3316,7 +3316,7 @@ async def _analyze_composition_vs_description(description: str, composition: str
     2. Потенциальные побочные эффекты и противопоказания.
     3. Эффективность по сравнению с аналогами.
     Отвечай честно. Общую уверенность в ответе вырази в confidence.
-    На основании этого анализа оцени соответствие Описания и Состава по шкале 1-10 (score) и верни валидный JSON: {{"score": число, "reasoning": "подробное_обоснование_оценки", "confidence": значение_0_1}}
+    На основании этого анализа оцени соответствие Описания и Состава по шкале 1-10 (score) и верни JSON: {{"score": число, "reasoning": "подробное_обоснование_оценки", "confidence": значение_0_1}}
     Требуется вернуть ТОЛЬКО валидный JSON без какого-либо дополнительного текста, объяснений или форматирования.
     """
 

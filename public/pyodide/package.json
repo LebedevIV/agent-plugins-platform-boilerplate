@@ -1,6 +1,6 @@
 {
   "name": "pyodide",
-  "version": "0.27.1147",
+  "version": "0.27.1148",
   "description": "The Pyodide JavaScript package",
   "keywords": [
     "python",
