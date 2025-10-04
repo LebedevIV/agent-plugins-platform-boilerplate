@@ -4,6 +4,7 @@ import type { PluginSettings } from '@extension/storage';
 import ToggleButton from './ToggleButton';
 import LocalErrorBoundary from './LocalErrorBoundary';
 import { useState, useEffect } from 'react';
+import type { ReactNode } from 'react';
 
 const cn = (...args: (string | undefined | false)[]) => args.filter(Boolean).join(' ');
 
@@ -15,18 +16,28 @@ interface PluginDetailsProps {
 
 interface CustomSetting {
   type: 'boolean' | 'select' | 'text' | 'number';
-  default: boolean | string;
-  label: string;
-  description?: string;
+  default: boolean | string | number;
+  label: string | { ru: string; en: string };
+  description?: string | { ru: string; en: string };
   values?: string[];
-  labels?: Record<string, string>;
+  labels?: Record<string, string | { ru: string; en: string }>;
+  min?: number;
+  max?: number;
+  step?: number;
 }
 
 const PluginDetails = (props: PluginDetailsProps) => {
   const { selectedPlugin, locale = 'en', onUpdateSetting } = props;
   const { t } = useTranslations(locale);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
-  const [customSettings, setCustomSettings] = useState<Record<string, boolean | string> | null>(null);
+  const [customSettings, setCustomSettings] = useState<Record<string, boolean | string | number> | null>(null);
+
+  // Хелперы для работы с локализацией
+  const getLocalizedText = (text: string | { ru: string; en: string } | undefined): string => {
+    if (!text) return '';
+    if (typeof text === 'string') return text;
+    return text[locale] || text.ru || text.en || '';
+  };
 
   // Загружаем пользовательские настройки при выборе плагина
   useEffect(() => {
@@ -58,7 +69,7 @@ const PluginDetails = (props: PluginDetailsProps) => {
         const keys = optionKeys.map(key => `${selectedPlugin.id}_${key}`);
 
         const result = await chrome.storage.local.get(keys);
-        const loadedSettings: Record<string, boolean | string> = {};
+        const loadedSettings: Record<string, boolean | string | number> = {};
 
         // Преобразуем ключи обратно и применяем значения
         Object.entries(result).forEach(([key, value]) => {
@@ -76,7 +87,7 @@ const PluginDetails = (props: PluginDetailsProps) => {
     }
   };
 
-  const saveCustomSetting = async (setting: string, value: boolean | string) => {
+  const saveCustomSetting = async (setting: string, value: boolean | string | number) => {
     if (!selectedPlugin) return;
 
     try {
@@ -100,16 +111,18 @@ const PluginDetails = (props: PluginDetailsProps) => {
 
 
   // Хелпер для получения значения настройки с приоритетом: chrome.storage -> manifest
-  const getCustomSettingValue = (settingName: string, defaultValue: boolean | string): boolean | string => {
+  const getCustomSettingValue = (settingName: string, defaultValue: boolean | string | number): boolean | string | number => {
     if (customSettings && customSettings[settingName] !== undefined) {
       return customSettings[settingName];
     }
     return defaultValue;
   };
 
-  const renderCustomSetting = (key: string, config: CustomSetting) => {
+  const renderCustomSetting = (key: string, config: CustomSetting): ReactNode | null => {
     const value = getCustomSettingValue(key, config.default);
     const disabled = isUpdating === key || !(settings.enabled ?? true);
+    const localizedLabel = getLocalizedText(config.label);
+    const localizedDescription = getLocalizedText(config.description);
 
     if (config.type === 'boolean') {
       return (
@@ -120,9 +133,9 @@ const PluginDetails = (props: PluginDetailsProps) => {
             onChange={val => handleSettingChange(key, val)}
             label={
               <>
-                {config.label}
-                {config.description && (
-                  <span className="info-icon" title={config.description}>
+                {localizedLabel}
+                {localizedDescription && (
+                  <span className="info-icon" title={localizedDescription}>
                     i
                   </span>
                 )}
@@ -137,9 +150,9 @@ const PluginDetails = (props: PluginDetailsProps) => {
       return (
         <div className="setting-item" key={key}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px' }}>
-            {config.label}
-            {config.description && (
-              <span className="info-icon" title={config.description}>
+            {localizedLabel}
+            {localizedDescription && (
+              <span className="info-icon" title={localizedDescription}>
                 i
               </span>
             )}
@@ -159,7 +172,7 @@ const PluginDetails = (props: PluginDetailsProps) => {
               }}>
               {config.values?.map((optionValue: string) => (
                 <option key={optionValue} value={optionValue}>
-                  {config.labels?.[optionValue] || optionValue}
+                  {getLocalizedText(config.labels?.[optionValue]) || optionValue}
                 </option>
               ))}
             </select>
@@ -172,9 +185,9 @@ const PluginDetails = (props: PluginDetailsProps) => {
       return (
         <div className="setting-item" key={key}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '15px' }}>
-            {config.label}
-            {config.description && (
-              <span style={{ fontSize: '12px', color: '#666' }}>{config.description}</span>
+            {localizedLabel}
+            {localizedDescription && (
+              <span style={{ fontSize: '12px', color: '#666' }}>{localizedDescription}</span>
             )}
             <input
               type="text"
@@ -197,20 +210,39 @@ const PluginDetails = (props: PluginDetailsProps) => {
     }
 
     if (config.type === 'number') {
+      const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const numValue = parseFloat(e.target.value);
+        if (isNaN(numValue)) return;
+
+        // Валидация диапазона
+        let validatedValue = numValue;
+        if (config.min !== undefined && validatedValue < config.min) {
+          validatedValue = config.min;
+        }
+        if (config.max !== undefined && validatedValue > config.max) {
+          validatedValue = config.max;
+        }
+
+        handleSettingChange(key, validatedValue);
+      };
+
       return (
         <div className="setting-item" key={key}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '15px' }}>
-            {config.label}
-            {config.description && (
-              <span style={{ fontSize: '12px', color: '#666' }}>{config.description}</span>
+            {localizedLabel}
+            {localizedDescription && (
+              <span style={{ fontSize: '12px', color: '#666' }}>{localizedDescription}</span>
             )}
             <input
               type="number"
               id={key}
               name={key}
-              value={value as string}
+              value={value as number}
               disabled={disabled}
-              onChange={e => handleSettingChange(key, e.target.value)}
+              onChange={handleNumberChange}
+              min={config.min}
+              max={config.max}
+              step={config.step}
               style={{
                 padding: '4px 8px',
                 border: '1px solid #ccc',
@@ -227,7 +259,7 @@ const PluginDetails = (props: PluginDetailsProps) => {
     return null;
   };
 
-  const handleSettingChange = async (setting: string, value: boolean | string) => {
+  const handleSettingChange = async (setting: string, value: boolean | string | number) => {
     if (!selectedPlugin) return;
 
     // Проверяем, является ли настройка пользовательской
@@ -356,11 +388,9 @@ const PluginDetails = (props: PluginDetailsProps) => {
           {selectedPlugin.manifest?.options && Object.keys(selectedPlugin.manifest.options).length > 0 && (
             <div className="detail-section" id="custom-settings">
               <h3>Дополнительные настройки</h3>
-              {Object.entries(selectedPlugin.manifest.options as Record<string, CustomSetting>).map(([key, config]) => (
-                <div key={key}>
-                  {renderCustomSetting(key, config)}
-                </div>
-              ))}
+              {selectedPlugin.manifest?.options && Object.entries(selectedPlugin.manifest?.options).map(([key, config]) =>
+                renderCustomSetting(key, config)
+              )}
             </div>
           )}
 

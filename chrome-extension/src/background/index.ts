@@ -1415,8 +1415,32 @@ chrome.runtime.onMessage.addListener(
         const pageHtml = results[0].result as string;
         console.log('[background][RUN_WORKFLOW] ✓ HTML extracted:', pageHtml.length, 'chars');
 
-        // ШАГ 4: Проверить настройки плагина
-        const pluginSettings = await getPluginSettings(msg.pluginId);
+        // ШАГ 4: Загрузить настройки из manifest.json для получения дефолтных значений
+        const manifestUrl = chrome.runtime.getURL(`public/plugins/${msg.pluginId}/manifest.json`);
+        let manifestDefaults: Partial<PluginSettings> = {};
+        let manifest: any = null;
+
+        try {
+          const manifestResponse = await fetch(manifestUrl);
+          if (manifestResponse.ok) {
+            manifest = await manifestResponse.json();
+            console.log(`[background][RUN_WORKFLOW] ✅ Manifest loaded for ${msg.pluginId}:`, manifest);
+            const manifestSettings = manifest.options || {};
+            manifestDefaults = {
+              response_language: manifestSettings.response_language?.default,
+              enable_deep_analysis: manifestSettings.enable_deep_analysis?.default,
+              auto_request_deep_analysis: manifestSettings.auto_request_deep_analysis?.default,
+            };
+          } else {
+            console.warn('[background][RUN_WORKFLOW] ⚠️ Could not load manifest for', msg.pluginId, '- using built-in defaults');
+          }
+        } catch (error) {
+          console.warn('[background][RUN_WORKFLOW] ⚠️ Failed to load manifest for', msg.pluginId, '- using built-in defaults:', error);
+        }
+
+        // ШАГ 5: Проверить настройки плагина с manifest defaults и пользовательскими настройками
+        const customSettingsKeys = manifest?.options ? Object.keys(manifest.options) : [];
+        const pluginSettings = await getPluginSettings(msg.pluginId, manifestDefaults, customSettingsKeys);
         if (!pluginSettings.enabled) {
           console.log('[background][RUN_WORKFLOW][INFO] Plugin disabled');
           sendResponse({ error: 'Плагин отключен' });
@@ -2092,6 +2116,8 @@ const handleHostApiMessage = async (
           }
 
           const manifest = await manifestResponse.json();
+          console.log(`[DEBUG] manifest loaded:`, manifest);
+          console.log(`[DEBUG] manifestResponse status:`, manifestResponse.status);
           const aiModels = manifest.ai_models || {};
 
           const actualModel = aiModels[modelAlias];
@@ -2158,6 +2184,8 @@ const handleHostApiMessage = async (
               throw new Error(`Failed to load manifest: ${manifestResponse.status}`);
             }
             const manifest = await manifestResponse.json();
+            console.log(`[DEBUG] manifest loaded:`, manifest);
+            console.log(`[DEBUG] manifestResponse status:`, manifestResponse.status);
             const manifestSettings = manifest.settings || {};
 
             // Конвертируем настройки из manifest в формат PluginSettings
@@ -2171,7 +2199,30 @@ const handleHostApiMessage = async (
           }
 
           // Получаем настройки из chrome.storage.local с fallback на manifest.json дефолты
-          const pluginSettings = await getPluginSettings(currentPlugin, manifestDefaults);
+          let manifest: any = null;
+
+          try {
+            const manifestResponse = await fetch(manifestUrl);
+            if (!manifestResponse.ok) {
+              throw new Error(`Failed to load manifest: ${manifestResponse.status}`);
+            }
+            manifest = await manifestResponse.json();
+            console.log(`[DEBUG] manifest loaded:`, manifest);
+            console.log(`[DEBUG] manifestResponse status:`, manifestResponse.status);
+            const manifestSettings = manifest.settings || {};
+
+            // Конвертируем настройки из manifest в формат PluginSettings
+            manifestDefaults = {
+              response_language: manifestSettings.response_language,
+              enable_deep_analysis: manifestSettings.enable_deep_analysis,
+              auto_request_deep_analysis: manifestSettings.auto_request_deep_analysis,
+            };
+          } catch (error) {
+            console.warn('[HOST API] Could not load manifest defaults, using built-in defaults:', error);
+          }
+
+          const customSettingsKeys = manifest?.options ? Object.keys(manifest.options) : [];
+          const pluginSettings = await getPluginSettings(currentPlugin, manifestDefaults, customSettingsKeys);
 
           // Возвращаем запрошенную настройку
           let settingValue = (pluginSettings as any)[settingName];
@@ -2386,8 +2437,30 @@ async function handleMessage(message: any, sender: any): Promise<any> {
       const pageHtml = results[0].result as string;
       console.log('[background][PORT][RUN_WORKFLOW] ✓ HTML extracted:', pageHtml.length, 'chars');
 
-      // Проверить настройки плагина
-      const settings = await getPluginSettings(message.pluginId);
+      // Загрузить настройки из manifest.json для получения дефолтных значений
+      const manifestUrl = chrome.runtime.getURL(`public/plugins/${message.pluginId}/manifest.json`);
+      let manifestDefaults: Partial<PluginSettings> = {};
+
+      try {
+        const manifestResponse = await fetch(manifestUrl);
+        if (manifestResponse.ok) {
+          const manifest = await manifestResponse.json();
+          console.log(`[background][PORT][RUN_WORKFLOW] ✅ Manifest loaded for ${message.pluginId}:`, manifest);
+          const manifestSettings = manifest.options || {};
+          manifestDefaults = {
+            response_language: manifestSettings.response_language?.default,
+            enable_deep_analysis: manifestSettings.enable_deep_analysis?.default,
+            auto_request_deep_analysis: manifestSettings.auto_request_deep_analysis?.default,
+          };
+        } else {
+          console.warn('[background][PORT][RUN_WORKFLOW] ⚠️ Could not load manifest for', message.pluginId, '- using built-in defaults');
+        }
+      } catch (error) {
+        console.warn('[background][PORT][RUN_WORKFLOW] ⚠️ Failed to load manifest for', message.pluginId, '- using built-in defaults:', error);
+      }
+
+      // Проверить настройки плагина с manifest defaults
+      const settings = await getPluginSettings(message.pluginId, manifestDefaults);
       if (!settings.enabled) {
         throw new Error('Плагин отключен');
       }

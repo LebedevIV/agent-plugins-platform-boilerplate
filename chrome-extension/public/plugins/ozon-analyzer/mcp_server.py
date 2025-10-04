@@ -2270,6 +2270,19 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None) -> Dict[str, Any]:
     if input_data and isinstance(input_data, dict):
         plugin_settings = input_data.get('pluginSettings', {})
         console_log(f"[PLUGIN_SETTINGS] Получены настройки плагина: {plugin_settings}")
+
+    # Определение языка контента для сообщений чата
+    response_language = plugin_settings.get("response_language", "ru")
+    content_language = "ru"  # По умолчанию русский
+    if response_language == "auto":
+        # В режиме auto определяем язык по умолчанию как русский для сообщений чата
+        # Можно расширить логику определения языка по контенту если нужно
+        content_language = "ru"
+        console_log(f"[LANGUAGE] Используется автоопределение языка для чата: {content_language}")
+    else:
+        content_language = response_language
+        console_log(f"[LANGUAGE] Настройка языка для чата: {content_language}")
+
     try:
         # === ОПТИМИЗИРОВАННОЕ ЛОГИРОВАНИЕ ===
         logger.log("🔍 ===== НАЧАЛО АНАЛИЗА ТОВАРА OZON =====", "analysis_start", force=True)
@@ -2848,30 +2861,45 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None) -> Dict[str, Any]:
         score = analysis_result.get('score', 'N/A')
         reasoning = analysis_result.get('reasoning', 'Объяснение не доступно')
 
-        # Отправляем описание и состав в одном сообщении
+        # Отправляем описание и состав в одном сообщении с учетом языка
         truncated_description = description[:100] + ('...' if len(description) > 100 else '')
         truncated_composition = composition[:100] + ('...' if len(composition) > 100 else '')
         console_log("[DIAGNOSTIC] ===== ОТПРАВКА СООБЩЕНИЯ С ОПИСАНИЕМ И СОСТАВОМ =====")
-        chat_message(f"📝 Описание: {truncated_description}\n📝 Состав: {truncated_composition}")
+        if content_language == "ru":
+            chat_message(f"📝 Описание: {truncated_description}\n📝 Состав: {truncated_composition}")
+        else:
+            chat_message(f"📝 Description: {truncated_description}\n📝 Composition: {truncated_composition}")
 
         # Проверяем, что переменные корректны
         score_str = str(score) if score is not None else 'N/A'
         reasoning_str = str(reasoning) if reasoning is not None else 'Объяснение не доступно'
 
-        console_log("[DIAGNOSTIC] ===== ОТПРАВКА СООБЩЕНИЯ С РЕЗУЛЬТАТАМИ AI =====")
+        console_log("[DIAGNOSTIC] ===== ОТПРАВКА СООБЩЕНИЯ С РЕЗУЛЬТАМИ AI =====")
         if score_str == 'N/A' and reasoning_str == 'Объяснение не доступно':
-            chat_message("⚠️ Не удалось получить результаты анализа от нейросети")
+            if content_language == "ru":
+                chat_message("⚠️ Не удалось получить результаты анализа от нейросети")
+            else:
+                chat_message("⚠️ Failed to get analysis results from neural network")
         else:
-            chat_message(f"🤖 Ответ нейросети (Gemini AI):\n📊 Оценка соответствия: {score_str}/10\n{clean_reasoning_for_chat(reasoning_str)}")
+            if content_language == "ru":
+                chat_message(f"🤖 Ответ нейросети (Gemini AI):\n📊 Оценка соответствия: {score_str}/10\n{clean_reasoning_for_chat(reasoning_str)}")
+            else:
+                chat_message(f"🤖 Neural Network Response (Gemini AI):\n📊 Compliance Score: {score_str}/10\n{clean_reasoning_for_chat(reasoning_str)}")
 
         # Отправляем информацию об аналогах в чат
         console_log("[DIAGNOSTIC] ===== ОТПРАВКА СООБЩЕНИЯ С АНАЛОГАМИ =====")
         if analogs and len(analogs) > 0:
-            analogs_message = "🔍 Найденные аналоги:\n"
+            if content_language == "ru":
+                analogs_message = "🔍 Найденные аналоги:\n"
+                analogs_not_found_message = "🔍 Аналоги не найдены или информация недоступна"
+            else:
+                analogs_message = "🔍 Found analogs:\n"
+                analogs_not_found_message = "🔍 No analogs found or information unavailable"
+
             for i, analog in enumerate(analogs[:3], 1):  # Показываем максимум 3 аналога
                 if isinstance(analog, dict) and not analog.get('error', False):
-                    name = analog.get('name', 'Название не указано')
-                    price_range = analog.get('price_range', 'Цена не указана')
+                    name = analog.get('name', 'Название не указано' if content_language == "ru" else 'Name not specified')
+                    price_range = analog.get('price_range', 'Цена не указана' if content_language == "ru" else 'Price not specified')
                     similarity = analog.get('similarity_score', 'N/A')
                     key_features = analog.get('key_features', [])
 
@@ -2881,11 +2909,20 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None) -> Dict[str, Any]:
                     if url and url.startswith('http') and not any(x in url.lower() for x in ['пример', 'example', 'placeholder']):
                         analogs_message += f"   🔗 {url}\n"
                     elif url and any(x in url.lower() for x in ['пример', 'example', 'placeholder']):
-                        analogs_message += f"   🔗 Примерная ссылка (требуется уточнение)\n"
+                        if content_language == "ru":
+                            analogs_message += f"   🔗 Примерная ссылка (требуется уточнение)\n"
+                        else:
+                            analogs_message += f"   🔗 Example link (needs clarification)\n"
                     elif url and not url.startswith('http'):
-                        analogs_message += f"   🔗 Некорректная ссылка\n"
+                        if content_language == "ru":
+                            analogs_message += f"   🔗 Некорректная ссылка\n"
+                        else:
+                            analogs_message += f"   🔗 Invalid link\n"
                     else:
-                        analogs_message += f"   🔗 Ссылка не найдена\n"
+                        if content_language == "ru":
+                            analogs_message += f"   🔗 Ссылка не найдена\n"
+                        else:
+                            analogs_message += f"   🔗 Link not found\n"
                     analogs_message += f"   📊 Схожесть: {similarity}%\n"
                     if key_features and len(key_features) > 0:
                         features_str = ', '.join(key_features[:3])  # Максимум 3 особенности
@@ -2894,7 +2931,10 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None) -> Dict[str, Any]:
 
             chat_message(analogs_message.strip())
         else:
-            chat_message("🔍 Аналоги не найдены или информация недоступна")
+            if content_language == "ru":
+                chat_message("🔍 Аналоги не найдены или информация недоступна")
+            else:
+                chat_message("🔍 No analogs found or information unavailable")
 
         # Логируем в консоль полную информацию для разработчиков
         title_preview = product_info['title'][:50] + "..." if safe_len(product_info['title']) > 50 else product_info['title']

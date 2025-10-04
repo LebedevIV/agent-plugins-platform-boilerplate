@@ -18,30 +18,50 @@
     "deep_analysis": "gemini-pro",
     "scraping_fallback": "gemini-flash"
   },
-  "options": {
+    "options": {
     "enable_deep_analysis": {
       "type": "boolean",
       "default": true,
-      "label": "Включить глубокий анализ",
-      "description": "Проводить детальный анализ товаров при каждом запросе"
+      "label": {
+        "ru": "Включить глубокий анализ",
+        "en": "Enable deep analysis"
+      },
+      "description": {
+        "ru": "Запускать дополнительный анализ при низкой оценке соответствия",
+        "en": "Run additional analysis when compliance score is low"
+      }
     },
     "auto_request_deep_analysis": {
-      "type": "boolean",
+      "type": "boolean", 
       "default": true,
-      "label": "Автоматический запрос глубокого анализа",
-      "description": "Автоматически запрашивать глубокий анализ при первом просмотре товара"
+      "label": {
+        "ru": "Автоматически запрашивать глубокий анализ",
+        "en": "Automatically request deep analysis"
+      }
     },
     "response_language": {
       "type": "select",
       "default": "ru",
       "values": ["ru", "en", "auto"],
       "labels": {
-        "ru": "Русский",
-        "en": "English",
-        "auto": "Автоопределение"
+        "ru": {"ru": "Русский", "en": "Английский", "auto": "Автоопределение"},
+        "en": {"ru": "Russian", "en": "English", "auto": "Auto-detect"}
       },
-      "label": "Язык ответа AI",
-      "description": "Выберите язык для ответов от искусственного интеллекта"
+      "label": {
+        "ru": "Язык ответа",
+        "en": "Response language"
+      }
+    },
+    "analysis_threshold": {
+      "type": "number",
+      "default": 7,
+      "min": 1,
+      "max": 10,
+      "step": 1,
+      "label": {
+        "ru": "Порог для глубокого анализа",
+        "en": "Deep analysis threshold"
+      }
     }
   }
 }
