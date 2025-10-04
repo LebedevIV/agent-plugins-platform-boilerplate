@@ -156,6 +156,34 @@ const PluginDetails = (props: PluginDetailsProps) => {
             </p>
           </div>
 
+          <div className="detail-section" id="plugin-description">
+            <h3>Описание</h3>
+            <p>{selectedPlugin.description}</p>
+          </div>
+
+          {/* Сайты/домены, на которых работает плагин */}
+          {hostPermissions.length > 0 && (
+            <div className="detail-section" id="plugin-host-permissions">
+              <h3>Сайты/домены</h3>
+              <ul>
+                {hostPermissions.map((host: string, idx: number) => (
+                  <li key={idx}>{host}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {selectedPlugin.manifest?.permissions && (
+            <div className="detail-section" id="plugin-permissions">
+              <h3>Разрешения</h3>
+              <ul>
+                {selectedPlugin.manifest.permissions.map((permission: string, idx: number) => (
+                  <li key={idx}>{permission}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* Настройки плагина */}
           <div className="detail-section" id="plugin-settings">
             <h3>Настройки плагина</h3>
@@ -264,33 +292,7 @@ const PluginDetails = (props: PluginDetailsProps) => {
             </div>
           )}
 
-          <div className="detail-section" id="plugin-description">
-            <h3>Описание</h3>
-            <p>{selectedPlugin.description}</p>
-          </div>
 
-          {/* Сайты/домены, на которых работает плагин */}
-          {hostPermissions.length > 0 && (
-            <div className="detail-section" id="plugin-host-permissions">
-              <h3>Сайты/домены</h3>
-              <ul>
-                {hostPermissions.map((host: string, idx: number) => (
-                  <li key={idx}>{host}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {selectedPlugin.manifest?.permissions && (
-            <div className="detail-section" id="plugin-permissions">
-              <h3>Разрешения</h3>
-              <ul>
-                {selectedPlugin.manifest.permissions.map((permission: string, idx: number) => (
-                  <li key={idx}>{permission}</li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
       </div>
     </LocalErrorBoundary>
