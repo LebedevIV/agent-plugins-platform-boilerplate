@@ -842,6 +842,7 @@ async function processRecoveredAssembledTransfer(msg: any, transfer: any): Promi
       useChunks: false, // Данные уже собраны
       pageHtml: transfer.assembledData || transfer.html,
       assembledData: transfer.assembledData || transfer.html,
+      pluginSettings: transfer.metadata?.pluginSettings, // Добавлено: передаем pluginSettings из метаданных
       recovery: true,
       recoverySource: transfer.isRecovery ? 'fallback_recovery' : 'recovered',
       timestamp: Date.now()
@@ -1588,7 +1589,8 @@ chrome.runtime.onMessage.addListener(
                 requestId: requestId,
                 totalSize: chunkingResult.totalSize,
                 timestamp: Date.now(),
-                fallbackFromDirect: true
+                fallbackFromDirect: true,
+                pluginSettings: pluginSettings  // Добавлено: передаем pluginSettings
               },
               resolve: () => {
                 console.log(`[CHUNKING] Transfer ${transferId} completed successfully`);
@@ -1625,7 +1627,8 @@ chrome.runtime.onMessage.addListener(
               pageKey: pageKey,
               requestId: requestId,
               totalSize: chunkingResult.totalSize,
-              timestamp: Date.now()
+              timestamp: Date.now(),
+              pluginSettings: pluginSettings  // Добавлено: передаем pluginSettings
             },
             resolve: () => {
               console.log(`[CHUNKING] Transfer ${transferId} completed successfully`);
@@ -1982,6 +1985,7 @@ chrome.runtime.onMessage.addListener(
             transferId: msg.transferId,
             useChunks: false, // HTML уже собран
             pageHtml: msg.html,
+            pluginSettings: msg.metadata?.pluginSettings, // Добавлено: передаем pluginSettings из метаданных
             timestamp: Date.now()
           };
 
@@ -2835,6 +2839,7 @@ async function handleMessage(message: any, sender: any): Promise<any> {
           transferId: message.transferId,
           useChunks: false, // HTML уже собран
           pageHtml: message.html,
+          pluginSettings: message.metadata?.pluginSettings, // Добавлено: передаем pluginSettings из метаданных
           timestamp: Date.now()
         };
 

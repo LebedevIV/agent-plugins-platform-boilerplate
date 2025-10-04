@@ -264,7 +264,7 @@ class SimpleWorkflowEngine {
     return { allowed: true };
   }
 
-  async executeWorkflow(pluginId: string, pageHtml: string, requestId?: string) {
+  async executeWorkflow(pluginId: string, pageHtml: string, requestId?: string, pluginSettings?: Record<string, any>) {
     const effectiveRequestId = requestId || `workflow-${Date.now()}`;
 
     // Check if we can execute
@@ -285,7 +285,7 @@ class SimpleWorkflowEngine {
       this.logger.log(`[WorkflowEngine] Starting workflow for plugin: ${pluginId}, request: ${effectiveRequestId}`);
 
       // Execute actual Python analysis
-      const pythonResult = await this.executePythonAnalysis(pageHtml);
+      const pythonResult = await this.executePythonAnalysis(pageHtml, pluginSettings);
 
       // Set completed state
       this.currentWorkflow.status = 'completed';
@@ -474,7 +474,7 @@ except Exception as e:
     }
   }
 
-  private async executePythonAnalysis(htmlContent: string): Promise<any> {
+  private async executePythonAnalysis(htmlContent: string, pluginSettings?: Record<string, any>): Promise<any> {
     await this.initializePyodide();
 
     try {
@@ -485,6 +485,7 @@ except Exception as e:
       console.log(`[BRIDGE DIAGNOSTIC] HTML content type: ${typeof htmlContent}`);
       console.log(`[BRIDGE DIAGNOSTIC] HTML content length: ${htmlContent?.length || 0}`);
       console.log(`[BRIDGE DIAGNOSTIC] HTML content preview: ${htmlContent?.substring(0, 200)}...`);
+      console.log(`[BRIDGE DIAGNOSTIC] Plugin settings:`, pluginSettings);
       console.log(`[BRIDGE DIAGNOSTIC] Pyodide ready: ${!!this.pyodide}`);
       console.log(`[BRIDGE DIAGNOSTIC] Pyodide globals available: ${!!this.pyodide?.globals}`);
       console.log('[BRIDGE DIAGNOSTIC] ===== НАЧАЛО ПЕРЕДАЧИ В PYTHON =====');
@@ -494,7 +495,12 @@ except Exception as e:
 
       console.log('[BRIDGE DIAGNOSTIC] HTML content successfully set in Python globals');
 
-      // Execute the analysis function
+      // Prepare tool input with plugin settings
+      const toolInput = { pluginSettings: pluginSettings || {} };
+      this.pyodide.globals.set('tool_input', toolInput);
+      console.log('[BRIDGE DIAGNOSTIC] Tool input prepared and set in Python globals:', toolInput);
+
+      // Execute the analysis function with plugin settings
       const result = this.pyodide.runPython(`
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -525,7 +531,12 @@ js = MockJs()
 # Execute the analysis
 try:
     print("[BRIDGE DIAGNOSTIC] ===== ЗАПУСК PYTHON АНАЛИЗА =====")
-    result = analyze_ozon_product()
+    # Import tool input from globals
+    tool_input = globals().get('tool_input', {})
+    plugin_settings = tool_input.get('pluginSettings', {})
+    print(f"[BRIDGE DIAGNOSTIC] Plugin settings from tool_input: {plugin_settings}")
+
+    result = analyze_ozon_product(tool_input)
     print(f"[BRIDGE DIAGNOSTIC] ===== PYTHON АНАЛИЗ ЗАВЕРШЕН =====")
     print(f"[BRIDGE DIAGNOSTIC] Результат анализа: {result}")
     print(f"[BRIDGE DIAGNOSTIC] Тип результата: {type(result)}")
@@ -1000,7 +1011,7 @@ async function handleExecuteWorkflow(data: ExecuteWorkflowMessage['data']) {
     console.log(`[offscreen][DIAG] 🚀 Executing workflow for plugin: ${data.pluginId}, request: ${data.requestId}`);
     const workflowStartTime = Date.now();
 
-    const result = await workflowEngine.executeWorkflow(data.pluginId, pageHtml, data.requestId);
+    const result = await workflowEngine.executeWorkflow(data.pluginId, pageHtml, data.requestId, data.pluginSettings);
 
     const workflowTime = Date.now() - workflowStartTime;
     console.log(`[offscreen][DIAG] ✅ Workflow completed in ${workflowTime}ms`);

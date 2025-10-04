@@ -44,8 +44,9 @@
       "default": "ru",
       "values": ["ru", "en", "auto"],
       "labels": {
-        "ru": {"ru": "Русский", "en": "Английский", "auto": "Автоопределение"},
-        "en": {"ru": "Russian", "en": "English", "auto": "Auto-detect"}
+        "ru": {"ru": "Русский", "en": "Russian"},
+        "en": {"ru": "Английский", "en": "English"}, 
+        "auto": {"ru": "Автоопределение", "en": "Auto-detect"}
       },
       "label": {
         "ru": "Язык ответа",

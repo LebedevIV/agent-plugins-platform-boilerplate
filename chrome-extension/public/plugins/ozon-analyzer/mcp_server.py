@@ -2269,6 +2269,13 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None) -> Dict[str, Any]:
     plugin_settings = {}
     if input_data and isinstance(input_data, dict):
         plugin_settings = input_data.get('pluginSettings', {})
+        # Дополнительные логи для диагностики передачи pluginSettings
+        console_log(f"[DIAGNOSTIC] input_data в начале функции: {input_data}")
+        console_log(f"[DIAGNOSTIC] pluginSettings после получения: {plugin_settings}")
+        console_log(f"[DIAGNOSTIC] response_language: {plugin_settings.get('response_language', 'ru')}")
+        console_log(f"[PLUGIN_SETTINGS] input_data передан: {input_data}")
+        console_log(f"[PLUGIN_SETTINGS] pluginSettings получены: {plugin_settings}")
+        console_log(f"[PLUGIN_SETTINGS] response_language: {plugin_settings.get('response_language', 'ru')}")
         console_log(f"[PLUGIN_SETTINGS] Получены настройки плагина: {plugin_settings}")
 
     # Определение языка контента для сообщений чата

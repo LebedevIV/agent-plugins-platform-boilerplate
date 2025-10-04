@@ -166,7 +166,7 @@ const Options = function () {
                   {activeTab === 'plugins' && (
                     <div id="plugin-details-container">
                       <div id="plugin-details">
-                        <PluginDetails selectedPlugin={selectedPlugin} />
+                        <PluginDetails selectedPlugin={selectedPlugin} locale='ru' />
                       </div>
                     </div>
                   )}
