@@ -1,6 +1,6 @@
 {
   "name": "@extension/tailwindcss-config",
-  "version": "0.5.1163",
+  "version": "0.5.1172",
   "description": "chrome extension - tailwindcss configuration",
   "main": "tailwind.config.ts",
   "private": true,

@@ -3376,6 +3376,7 @@ async def _analyze_composition_vs_description(description: str, composition: str
         Отвечай честно. Общую уверенность в ответе вырази в confidence.
         На основании этого анализа оцени соответствие Описания и Состава по шкале 1-10 (score) и верни JSON: {{"score": число, "reasoning": "подробное_обоснование_оценки", "confidence": значение_0_1}}
         Требуется вернуть ТОЛЬКО валидный JSON без какого-либо дополнительного текста, объяснений или форматирования.
+        Выведи ответ на русском языке.
         """
     else:  # English
         prompt = f"""
@@ -3389,6 +3390,7 @@ async def _analyze_composition_vs_description(description: str, composition: str
         Answer honestly. Express overall confidence in the answer as confidence.
         Based on this analysis, evaluate the correspondence between Description and Composition on a scale of 1-10 (score) and return JSON: {{"score": number, "reasoning": "detailed_justification_of_score", "confidence": value_0_1}}
         You must return ONLY valid JSON without any additional text, explanations, or formatting.
+        Write the answer in English.
         """
 
     # prompt = f"""

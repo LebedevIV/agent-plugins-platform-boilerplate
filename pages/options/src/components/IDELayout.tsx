@@ -4,6 +4,7 @@ import { cn } from '@extension/ui';
 import { useState, useRef, useEffect } from 'react';
 import type { Plugin } from '../hooks/usePlugins';
 import type { TabType } from '../hooks/useTabs';
+import type { PluginSettings } from '@extension/storage';
 import React from 'react';
 import ToggleButton from './ToggleButton';
 
@@ -14,7 +15,7 @@ interface IDELayoutProps {
   selectedPlugin: Plugin | null;
   onGithubClick: () => void;
   locale?: 'en' | 'ru';
-  onUpdatePluginSetting?: (pluginId: string, setting: string, value: boolean) => Promise<void>;
+  onUpdatePluginSetting?: (pluginId: string, setting: keyof PluginSettings, value: boolean) => Promise<boolean>;
   isLight: boolean;
 }
 

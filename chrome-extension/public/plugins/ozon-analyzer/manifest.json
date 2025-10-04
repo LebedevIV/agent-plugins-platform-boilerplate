@@ -18,9 +18,30 @@
     "deep_analysis": "gemini-pro",
     "scraping_fallback": "gemini-flash"
   },
-  "settings": {
-    "enable_deep_analysis": true,
-    "auto_request_deep_analysis": true,
-    "response_language": "ru"  
+  "options": {
+    "enable_deep_analysis": {
+      "type": "boolean",
+      "default": true,
+      "label": "Включить глубокий анализ",
+      "description": "Проводить детальный анализ товаров при каждом запросе"
+    },
+    "auto_request_deep_analysis": {
+      "type": "boolean",
+      "default": true,
+      "label": "Автоматический запрос глубокого анализа",
+      "description": "Автоматически запрашивать глубокий анализ при первом просмотре товара"
+    },
+    "response_language": {
+      "type": "select",
+      "default": "ru",
+      "values": ["ru", "en", "auto"],
+      "labels": {
+        "ru": "Русский",
+        "en": "English",
+        "auto": "Автоопределение"
+      },
+      "label": "Язык ответа AI",
+      "description": "Выберите язык для ответов от искусственного интеллекта"
+    }
   }
 }

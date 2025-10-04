@@ -1,5 +1,6 @@
 import { useTranslations } from '../hooks/useTranslations';
 import type { Plugin } from '../hooks/usePlugins';
+import type { PluginSettings } from '@extension/storage';
 import ToggleButton from './ToggleButton';
 import LocalErrorBoundary from './LocalErrorBoundary';
 import { useState, useEffect } from 'react';
@@ -9,7 +10,16 @@ const cn = (...args: (string | undefined | false)[]) => args.filter(Boolean).joi
 interface PluginDetailsProps {
   selectedPlugin: Plugin | null;
   locale?: 'en' | 'ru';
-  onUpdateSetting?: (pluginId: string, setting: string, value: boolean) => Promise<void>;
+  onUpdateSetting?: (pluginId: string, setting: keyof PluginSettings, value: boolean) => Promise<boolean>;
+}
+
+interface CustomSetting {
+  type: 'boolean' | 'select' | 'text' | 'number';
+  default: boolean | string;
+  label: string;
+  description?: string;
+  values?: string[];
+  labels?: Record<string, string>;
 }
 
 const PluginDetails = (props: PluginDetailsProps) => {
@@ -18,9 +28,9 @@ const PluginDetails = (props: PluginDetailsProps) => {
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
   const [customSettings, setCustomSettings] = useState<Record<string, boolean | string> | null>(null);
 
-  // Загружаем пользовательские настройки при выборе плагина Ozon Analyzer
+  // Загружаем пользовательские настройки при выборе плагина
   useEffect(() => {
-    if (selectedPlugin?.id === 'ozon-analyzer') {
+    if (selectedPlugin?.manifest?.options) {
       loadCustomSettings();
     }
   }, [selectedPlugin?.id]);
@@ -39,21 +49,20 @@ const PluginDetails = (props: PluginDetailsProps) => {
 
   // Функции для работы с chrome.storage.local
   const loadCustomSettings = async () => {
-    if (!selectedPlugin || selectedPlugin.id !== 'ozon-analyzer' || customSettings !== null) return;
+    if (!selectedPlugin || !selectedPlugin.manifest?.options || customSettings !== null) return;
 
     try {
       // Проверяем доступность chrome.storage
       if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        const keys = ['enable_deep_analysis', 'auto_request_deep_analysis', 'response_language'].map(
-          key => `ozon-analyzer_${key}`
-        );
+        const optionKeys = Object.keys(selectedPlugin.manifest.options);
+        const keys = optionKeys.map(key => `${selectedPlugin.id}_${key}`);
 
         const result = await chrome.storage.local.get(keys);
         const loadedSettings: Record<string, boolean | string> = {};
 
         // Преобразуем ключи обратно и применяем значения
         Object.entries(result).forEach(([key, value]) => {
-          const settingName = key.replace('ozon-analyzer_', '');
+          const settingName = key.replace(`${selectedPlugin.id}_`, '');
           if (value !== undefined) {
             loadedSettings[settingName] = value;
           }
@@ -68,11 +77,11 @@ const PluginDetails = (props: PluginDetailsProps) => {
   };
 
   const saveCustomSetting = async (setting: string, value: boolean | string) => {
-    if (!selectedPlugin || selectedPlugin.id !== 'ozon-analyzer') return;
+    if (!selectedPlugin) return;
 
     try {
       if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        const key = `ozon-analyzer_${setting}`;
+        const key = `${selectedPlugin.id}_${setting}`;
         await chrome.storage.local.set({ [key]: value });
 
         // Обновляем локальное состояние
@@ -98,12 +107,132 @@ const PluginDetails = (props: PluginDetailsProps) => {
     return defaultValue;
   };
 
+  const renderCustomSetting = (key: string, config: CustomSetting) => {
+    const value = getCustomSettingValue(key, config.default);
+    const disabled = isUpdating === key || !(settings.enabled ?? true);
+
+    if (config.type === 'boolean') {
+      return (
+        <div className="setting-item" key={key}>
+          <ToggleButton
+            checked={value as boolean}
+            disabled={disabled}
+            onChange={val => handleSettingChange(key, val)}
+            label={
+              <>
+                {config.label}
+                {config.description && (
+                  <span className="info-icon" title={config.description}>
+                    i
+                  </span>
+                )}
+              </>
+            }
+          />
+        </div>
+      );
+    }
+
+    if (config.type === 'select') {
+      return (
+        <div className="setting-item" key={key}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px' }}>
+            {config.label}
+            {config.description && (
+              <span className="info-icon" title={config.description}>
+                i
+              </span>
+            )}
+            <select
+              id={key}
+              name={key}
+              value={value as string}
+              disabled={disabled}
+              onChange={e => handleSettingChange(key, e.target.value)}
+              style={{
+                padding: '4px 8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                backgroundColor: 'white',
+                fontSize: '14px',
+                minWidth: '120px'
+              }}>
+              {config.values?.map((optionValue: string) => (
+                <option key={optionValue} value={optionValue}>
+                  {config.labels?.[optionValue] || optionValue}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      );
+    }
+
+    if (config.type === 'text') {
+      return (
+        <div className="setting-item" key={key}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '15px' }}>
+            {config.label}
+            {config.description && (
+              <span style={{ fontSize: '12px', color: '#666' }}>{config.description}</span>
+            )}
+            <input
+              type="text"
+              id={key}
+              name={key}
+              value={value as string}
+              disabled={disabled}
+              onChange={e => handleSettingChange(key, e.target.value)}
+              style={{
+                padding: '4px 8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                backgroundColor: 'white',
+                fontSize: '14px'
+              }}
+            />
+          </label>
+        </div>
+      );
+    }
+
+    if (config.type === 'number') {
+      return (
+        <div className="setting-item" key={key}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '15px' }}>
+            {config.label}
+            {config.description && (
+              <span style={{ fontSize: '12px', color: '#666' }}>{config.description}</span>
+            )}
+            <input
+              type="number"
+              id={key}
+              name={key}
+              value={value as string}
+              disabled={disabled}
+              onChange={e => handleSettingChange(key, e.target.value)}
+              style={{
+                padding: '4px 8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                backgroundColor: 'white',
+                fontSize: '14px'
+              }}
+            />
+          </label>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   const handleSettingChange = async (setting: string, value: boolean | string) => {
     if (!selectedPlugin) return;
 
-    // Пользовательские настройки Ozon Analyzer сохраняем в chrome.storage.local
-    const customSettingsList = ['enable_deep_analysis', 'auto_request_deep_analysis', 'response_language'];
-    if (selectedPlugin.id === 'ozon-analyzer' && customSettingsList.includes(setting)) {
+    // Проверяем, является ли настройка пользовательской
+    const options = selectedPlugin.manifest?.options;
+    if (options && options[setting as keyof typeof options]) {
       // Ленивая загрузка: загружаем настройки только при первом взаимодействии
       if (customSettings === null) {
         await loadCustomSettings();
@@ -122,7 +251,7 @@ const PluginDetails = (props: PluginDetailsProps) => {
       if (onUpdateSetting) {
         try {
           setIsUpdating(setting);
-          await onUpdateSetting(selectedPlugin.id, setting, value as boolean);
+          await onUpdateSetting(selectedPlugin.id, setting as keyof PluginSettings, value as boolean);
         } catch (error) {
           console.error(`Failed to update setting ${setting}:`, error);
         } finally {
@@ -223,72 +352,15 @@ const PluginDetails = (props: PluginDetailsProps) => {
             </div>
           </div>
 
-          {/* Пользовательские настройки для Ozon Analyzer */}
-          {selectedPlugin.id === 'ozon-analyzer' && (
-            <div className="detail-section" id="ozon-custom-settings">
-              <h3>{t('options.plugins.ozonAnalyzer.customSettings')}</h3>
-              <div className="setting-item">
-                <ToggleButton
-                  checked={getCustomSettingValue('enable_deep_analysis', true) as boolean}
-                  disabled={isUpdating === 'enable_deep_analysis' || !settings.enabled}
-                  onChange={val => handleSettingChange('enable_deep_analysis', val)}
-                  label={
-                    <>
-                      {t('options.plugins.ozonAnalyzer.enableDeepAnalysis')}
-                      <span
-                        className="info-icon"
-                        title={t('options.plugins.ozonAnalyzer.enableDeepAnalysisTooltip')}>
-                        i
-                      </span>
-                    </>
-                  }
-                />
-              </div>
-              <div className="setting-item">
-                <ToggleButton
-                  checked={getCustomSettingValue('auto_request_deep_analysis', true) as boolean}
-                  disabled={isUpdating === 'auto_request_deep_analysis' || !settings.enabled}
-                  onChange={val => handleSettingChange('auto_request_deep_analysis', val)}
-                  label={
-                    <>
-                      {t('options.plugins.ozonAnalyzer.autoRequestDeepAnalysis')}
-                      <span
-                        className="info-icon"
-                        title={t('options.plugins.ozonAnalyzer.autoRequestDeepAnalysisTooltip')}>
-                        i
-                      </span>
-                    </>
-                  }
-                />
-              </div>
-              <div className="setting-item">
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px' }}>
-                  {t('options.plugins.ozonAnalyzer.responseLanguage')}
-                  <span
-                    className="info-icon"
-                    title={t('options.plugins.ozonAnalyzer.responseLanguageTooltip')}>
-                    i
-                  </span>
-                  <select
-                    id="response-language"
-                    name="response-language"
-                    value={getCustomSettingValue('response_language', 'ru') as string}
-                    disabled={isUpdating === 'response_language' || !settings.enabled}
-                    onChange={e => handleSettingChange('response_language', e.target.value)}
-                    style={{
-                      padding: '4px 8px',
-                      border: '1px solid #ccc',
-                      borderRadius: '4px',
-                      backgroundColor: 'white',
-                      fontSize: '14px',
-                      minWidth: '120px'
-                    }}>
-                    <option value="ru">{t('options.plugins.ozonAnalyzer.languages.ru')}</option>
-                    <option value="en">{t('options.plugins.ozonAnalyzer.languages.en')}</option>
-                    <option value="auto">{t('options.plugins.ozonAnalyzer.languages.auto')}</option>
-                  </select>
-                </label>
-              </div>
+          {/* Пользовательские настройки */}
+          {selectedPlugin.manifest?.options && Object.keys(selectedPlugin.manifest.options).length > 0 && (
+            <div className="detail-section" id="custom-settings">
+              <h3>Дополнительные настройки</h3>
+              {Object.entries(selectedPlugin.manifest.options as Record<string, CustomSetting>).map(([key, config]) => (
+                <div key={key}>
+                  {renderCustomSetting(key, config)}
+                </div>
+              ))}
             </div>
           )}
 
