@@ -6,7 +6,7 @@
 
 import type { getMonitoringCore } from './monitoring/index.js';
 import { LogLevel } from './monitoring/monitoring-core.js';
-import { APIKeyManager } from '../../../pages/options/src/utils/encryption.js';
+import { APIKeyManager } from '../../../pages/options/src/utils/encryption.ts';
 
 export interface AiModelResponse {
   response: string;

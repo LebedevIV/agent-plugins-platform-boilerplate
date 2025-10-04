@@ -4,9 +4,9 @@
  * Анализирует паттерны ошибок, отслеживает частоту и помогает в диагностике
  */
 
-import { MonitoringConfig, AlertSeverity } from './monitoring-core.js';
-import type { MonitoringLogger } from './logger.js';
-import type { AlertManager } from './alert-manager.js';
+import { MonitoringConfig, AlertSeverity } from './monitoring-core.ts';
+import type { MonitoringLogger } from './logger.ts';
+import type { AlertManager } from './alert-manager.ts';
 
 export interface ErrorPattern {
   id: string;

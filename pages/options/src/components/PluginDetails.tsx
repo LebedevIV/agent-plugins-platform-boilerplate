@@ -2,7 +2,7 @@ import { useTranslations } from '../hooks/useTranslations';
 import type { Plugin } from '../hooks/usePlugins';
 import ToggleButton from './ToggleButton';
 import LocalErrorBoundary from './LocalErrorBoundary';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const cn = (...args: (string | undefined | false)[]) => args.filter(Boolean).join(' ');
 
@@ -17,6 +17,13 @@ const PluginDetails = (props: PluginDetailsProps) => {
   const { t } = useTranslations(locale);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
   const [customSettings, setCustomSettings] = useState<Record<string, boolean | string> | null>(null);
+
+  // Загружаем пользовательские настройки при выборе плагина Ozon Analyzer
+  useEffect(() => {
+    if (selectedPlugin?.id === 'ozon-analyzer') {
+      loadCustomSettings();
+    }
+  }, [selectedPlugin?.id]);
 
   if (!selectedPlugin || typeof selectedPlugin !== 'object') {
     return (
@@ -195,7 +202,7 @@ const PluginDetails = (props: PluginDetailsProps) => {
               <div className="setting-item">
                 <ToggleButton
                   checked={getCustomSettingValue('enable_deep_analysis', true) as boolean}
-                  disabled={isUpdating === 'enable_deep_analysis' || !settings.enabled || customSettings === null}
+                  disabled={isUpdating === 'enable_deep_analysis' || !settings.enabled}
                   onChange={val => handleSettingChange('enable_deep_analysis', val)}
                   label={
                     <>
@@ -212,7 +219,7 @@ const PluginDetails = (props: PluginDetailsProps) => {
               <div className="setting-item">
                 <ToggleButton
                   checked={getCustomSettingValue('auto_request_deep_analysis', true) as boolean}
-                  disabled={isUpdating === 'auto_request_deep_analysis' || !settings.enabled || customSettings === null}
+                  disabled={isUpdating === 'auto_request_deep_analysis' || !settings.enabled}
                   onChange={val => handleSettingChange('auto_request_deep_analysis', val)}
                   label={
                     <>
@@ -235,8 +242,10 @@ const PluginDetails = (props: PluginDetailsProps) => {
                     i
                   </span>
                   <select
+                    id="response-language"
+                    name="response-language"
                     value={getCustomSettingValue('response_language', 'ru') as string}
-                    disabled={isUpdating === 'response_language' || !settings.enabled || customSettings === null}
+                    disabled={isUpdating === 'response_language' || !settings.enabled}
                     onChange={e => handleSettingChange('response_language', e.target.value)}
                     style={{
                       padding: '4px 8px',

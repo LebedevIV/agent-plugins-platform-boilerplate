@@ -5,12 +5,12 @@
  * для всех компонентов плагина: Workflow Engine, Pyodide Worker, AI Client, Network
  */
 
-import { MonitoringLogger } from './logger.js';
-import { MetricsCollector } from './metrics-collector.js';
-import { AlertManager } from './alert-manager.js';
-import { ErrorTracker } from './error-tracker.js';
-import { PerformanceMonitor } from './performance-monitor.js';
-import { NetworkTracker } from './network-tracker.js';
+import { MonitoringLogger } from './logger.ts';
+import { MetricsCollector } from './metrics-collector.ts';
+import { AlertManager } from './alert-manager.ts';
+import { ErrorTracker } from './error-tracker.ts';
+import { PerformanceMonitor } from './performance-monitor.ts';
+import { NetworkTracker } from './network-tracker.ts';
 
 export enum LogLevel {
   DEBUG = 'debug',

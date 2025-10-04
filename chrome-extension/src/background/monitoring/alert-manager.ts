@@ -5,8 +5,8 @@
  * уведомляет о критических проблемах
  */
 
-import { Alert, AlertSeverity, MonitoringConfig } from './monitoring-core.js';
-import { MonitoringLogger } from './logger.js';
+import { Alert, AlertSeverity, MonitoringConfig } from './monitoring-core.ts';
+import { MonitoringLogger } from './logger.ts';
 
 export interface AlertRule {
   id: string;

@@ -6,7 +6,7 @@
  */
 
 // Основное API
-export { getMonitoringCore, MonitoringCore } from './monitoring-core.js';
+export { getMonitoringCore, MonitoringCore } from './monitoring-core.ts';
 
 // Основные типы
 export type {
@@ -17,31 +17,31 @@ export type {
   Alert,
   AlertSeverity,
   MonitoringConfig
-} from './monitoring-core.js';
+} from './monitoring-core.ts';
 
 // Компоненты логирования
-export { MonitoringLogger } from './logger.js';
-export type { LogFilter, LogExportOptions } from './logger.js';
+export { MonitoringLogger } from './logger.ts';
+export type { LogFilter, LogExportOptions } from './logger.ts';
 
 // Компоненты метрик
-export { MetricsCollector } from './metrics-collector.js';
-export type { MetricsStats, BucketDefinition } from './metrics-collector.js';
+export { MetricsCollector } from './metrics-collector.ts';
+export type { MetricsStats, BucketDefinition } from './metrics-collector.ts';
 
 // Компоненты алертов
-export { AlertManager } from './alert-manager.js';
-export type { AlertRule, AlertState } from './alert-manager.js';
+export { AlertManager } from './alert-manager.ts';
+export type { AlertRule, AlertState } from './alert-manager.ts';
 
 // Компоненты трекинга ошибок
-export { ErrorTracker } from './error-tracker.js';
-export type { ErrorPattern, ErrorReport } from './error-tracker.js';
+export { ErrorTracker } from './error-tracker.ts';
+export type { ErrorPattern, ErrorReport } from './error-tracker.ts';
 
 // Компоненты мониторинга производительности
-export { PerformanceMonitor } from './performance-monitor.js';
-export type { PerformanceMeasurement } from './performance-monitor.js';
+export { PerformanceMonitor } from './performance-monitor.ts';
+export type { PerformanceMeasurement } from './performance-monitor.ts';
 
 // Компоненты трекинга сети
-export { NetworkTracker } from './network-tracker.js';
-export type { NetworkRequest, NetworkStats } from './network-tracker.js';
+export { NetworkTracker } from './network-tracker.ts';
+export type { NetworkRequest, NetworkStats } from './network-tracker.ts';
 
 /**
  * Быстрая функция инициализации системы мониторинга производственного уровня
