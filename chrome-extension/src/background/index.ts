@@ -13,6 +13,7 @@ console.log('[background] Plugin manager loaded');
 import { getPageKey } from '../../../packages/shared/lib/utils/helpers';
 import { getApiKeyForModel, callAiModel } from './ai-api-client';
 import { exampleThemeStorage, pluginSettingsStorage, getPluginSettings } from '@extension/storage';
+import type { PluginSettings } from '@extension/storage';
 import { ensureOffscreenDocument } from '../../../src/background/offscreen-manager';
 console.log('[background] Storage modules loaded');
 
@@ -171,7 +172,8 @@ const sendHtmlDirectly = async (
   pageKey: string,
   html: string,
   requestId: string,
-  transferId: string
+  transferId: string,
+  pluginSettings: Record<string, any> = {}
 ): Promise<void> => {
   console.log('[background][DIRECT_TRANSMISSION] Sending HTML directly to offscreen for transfer:', transferId);
   console.log('[background][DIRECT_TRANSMISSION] HTML size:', html.length, 'chars');
@@ -244,7 +246,7 @@ const sendHtmlDirectly = async (
         geminiApiKey = undefined;
       }
   
-      await executeWorkflowInOffscreen(pluginId, pageKey, transferId, requestId, false, html, geminiApiKey);
+      await executeWorkflowInOffscreen(pluginId, pageKey, transferId, requestId, false, html, geminiApiKey, pluginSettings);
       console.log('[background][DIRECT_TRANSMISSION] Workflow execution initiated successfully');
     } catch (workflowError) {
       console.error('[background][DIRECT_TRANSMISSION] Failed to execute workflow:', workflowError);
@@ -1305,13 +1307,15 @@ async function executeWorkflowInOffscreen(
   requestId: string,
   useChunks: boolean = false,
   htmlData?: string,
-  apiKey?: string
+  apiKey?: string,
+  pluginSettings: Record<string, any> = {}
 ): Promise<void> {
   console.log(`[WORKFLOW_EXECUTION] 🚀 Starting workflow execution in offscreen`);
   console.log(`[WORKFLOW_EXECUTION] Plugin ID: ${pluginId}`);
   console.log(`[WORKFLOW_EXECUTION] Transfer ID: ${transferId}`);
   console.log(`[WORKFLOW_EXECUTION] Use chunks: ${useChunks}`);
   console.log(`[WORKFLOW_EXECUTION] HTML data length: ${htmlData?.length || 0}`);
+  console.log(`[WORKFLOW_EXECUTION] Plugin settings:`, pluginSettings);
 
   // Получить API ключ для Gemini
   let geminiApiKey: string | null | undefined = apiKey;
@@ -1335,6 +1339,7 @@ async function executeWorkflowInOffscreen(
     useChunks,
     htmlData,
     geminiApiKey,
+    pluginSettings,
     timestamp: Date.now()
   };
 
@@ -1411,8 +1416,8 @@ chrome.runtime.onMessage.addListener(
         console.log('[background][RUN_WORKFLOW] ✓ HTML extracted:', pageHtml.length, 'chars');
 
         // ШАГ 4: Проверить настройки плагина
-        const settings = await getPluginSettings(msg.pluginId);
-        if (!settings.enabled) {
+        const pluginSettings = await getPluginSettings(msg.pluginId);
+        if (!pluginSettings.enabled) {
           console.log('[background][RUN_WORKFLOW][INFO] Plugin disabled');
           sendResponse({ error: 'Плагин отключен' });
           return true;
@@ -1532,7 +1537,7 @@ chrome.runtime.onMessage.addListener(
           console.log('[background][RUN_WORKFLOW] HTML size:', pageHtml.length, 'chars');
 
           try {
-            await sendHtmlDirectly(msg.pluginId, pageKey, pageHtml, requestId, transferId);
+            await sendHtmlDirectly(msg.pluginId, pageKey, pageHtml, requestId, transferId, pluginSettings);
             console.log('[background][RUN_WORKFLOW] ✅ Direct transmission completed');
           } catch (directError) {
             console.log('[background][RUN_WORKFLOW] ❌ Direct transmission failed, switching to chunked mode');

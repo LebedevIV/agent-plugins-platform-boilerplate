@@ -2226,14 +2226,17 @@ def _run_async_in_sync(coro):
             # Возвращаем fallback значения
             return ({"score": 5, "reasoning": "Ошибка выполнения асинхронного кода"}, [])
 
-async def _analyze_product_async(description: str, composition: str, categories: List[str]) -> tuple:
+async def _analyze_product_async(description: str, composition: str, categories: List[str], plugin_settings: Dict[str, Any] = None) -> tuple:
     """
     Асинхронная версия анализа продукта для внутреннего использования.
     Возвращает кортеж (analysis_result, analogs)
     """
+    if plugin_settings is None:
+        plugin_settings = {}
+
     # Запускаем анализ соответствия и поиск аналогов параллельно
-    analysis_task = _analyze_composition_vs_description(description, composition)
-    analogs_task = _find_similar_products(categories, composition)
+    analysis_task = _analyze_composition_vs_description(description, composition, plugin_settings)
+    analogs_task = _find_similar_products(categories, composition, plugin_settings)
 
     analysis_result, analogs = await asyncio.gather(analysis_task, analogs_task, return_exceptions=True)
 
@@ -2248,19 +2251,25 @@ async def _analyze_product_async(description: str, composition: str, categories:
 
     return analysis_result, analogs
 
-def analyze_ozon_product() -> Dict[str, Any]:
+def analyze_ozon_product(input_data: Dict[str, Any] = None) -> Dict[str, Any]:
     """
     Главная точка входа для анализа страницы товара Ozon.
     Эта функция оркестрирует весь процесс: парсинг, анализ, поиск аналогов
     и формирование итогового отчета.
 
     Данные считываются из JS globals, переданные JavaScript.
+    Настройки плагина передаются через input_data['pluginSettings'].
 
     Returns:
         Словарь с полным отчетом. Ключевые поля `description` и `composition`
         возвращаются на верхнем уровне, чтобы быть доступными для последующих
         шагов в `workflow.json` (например, для `perform_deep_analysis`).
     """
+    # Получить pluginSettings из input_data или использовать пустой словарь
+    plugin_settings = {}
+    if input_data and isinstance(input_data, dict):
+        plugin_settings = input_data.get('pluginSettings', {})
+        console_log(f"[PLUGIN_SETTINGS] Получены настройки плагина: {plugin_settings}")
     try:
         # === ОПТИМИЗИРОВАННОЕ ЛОГИРОВАНИЕ ===
         logger.log("🔍 ===== НАЧАЛО АНАЛИЗА ТОВАРА OZON =====", "analysis_start", force=True)
@@ -2749,7 +2758,7 @@ def analyze_ozon_product() -> Dict[str, Any]:
             try:
                 console_log("Запускаю асинхронный анализ...")
                 analysis_result, analogs = _run_async_in_sync(
-                    _analyze_product_async(description, composition, categories)
+                _analyze_product_async(description, composition, categories, plugin_settings)
                 )
 
                 # Кешируем успешные результаты
@@ -2771,7 +2780,7 @@ def analyze_ozon_product() -> Dict[str, Any]:
         console_log("Оптимизированный анализ завершен!")
         
         # Шаг 4: Проверяем настройки плагина, заданные пользователем в UI
-        enable_deep_analysis = safe_js_get_setting("enable_deep_analysis", False)
+        enable_deep_analysis = plugin_settings.get("enable_deep_analysis", True)  # default: true
         
         # Шаг 5: Формируем условное предложение для глубокого анализа
         # Это поле будет использоваться в `workflow.json` в условии `run_if`.
@@ -2954,8 +2963,9 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
     if not description or not composition:
         return { "status": "error", "message": "Описание или состав не были переданы для глубокого анализа."}
 
-    # Получение настройки языка
-    response_language = safe_js_get_setting("response_language", "ru")
+    # Получение настройки языка из pluginSettings
+    plugin_settings = input_data.get('pluginSettings', {})
+    response_language = plugin_settings.get("response_language", "ru")
     console_log(f"[LANGUAGE] Настройка языка в perform_deep_analysis: {response_language}")
 
     # Определение языка контента для режима "auto"
@@ -3315,7 +3325,7 @@ def _reconstruct_chunked_strings(input_data: Dict[str, Any]) -> Dict[str, Any]:
         console_log(f"❌ Traceback: {traceback.format_exc()}")
         return input_data  # Возвращаем исходные данные при ошибке
 
-async def _analyze_composition_vs_description(description: str, composition: str) -> Dict[str, Any]:
+async def _analyze_composition_vs_description(description: str, composition: str, plugin_settings: Dict[str, Any] = None) -> Dict[str, Any]:
     """
     Оптимизированный анализ соответствия описания и состава с предобработкой.
     Использует преданализ для сокращения размера промпта и cache busting.
@@ -3333,7 +3343,7 @@ async def _analyze_composition_vs_description(description: str, composition: str
         return { "score": 0, "reasoning": "Не удалось извлечь описание или состав товара." }
 
     # Получение настройки языка
-    response_language = safe_js_get_setting("response_language", "ru")
+    response_language = plugin_settings.get("response_language", "ru")
     console_log(f"[LANGUAGE] Настройка языка: {response_language}")
 
     # Определение языка контента для режима "auto"
@@ -3959,7 +3969,7 @@ def _extract_description_and_composition(soup: 'SimpleHTMLParser') -> tuple:
     """Заглушка для извлечения описания и состава."""
     return "Пример описания", "Пример состава"
 
-async def _find_similar_products(categories: List[str], composition: str) -> List[Dict[str, Any]]:
+async def _find_similar_products(categories: List[str], composition: str, plugin_settings: Dict[str, Any] = None) -> List[Dict[str, Any]]:
     """
     Оптимизированный поиск аналогичных продуктов на основе категорий и состава.
     Использует параллельные AI запросы для поиска аналогичных товаров в разных категориях.
@@ -3968,8 +3978,8 @@ async def _find_similar_products(categories: List[str], composition: str) -> Lis
     if not categories or not composition:
         return [{"name": "Недостаточно данных для поиска аналогов", "reason": "missing_categories_or_composition"}]
 
-    # Получение настройки языка
-    response_language = safe_js_get_setting("response_language", "ru")
+    # Получение настройки языка из plugin_settings
+    response_language = plugin_settings.get("response_language", "ru") if plugin_settings else "ru"
     console_log(f"[LANGUAGE] Настройка языка в _find_similar_products: {response_language}")
 
     # Определение языка контента для режима "auto"

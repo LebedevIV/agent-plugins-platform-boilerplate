@@ -302,7 +302,7 @@ const PluginDetails = (props: PluginDetailsProps) => {
             </div>
           )}
 
-          {selectedPlugin.manifest?.permissions && (
+          {selectedPlugin.manifest?.permissions && Array.isArray(selectedPlugin.manifest.permissions) && (
             <div className="detail-section" id="plugin-permissions">
               <h3>Разрешения</h3>
               <ul>
