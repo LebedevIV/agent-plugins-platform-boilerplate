@@ -4,6 +4,14 @@
  */
 importScripts('../public/pyodide/pyodide.js');
 
+// Переопределение console.log для отправки логов в основной поток
+const originalConsoleLog = console.log;
+console.log = (...args) => {
+    const timestamp = new Date().toISOString();
+    const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ');
+    self.postMessage({ type: 'pyodide_log', level: 'log', message: `[${timestamp}] [Pyodide Worker] ${message}` });
+};
+
 let pyodide;
 const hostCallPromises = new Map();
 
@@ -15,7 +23,32 @@ async function initializePyodide() {
   
   try {
     pyodide = await loadPyodide({ indexURL: '../public/pyodide/' });
-    
+
+    // Переопределение stdout и stderr для перехвата print() из Python
+    pyodide.runPython(`
+import sys
+import io
+
+class PyodideLogWriter(io.StringIO):
+   def __init__(self, level):
+       super().__init__()
+       self.level = level
+
+   def write(self, text):
+       if text.strip():
+           import js
+           timestamp = js.eval('(new Date()).toISOString()')
+           js.postMessage({
+               'type': 'pyodide_log',
+               'level': self.level,
+               'message': f'[{timestamp}] [Pyodide] {text.strip()}'
+           })
+       super().write(text)
+
+sys.stdout = PyodideLogWriter('info')
+sys.stderr = PyodideLogWriter('error')
+    `);
+
     // Notify about successful loading
     self.postMessage({ type: 'pyodide_status', status: 'ready', message: 'Python среда готова' });
   } catch (error) {

@@ -90,7 +90,7 @@ const pluginChatApi = {
         // Дополнительная диагностика: проверим все ключи в storage
         chrome.storage.local.get(null, allData => {
           const relatedKeys = Object.keys(allData).filter(key => key.includes(chatKey.split('::')[0]));
-          console.log('[pluginChatApi] getOrLoadChat - all storage keys:', Object.keys(allData));
+          // console.log('[pluginChatApi] getOrLoadChat - all storage keys:', Object.keys(allData));
           console.log('[pluginChatApi] getOrLoadChat - related keys:', relatedKeys);
           console.log('[pluginChatApi] getOrLoadChat - all data:', allData);
         });
@@ -120,7 +120,7 @@ const pluginChatApi = {
     // Ожидаем завершения предыдущей операции сохранения для этого чата
     const queueKey = chatKey;
     if (this._messageSaveQueue.has(queueKey)) {
-      console.log('[pluginChatApi][saveMessage] Ожидание предыдущей операции сохранения', { queueKey });
+      // console.log('[pluginChatApi][saveMessage] Ожидание предыдущей операции сохранения', { queueKey });
       await this._messageSaveQueue.get(queueKey);
     }
 
@@ -275,10 +275,10 @@ const pluginChatApi = {
 
     for (let attempt = 1; attempt <= 5; attempt++) {
       const delay = retryDelays[attempt - 1];
-      console.log(`[pluginChatApi][saveMessage] ВЕРИФИКАЦИЯ попытка ${attempt}/5, задержка ${delay}ms`, {
-        chatKey,
-        messageId: message.id
-      });
+      // console.log(`[pluginChatApi][saveMessage] ВЕРИФИКАЦИЯ попытка ${attempt}/5, задержка ${delay}ms`, {
+      //   chatKey,
+      //   messageId: message.id
+      // });
 
       await new Promise(resolve => setTimeout(resolve, delay));
 

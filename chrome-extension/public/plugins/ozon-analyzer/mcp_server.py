@@ -2251,6 +2251,78 @@ async def _analyze_product_async(description: str, composition: str, categories:
 
     return analysis_result, analogs
 
+def get_safe_content_language(plugin_settings: Dict[str, Any]) -> str:
+    """
+    Безопасная функция определения языка контента для сообщений чата.
+
+    Выполняет валидацию настройки response_language из plugin_settings и возвращает
+    безопасное значение языка, гарантируя соответствие допустимым значениям.
+
+    Args:
+        plugin_settings (Dict[str, Any]): Настройки плагина, содержащие response_language
+
+    Returns:
+        str: Валидное значение языка ('ru', 'en', 'auto')
+
+    Behavior:
+        - Извлекает response_language из plugin_settings
+        - Валидирует значение против допустимых: ['ru', 'en', 'auto']
+        - Возвращает fallback 'ru' если значение некорректное или отсутствует
+        - Логирует весь процесс валидации для диагностики
+
+    Examples:
+        >>> get_safe_content_language({'response_language': 'en'})
+        'en'
+
+        >>> get_safe_content_language({'response_language': 'invalid'})
+        'ru'  # fallback
+
+        >>> get_safe_content_language({})
+        'ru'  # default fallback
+    """
+    console_log("[LANGUAGE_VALIDATION] ===== НАЧАЛО ВАЛИДАЦИИ ЯЗЫКА =====")
+
+    # Извлечение значения response_language из plugin_settings
+    raw_response_language = safe_dict_get(plugin_settings, "response_language", "ru")
+    console_log(f"[LANGUAGE_VALIDATION] Извлечено response_language: '{raw_response_language}' (тип: {type(raw_response_language).__name__})")
+
+    # Детальный анализ plugin_settings
+    console_log(f"[LANGUAGE_VALIDATION] Анализ plugin_settings:")
+    console_log(f"[LANGUAGE_VALIDATION]   - Тип plugin_settings: {type(plugin_settings)}")
+    if isinstance(plugin_settings, dict):
+        console_log(f"[LANGUAGE_VALIDATION]   - Все ключи: {list(plugin_settings.keys())}")
+        response_lang = plugin_settings.get('response_language', 'КЛЮЧ ОТСУТСТВУЕТ') if plugin_settings else 'plugin_settings is None'
+        console_log(f"[LANGUAGE_VALIDATION]   - Значение response_language: {response_lang}")
+        console_log(f"[LANGUAGE_VALIDATION]   - Значение по умолчанию для safe_dict_get: 'ru'")
+    else:
+        console_log(f"[LANGUAGE_VALIDATION]   - plugin_settings не является словарем!")
+
+    # Список допустимых значений
+    valid_languages = ['ru', 'en', 'auto']
+    console_log(f"[LANGUAGE_VALIDATION] Допустимые значения: {valid_languages}")
+
+    # Детальная проверка валидности
+    console_log(f"[LANGUAGE_VALIDATION] Проверка валидности '{raw_response_language}':")
+    console_log(f"[LANGUAGE_VALIDATION]   - Проверка типа: {type(raw_response_language)}")
+    console_log(f"[LANGUAGE_VALIDATION]   - Проверка на None: {raw_response_language is None}")
+    console_log(f"[LANGUAGE_VALIDATION]   - Проверка на пустую строку: {raw_response_language == '' if isinstance(raw_response_language, str) else 'N/A'}")
+    console_log(f"[LANGUAGE_VALIDATION]   - Принадлежность к valid_languages: {raw_response_language in valid_languages}")
+
+    # Валидация значения
+    if raw_response_language in valid_languages:
+        console_log(f"[LANGUAGE_VALIDATION] ✅ Валидация пройдена: '{raw_response_language}' является допустимым значением")
+        result = raw_response_language
+    else:
+        console_log(f"[LANGUAGE_VALIDATION] ❌ Валидация НЕ пройдена: '{raw_response_language}' не является допустимым значением")
+        console_log(f"[LANGUAGE_VALIDATION] 🔄 Используем fallback: 'ru'")
+        console_log(f"[LANGUAGE_VALIDATION] Причина: значение не входит в {valid_languages}")
+        result = "ru"
+
+    console_log(f"[LANGUAGE_VALIDATION] Финальный результат: '{result}'")
+    console_log("[LANGUAGE_VALIDATION] ===== КОНЕЦ ВАЛИДАЦИИ ЯЗЫКА =====")
+
+    return result
+
 def analyze_ozon_product(input_data: Dict[str, Any] = None) -> Dict[str, Any]:
     """
     Главная точка входа для анализа страницы товара Ozon.
@@ -2265,30 +2337,23 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None) -> Dict[str, Any]:
         возвращаются на верхнем уровне, чтобы быть доступными для последующих
         шагов в `workflow.json` (например, для `perform_deep_analysis`).
     """
-    # Получить pluginSettings из input_data или использовать пустой словарь
-    plugin_settings = {}
-    if input_data and isinstance(input_data, dict):
-        plugin_settings = input_data.get('pluginSettings', {})
-        # Дополнительные логи для диагностики передачи pluginSettings
-        console_log(f"[DIAGNOSTIC] input_data в начале функции: {input_data}")
-        console_log(f"[DIAGNOSTIC] pluginSettings после получения: {plugin_settings}")
-        console_log(f"[DIAGNOSTIC] response_language: {plugin_settings.get('response_language', 'ru')}")
-        console_log(f"[PLUGIN_SETTINGS] input_data передан: {input_data}")
-        console_log(f"[PLUGIN_SETTINGS] pluginSettings получены: {plugin_settings}")
-        console_log(f"[PLUGIN_SETTINGS] response_language: {plugin_settings.get('response_language', 'ru')}")
-        console_log(f"[PLUGIN_SETTINGS] Получены настройки плагина: {plugin_settings}")
+    console_log("[DIAGNOSTIC] ===== analyze_ozon_product STARTED =====")
+    console_log(f"[DIAGNOSTIC] input_data type: {type(input_data)}")
 
-    # Определение языка контента для сообщений чата
-    response_language = plugin_settings.get("response_language", "ru")
-    content_language = "ru"  # По умолчанию русский
-    if response_language == "auto":
-        # В режиме auto определяем язык по умолчанию как русский для сообщений чата
-        # Можно расширить логику определения языка по контенту если нужно
-        content_language = "ru"
-        console_log(f"[LANGUAGE] Используется автоопределение языка для чата: {content_language}")
-    else:
-        content_language = response_language
-        console_log(f"[LANGUAGE] Настройка языка для чата: {content_language}")
+    # Получить pluginSettings из pyodide globals
+    plugin_settings = globals().get('plugin_settings', {})
+
+    console_log(f"[PLUGIN_SETTINGS] pluginSettings получены из pyodide.globals: {plugin_settings}")
+    console_log(f"[PLUGIN_SETTINGS] Тип plugin_settings: {type(plugin_settings)}")
+    if isinstance(plugin_settings, dict):
+        console_log(f"[PLUGIN_SETTINGS] Ключи в plugin_settings: {list(plugin_settings.keys())}")
+        response_lang = plugin_settings.get('response_language', 'КЛЮЧ НЕ НАЙДЕН') if plugin_settings else 'plugin_settings is None'
+        console_log(f"[PLUGIN_SETTINGS] response_language в plugin_settings: {response_lang}")
+
+    # Определение языка контента для сообщений чата с использованием безопасной функции
+    content_language = get_safe_content_language(plugin_settings)
+    console_log(f"[LANGUAGE] Язык контента определен: '{content_language}'")
+    console_log(f"[LANGUAGE] Финальный результат get_safe_content_language: '{content_language}'")
 
     try:
         # === ОПТИМИЗИРОВАННОЕ ЛОГИРОВАНИЕ ===
@@ -2800,8 +2865,8 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None) -> Dict[str, Any]:
         console_log("Оптимизированный анализ завершен!")
         
         # Шаг 4: Проверяем настройки плагина, заданные пользователем в UI
-        enable_deep_analysis = plugin_settings.get("enable_deep_analysis", True)  # default: true
-        
+        enable_deep_analysis = safe_dict_get(plugin_settings, "enable_deep_analysis", True)  # default: true
+
         # Шаг 5: Формируем условное предложение для глубокого анализа
         # Это поле будет использоваться в `workflow.json` в условии `run_if`.
         offer_deep_analysis = enable_deep_analysis and analysis_result.get('score', 10) < 7
@@ -2851,7 +2916,8 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None) -> Dict[str, Any]:
             "deep_analysis_offer": {
                 "available": offer_deep_analysis,
                 "message": "Обнаружены несоответствия. Хотите провести более глубокий анализ?" if offer_deep_analysis else ""
-            }
+            },
+            "pluginSettings": plugin_settings
         }
 
         # Детальное логирование полных данных в консоль для разработчиков
@@ -2872,6 +2938,7 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None) -> Dict[str, Any]:
         truncated_description = description[:100] + ('...' if len(description) > 100 else '')
         truncated_composition = composition[:100] + ('...' if len(composition) > 100 else '')
         console_log("[DIAGNOSTIC] ===== ОТПРАВКА СООБЩЕНИЯ С ОПИСАНИЕМ И СОСТАВОМ =====")
+        console_log(f"[DEBUG] content_language перед отправкой описания: '{content_language}'")
         if content_language == "ru":
             chat_message(f"📝 Описание: {truncated_description}\n📝 Состав: {truncated_composition}")
         else:
@@ -2882,6 +2949,8 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None) -> Dict[str, Any]:
         reasoning_str = str(reasoning) if reasoning is not None else 'Объяснение не доступно'
 
         console_log("[DIAGNOSTIC] ===== ОТПРАВКА СООБЩЕНИЯ С РЕЗУЛЬТАМИ AI =====")
+        console_log(f"[DEBUG] content_language перед отправкой результатов AI: '{content_language}'")
+        console_log(f"[DEBUG] score_str: '{score_str}', reasoning_str length: {len(reasoning_str)}")
         if score_str == 'N/A' and reasoning_str == 'Объяснение не доступно':
             if content_language == "ru":
                 chat_message("⚠️ Не удалось получить результаты анализа от нейросети")
@@ -2895,51 +2964,59 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None) -> Dict[str, Any]:
 
         # Отправляем информацию об аналогах в чат
         console_log("[DIAGNOSTIC] ===== ОТПРАВКА СООБЩЕНИЯ С АНАЛОГАМИ =====")
-        if analogs and len(analogs) > 0:
+        console_log(f"[DEBUG] content_language перед отправкой аналогов: '{content_language}'")
+        console_log(f"[DEBUG] analogs: {analogs}")
+        console_log(f"[DEBUG] len(analogs): {len(analogs) if analogs else 0}")
+
+        # Проверяем, есть ли валидные аналоги (без ошибки)
+        valid_analogs = [a for a in analogs if isinstance(a, dict) and not a.get('error', False)] if analogs else []
+
+        console_log(f"[DEBUG] valid_analogs count: {len(valid_analogs)}")
+
+        if valid_analogs:
             if content_language == "ru":
                 analogs_message = "🔍 Найденные аналоги:\n"
-                analogs_not_found_message = "🔍 Аналоги не найдены или информация недоступна"
             else:
                 analogs_message = "🔍 Found analogs:\n"
-                analogs_not_found_message = "🔍 No analogs found or information unavailable"
 
-            for i, analog in enumerate(analogs[:3], 1):  # Показываем максимум 3 аналога
-                if isinstance(analog, dict) and not analog.get('error', False):
-                    name = analog.get('name', 'Название не указано' if content_language == "ru" else 'Name not specified')
-                    price_range = analog.get('price_range', 'Цена не указана' if content_language == "ru" else 'Price not specified')
-                    similarity = analog.get('similarity_score', 'N/A')
-                    key_features = analog.get('key_features', [])
+            for i, analog in enumerate(valid_analogs[:3], 1):  # Показываем максимум 3 аналога
+                name = analog.get('name', 'Название не указано' if content_language == "ru" else 'Name not specified')
+                price_range = analog.get('price_range', 'Цена не указана' if content_language == "ru" else 'Price not specified')
+                similarity = analog.get('similarity_score', 'N/A')
+                key_features = analog.get('key_features', [])
 
-                    analogs_message += f"{i}. **{name}**\n"
-                    analogs_message += f"   💰 {price_range}\n"
-                    url = analog.get('url', '')
-                    if url and url.startswith('http') and not any(x in url.lower() for x in ['пример', 'example', 'placeholder']):
-                        analogs_message += f"   🔗 {url}\n"
-                    elif url and any(x in url.lower() for x in ['пример', 'example', 'placeholder']):
-                        if content_language == "ru":
-                            analogs_message += f"   🔗 Примерная ссылка (требуется уточнение)\n"
-                        else:
-                            analogs_message += f"   🔗 Example link (needs clarification)\n"
-                    elif url and not url.startswith('http'):
-                        if content_language == "ru":
-                            analogs_message += f"   🔗 Некорректная ссылка\n"
-                        else:
-                            analogs_message += f"   🔗 Invalid link\n"
+                analogs_message += f"{i}. **{name}**\n"
+                analogs_message += f"   💰 {price_range}\n"
+                url = analog.get('url', '')
+                if url and url.startswith('http') and not any(x in url.lower() for x in ['пример', 'example', 'placeholder']):
+                    analogs_message += f"   🔗 {url}\n"
+                elif url and any(x in url.lower() for x in ['пример', 'example', 'placeholder']):
+                    if content_language == "ru":
+                        analogs_message += f"   🔗 Примерная ссылка (требуется уточнение)\n"
                     else:
-                        if content_language == "ru":
-                            analogs_message += f"   🔗 Ссылка не найдена\n"
-                        else:
-                            analogs_message += f"   🔗 Link not found\n"
-                    analogs_message += f"   📊 Схожесть: {similarity}%\n"
-                    if key_features and len(key_features) > 0:
-                        features_str = ', '.join(key_features[:3])  # Максимум 3 особенности
-                        analogs_message += f"   ✨ {features_str}\n"
-                    analogs_message += "\n"
+                        analogs_message += f"   🔗 Example link (needs clarification)\n"
+                elif url and not url.startswith('http'):
+                    if content_language == "ru":
+                        analogs_message += f"   🔗 Некорректная ссылка\n"
+                    else:
+                        analogs_message += f"   🔗 Invalid link\n"
+                else:
+                    if content_language == "ru":
+                        analogs_message += f"   🔗 Ссылка не найдена\n"
+                    else:
+                        analogs_message += f"   🔗 Link not found\n"
+                analogs_message += f"   📊 Схожесть: {similarity}%\n"
+                if key_features and len(key_features) > 0:
+                    features_str = ', '.join(key_features[:3])  # Максимум 3 особенности
+                    analogs_message += f"   ✨ {features_str}\n"
+                analogs_message += "\n"
 
+            console_log(f"[DEBUG] Отправка analogs_message: {analogs_message[:100]}...")
             chat_message(analogs_message.strip())
         else:
+            console_log("[DEBUG] Отправка сообщения об отсутствии аналогов")
             if content_language == "ru":
-                chat_message("🔍 Аналоги не найдены или информация недоступна")
+                chat_message("🔍 Аналоги не найдены или информация недоступна " + content_language)
             else:
                 chat_message("🔍 No analogs found or information unavailable")
 
@@ -3004,34 +3081,35 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
     Выполняет глубокий, ресурсоемкий анализ с помощью самой мощной
     AI-модели, доступной платформе.
     """
+    console_log("[DIAGNOSTIC] ===== perform_deep_analysis STARTED =====")
+    console_log(f"[DIAGNOSTIC] input_data type: {type(input_data)}")
+    console_log(f"[DIAGNOSTIC] input_data keys: {list(input_data.keys()) if isinstance(input_data, dict) else 'not dict'}")
+
     description = input_data.get('description', '')
     composition = input_data.get('composition', '')
 
     if not description or not composition:
         return { "status": "error", "message": "Описание или состав не были переданы для глубокого анализа."}
 
-    # Получение настройки языка из pluginSettings
-    plugin_settings = input_data.get('pluginSettings', {})
-    response_language = plugin_settings.get("response_language", "ru")
-    console_log(f"[LANGUAGE] Настройка языка в perform_deep_analysis: {response_language}")
+    # Получить pluginSettings из pyodide globals
+    plugin_settings = globals().get('plugin_settings')
+    if plugin_settings is None:
+        plugin_settings = {}
 
-    # Определение языка контента для режима "auto"
-    content_language = "ru"  # По умолчанию русский
-    if response_language == "auto":
-        # Проверяем наличие русских букв в описании и составе
-        russian_chars = re.findall(r'[а-яА-ЯёЁ]', description + " " + composition)
-        if russian_chars:
-            content_language = "ru"
-            console_log("[LANGUAGE] Автоопределение в perform_deep_analysis: русский язык (найдены русские буквы)")
-        else:
-            content_language = "en"
-            console_log("[LANGUAGE] Автоопределение в perform_deep_analysis: английский язык (русские буквы не найдены)")
-    else:
-        content_language = response_language
+    console_log(f"[PLUGIN_SETTINGS] pluginSettings получены из pyodide.globals: {plugin_settings}")
+    console_log(f"[PLUGIN_SETTINGS] Тип plugin_settings: {type(plugin_settings)}")
+    if isinstance(plugin_settings, dict):
+        console_log(f"[PLUGIN_SETTINGS] Ключи в plugin_settings: {list(plugin_settings.keys())}")
+        response_lang = plugin_settings.get('response_language', 'КЛЮЧ НЕ НАЙДЕН') if plugin_settings else 'plugin_settings is None'
+        console_log(f"[PLUGIN_SETTINGS] response_language в plugin_settings: {response_lang}")
+
+    # Определение языка контента для сообщений чата с использованием безопасной функции
+    content_language = get_safe_content_language(plugin_settings)
+    console_log(f"[LANGUAGE] Язык контента определен: '{content_language}'")
+    console_log(f"[LANGUAGE] Финальный результат get_safe_content_language: '{content_language}'")
+
 
     console_log(f"Глубокий анализ: desc='{description[:100]}...', comp='{composition[:100]}...', язык={content_language}")
-
-    # Оптимизированный промпт с учетом выбранного языка
     if content_language == "ru":
         prompt = f"""
         Проведи глубокий анализ товара с медицинской и научной точки зрения.
@@ -3384,13 +3462,19 @@ async def _analyze_composition_vs_description(description: str, composition: str
     console_log(f"[DIAGNOSTIC] Composition length: {safe_len(composition)}")
     console_log(f"[DIAGNOSTIC] Description preview: {description[:100]}..." if description else "[DIAGNOSTIC] Description: None")
     console_log(f"[DIAGNOSTIC] Composition preview: {composition[:100]}..." if composition else "[DIAGNOSTIC] Composition: None")
+    console_log(f"[DIAGNOSTIC] plugin_settings: {plugin_settings}")
+    console_log(f"[DIAGNOSTIC] Тип plugin_settings: {type(plugin_settings)}")
+    if isinstance(plugin_settings, dict):
+        console_log(f"[DIAGNOSTIC] Ключи в plugin_settings: {list(plugin_settings.keys())}")
+        response_lang = plugin_settings.get('response_language', 'КЛЮЧ НЕ НАЙДЕН') if plugin_settings else 'plugin_settings is None'
+        console_log(f"[DIAGNOSTIC] response_language: {response_lang}")
 
     if not description or not composition:
         console_log("[DIAGNOSTIC] ===== ВЫХОД ИЗ _analyze_composition_vs_description (пустые данные) =====")
         return { "score": 0, "reasoning": "Не удалось извлечь описание или состав товара." }
 
     # Получение настройки языка
-    response_language = plugin_settings.get("response_language", "ru")
+    response_language = safe_dict_get(plugin_settings, "response_language", "ru")
     console_log(f"[LANGUAGE] Настройка языка: {response_language}")
 
     # Определение языка контента для режима "auto"
@@ -3402,12 +3486,14 @@ async def _analyze_composition_vs_description(description: str, composition: str
             content_language = "ru"
             console_log("[LANGUAGE] Автоопределение: русский язык (найдены русские буквы)")
         else:
-            content_language = "en"
-            console_log("[LANGUAGE] Автоопределение: английский язык (русские буквы не найдены)")
+            content_language = get_safe_content_language(plugin_settings)
+            console_log(f"[LANGUAGE] Автоопределение: нет русских букв, используем настройку пользователя '{content_language}'")
     else:
         content_language = response_language
 
     console_log(f"Анализ соответствия: desc='{description[:100]}...', comp='{composition[:100]}...', язык={content_language}")
+    console_log(f"[DIAGNOSTIC] Финальный content_language в _analyze_composition_vs_description: '{content_language}'")
+    console_log(f"[DIAGNOSTIC] Процесс определения языка завершен")
 
     # Предварительный анализ для сокращения размера промпта
     analysis_cache_key = f"pre_analysis:{hash(description[:100] + composition[:100])}"
@@ -3419,6 +3505,7 @@ async def _analyze_composition_vs_description(description: str, composition: str
         memory_manager.cache_lru(analysis_cache_key, key_elements, max_age_seconds=600)  # 10 мин
     else:
         key_elements = pre_analyzed
+
 
     # Оптимизированный промпт с учетом выбранного языка
     if content_language == "ru":
@@ -4025,8 +4112,15 @@ async def _find_similar_products(categories: List[str], composition: str, plugin
     if not categories or not composition:
         return [{"name": "Недостаточно данных для поиска аналогов", "reason": "missing_categories_or_composition"}]
 
+    console_log(f"[DIAGNOSTIC] plugin_settings в _find_similar_products: {plugin_settings}")
+    console_log(f"[DIAGNOSTIC] Тип plugin_settings: {type(plugin_settings)}")
+    if isinstance(plugin_settings, dict):
+        console_log(f"[DIAGNOSTIC] Ключи в plugin_settings: {list(plugin_settings.keys())}")
+        response_lang = plugin_settings.get('response_language', 'КЛЮЧ НЕ НАЙДЕН') if plugin_settings else 'plugin_settings is None'
+        console_log(f"[DIAGNOSTIC] response_language в plugin_settings: {response_lang}")
+
     # Получение настройки языка из plugin_settings
-    response_language = plugin_settings.get("response_language", "ru") if plugin_settings else "ru"
+    response_language = safe_dict_get(plugin_settings, "response_language", "ru")
     console_log(f"[LANGUAGE] Настройка языка в _find_similar_products: {response_language}")
 
     # Определение языка контента для режима "auto"
@@ -4038,10 +4132,13 @@ async def _find_similar_products(categories: List[str], composition: str, plugin
             content_language = "ru"
             console_log("[LANGUAGE] Автоопределение в _find_similar_products: русский язык (найдены русские буквы)")
         else:
-            content_language = "en"
-            console_log("[LANGUAGE] Автоопределение в _find_similar_products: английский язык (русские буквы не найдены)")
+            content_language = get_safe_content_language(plugin_settings)
+            console_log(f"[LANGUAGE] Автоопределение в _find_similar_products: нет русских букв, используем настройку пользователя '{content_language}'")
     else:
         content_language = response_language
+
+    console_log(f"[DIAGNOSTIC] Финальный content_language в _find_similar_products: '{content_language}'")
+    console_log(f"[DIAGNOSTIC] Начат поиск аналогов для типа: {product_type}")
 
     # Быстрые категоризации по типу продукта
     product_type = _categorize_product_by_composition(composition)

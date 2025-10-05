@@ -48,41 +48,34 @@ function cleanupHtmlDirectStorage() {
   });
 
   if (expiredTransfers.length > 0) {
-    console.log(`[offscreen] 🧹 Очищено ${expiredTransfers.length} устаревших HTML_DIRECT записей`);
+    logDebug('SYSTEM', `Очищено ${expiredTransfers.length} устаревших HTML_DIRECT записей`);
   }
 }
 
 // Обработчик HTML_DIRECT сообщений
 async function handleHtmlDirect(message) {
-  console.log(`[offscreen][HTML_DIRECT] ===== HTML_DIRECT СООБЩЕНИЕ ПОЛУЧЕНО =====`);
-  console.log(`[offscreen][HTML_DIRECT] Transfer ID: ${message.transferId}`);
-  console.log(`[offscreen][HTML_DIRECT] Plugin ID: ${message.pluginId}`);
-  console.log(`[offscreen][HTML_DIRECT] Request ID: ${message.requestId}`);
-  console.log(`[offscreen][HTML_DIRECT] HTML длина: ${message.htmlData?.length || 0} символов`);
+   logDebug('HTML_DIRECT', `HTML_DIRECT сообщение получено: transferId=${message.transferId}, pluginId=${message.pluginId}, htmlLength=${message.htmlData?.length || 0}`);
 
-  // Сохраняем HTML данные в глобальное хранилище
-  htmlDirectStorage.set(message.transferId, {
-    html: message.htmlData,
-    pluginId: message.pluginId,
-    pageKey: message.pageKey,
-    requestId: message.requestId,
-    timestamp: Date.now()
-  });
+   // Сохраняем HTML данные в глобальное хранилище
+   htmlDirectStorage.set(message.transferId, {
+     html: message.htmlData,
+     pluginId: message.pluginId,
+     pageKey: message.pageKey,
+     requestId: message.requestId,
+     timestamp: Date.now()
+   });
 
-  console.log(`[offscreen][HTML_DIRECT] ✅ HTML сохранен для transfer ${message.transferId}`);
-  console.log(`[offscreen][HTML_DIRECT] Размер хранилища: ${htmlDirectStorage.size} элементов`);
-
-  // Отправляем подтверждение получения
-  try {
-    chrome.runtime.sendMessage({
-      type: 'CONFIRM_HTML_RECEIPT',
-      transferId: message.transferId,
-      timestamp: Date.now()
-    });
-    console.log(`[offscreen][HTML_DIRECT] Подтверждение отправлено для ${message.transferId}`);
-  } catch (error) {
-    console.error(`[offscreen][HTML_DIRECT] Ошибка отправки подтверждения:`, error);
-  }
+   // Отправляем подтверждение получения
+   try {
+     chrome.runtime.sendMessage({
+       type: 'CONFIRM_HTML_RECEIPT',
+       transferId: message.transferId,
+       timestamp: Date.now()
+     });
+     logDebug('HTML_DIRECT', `Подтверждение отправлено для ${message.transferId}`);
+   } catch (error) {
+     logError('HTML_DIRECT', `Ошибка отправки подтверждения:`, error);
+   }
 }
 
 let pyodide = null;
@@ -189,15 +182,15 @@ const LOG_LEVELS = {
   DEBUG: 3
 };
 
-// Текущий уровень логирования (по умолчанию INFO, debug отключен)
-let currentLogLevel = LOG_LEVELS.INFO;
+// Текущий уровень логирования (WARN для экономии токенов)
+let currentLogLevel = LOG_LEVELS.WARN;
 
-// Флаги для разных типов логирования
+// Флаги для разных типов логирования (отключены verbose логи)
 const LOG_FLAGS = {
-  CHUNKING: true,
-  PYODIDE: true,
-  EXECUTION: true,
-  CHANNEL: true
+  CHUNKING: false,
+  PYODIDE: false,
+  EXECUTION: false,
+  CHANNEL: false
 };
 
 // Троттлинг для повторяющихся логов
@@ -390,7 +383,7 @@ async function safeSendMessage(message, options = {}) {
         lastAttempt = await sendPromise;
       }
 
-      logDebug('CHANNEL', `Message sent successfully: ${message.type}, ID: ${messageId}`);
+      // logDebug('CHANNEL', `Message sent successfully: ${message.type}, ID: ${messageId}`);
       return { success: true, response: lastAttempt };
 
     } catch (error) {
@@ -489,12 +482,9 @@ async function initializePyodide() {
       },
 
       sendMessageToChat: (message) => {
-        console.log('[DIAGNOSTIC] ===== PYODIDE sendMessageToChat CALLED =====');
-        console.log('[DIAGNOSTIC] Raw message from Python:', message);
         logDebug('PYODIDE', 'JS bridge attempting to send message');
         try {
           const jsMessage = message.toJs ? message.toJs({ dict_converter: Object.fromEntries }) : message;
-          console.log('[DIAGNOSTIC] Converted JS message:', jsMessage);
 
           // Исправление: правильно обрабатываем объект с полем content
           let content;
@@ -506,12 +496,9 @@ async function initializePyodide() {
             content = JSON.stringify(jsMessage);
           }
 
-          console.log('[DIAGNOSTIC] Final content to send:', (typeof content === 'string' ? content.substring(0, 200) + '...' : String(content)));
-
           // Асинхронная отправка с Promise и таймаутом для предотвращения ошибок каналов
           const messageId = `pyodide_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          console.log('[DIAGNOSTIC] Generated messageId:', messageId);
-          logInfo('PYODIDE', `sendMessageToChat starting for messageId: ${messageId}, content length: ${content.length}`);
+          // logInfo('PYODIDE', `sendMessageToChat starting for messageId: ${messageId}, content length: ${content.length}`);
 
           return new Promise((resolve, reject) => {
             const timeoutId = setTimeout(() => {
@@ -532,7 +519,6 @@ async function initializePyodide() {
                   timestamp: Date.now()
                 }
               };
-              console.log('[DIAGNOSTIC] Sending PYODIDE_MESSAGE:', pyodideMessage);
 
               // Проверка доступности chrome.runtime
               if (!chrome.runtime || !chrome.runtime.sendMessage) {
@@ -548,7 +534,7 @@ async function initializePyodide() {
                   logError('PYODIDE', 'Promise rejected in sendMessageToChat:', chrome.runtime.lastError.message);
                   resolve({ success: false, error: chrome.runtime.lastError.message });
                 } else {
-                  logDebug('PYODIDE', 'Message sent successfully');
+                  // logDebug('PYODIDE', 'Message sent successfully');
                   resolve({ success: true, data: response });
                 }
               });
@@ -559,7 +545,6 @@ async function initializePyodide() {
             }
           });
         } catch (error) {
-          console.log('[DIAGNOSTIC] Unexpected error in sendMessageToChat:', error);
           logError('PYODIDE', 'Unexpected error in sendMessageToChat:', error);
           return Promise.resolve({ success: false, error: error.message });
         }
@@ -567,7 +552,7 @@ async function initializePyodide() {
 
       // Функция для повторных попыток отправки сообщений
       sendWithRetry: async (content, messageId, currentPluginId, currentPageKey, retryAttempt) => {
-        logDebug('PYODIDE', `sendWithRetry called with attempt ${retryAttempt + 1}/3 for messageId: ${messageId}`);
+        // logDebug('PYODIDE', `sendWithRetry called with attempt ${retryAttempt + 1}/3 for messageId: ${messageId}`);
 
         // Сброс retryCount для новой попытки
         const originalRetryCount = retryCount;
@@ -583,16 +568,16 @@ async function initializePyodide() {
             throw new Error('sendMessageToChat not available in js bridge');
           }
 
-          logDebug('PYODIDE', `sendWithRetry: Attempting to send message, attempt ${currentAttempt}/${maxRetries}`);
+          // logDebug('PYODIDE', `sendWithRetry: Attempting to send message, attempt ${currentAttempt}/${maxRetries}`);
 
           // Попытка отправки сообщения
           const result = await jsBridge.sendMessageToChat(content);
 
-          logInfo('PYODIDE', `sendWithRetry completed successfully on attempt ${currentAttempt} for messageId: ${messageId}`);
+          // logInfo('PYODIDE', `sendWithRetry completed successfully on attempt ${currentAttempt} for messageId: ${messageId}`);
           return result;
 
         } catch (error) {
-          logError('PYODIDE', `sendWithRetry failed on attempt ${currentAttempt}/${maxRetries} for messageId: ${messageId}:`, error);
+          // logError('PYODIDE', `sendWithRetry failed on attempt ${currentAttempt}/${maxRetries} for messageId: ${messageId}:`, error);
 
           // Восстанавливаем оригинальное значение retryCount
           retryCount = originalRetryCount;
@@ -600,7 +585,7 @@ async function initializePyodide() {
           // Улучшенная обработка ошибок с экспоненциальной задержкой
           if (currentAttempt < maxRetries) {
             const delay = Math.min(1000 * Math.pow(2, retryAttempt), 10000); // Экспоненциальная задержка, максимум 10 секунд
-            logInfo('PYODIDE', `Retrying after ${delay}ms, attempt ${currentAttempt + 1}/${maxRetries}`);
+            // logInfo('PYODIDE', `Retrying after ${delay}ms, attempt ${currentAttempt + 1}/${maxRetries}`);
 
             await new Promise(resolve => setTimeout(resolve, delay));
 
@@ -626,7 +611,7 @@ async function initializePyodide() {
           }
 
           // Все попытки исчерпаны
-          logError('PYODIDE', `All ${maxRetries} retry attempts exhausted for messageId: ${messageId}`);
+          // logError('PYODIDE', `All ${maxRetries} retry attempts exhausted for messageId: ${messageId}`);
           throw new Error(`sendWithRetry failed after ${maxRetries} attempts: ${error.message}`);
         }
       },
@@ -698,15 +683,6 @@ async function initializePyodide() {
           const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${urlModelName}?key=${apiKey}`;
 
           logDebug('PYODIDE', `Making request to Gemini API: ${geminiUrl}`);
-          logDebug('PYODIDE', `Final URL: ${geminiUrl}`);
-
-          // ЛОГИРОВАНИЕ ЗАПРОСА К GEMINI API
-          console.log('[GEMINI REQUEST] ===== REQUEST TO GEMINI API =====');
-          console.log('[GEMINI REQUEST] URL:', geminiUrl);
-          console.log('[GEMINI REQUEST] Model:', cleanedModelAlias);
-          console.log('[GEMINI REQUEST] Prompt:', jsOptions.prompt || jsOptions.message || 'N/A');
-          console.log('[GEMINI REQUEST] Request Body:', JSON.stringify(requestBody, null, 2));
-          console.log('[GEMINI REQUEST] ===== END REQUEST =====');
 
           const response = await fetch(geminiUrl, {
             method: 'POST',
@@ -718,33 +694,14 @@ async function initializePyodide() {
 
           if (!response.ok) {
             const errorData = await response.text();
-            console.log('[GEMINI RESPONSE] ===== GEMINI API ERROR =====');
-            console.log('[GEMINI RESPONSE] Status:', response.status);
-            console.log('[GEMINI RESPONSE] Error data:', errorData);
-            console.log('[GEMINI RESPONSE] ===== END ERROR =====');
             throw new Error(`Gemini API error (${response.status}): ${errorData}`);
           }
 
           const responseData = await response.json();
           logDebug('PYODIDE', 'Gemini API response received successfully');
 
-          // ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ ПОЛНОГО ОТВЕТА ОТ GEMINI API
-          console.log('[GEMINI RESPONSE] ===== FULL RESPONSE FROM GEMINI API =====');
-          console.log('[GEMINI RESPONSE] Model:', cleanedModelAlias);
-          console.log('[GEMINI RESPONSE] Response status:', response.status);
-          console.log('[GEMINI RESPONSE] Response headers:', Object.fromEntries(response.headers.entries()));
-          console.log('[GEMINI RESPONSE] Response data keys:', Object.keys(responseData));
-          console.log('[GEMINI RESPONSE] Response data:', JSON.stringify(responseData, null, 2));
-          console.log('[GEMINI RESPONSE] ===== END FULL RESPONSE =====');
-
           // 5. Обработка ответа от Gemini API
           if (!responseData.candidates || !responseData.candidates[0] || !responseData.candidates[0].content) {
-            console.log('[GEMINI RESPONSE] ===== INVALID RESPONSE FORMAT =====');
-            console.log('[GEMINI RESPONSE] Candidates exist:', !!responseData.candidates);
-            console.log('[GEMINI RESPONSE] First candidate exists:', !!responseData.candidates?.[0]);
-            console.log('[GEMINI RESPONSE] Content exists:', !!responseData.candidates?.[0]?.content);
-            console.log('[GEMINI RESPONSE] Full response data:', responseData);
-            console.log('[GEMINI RESPONSE] ===== END INVALID FORMAT =====');
             throw new Error('Invalid response format from Gemini API');
           }
 
@@ -753,21 +710,8 @@ async function initializePyodide() {
             .join('');
 
           if (!generatedText) {
-            console.log('[GEMINI RESPONSE] ===== EMPTY GENERATED TEXT =====');
-            console.log('[GEMINI RESPONSE] Parts count:', responseData.candidates[0].content.parts.length);
-            console.log('[GEMINI RESPONSE] Parts content:', responseData.candidates[0].content.parts);
-            console.log('[GEMINI RESPONSE] ===== END EMPTY TEXT =====');
             throw new Error('No text generated by Gemini API');
           }
-
-          // ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ СГЕНЕРИРОВАННОГО ТЕКСТА
-          console.log('[GEMINI RESPONSE] ===== GENERATED TEXT =====');
-          console.log('[GEMINI RESPONSE] Model:', cleanedModelAlias);
-          console.log('[GEMINI RESPONSE] Generated text length:', generatedText.length);
-          console.log('[GEMINI RESPONSE] Generated text preview (first 500 chars):', (typeof generatedText === 'string' ? generatedText.substring(0, 500) + (generatedText.length > 500 ? '...' : '') : String(generatedText)));
-          console.log('[GEMINI RESPONSE] Generated text preview (last 500 chars):', (typeof generatedText === 'string' && generatedText.length > 500) ? '...' + generatedText.substring(generatedText.length - 500) : String(generatedText));
-          console.log('[GEMINI RESPONSE] Full generated text:', generatedText);
-          console.log('[GEMINI RESPONSE] ===== END GENERATED TEXT =====');
 
           logDebug('PYODIDE', `LLM call completed successfully, response length: ${generatedText.length}`);
 
@@ -778,11 +722,6 @@ async function initializePyodide() {
             response_length: generatedText.length,
             raw_response: responseData
           };
-
-          console.log('[GEMINI RESPONSE] ===== RETURNING TO PYTHON =====');
-          console.log('[GEMINI RESPONSE] Result object keys:', Object.keys(resultObject));
-          console.log('[GEMINI RESPONSE] Result preview:', generatedText.substring(0, 200) + '...');
-          console.log('[GEMINI RESPONSE] ===== END RETURNING =====');
 
           return pyodide.toPy(resultObject);
 
@@ -981,28 +920,12 @@ function handleHtmlChunk(chunkMessage) {
   if (transfer.receivedChunks === totalChunks) {
     logInfo('CHUNKING', `All chunks received for transfer ${transferId}`);
 
-    // LOG CHUNK ASSEMBLY START
-    console.log('[DIAGNOSTIC] ===== STARTING CHUNK ASSEMBLY =====');
-    console.log('[DIAGNOSTIC] Transfer ID:', transferId);
-    console.log('[DIAGNOSTIC] Total chunks:', totalChunks);
-    console.log('[DIAGNOSTIC] Chunk details:');
-    transfer.chunks.forEach((chunk, idx) => {
-      console.log(`[DIAGNOSTIC] Chunk ${idx}: ${chunk ? chunk.length : 'EMPTY'} characters`);
-    });
     // Automatically mark transfer as completed when all chunks are received
     transfer.completed = true;
 
     // Assemble the complete HTML from all chunks
     const assembledHtml = transfer.chunks.join('');
     logInfo('CHUNKING', `Successfully assembled HTML for transfer ${transferId}, total length: ${assembledHtml.length}`);
-
-    // LOG ASSEMBLED HTML FOR DIAGNOSTICS
-    console.log('[DIAGNOSTIC] ===== ASSEMBLED HTML CONTENT =====');
-    console.log('[DIAGNOSTIC] HTML Length:', assembledHtml.length);
-    console.log('[DIAGNOSTIC] First 1000 chars:', (typeof assembledHtml === 'string' ? assembledHtml.substring(0, Math.min(1000, assembledHtml.length)) : String(assembledHtml)));
-    const lastChars = (typeof assembledHtml === 'string' && assembledHtml.length > 500) ? assembledHtml.substring(Math.max(0, assembledHtml.length - 500)) : String(assembledHtml);
-    console.log('[DIAGNOSTIC] Last 500 chars:', lastChars);
-    console.log('[DIAGNOSTIC] ===== END ASSEMBLED HTML =====');
 
     // Send HTML_ASSEMBLED message to background with extracted pluginId and pageKey
     safeSendMessageSync({
@@ -1083,16 +1006,12 @@ async function handleStartWorkflowAfterChunks(message, sendResponse) {
     }
 
     // Log chunk details for debugging
-    console.log(`[offscreen][CHUNKING] Preparing ${selectedTransfer.chunks.length} chunks for Python:`);
-    selectedTransfer.chunks.forEach((chunk, idx) => {
-      console.log(`[offscreen][CHUNKING] Chunk ${idx}: ${chunk ? chunk.length : 0} characters`);
-    });
-    console.log(`[offscreen][CHUNKING] Total expected length: ${workflowPayload.page_html.totalLength}`);
+    logDebug('CHUNKING', `Preparing ${selectedTransfer.chunks.length} chunks for Python, total length: ${workflowPayload.page_html.totalLength}`);
 
     // Execute workflow and let Python handle chunk reconstruction
     const result = await executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, requestId, sendResponse);
 
-    console.log('[offscreen][CHUNKING] Workflow execution completed');
+    logInfo('CHUNKING', `Workflow execution completed`);
 
     logInfo('CHUNKING', `Workflow успешно завершен для pluginId: ${pluginId}, requestId: ${requestId}`);
 
@@ -1113,25 +1032,25 @@ async function handleStartWorkflowAfterChunks(message, sendResponse) {
 }
 
 // Function to execute workflow with chunk metadata or assembled HTML
-async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, requestId, sendResponse) {
+async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, requestId, pluginSettings, sendResponse) {
   const startTime = Date.now();
   logInfo('EXECUTION', `Запуск workflow для pluginId: ${pluginId}, pageKey: ${pageKey}, requestId: ${requestId} в ${new Date(startTime).toISOString()}`);
-  logInfo('EXECUTION', `Шаг 1: Инициализация Pyodide - ${new Date(Date.now()).toISOString()}`);
+  // logInfo('EXECUTION', `Шаг 1: Инициализация Pyodide - ${new Date(Date.now()).toISOString()}`);
 
   try {
     // Initialize Pyodide if needed
     if (!pyodide) {
-      logInfo('EXECUTION', `Шаг 2: Инициализация Pyodide - ${new Date(Date.now()).toISOString()}`);
+      // logInfo('EXECUTION', `Шаг 2: Инициализация Pyodide - ${new Date(Date.now()).toISOString()}`);
       await initializePyodide();
-      logInfo('EXECUTION', `Шаг 3: Pyodide инициализирован - ${new Date(Date.now()).toISOString()}`);
+      // logInfo('EXECUTION', `Шаг 3: Pyodide инициализирован - ${new Date(Date.now()).toISOString()}`);
     } else {
-      logInfo('EXECUTION', `Шаг 2: Pyodide уже инициализирован - ${new Date(Date.now()).toISOString()}`);
+      // logInfo('EXECUTION', `Шаг 2: Pyodide уже инициализирован - ${new Date(Date.now()).toISOString()}`);
     }
 
     logInfo('EXECUTION', `Workflow запускается`);
 
     // Load the Python script URL
-    logInfo('EXECUTION', `Шаг 4: Загрузка Python скрипта - ${new Date(Date.now()).toISOString()}`);
+    // logInfo('EXECUTION', `Шаг 4: Загрузка Python скрипта - ${new Date(Date.now()).toISOString()}`);
     const pyScriptUrl = chrome.runtime.getURL(`/plugins/${pluginId}/mcp_server.py`);
 
     const response = await fetch(pyScriptUrl);
@@ -1140,7 +1059,7 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
     }
 
     const pythonCode = await response.text();
-    logInfo('EXECUTION', `Шаг 5: Python скрипт загружен (${pythonCode.length} символов) - ${new Date(Date.now()).toISOString()}`);
+    // logInfo('EXECUTION', `Шаг 5: Python скрипт загружен (${pythonCode.length} символов) - ${new Date(Date.now()).toISOString()}`);
 
     // Execute the Python code
     await pyodide.runPythonAsync(pythonCode);
@@ -1152,20 +1071,20 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
     }
 
     // Execute the workflow with detailed logging
-    logInfo('EXECUTION', `Шаг 6: Вызов Python функции analyze_ozon_product - ${new Date(Date.now()).toISOString()}`);
+    // logInfo('EXECUTION', `Шаг 6: Вызов Python функции analyze_ozon_product - ${new Date(Date.now()).toISOString()}`);
 
     // === НОВАЯ СИСТЕМА ПЕРЕДАЧИ ДАННЫХ ЧЕРЕЗ PYODIDE.GLOBALS ===
     logDebug('PYODIDE', 'Starting data transmission to Pyodide globals');
 
     // ДИАГНОСТИКА: Проверить тип и структуру workflowPayload.page_html
-    logInfo('PYODIDE', `🔍 WORKFLOW PAYLOAD DIAGNOSTIC:`);
-    logInfo('PYODIDE', `🔍 workflowPayload.page_html type: ${typeof workflowPayload.page_html}`);
+    // logInfo('PYODIDE', `🔍 WORKFLOW PAYLOAD DIAGNOSTIC:`);
+    // logInfo('PYODIDE', `🔍 workflowPayload.page_html type: ${typeof workflowPayload.page_html}`);
     if (workflowPayload.page_html && typeof workflowPayload.page_html === 'object') {
       logInfo('PYODIDE', `🔍 workflowPayload.page_html keys: ${Object.keys(workflowPayload.page_html)}`);
       logInfo('PYODIDE', `🔍 __isChunkedString: ${workflowPayload.page_html.__isChunkedString}`);
       logInfo('PYODIDE', `🔍 chunkCount: ${workflowPayload.page_html.chunkCount}`);
     } else if (workflowPayload.page_html && typeof workflowPayload.page_html === 'string') {
-      logInfo('PYODIDE', `🔍 workflowPayload.page_html length: ${workflowPayload.page_html.length} chars`);
+      // logInfo('PYODIDE', `🔍 workflowPayload.page_html length: ${workflowPayload.page_html.length} chars`);
     }
 
     // Проверить, есть ли page_html в workflowPayload
@@ -1216,13 +1135,13 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
       }
 
     } else {
-      logInfo('PYODIDE', '🔄 No chunk data found, using direct transmission (DIRECT BRANCH)');
+      // logInfo('PYODIDE', '🔄 No chunk data found, using direct transmission (DIRECT BRANCH)');
 
       // Fallback: установить page_html напрямую если нет chunks
       if (workflowPayload.page_html && typeof workflowPayload.page_html === 'string') {
         try { pyodide.globals.delete('page_html'); } catch(e) {} // Очистить старую
         pyodide.globals.set('page_html', workflowPayload.page_html);
-        logInfo('PYODIDE', `page_html set directly, length: ${workflowPayload.page_html.length}`);
+        // logInfo('PYODIDE', `page_html set directly, length: ${workflowPayload.page_html.length}`);
 
         // === ИСПРАВЛЕНИЕ: Симулировать chunk логику для совместимости с Python кодом ===
         logInfo('PYODIDE', '🔧 FIXING: Simulating chunk variables for direct HTML transmission');
@@ -1249,7 +1168,7 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
             verifyLength === workflowPayload.page_html.length &&
             verifyChunk0 === workflowPayload.page_html &&
             verifyHtml === workflowPayload.page_html) {
-          logInfo('PYODIDE', '✅ All variables verified successfully - Python compatibility ensured');
+          // logInfo('PYODIDE', '✅ All variables verified successfully - Python compatibility ensured');
         } else {
           logError('PYODIDE', `❌ Verification failed: count=${verifyCount}/1, length=${verifyLength}/${workflowPayload.page_html.length}, chunk0_length=${verifyChunk0 ? verifyChunk0.length : 'null'}/${workflowPayload.page_html.length}`);
         }
@@ -1258,20 +1177,37 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
       }
     }
 
+    // Установить pluginSettings в Pyodide globals
+    if (pluginSettings) {
+      try {
+        pyodide.globals.set('plugin_settings', pluginSettings);
+        logInfo('PYODIDE', 'pluginSettings set in Pyodide globals');
+      } catch (setError) {
+        logError('PYODIDE', 'Error setting pluginSettings in globals:', setError);
+      }
+    }
+
     // ВЫЗВАТЬ PYTHON ФУНКЦИЮ НЕМЕДЛЕННО ПОСЛЕ УСТАНОВКИ ПЕРЕМЕННЫХ
     logInfo('PYODIDE', 'Calling Python function analyze_ozon_product()');
 
+    // Проверка доступности Python функций перед вызовом
+    if (typeof pyodide.globals.get('analyze_ozon_product') === 'undefined') {
+      console.error("[PYODIDE_DEBUG] analyze_ozon_product function not found in Pyodide globals");
+      throw new Error("analyze_ozon_product function not found in Pyodide globals");
+    }
+
+    // Подготовить input_data с pluginSettings для передачи в Python функцию
+    const inputData = { pluginSettings: pluginSettings };
+    pyodide.globals.set('input_data', inputData);
+
+    console.log("[PYODIDE_DEBUG] Starting Pyodide execution...");
     let resultProxy;
     try {
-      console.log('[DIAGNOSTIC] ===== PYTHON FUNCTION CALL =====');
-      console.log('[DIAGNOSTIC] About to call analyze_ozon_product()');
+      resultProxy = await pyodide.runPythonAsync('analyze_ozon_product(input_data)');
 
-      resultProxy = await pyodide.runPythonAsync('analyze_ozon_product()');
-
-      console.log('[DIAGNOSTIC] Call to analyze_ozon_product() completed successfully');
       logInfo('PYODIDE', 'Python function called successfully');
     } catch (callError) {
-      console.error('[DIAGNOSTIC] Call to analyze_ozon_product() failed:', callError);
+      console.error("[PYODIDE_DEBUG] Pyodide execution error:", callError);
       throw callError;
     }
 
@@ -1282,7 +1218,6 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
       if (hasToJs) {
         try {
           result = resultProxy.toJs({ dict_converter: Object.fromEntries });
-          console.log('[DIAGNOSTIC] toJs() conversion successful');
           logInfo('PYODIDE', 'toJs() conversion successful');
 
           // Проверяем результат на наличие ошибок
@@ -1300,7 +1235,6 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
           }
 
         } catch (conversionError) {
-          console.error('[DIAGNOSTIC] toJs() conversion failed:', conversionError);
           logError('PYODIDE', 'toJs() conversion failed:', conversionError);
           // Попытка альтернативной конвертации
           try {
@@ -1317,7 +1251,7 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
       throw new Error('Pyodide workflow function returned null/undefined result');
     }
 
-    logInfo('EXECUTION', `Шаг 7: Python функция выполнена успешно - ${new Date(Date.now()).toISOString()}`);
+    // logInfo('EXECUTION', `Шаг 7: Python функция выполнена успешно - ${new Date(Date.now()).toISOString()}`);
     logInfo('EXECUTION', 'Workflow-engine executed successfully');
 
     logInfo('EXECUTION', `Workflow успешно завершен`);
@@ -1363,7 +1297,10 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
 // Handle messages from background script
 chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
   const messageId = message.messageId || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  logInfo('CHANNEL', `📨 OFFSCREEN MESSAGE RECEIVED: type=${message.type}, messageId=${messageId}, timestamp=${new Date().toISOString()}`);
+  // Закомментировано: повторяющиеся verbose логи для GET_PLUGIN_CHAT и GET_PLUGIN_CHAT_DRAFT
+  // if (message.type !== 'GET_PLUGIN_CHAT' && message.type !== 'GET_PLUGIN_CHAT_DRAFT') {
+  //   logInfo('CHANNEL', `📨 OFFSCREEN MESSAGE RECEIVED: type=${message.type}, messageId=${messageId}, timestamp=${new Date().toISOString()}`);
+  // }
 
   // Track response status
   let responseSent = false;
@@ -1468,11 +1405,10 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
   if (message.type === 'HTML_DIRECT') {
     handleHtmlDirect(message)
       .then(() => {
-        console.log(`[offscreen][HTML_DIRECT] Обработчик завершен успешно`);
         sendResponse({ success: true });
       })
       .catch(error => {
-        console.error(`[offscreen][HTML_DIRECT] Ошибка обработчика:`, error);
+        logError('HTML_DIRECT', `Ошибка обработчика:`, error);
         sendResponse({ success: false, error: error.message });
       });
     return true; // Keep channel open for async response
@@ -1649,6 +1585,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     // Extract workflow parameters (уже определены выше)
     const transferId = message.transferId;
     const useChunks = message.useChunks || false;
+    const pluginSettings = message.pluginSettings;
 
     // ОБНОВИТЬ ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ JS BRIDGE - ИСПРАВЛЕНИЕ HARDCODED PAGEKEY
     currentPluginId = pluginId;
@@ -1704,8 +1641,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       // ПРИОРИТЕТ 1: Используем HTML_DIRECT storage
       const htmlDirectData = htmlDirectStorage.get(transferId);
       workflowPayload = { page_html: htmlDirectData.html };
-      console.log(`[offscreen] ✅ Найден HTML в HTML_DIRECT storage для transfer ${transferId}`);
-      console.log(`[offscreen] Длина HTML: ${htmlDirectData.html.length} символов`);
+      logDebug('EXECUTION', `Найден HTML в HTML_DIRECT storage для transfer ${transferId}, длина: ${htmlDirectData.html.length}`);
 
       // Очищаем использованные данные для предотвращения утечек памяти
       htmlDirectStorage.delete(transferId);
@@ -1714,7 +1650,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       // ПРИОРИТЕТ 2: Прямая передача HTML данных
       const pageHtml = message.pageHtml || message.htmlData || message.html;
       workflowPayload = { page_html: pageHtml };
-      console.log(`[offscreen] 📄 Используем прямой pageHtml: ${pageHtml.length} символов`);
+      logDebug('EXECUTION', `Используем прямой pageHtml, длина: ${pageHtml.length}`);
     } else {
       throw new Error('Нет HTML данных - ни chunks, ни HTML_DIRECT storage, ни прямой pageHtml/htmlData/html недоступны');
     }
@@ -1734,9 +1670,9 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
      }
 
      // Execute workflow with chunks
-     logInfo('EXECUTION', `Шаг 8: Запуск executeWorkflowWithChunks - ${new Date(Date.now()).toISOString()}`);
-     const result = await executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, requestId, sendWorkflowResponse);
-     logInfo('EXECUTION', `Шаг 9: executeWorkflowWithChunks завершен - ${new Date(Date.now()).toISOString()}`);
+     // logInfo('EXECUTION', `Шаг 8: Запуск executeWorkflowWithChunks - ${new Date(Date.now()).toISOString()}`);
+     const result = await executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, requestId, pluginSettings, sendWorkflowResponse);
+     // logInfo('EXECUTION', `Шаг 9: executeWorkflowWithChunks завершен - ${new Date(Date.now()).toISOString()}`);
      logInfo('EXECUTION', 'Workflow execution completed');
 
    } catch (error) {

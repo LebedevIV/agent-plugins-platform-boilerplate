@@ -1344,6 +1344,12 @@ async function executeWorkflowInOffscreen(
     timestamp: Date.now()
   };
 
+  console.log('[BACKGROUND] 📤 Передаем настройки плагина в Pyodide worker:');
+  console.log('[BACKGROUND] 📋 Plugin ID:', pluginId);
+  console.log('[BACKGROUND] 📋 Plugin settings:', JSON.stringify(pluginSettings, null, 2));
+  console.log('[BACKGROUND] 🔑 Response language в настройках:', pluginSettings?.response_language);
+  console.log('[BACKGROUND] 📊 Все настройки для передачи в worker:', pluginSettings);
+
   try {
     const result = await chrome.runtime.sendMessage(workflowPayload);
     if (chrome.runtime.lastError) {
@@ -1417,31 +1423,52 @@ chrome.runtime.onMessage.addListener(
         console.log('[background][RUN_WORKFLOW] ✓ HTML extracted:', pageHtml.length, 'chars');
 
         // ШАГ 4: Загрузить настройки из manifest.json для получения дефолтных значений
-        const manifestUrl = chrome.runtime.getURL(`public/plugins/${msg.pluginId}/manifest.json`);
+        const manifestUrl = chrome.runtime.getURL(`plugins/${msg.pluginId}/manifest.json`);
         let manifestDefaults: Partial<PluginSettings> = {};
         let manifest: any = null;
 
+        console.log('[BACKGROUND] 📂 Начинаем загрузку manifest.json для плагина:', msg.pluginId);
+        console.log('[BACKGROUND] 🔗 Manifest URL:', manifestUrl);
+
         try {
           const manifestResponse = await fetch(manifestUrl);
+          console.log('[BACKGROUND] 📥 Manifest fetch status:', manifestResponse.status);
+
           if (manifestResponse.ok) {
             manifest = await manifestResponse.json();
-            console.log(`[background][RUN_WORKFLOW] ✅ Manifest loaded for ${msg.pluginId}:`, manifest);
+            console.log(`[BACKGROUND] ✅ Manifest успешно загружен для ${msg.pluginId}`);
+            console.log(`[BACKGROUND] 📋 Manifest содержимое:`, JSON.stringify(manifest, null, 2));
+
             const manifestSettings = manifest.options || {};
+            console.log('[BACKGROUND] 📋 Manifest options:', manifestSettings);
+
             manifestDefaults = {
               response_language: manifestSettings.response_language?.default,
               enable_deep_analysis: manifestSettings.enable_deep_analysis?.default,
               auto_request_deep_analysis: manifestSettings.auto_request_deep_analysis?.default,
             };
+
+            console.log('[BACKGROUND] 📋 Manifest defaults применены:', manifestDefaults);
           } else {
-            console.warn('[background][RUN_WORKFLOW] ⚠️ Could not load manifest for', msg.pluginId, '- using built-in defaults');
+            console.warn('[BACKGROUND] ⚠️ Не удалось загрузить manifest для', msg.pluginId, '- используем встроенные дефолты');
+            console.warn('[BACKGROUND] 📊 HTTP статус:', manifestResponse.status);
           }
         } catch (error) {
-          console.warn('[background][RUN_WORKFLOW] ⚠️ Failed to load manifest for', msg.pluginId, '- using built-in defaults:', error);
+          console.warn('[BACKGROUND] ⚠️ Ошибка загрузки manifest для', msg.pluginId, '- используем встроенные дефолты:', error);
+          console.warn('[BACKGROUND] 📊 Детали ошибки:', (error as Error).message);
         }
 
         // ШАГ 5: Проверить настройки плагина с manifest defaults и пользовательскими настройками
         const customSettingsKeys = manifest?.options ? Object.keys(manifest.options) : [];
+        console.log('[BACKGROUND] 🔍 Начинаем получение настроек плагина:', msg.pluginId);
+        console.log('[BACKGROUND] 📋 Доступные ключи настроек:', customSettingsKeys);
+        console.log('[BACKGROUND] 📋 Manifest defaults:', manifestDefaults);
+
         const pluginSettings = await getPluginSettings(msg.pluginId, manifestDefaults, customSettingsKeys);
+
+        console.log('[BACKGROUND] ✅ Настройки плагина получены из chrome.storage.local:', pluginSettings);
+        console.log('[BACKGROUND] 🔑 Значение response_language:', pluginSettings?.response_language);
+        console.log('[BACKGROUND] 📊 Все полученные настройки плагина:', JSON.stringify(pluginSettings, null, 2));
         if (!pluginSettings.enabled) {
           console.log('[background][RUN_WORKFLOW][INFO] Plugin disabled');
           sendResponse({ error: 'Плагин отключен' });
@@ -1579,6 +1606,9 @@ chrome.runtime.onMessage.addListener(
             console.log('[background][RUN_WORKFLOW] Created chunks:', chunkingResult.totalChunks);
 
             // Храним transfer для отслеживания
+            console.log('[BACKGROUND] 📦 Создаем transfer state с настройками плагина для chunked fallback');
+            console.log('[BACKGROUND] 📋 Plugin settings в transfer metadata:', pluginSettings);
+
             const transferState = {
               chunks: chunkingResult.chunks,
               received: new Set<number>(),
@@ -1618,6 +1648,10 @@ chrome.runtime.onMessage.addListener(
           console.log('[background][RUN_WORKFLOW] Created chunks:', chunkingResult.totalChunks);
 
           // Храним transfer для отслеживания
+          console.log('[BACKGROUND] 📦 Создаем transfer state с настройками плагина для chunked передачи');
+          console.log('[BACKGROUND] 📋 Plugin settings в transfer metadata:', pluginSettings);
+          console.log('[BACKGROUND] 🔑 Response language в transfer metadata:', pluginSettings?.response_language);
+
           const transferState = {
             chunks: chunkingResult.chunks,
             received: new Set<number>(),
@@ -2102,7 +2136,7 @@ const handleHostApiMessage = async (
           console.log('[HOST API] LLM call requested:', { modelAlias, pluginId });
 
           const currentPlugin = pluginId || 'ozon-analyzer';
-          const manifestUrl = chrome.runtime.getURL(`public/plugins/${currentPlugin}/manifest.json`);
+          const manifestUrl = chrome.runtime.getURL(`plugins/${currentPlugin}/manifest.json`);
 
           let manifestResponse;
           try {
@@ -2174,12 +2208,13 @@ const handleHostApiMessage = async (
             pluginId?: string
           };
 
-          console.log('[HOST API] Get setting requested:', { settingName, pluginId });
+          console.log('[BACKGROUND][HOST API] Get setting requested:', { settingName, pluginId });
 
           const currentPlugin = pluginId || 'ozon-analyzer';
+          console.log('[BACKGROUND][HOST API] Current plugin resolved:', currentPlugin);
 
           // Сначала загружаем manifest.json для получения дефолтных значений
-          const manifestUrl = chrome.runtime.getURL(`public/plugins/${currentPlugin}/manifest.json`);
+          const manifestUrl = chrome.runtime.getURL(`plugins/${currentPlugin}/manifest.json`);
           let manifestDefaults: Partial<PluginSettings> = {};
 
           try {
@@ -2206,6 +2241,7 @@ const handleHostApiMessage = async (
           let manifest: any = null;
 
           try {
+            const manifestUrl = chrome.runtime.getURL(`plugins/${currentPlugin}/manifest.json`);
             const manifestResponse = await fetch(manifestUrl);
             if (!manifestResponse.ok) {
               throw new Error(`Failed to load manifest: ${manifestResponse.status}`);
@@ -2226,7 +2262,13 @@ const handleHostApiMessage = async (
           }
 
           const customSettingsKeys = manifest?.options ? Object.keys(manifest.options) : [];
+          console.log('[BACKGROUND][HOST API] Custom settings keys:', customSettingsKeys);
+          console.log('[BACKGROUND][HOST API] Manifest defaults:', manifestDefaults);
+
           const pluginSettings = await getPluginSettings(currentPlugin, manifestDefaults, customSettingsKeys);
+
+          console.log('[BACKGROUND][HOST API] ✅ Plugin settings retrieved for', currentPlugin, ':', pluginSettings);
+          console.log('[BACKGROUND][HOST API] 🔑 Response language setting:', pluginSettings?.response_language);
 
           // Возвращаем запрошенную настройку
           let settingValue = (pluginSettings as any)[settingName];
@@ -2442,7 +2484,7 @@ async function handleMessage(message: any, sender: any): Promise<any> {
       console.log('[background][PORT][RUN_WORKFLOW] ✓ HTML extracted:', pageHtml.length, 'chars');
 
       // Загрузить настройки из manifest.json для получения дефолтных значений
-      const manifestUrl = chrome.runtime.getURL(`public/plugins/${message.pluginId}/manifest.json`);
+      const manifestUrl = chrome.runtime.getURL(`plugins/${message.pluginId}/manifest.json`);
       let manifestDefaults: Partial<PluginSettings> = {};
 
       try {
@@ -2464,7 +2506,13 @@ async function handleMessage(message: any, sender: any): Promise<any> {
       }
 
       // Проверить настройки плагина с manifest defaults
+      console.log('[BACKGROUND][PORT][RUN_WORKFLOW] 🔍 Получаем настройки плагина из chrome.storage.local');
+      console.log('[BACKGROUND][PORT][RUN_WORKFLOW] 📋 Manifest defaults:', manifestDefaults);
+
       const settings = await getPluginSettings(message.pluginId, manifestDefaults);
+
+      console.log('[BACKGROUND][PORT][RUN_WORKFLOW] ✅ Настройки плагина получены:', settings);
+      console.log('[BACKGROUND][PORT][RUN_WORKFLOW] 🔑 Response language:', settings?.response_language);
       if (!settings.enabled) {
         throw new Error('Плагин отключен');
       }

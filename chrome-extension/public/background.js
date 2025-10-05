@@ -2761,15 +2761,7 @@ chrome.runtime.onMessage.addListener(
         return true;
       }
       if (msg.type === "RUN_WORKFLOW") {
-        console.log("[background][DEBUG] ===== MESSAGE TYPE IS RUN_WORKFLOW =====");
-        console.log("[background][DEBUG] RUN_WORKFLOW message detected:", {
-          type: msg.type,
-          pluginId: msg.pluginId,
-          pageKey: msg.pageKey,
-          hasPluginId: !!msg.pluginId,
-          hasPageKey: !!msg.pageKey,
-          fullMessage: JSON.stringify(msg, null, 2)
-        });
+        // RUN_WORKFLOW processing starts
       }
       if (msg.type === "PING") {
         sendResponse({ pong: true, timestamp: Date.now() });
@@ -3020,13 +3012,7 @@ chrome.runtime.onMessage.addListener(
       console.log("[background][DEBUG] Timestamp:", (/* @__PURE__ */ new Date()).toISOString());
       if (msg.type === "RUN_WORKFLOW") {
         console.log("[background][OFFSCREEN DELEGATION] ===== RUN_WORKFLOW REQUEST RECEIVED =====");
-        console.log("[background][OFFSCREEN DELEGATION] Plugin ID:", msg.pluginId);
-        console.log("[background][OFFSCREEN DELEGATION] Page Key:", msg.pageKey);
-        console.log("[background][OFFSCREEN DELEGATION] Request timestamp:", (/* @__PURE__ */ new Date()).toISOString());
-        console.log("[background][DEBUG] Condition checks:");
-        console.log("[background][DEBUG] - msg.type === RUN_WORKFLOW:", msg.type === "RUN_WORKFLOW");
-        console.log("[background][DEBUG] - msg.pluginId exists:", !!msg.pluginId);
-        console.log("[background][DEBUG] - msg.pageKey exists:", !!msg.pageKey);
+        console.log("[background][OFFSCREEN DELEGATION] Plugin ID:", msg.pluginId, "Page Key:", msg.pageKey);
         try {
           console.log("[background][DEBUG] Starting async handler for RUN_WORKFLOW");
           (async () => {
@@ -3129,6 +3115,7 @@ chrome.runtime.onMessage.addListener(
                   transferId: requestId,
                   useChunks: false,
                   directExchange: true,
+                  pluginSettings: settings,
                   timestamp: Date.now()
                 };
                 console.log("[background][OFFSCREEN DELEGATION] Direct execution payload prepared:", {
