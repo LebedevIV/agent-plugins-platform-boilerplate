@@ -28,10 +28,12 @@ code {
 /* IDE Layout */
 .ide-layout {
   display: flex;
-  height: 100vh;
+  height: 100vh !important; /* Жёстко привязываем к viewport */
+  max-height: 100vh;
   gap: 0;
   background-color: #2d3748;
   position: relative;
+  overflow: hidden;
 }
 
 /* Resizable panels */
@@ -792,4 +794,150 @@ code {
 
 .theme-light .tab-button {
   color: var(--color-text-light-secondary);
+}
+
+/* Fix для прокрутки основного контента - Flex layout решение */
+#main-content-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%; /* Наследуем от layout */
+    max-height: 100%;
+    overflow: hidden;
+}
+
+.ide-main-content {
+    flex: 1;
+    min-height: 0; /* КРИТИЧНО для flex - отключает auto-растягивание */
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 8px;
+}
+
+/* Стилизация scrollbar для темной темы */
+.theme-dark .ide-main-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.theme-dark .ide-main-content::-webkit-scrollbar-track {
+    background: #1f2937;
+}
+
+.theme-dark .ide-main-content::-webkit-scrollbar-thumb {
+    background: #4b5563;
+    border-radius: 4px;
+}
+
+.theme-dark .ide-main-content::-webkit-scrollbar-thumb:hover {
+    background: #6b7280;
+}
+
+/* Settings Dark Theme */
+.theme-dark .settings-section {
+  background-color: #4a5568;
+  border-color: #718096;
+  color: #e2e8f0;
+}
+
+.theme-dark .settings-section h3 {
+  color: #f7fafc;
+}
+
+.theme-dark .ai-key-item {
+  background-color: #2d3748;
+  border-color: #718096;
+  color: #e2e8f0;
+}
+
+.theme-dark .ai-key-item h4 {
+  color: #f7fafc;
+}
+
+.theme-dark .ai-key-input input {
+  background-color: #4a5568;
+  border-color: #718096;
+  color: #e2e8f0;
+}
+
+.theme-dark .ai-key-input input:focus {
+  border-color: #63b3ed;
+}
+
+.theme-dark .key-name-input {
+  background-color: #4a5568;
+  border-color: #718096;
+  color: #e2e8f0;
+}
+
+.theme-dark .custom-keys-section {
+  border-color: #718096;
+}
+
+.theme-dark .custom-keys-section h4 {
+  color: #f7fafc;
+}
+
+.theme-dark .settings-actions {
+  border-color: #718096;
+}
+
+.theme-dark .setting-item label {
+  color: #e2e8f0;
+}
+
+.theme-dark .setting-description {
+  color: #a0aec0;
+}
+
+.theme-dark .toggle-slider {
+  background: #718096;
+}
+
+.theme-dark .toggle-switch input[type="checkbox"]:checked + .toggle-slider {
+  background: #63b3ed;
+}
+
+.theme-dark .toggle-slider:before {
+  background: #e2e8f0;
+}
+
+.theme-dark .toggle-switch input[type="checkbox"]:checked + .toggle-slider:before {
+  background: #fff;
+}
+
+.theme-dark .toggle-label {
+  color: #e2e8f0;
+}
+
+.theme-dark .info-icon {
+  color: #e2e8f0;
+  border-color: #e2e8f0;
+}
+
+.theme-dark .info-icon:hover {
+  background: rgba(251, 191, 36, 0.1);
+  color: #fbbf24;
+}
+
+.theme-dark input[type="number"] {
+  background-color: #4a5568;
+  border-color: #718096;
+  color: #e2e8f0;
+}
+
+.theme-dark input[type="number"]:focus {
+  border-color: #63b3ed;
+}
+
+.theme-dark select {
+  background-color: #4a5568;
+  border-color: #718096;
+  color: #e2e8f0;
+}
+
+.theme-dark select:focus {
+  border-color: #63b3ed;
+}
+
+.theme-dark .tab-content h2 {
+  color: #f7fafc;
 }

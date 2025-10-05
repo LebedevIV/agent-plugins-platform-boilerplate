@@ -4,9 +4,9 @@
  * Интегрирована система мониторинга для отслеживания лимитов, сбоев и fallback
  */
 
-import type { getMonitoringCore } from './monitoring/index.js';
-import { LogLevel } from './monitoring/monitoring-core.js';
-import { APIKeyManager } from '../../../pages/options/src/utils/encryption.js';
+import type { getMonitoringCore } from './monitoring/index';
+import { LogLevel } from './monitoring/monitoring-core';
+import { APIKeyManager } from '../../../pages/options/src/utils/encryption';
 
 export interface AiModelResponse {
   response: string;
@@ -79,7 +79,7 @@ function initializeAiMonitoring(): void {
   if (!monitoringCore) {
     try {
       // Попытка импортировать систему мониторинга
-      import('./monitoring/index.js').then(module => {
+      import('./monitoring/index').then(module => {
         monitoringCore = module.initializeMonitoring({
           sampleRate: 0.9, // высокая сэмплировка для AI API
           enableErrorCapture: true
@@ -253,7 +253,8 @@ function handleAiError(error: any, context: any): never {
 const MODEL_CONFIGS: Record<ModelAlias, ModelConfig> = {
   'gemini-flash': {
     provider: 'google',
-    model_name: 'gemini-2.5-flash-lite:generateContent',
+    //model_name: 'gemini-2.5-flash-lite:generateContent',
+    model_name: 'gemini-flash-lite-latest:generateContent',
     endpoint: 'https://generativelanguage.googleapis.com/v1beta/models/',
     api_key_env: 'GOOGLE_AI_API_KEY'
   },

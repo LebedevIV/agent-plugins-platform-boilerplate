@@ -1,0 +1,71 @@
+/* PluginCard стили */
+.plugin-card {
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+  background: var(--background);
+  border: 2px solid var(--border);
+  color: var(--text-primary);
+}
+
+.plugin-card.selected {
+  background: var(--surface);
+  box-shadow: 0 2px 8px rgba(0, 200, 255, 0.10);
+}
+
+.plugin-card:hover {
+  background: var(--surface);
+}
+
+.plugin-card.dark {
+  background: var(--background);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+.plugin-card.dark.selected {
+  background: var(--surface);
+}
+
+.plugin-card.dark:hover {
+  background: var(--surface);
+}
+
+.plugin-card-name {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.plugin-card.dark .plugin-card-name {
+  color: var(--text-primary);
+}
+
+.plugin-card-version {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.plugin-card-description {
+  margin: 8px 0;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.plugin-card.dark .plugin-card-description {
+  color: var(--text-primary);
+}
+
+.plugin-card-status {
+  font-size: 12px;
+}
+
+.plugin-card-status.enabled {
+  color: var(--success);
+}
+
+.plugin-card-status.disabled {
+  color: var(--error);
+}

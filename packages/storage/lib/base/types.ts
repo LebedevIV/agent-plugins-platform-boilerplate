@@ -44,11 +44,24 @@ export type StorageConfigType<D = string> = {
   };
 };
 
+export type Theme = 'light' | 'dark' | 'system';
+
 export interface ThemeStateType {
-  theme: 'light' | 'dark' | 'system';
+  theme: Theme;
   isLight: boolean;
 }
 
 export type ThemeStorageType = BaseStorageType<ThemeStateType> & {
   toggle: () => Promise<void>;
+};
+
+export type ChatAlignment = 'left' | 'center' | 'right';
+
+export interface ChatAlignmentStateType {
+  alignment: ChatAlignment;
+}
+
+export type ChatAlignmentStorageType = BaseStorageType<ChatAlignmentStateType> & {
+  setAlignment: (alignment: ChatAlignment) => Promise<void>;
+  getAlignment: () => Promise<ChatAlignment>;
 };

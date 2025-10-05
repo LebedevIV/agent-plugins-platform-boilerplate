@@ -31,12 +31,12 @@ export async function getAvailablePlugins(): Promise<Plugin[]> {
 
   for (const dirName of PLUGIN_DIRS) {
     try {
-      console.log(`[plugin-manager] Processing plugin: ${dirName}`);
+      // console.log(`[plugin-manager] Processing plugin: ${dirName}`);
       const manifestUrl = chrome.runtime.getURL(`plugins/${dirName}/manifest.json`);
-      console.log(`[plugin-manager] Manifest URL for ${dirName}:`, manifestUrl);
+      // console.log(`[plugin-manager] Manifest URL for ${dirName}:`, manifestUrl);
 
       const response = await fetch(manifestUrl);
-      console.log(`[plugin-manager] Fetch response for ${dirName}:`, response.status, response.statusText);
+      // console.log(`[plugin-manager] Fetch response for ${dirName}:`, response.status, response.statusText);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch manifest: ${response.statusText}`);
@@ -55,7 +55,7 @@ export async function getAvailablePlugins(): Promise<Plugin[]> {
         manifest
       };
 
-      console.log(`[plugin-manager] Created plugin object for ${dirName}:`, plugin);
+      // console.log(`[plugin-manager] Created plugin object for ${dirName}:`, plugin);
       plugins.push(plugin);
 
     } catch (error) {

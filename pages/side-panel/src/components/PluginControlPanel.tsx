@@ -29,6 +29,7 @@ import { saveAs } from 'file-saver';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import './PluginControlPanel.css';
 import type React from 'react';
+import { exampleChatAlignmentStorage, type ChatAlignment } from '@extension/storage';
 
 // Определение типа Plugin для PluginControlPanel
 type Plugin = {
@@ -86,6 +87,8 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   // Состояние для текущего pageKey с динамическим обновлением
   const [currentPageKey, setCurrentPageKey] = useState(getPageKey(currentTabUrl));
 
+  const [chatTextAlign, setChatTextAlign] = useState<ChatAlignment>('left');
+
   // useEffect для обновления pageKey при изменении currentTabUrl
   useEffect(() => {
     const newPageKey = getPageKey(currentTabUrl);
@@ -97,6 +100,21 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     });
     setCurrentPageKey(newPageKey);
   }, [currentTabUrl]);
+
+  useEffect(() => {
+    const loadAlignment = async () => {
+      const alignment = await exampleChatAlignmentStorage.getAlignment();
+      setChatTextAlign(alignment);
+    };
+
+    loadAlignment();
+
+    const unsubscribe = exampleChatAlignmentStorage.subscribe(() => {
+      loadAlignment();
+    });
+
+    return unsubscribe;
+  }, []);
   // Используем хук для ленивой синхронизации
   const { message, setMessage, isDraftSaved, isDraftLoading, draftError, loadDraft, clearDraft, draftText } =
     useLazyChatSync({
@@ -135,21 +153,8 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     const messageId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
     const messageWithId = { ...message, messageId };
 
-    console.log('[PluginControlPanel] sendMessageToBackgroundAsync:', {
-      type: messageWithId.type,
-      pluginId: messageWithId.pluginId,
-      pageKey: messageWithId.pageKey,
-      messageId: messageWithId.messageId,
-      timestamp: new Date().toISOString()
-    });
-
     try {
       const response = await chrome.runtime.sendMessage(messageWithId);
-      console.log('[PluginControlPanel] sendMessageToBackgroundAsync - получен ответ:', {
-        response,
-        messageId,
-        timestamp: new Date().toISOString()
-      });
       return response;
     } catch (error) {
       console.error('[PluginControlPanel] sendMessageToBackgroundAsync - ошибка:', error);
@@ -162,13 +167,6 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     const messageId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
     const messageWithId = { ...message, messageId };
 
-    console.log('[PluginControlPanel] sendMessageToBackground (legacy):', {
-      type: messageWithId.type,
-      pluginId: messageWithId.pluginId,
-      pageKey: messageWithId.pageKey,
-      messageId: messageWithId.messageId,
-      timestamp: new Date().toISOString()
-    });
     chrome.runtime.sendMessage(messageWithId);
   }, []);
 
@@ -564,37 +562,60 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
           return true;
         })
         .map((msg: any, index: number) => {
-          try {
-            // Строгая проверка и конвертация поля text
-            let textContent = msg.content || msg.text || '';
+           try {
+             // Строгая проверка и конвертация поля text
+             let textContent = msg.content || msg.text || '';
+             let messageTimestamp = msg.timestamp || Date.now();
 
-            // Если text является объектом, конвертируем его в строку
-            if (typeof textContent === 'object') {
-              console.warn('[PluginControlPanel] text является объектом, конвертируем:', textContent);
-              textContent = JSON.stringify(textContent);
-            } else if (textContent === null || textContent === undefined) {
-              console.warn('[PluginControlPanel] text равен null/undefined, устанавливаем пустую строку');
-              textContent = '';
-            } else {
-              // Убеждаемся, что это строка
-              textContent = String(textContent);
-            }
+             // Если text является объектом, конвертируем его в строку
+             if (typeof textContent === 'object') {
+               console.warn('[PluginControlPanel] text является объектом, конвертируем:', textContent);
+               textContent = JSON.stringify(textContent);
+             } else if (textContent === null || textContent === undefined) {
+               console.warn('[PluginControlPanel] text равен null/undefined, устанавливаем пустую строку');
+               textContent = '';
+             } else {
+               // Убеждаемся, что это строка
+               textContent = String(textContent);
 
-            const convertedMsg: ChatMessage = {
-              id: msg.id || String(msg.timestamp || Date.now() + index),
-              text: textContent,
-              isUser: msg.role ? msg.role === 'user' : !!msg.isUser,
-              timestamp: msg.timestamp || Date.now(),
-            };
+               console.log(`[PluginControlPanel] Raw textContent before JSON parse for message ${index}:`, textContent);
 
-            console.log(`[PluginControlPanel] Конвертировано сообщение ${index}:`, {
-              id: convertedMsg.id,
-              textLength: convertedMsg.text.length,
-              textType: typeof convertedMsg.text,
-              isUser: convertedMsg.isUser
-            });
+               // Проверяем, является ли строка JSON с сообщением плагина
+               try {
+                 const parsedContent = JSON.parse(textContent);
+                 if (typeof parsedContent === 'object' && parsedContent !== null && 'content' in parsedContent) {
+                   console.log('[PluginControlPanel] Распарсен JSON из content:', parsedContent);
+                   textContent = String(parsedContent.content || '');
+                   // Используем timestamp из распарсенного объекта, если он есть
+                   if (parsedContent.timestamp && typeof parsedContent.timestamp === 'number') {
+                     messageTimestamp = parsedContent.timestamp;
+                   }
+                 }
+               } catch (jsonParseError) {
+                 // Не JSON, оставляем как есть
+                 console.log('[PluginControlPanel] content не является JSON, оставляем как есть');
+               }
 
-            return convertedMsg;
+               console.log(`[PluginControlPanel] TextContent after JSON parse for message ${index}:`, textContent);
+             }
+
+             const convertedMsg: ChatMessage = {
+               id: msg.id || String(messageTimestamp + index),
+               text: textContent,
+               isUser: msg.role ? msg.role === 'user' : !!msg.isUser,
+               timestamp: messageTimestamp,
+             };
+
+             console.log(`[PluginControlPanel] Конвертировано сообщение ${index}:`, {
+               id: convertedMsg.id,
+               textLength: convertedMsg.text.length,
+               textType: typeof convertedMsg.text,
+               isUser: convertedMsg.isUser
+             });
+
+             console.log(`[PluginControlPanel] Final converted text for message ${index}:`, convertedMsg.text);
+
+             return convertedMsg;
           } catch (conversionError) {
             console.error(`[PluginControlPanel] Ошибка конвертации сообщения ${index}:`, conversionError, msg);
             // Возвращаем безопасное сообщение в случае ошибки
@@ -647,6 +668,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     });
 
     try {
+      console.log('[PluginControlPanel] loadChat - отправляем запрос GET_PLUGIN_CHAT');
       const response = await sendMessageToBackgroundAsync({
         type: 'GET_PLUGIN_CHAT',
         pluginId,
@@ -654,8 +676,14 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       });
 
       console.log('[PluginControlPanel] loadChat - получен ответ от background:', response);
+      console.log('[PluginControlPanel] loadChat - ТЕКУЩЕЕ СОСТОЯНИЕ ПЕРЕД СБРОСОМ LOADING В loadChat:', {
+        loading,
+        messagesCount: messages.length,
+        timestamp: new Date().toISOString()
+      });
 
       setLoading(false); // Останавливаем загрузку при получении ответа
+      console.log('[PluginControlPanel] loadChat - loading сброшен в false');
 
       if (response?.error) {
         console.error('[PluginControlPanel] loadChat - ошибка в ответе:', response.error);
@@ -800,7 +828,8 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
                 try {
                   // Строгая проверка и конвертация поля text
                   let textContent = msg.content || msg.text || '';
-
+                  let messageTimestamp = msg.timestamp || Date.now();
+   
                   // Если text является объектом, конвертируем его в строку
                   if (typeof textContent === 'object') {
                     console.warn('[PluginControlPanel] text является объектом, конвертируем:', textContent);
@@ -811,13 +840,29 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
                   } else {
                     // Убеждаемся, что это строка
                     textContent = String(textContent);
+   
+                    // Проверяем, является ли строка JSON с сообщением плагина
+                    try {
+                      const parsedContent = JSON.parse(textContent);
+                      if (typeof parsedContent === 'object' && parsedContent !== null && 'content' in parsedContent) {
+                        console.log('[PluginControlPanel] Распаршен JSON из content:', parsedContent);
+                        textContent = String(parsedContent.content || '');
+                        // Используем timestamp из распарсенного объекта, если он есть
+                        if (parsedContent.timestamp && typeof parsedContent.timestamp === 'number') {
+                          messageTimestamp = parsedContent.timestamp;
+                        }
+                      }
+                    } catch (jsonParseError) {
+                      // Не JSON, оставляем как есть
+                      console.log('[PluginControlPanel] content не является JSON, оставляем как есть');
+                    }
                   }
-
+   
                   const convertedMsg: ChatMessage = {
-                    id: msg.id || String(msg.timestamp || Date.now() + index),
+                    id: msg.id || String(messageTimestamp + index),
                     text: textContent,
                     isUser: msg.role ? msg.role === 'user' : !!msg.isUser,
-                    timestamp: msg.timestamp || Date.now(),
+                    timestamp: messageTimestamp,
                   };
 
                   console.log(`[PluginControlPanel] Конвертировано сообщение ${index}:`, {
@@ -869,6 +914,13 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
 
     } catch (error) {
       console.error('[PluginControlPanel] loadChat - ошибка при получении ответа:', error);
+      console.error('[PluginControlPanel] loadChat - ТЕКУЩЕЕ СОСТОЯНИЕ В CATCH:', {
+        loading,
+        messagesCount: messages.length,
+        errorType: typeof error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString()
+      });
 
       // Детальное логирование ошибки с трассировкой стека
       console.error('[PluginControlPanel] loadChat - ERROR DETAILS:', {
@@ -883,6 +935,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       });
 
       setLoading(false);
+      console.log('[PluginControlPanel] loadChat - loading сброшен в false в catch блоке');
 
       // Улучшенная обработка ошибок с проверкой типа
       let errorMessage = 'Ошибка связи с background';
@@ -957,6 +1010,15 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       // Обработка обновлений чата от других компонентов/вкладок
       if (event?.type === 'PLUGIN_CHAT_UPDATED' && event.pluginId === pluginId && event.pageKey === currentPageKey) {
         console.log('[PluginControlPanel] handleChatUpdate - обновление чата получено, запрашиваем актуальные данные');
+        console.log('[PluginControlPanel] handleChatUpdate - ТЕКУЩЕЕ СОСТОЯНИЕ ПЕРЕД СБРОСОМ:', {
+          loading,
+          messagesCount: messages.length,
+          currentPageKey,
+          pluginId,
+          timestamp: new Date().toISOString()
+        });
+        setLoading(false); // Гарантированный сброс loading перед загрузкой чата
+        console.log('[PluginControlPanel] handleChatUpdate - loading сброшен, вызываем loadChat');
         // Запрашиваем актуальные данные чата асинхронно
         loadChat().catch((error) => {
           console.error('[PluginControlPanel] handleChatUpdate - ошибка при загрузке чата:', error);
@@ -990,8 +1052,15 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
       // Обработка результатов удаления чата
       if (event?.type === 'DELETE_PLUGIN_CHAT_RESPONSE') {
         console.log('[PluginControlPanel] handleChatUpdate - результат удаления чата:', event);
+        console.log('[PluginControlPanel] handleChatUpdate - ТЕКУЩЕЕ СОСТОЯНИЕ ПЕРЕД ОБРАБОТКОЙ DELETE_RESPONSE:', {
+          loading,
+          messagesCount: messages.length,
+          eventSuccess: event.success,
+          timestamp: new Date().toISOString()
+        });
 
         setLoading(false); // Останавливаем загрузку
+        console.log('[PluginControlPanel] handleChatUpdate - loading сброшен в false для DELETE_PLUGIN_CHAT_RESPONSE');
 
         if (event.success) {
           console.log('[PluginControlPanel] handleChatUpdate: чат успешно удален');
@@ -1009,6 +1078,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
           try {
             // Строгая проверка типа content для Pyodide сообщений
             let content = event.message.content;
+            let messageTimestamp = event.timestamp || Date.now();
 
             // Если content является объектом, конвертируем в строку
             if (typeof content === 'object') {
@@ -1019,13 +1089,29 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
               content = 'Пустое сообщение от Pyodide';
             } else {
               content = String(content);
+
+              // Проверяем, является ли строка JSON с сообщением плагина
+              try {
+                const parsedContent = JSON.parse(content);
+                if (typeof parsedContent === 'object' && parsedContent !== null && 'content' in parsedContent) {
+                  console.log('[PluginControlPanel] Распарсен JSON из PYODIDE content:', parsedContent);
+                  content = String(parsedContent.content || '');
+                  // Используем timestamp из распарсенного объекта, если он есть
+                  if (parsedContent.timestamp && typeof parsedContent.timestamp === 'number') {
+                    messageTimestamp = parsedContent.timestamp;
+                  }
+                }
+              } catch (jsonParseError) {
+                // Не JSON, оставляем как есть
+                console.log('[PluginControlPanel] PYODIDE content не является JSON, оставляем как есть');
+              }
             }
 
             const pyodideMessage: ChatMessage = {
-              id: event.message.id || `pyodide_${event.timestamp || Date.now()}_${Math.random()}`,
+              id: event.message.id || `pyodide_${messageTimestamp}_${Math.random()}`,
               text: content,
               isUser: false, // Python сообщения отображаем как от бота
-              timestamp: event.timestamp || Date.now(),
+              timestamp: messageTimestamp,
             };
 
             console.log('[PluginControlPanel] Adding Pyodide message to chat:', pyodideMessage);
@@ -1134,6 +1220,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
           try {
             // Строгая проверка типа content
             let content = data.message.content;
+            let messageTimestamp = data.timestamp || Date.now();
 
             // Если content является объектом, конвертируем в строку
             if (typeof content === 'object') {
@@ -1144,13 +1231,29 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
               content = 'Пустое сообщение от Pyodide';
             } else {
               content = String(content);
+
+              // Проверяем, является ли строка JSON с сообщением плагина
+              try {
+                const parsedContent = JSON.parse(content);
+                if (typeof parsedContent === 'object' && parsedContent !== null && 'content' in parsedContent) {
+                  console.log('[PluginControlPanel] Распарсен JSON из Pyodide content:', parsedContent);
+                  content = String(parsedContent.content || '');
+                  // Используем timestamp из распарсенного объекта, если он есть
+                  if (parsedContent.timestamp && typeof parsedContent.timestamp === 'number') {
+                    messageTimestamp = parsedContent.timestamp;
+                  }
+                }
+              } catch (jsonParseError) {
+                // Не JSON, оставляем как есть
+                console.log('[PluginControlPanel] Pyodide content не является JSON, оставляем как есть');
+              }
             }
 
             const pyodideMessage: ChatMessage = {
-              id: data.message.id || `pyodide_${data.timestamp || Date.now()}_${Math.random()}`,
+              id: data.message.id || `pyodide_${messageTimestamp}_${Math.random()}`,
               text: content,
               isUser: false, // Python сообщения отображаем как от бота
-              timestamp: data.timestamp || Date.now(),
+              timestamp: messageTimestamp,
             };
 
             console.log('[PluginControlPanel] Adding Pyodide message to chat:', pyodideMessage);
@@ -1185,11 +1288,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
 
   // --- Синхронизация message с draftText после загрузки черновика ---
   useEffect(() => {
-    // Если draftText пустой, подставляем автотестовый текст
-    if (typeof draftText === 'string' && draftText === '') {
-      setMessage('Тестовое сообщение для диагностики');
-      console.log('[PluginControlPanel] draftText пустой, подставлен автотестовый текст');
-    } else if (typeof draftText === 'string') {
+    if (typeof draftText === 'string') {
       setMessage(draftText);
       console.log('[PluginControlPanel] draftText подставлен в поле ввода:', draftText);
     }
@@ -1300,7 +1399,6 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
 
   const handleTextareaChange = (event: React.ChangeEvent<HTMLTextAreaElement>): void => {
     setMessage(event.target.value); // Используем хук вместо setMessage
-    console.log('[PluginControlPanel] handleTextareaChange: новое значение', event.target.value);
     // Автоматическое изменение высоты
     const textarea = event.target;
     textarea.style.height = 'auto';
@@ -1330,7 +1428,6 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
     // Очищаем локальное состояние сразу
     setMessages([]);
     clearDraft(); // Очищаем черновик
-    console.log('[PluginControlPanel] handleClearChat: запрос на очистку чата отправлен');
   };
 
   // Экспорт чата в JSON
@@ -1341,7 +1438,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   };
 
   return (
-    <div className="plugin-control-panel">
+    <div className="plugin-control-panel" style={{ '--chat-text-align': chatTextAlign }}>
       <div className="panel-header">
         <div className="plugin-info">
           <img
@@ -1357,16 +1454,37 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
           <h3>{pluginName}</h3>
         </div>
         <div className="control-buttons">
-          <button onClick={handleStart} disabled={isRunning || isPaused}>
-            {isRunning ? 'Остановить' : 'Запустить'}
+          <button
+            className={`media-btn ${isRunning ? 'stop-mode' : 'start-mode'}`}
+            onClick={handleStart}
+            disabled={isRunning || isPaused}
+            title={isRunning ? 'Остановить' : 'Запустить'}
+          >
+            {isRunning ? '⏹️' : '▶️'}
           </button>
-          <button onClick={onPause} disabled={!isRunning || isPaused}>
-            Пауза
+          <button
+            className="media-btn pause-mode"
+            onClick={onPause}
+            disabled={!isRunning || isPaused}
+            title="Пауза"
+          >
+            ⏸️
           </button>
-          <button onClick={onStop} disabled={!isRunning}>
-            Остановить
+          <button
+            className="media-btn stop-mode"
+            onClick={onStop}
+            disabled={!isRunning}
+            title="Остановить"
+          >
+            ⏹️
           </button>
-          <button onClick={onClose}>Закрыть</button>
+          <button
+            className="media-btn close-mode"
+            onClick={onClose}
+            title="Закрыть"
+          >
+            ✕
+          </button>
         </div>
       </div>
       <div className="panel-tabs">
@@ -1398,7 +1516,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
               <button
                 onClick={testMessageProcessing}
                 disabled={loading}
-                style={{ backgroundColor: '#ff6b35', marginLeft: '5px' }}
+                style={{ backgroundColor: '#ff6b35', marginLeft: '5px', display: 'none' }}
                 title="Протестировать обработку сообщений с проблемными данными"
               >
                 🧪 Тест
@@ -1418,15 +1536,54 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
             <div className="messages-container">
               {messages.map((msg, idx) => {
                 console.log('[PluginControlPanel] render message:', idx, msg);
+
+                // Парсинг JSON в тексте сообщения перед рендерингом
+                let displayText = msg.text;
+                let displayTimestamp = msg.timestamp;
+
+                console.log('[PluginControlPanel] Raw message text before parsing for message', idx, ':', msg.text);
+
+                try {
+                  const parsed = JSON.parse(displayText);
+                  if (typeof parsed === 'object' && parsed !== null && 'content' in parsed) {
+                    console.log('[PluginControlPanel] Парсинг JSON в рендере:', parsed);
+                    let content = parsed.content;
+                    if (typeof content === 'object') {
+                      displayText = JSON.stringify(content);
+                    } else {
+                      displayText = String(content || '');
+                    }
+                    if (parsed.timestamp && typeof parsed.timestamp === 'number') {
+                      displayTimestamp = parsed.timestamp;
+                    }
+                  } else if (typeof parsed === 'string') {
+                    // Если JSON содержит просто строку
+                    displayText = parsed;
+                  } else if (typeof parsed === 'object' && parsed !== null) {
+                    // Если JSON содержит объект без поля content, берем первое строковое поле
+                    const stringFields = Object.values(parsed).filter(val => typeof val === 'string');
+                    if (stringFields.length > 0) {
+                      displayText = String(stringFields[0]);
+                    } else {
+                      displayText = JSON.stringify(parsed);
+                    }
+                  }
+                } catch (parseError) {
+                  // Не JSON, оставляем как есть
+                  console.log('[PluginControlPanel] Текст не является JSON, рендерим как есть');
+                }
+
+                console.log('[PluginControlPanel] Display text after parsing for message', idx, ':', displayText);
+
                 return (
                   <div
                     key={msg.id || idx}
                     className={`chat-message ${msg.isUser ? 'user' : 'bot'}`}
                   >
                     <div className="message-content">
-                      <span className="message-text">{msg.text}</span>
+                      <span className="message-text">{displayText}</span>
                       <span className="message-time">
-                        {new Date(msg.timestamp).toLocaleTimeString()}
+                        {new Date(displayTimestamp).toLocaleTimeString()}
                       </span>
                     </div>
                   </div>

@@ -13,6 +13,12 @@ export const APPOptions: React.FC<{ isLight: boolean }> = ({ isLight }) => {
   const { t } = useTranslations(locale);
   const { activeTab, switchTab, isActiveTab } = useTabs('plugins');
   const { plugins, selectedPlugin, loading, error, selectPlugin, updatePluginSetting } = usePlugins();
+
+  const [theme, setTheme] = React.useState<'light' | 'dark' | 'system'>(isLight ? 'light' : 'dark');
+
+  const handleThemeChange = (newTheme: string) => {
+    setTheme(newTheme as 'light' | 'dark' | 'system');
+  };
   const {
     aiKeys,
     customKeys,
@@ -56,7 +62,7 @@ export const APPOptions: React.FC<{ isLight: boolean }> = ({ isLight }) => {
             loading={loading}
             error={error}
             locale={locale}
-            onUpdatePluginSetting={updatePluginSetting}
+            isLight={isLight}
           />
         )}
 
@@ -72,6 +78,8 @@ export const APPOptions: React.FC<{ isLight: boolean }> = ({ isLight }) => {
             onUpdateCustomKeyName={updateCustomKeyName}
             getStatusText={status => getStatusText(status, t)}
             getStatusClass={getStatusClass}
+            theme={theme}
+            onThemeChange={handleThemeChange}
             locale={locale}
           />
         )}

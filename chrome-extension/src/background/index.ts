@@ -13,10 +13,29 @@ console.log('[background] Plugin manager loaded');
 import { getPageKey } from '../../../packages/shared/lib/utils/helpers';
 import { getApiKeyForModel, callAiModel } from './ai-api-client';
 import { exampleThemeStorage, pluginSettingsStorage, getPluginSettings } from '@extension/storage';
+import type { PluginSettings } from '@extension/storage';
 import { ensureOffscreenDocument } from '../../../src/background/offscreen-manager';
 console.log('[background] Storage modules loaded');
 
+// Глобальный счетчик для генерации уникальных messageId
+let messageIdCounter = 0;
+
+// Интерфейсы для сообщений
+interface ExtensionMessage {
+  type: string;
+  [key: string]: any;
+}
+
 console.log('[background] Starting Offscreen Document integration - REFACTORED BACKGROUND ARCHITECTURE');
+
+// Функция для отправки обновлений чата плагина
+const broadcastChatUpdate = (pluginId: string, pageKey: string) => {
+  chrome.runtime.sendMessage({
+    type: 'PLUGIN_CHAT_UPDATED',
+    pluginId,
+    pageKey,
+  });
+};
 
 // === OFFSCREEN API FEATURE DETECTION ===
 
@@ -153,12 +172,20 @@ const sendHtmlDirectly = async (
   pageKey: string,
   html: string,
   requestId: string,
-  transferId: string
+  transferId: string,
+  pluginSettings: Record<string, any> = {}
 ): Promise<void> => {
   console.log('[background][DIRECT_TRANSMISSION] Sending HTML directly to offscreen for transfer:', transferId);
   console.log('[background][DIRECT_TRANSMISSION] HTML size:', html.length, 'chars');
+  console.log('[background][DIRECT_TRANSMISSION] Transmission mode: DIRECT');
 
   try {
+    // Проверяем размер HTML для прямой передачи
+    if (html.length > CHUNK_SIZE * MAX_CHUNKS) {
+      console.warn('[background][DIRECT_TRANSMISSION] ⚠️ HTML too large for direct transmission, using chunks instead');
+      throw new Error('HTML слишком большой для прямой передачи, используем чанки');
+    }
+
     // Создаем сообщение для прямой передачи HTML
     const directMessage = {
       type: 'HTML_DIRECT',
@@ -188,18 +215,38 @@ const sendHtmlDirectly = async (
     }
     console.log('[background][DIRECT_TRANSMISSION] Direct HTML transmission completed successfully');
 
+    // Ждем подтверждения получения HTML от offscreen
+    console.log('[background][DIRECT_TRANSMISSION] Waiting for HTML receipt confirmation...');
+    const confirmResponse = await chrome.runtime.sendMessage({
+      type: 'CONFIRM_HTML_RECEIPT',
+      transferId,
+      pluginId,
+      pageKey,
+      requestId,
+      timestamp: Date.now()
+    }) as any;
+
+    if (chrome.runtime.lastError) {
+      console.warn('[background][DIRECT_TRANSMISSION] Confirmation failed:', (chrome.runtime.lastError as any).message);
+    } else if ((confirmResponse as any)?.confirmed) {
+      console.log('[background][DIRECT_TRANSMISSION] ✅ HTML receipt confirmed by offscreen');
+    } else {
+      console.warn('[background][DIRECT_TRANSMISSION] ⚠️ HTML receipt not confirmed by offscreen');
+    }
+
     // Запускаем workflow в offscreen document с прямой передачей
     try {
       // Получить API ключ для передачи в offscreen
-      let geminiApiKey;
+      let geminiApiKey: string | undefined;
       try {
-        geminiApiKey = await getApiKeyForModel('gemini-flash');
+        geminiApiKey = await getApiKeyForModel('gemini-flash') || undefined;
         console.log('[background][DIRECT_TRANSMISSION] ✅ API key retrieved for workflow');
       } catch (keyError) {
         console.warn('[background][DIRECT_TRANSMISSION] ⚠️ Failed to get API key:', keyError);
+        geminiApiKey = undefined;
       }
-
-      await executeWorkflowInOffscreen(pluginId, pageKey, transferId, requestId, false, undefined, geminiApiKey);
+  
+      await executeWorkflowInOffscreen(pluginId, pageKey, transferId, requestId, false, html, geminiApiKey, pluginSettings);
       console.log('[background][DIRECT_TRANSMISSION] Workflow execution initiated successfully');
     } catch (workflowError) {
       console.error('[background][DIRECT_TRANSMISSION] Failed to execute workflow:', workflowError);
@@ -208,7 +255,9 @@ const sendHtmlDirectly = async (
 
   } catch (error) {
     console.error('[background][DIRECT_TRANSMISSION] Failed to send HTML directly:', error);
-    throw error;
+    // Если прямая передача не удалась, пробуем отправить чанками как fallback
+    console.log('[background][DIRECT_TRANSMISSION] Direct transmission failed, falling back to chunked transmission');
+    throw error; // Передаем ошибку дальше для обработки в RUN_WORKFLOW
   }
 };
 
@@ -249,10 +298,10 @@ const activeTransfers = new Map<string, any>();
 function diagnoseTransferState(transferId: string): {
   exists: boolean;
   isValid: boolean;
-  diagnostics: Record<string, any>;
+  diagnostics: any;
 } {
   const transfer = activeTransfers.get(transferId);
-  const diagnostics = {
+  const diagnostics: any = {
     transferId,
     timestamp: Date.now(),
     exists: !!transfer,
@@ -784,7 +833,7 @@ async function processRecoveredAssembledTransfer(msg: any, transfer: any): Promi
     console.log(`[RECOVERY_PROCESSING] ✅ Recovery data validated - pluginId: ${pluginId}, pageKey: ${pageKey}`);
 
     // ПОДГОТОВКА EXECUTE_WORKFLOW СООБЩЕНИЯ
-    const executeMessage = {
+    const executeMessage: any = {
       type: 'EXECUTE_WORKFLOW',
       pluginId,
       pageKey,
@@ -792,6 +841,8 @@ async function processRecoveredAssembledTransfer(msg: any, transfer: any): Promi
       transferId: transferId,
       useChunks: false, // Данные уже собраны
       pageHtml: transfer.assembledData || transfer.html,
+      assembledData: transfer.assembledData || transfer.html,
+      pluginSettings: transfer.metadata?.pluginSettings, // Добавлено: передаем pluginSettings из метаданных
       recovery: true,
       recoverySource: transfer.isRecovery ? 'fallback_recovery' : 'recovered',
       timestamp: Date.now()
@@ -916,6 +967,23 @@ const runPluginIfEnabled = async (pluginId: string) => {
   } catch (error) {
     console.error(`[background] Error running plugin ${pluginId}:`, error);
     return { error: (error as Error).message };
+  }
+};
+
+// Обработчик для удаления чата плагина
+const handleDeletePluginChat = async (message: any, sendResponse: (response?: any) => void) => {
+  console.log('[background] DELETE_PLUGIN_CHAT processing:', message.pluginId, message.pageKey);
+  try {
+    const result = await pluginChatApi.deleteChat(message.pluginId, message.pageKey);
+    console.log('[background] DELETE_PLUGIN_CHAT completed successfully for:', { pluginId: message.pluginId, pageKey: message.pageKey });
+
+    // Отправляем событие обновления чата после успешного удаления
+    broadcastChatUpdate(message.pluginId, message.pageKey);
+
+    sendResponse(result);
+  } catch (error) {
+    console.error('[background] DELETE_PLUGIN_CHAT error:', error);
+    sendResponse({ error: (error as Error).message });
   }
 };
 
@@ -1221,6 +1289,17 @@ async function sendChunksToOffscreen(
   }
 }
 
+// Функция для обработки старых версий Chrome (< 109)
+async function handleLegacyChrome(message: any): Promise<void> {
+  console.log('[LEGACY_CHROME] Handling legacy Chrome workflow:', message.type);
+
+  // Для старых версий просто логируем и игнорируем
+  console.warn('[LEGACY_CHROME] Legacy Chrome detected - workflow execution skipped');
+  console.warn('[LEGACY_CHROME] Please upgrade to Chrome 109+ for full functionality');
+
+  // Можно добавить дополнительную логику для fallback поведения
+}
+
 // Функция для запуска workflow в offscreen document
 async function executeWorkflowInOffscreen(
   pluginId: string,
@@ -1229,16 +1308,18 @@ async function executeWorkflowInOffscreen(
   requestId: string,
   useChunks: boolean = false,
   htmlData?: string,
-  apiKey?: string
+  apiKey?: string,
+  pluginSettings: Record<string, any> = {}
 ): Promise<void> {
   console.log(`[WORKFLOW_EXECUTION] 🚀 Starting workflow execution in offscreen`);
   console.log(`[WORKFLOW_EXECUTION] Plugin ID: ${pluginId}`);
   console.log(`[WORKFLOW_EXECUTION] Transfer ID: ${transferId}`);
   console.log(`[WORKFLOW_EXECUTION] Use chunks: ${useChunks}`);
   console.log(`[WORKFLOW_EXECUTION] HTML data length: ${htmlData?.length || 0}`);
+  console.log(`[WORKFLOW_EXECUTION] Plugin settings:`, pluginSettings);
 
   // Получить API ключ для Gemini
-  let geminiApiKey = apiKey;
+  let geminiApiKey: string | null | undefined = apiKey;
   if (!geminiApiKey) {
     try {
       console.log('[WORKFLOW_EXECUTION] 🔑 Getting Gemini API key...');
@@ -1259,8 +1340,15 @@ async function executeWorkflowInOffscreen(
     useChunks,
     htmlData,
     geminiApiKey,
+    pluginSettings,
     timestamp: Date.now()
   };
+
+  console.log('[BACKGROUND] 📤 Передаем настройки плагина в Pyodide worker:');
+  console.log('[BACKGROUND] 📋 Plugin ID:', pluginId);
+  console.log('[BACKGROUND] 📋 Plugin settings:', JSON.stringify(pluginSettings, null, 2));
+  console.log('[BACKGROUND] 🔑 Response language в настройках:', pluginSettings?.response_language);
+  console.log('[BACKGROUND] 📊 Все настройки для передачи в worker:', pluginSettings);
 
   try {
     const result = await chrome.runtime.sendMessage(workflowPayload);
@@ -1285,7 +1373,7 @@ async function executeWorkflowInOffscreen(
 // Активируем основной обработчик сообщений
 chrome.runtime.onMessage.addListener(
   async (message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => {
-    console.log('[background] Main message handler activated with message:', message);
+    // console.log('[background] Main message handler activated with message:', message);
 
     const msg = message as any;
 
@@ -1334,32 +1422,137 @@ chrome.runtime.onMessage.addListener(
         const pageHtml = results[0].result as string;
         console.log('[background][RUN_WORKFLOW] ✓ HTML extracted:', pageHtml.length, 'chars');
 
-        // ШАГ 4: Проверить настройки плагина
-        const settings = await getPluginSettings(msg.pluginId);
-        if (!settings.enabled) {
+        // ШАГ 4: Загрузить настройки из manifest.json для получения дефолтных значений
+        const manifestUrl = chrome.runtime.getURL(`plugins/${msg.pluginId}/manifest.json`);
+        let manifestDefaults: Partial<PluginSettings> = {};
+        let manifest: any = null;
+
+        console.log('[BACKGROUND] 📂 Начинаем загрузку manifest.json для плагина:', msg.pluginId);
+        console.log('[BACKGROUND] 🔗 Manifest URL:', manifestUrl);
+
+        try {
+          const manifestResponse = await fetch(manifestUrl);
+          console.log('[BACKGROUND] 📥 Manifest fetch status:', manifestResponse.status);
+
+          if (manifestResponse.ok) {
+            manifest = await manifestResponse.json();
+            console.log(`[BACKGROUND] ✅ Manifest успешно загружен для ${msg.pluginId}`);
+            console.log(`[BACKGROUND] 📋 Manifest содержимое:`, JSON.stringify(manifest, null, 2));
+
+            const manifestSettings = manifest.options || {};
+            console.log('[BACKGROUND] 📋 Manifest options:', manifestSettings);
+
+            manifestDefaults = {
+              response_language: manifestSettings.response_language?.default,
+              enable_deep_analysis: manifestSettings.enable_deep_analysis?.default,
+              auto_request_deep_analysis: manifestSettings.auto_request_deep_analysis?.default,
+            };
+
+            console.log('[BACKGROUND] 📋 Manifest defaults применены:', manifestDefaults);
+          } else {
+            console.warn('[BACKGROUND] ⚠️ Не удалось загрузить manifest для', msg.pluginId, '- используем встроенные дефолты');
+            console.warn('[BACKGROUND] 📊 HTTP статус:', manifestResponse.status);
+          }
+        } catch (error) {
+          console.warn('[BACKGROUND] ⚠️ Ошибка загрузки manifest для', msg.pluginId, '- используем встроенные дефолты:', error);
+          console.warn('[BACKGROUND] 📊 Детали ошибки:', (error as Error).message);
+        }
+
+        // ШАГ 5: Проверить настройки плагина с manifest defaults и пользовательскими настройками
+        const customSettingsKeys = manifest?.options ? Object.keys(manifest.options) : [];
+        console.log('[BACKGROUND] 🔍 Начинаем получение настроек плагина:', msg.pluginId);
+        console.log('[BACKGROUND] 📋 Доступные ключи настроек:', customSettingsKeys);
+        console.log('[BACKGROUND] 📋 Manifest defaults:', manifestDefaults);
+
+        const pluginSettings = await getPluginSettings(msg.pluginId, manifestDefaults, customSettingsKeys);
+
+        console.log('[BACKGROUND] ✅ Настройки плагина получены из chrome.storage.local:', pluginSettings);
+        console.log('[BACKGROUND] 🔑 Значение response_language:', pluginSettings?.response_language);
+        console.log('[BACKGROUND] 📊 Все полученные настройки плагина:', JSON.stringify(pluginSettings, null, 2));
+        if (!pluginSettings.enabled) {
           console.log('[background][RUN_WORKFLOW][INFO] Plugin disabled');
           sendResponse({ error: 'Плагин отключен' });
           return true;
         }
 
-        // ШАГ 5: ЧИТАТЬ НАСТРОЙКУ htmlTransmissionMode ИЗ STORAGE
-        console.log('[background][RUN_WORKFLOW] Reading htmlTransmissionMode setting...');
+        // ШАГ 5: ЧИТАТЬ НАСТРОЙКУ htmlTransmissionMode ИЗ STORAGE С ДЕТАЛЬНЫМ ЛОГИРОВАНИЕМ
+        console.log('[background][RUN_WORKFLOW] 🔍 Reading htmlTransmissionMode setting...');
+        console.log('[background][RUN_WORKFLOW] 📊 Timestamp:', new Date().toISOString());
 
         let htmlTransmissionMode = 'chunks'; // По умолчанию используем chunks
         try {
-          const allSettings = await pluginSettingsStorage.get();
-          const pluginSettings = allSettings[msg.pluginId] || {};
-          htmlTransmissionMode = pluginSettings.htmlTransmissionMode || 'chunks';
+          console.log('[background][RUN_WORKFLOW] 📦 Executing chrome.storage.local.get() for htmlTransmissionMode...');
 
-          console.log('[background][RUN_WORKFLOW] htmlTransmissionMode setting:', htmlTransmissionMode);
+          // Читать настройки напрямую из chrome.storage.local, как делает UI
+          const settings = await chrome.storage.local.get(['htmlTransmissionMode']);
+
+          console.log('[background][RUN_WORKFLOW] 📊 FULL STORAGE READ RESULT:');
+          console.log('[background][RUN_WORKFLOW] Raw settings object:', settings);
+          console.log('[background][RUN_WORKFLOW] Keys in storage:', Object.keys(settings));
+          console.log('[background][RUN_WORKFLOW] htmlTransmissionMode value from storage:', settings.htmlTransmissionMode);
+          console.log('[background][RUN_WORKFLOW] Type of htmlTransmissionMode value:', typeof settings.htmlTransmissionMode);
+
+          htmlTransmissionMode = settings.htmlTransmissionMode || 'chunks';
+
+          console.log('[background][RUN_WORKFLOW] 🔍 DETAILED ANALYSIS:');
+          console.log('[background][RUN_WORKFLOW] - Final htmlTransmissionMode value:', htmlTransmissionMode);
+          console.log('[background][RUN_WORKFLOW] - Final htmlTransmissionMode type:', typeof htmlTransmissionMode);
+          console.log('[background][RUN_WORKFLOW] - Is htmlTransmissionMode "direct"?', htmlTransmissionMode === 'direct');
+          console.log('[background][RUN_WORKFLOW] - Is htmlTransmissionMode "chunks"?', htmlTransmissionMode === 'chunks');
+          console.log('[background][RUN_WORKFLOW] - Using transmission mode:', htmlTransmissionMode, '(fallback to chunks if not set)');
+
+          // Проверяем все ключи в storage для диагностики
+          console.log('[background][RUN_WORKFLOW] 🔍 CHECKING ALL STORAGE KEYS:');
+          const allStorage = await chrome.storage.local.get(null);
+          console.log('[background][RUN_WORKFLOW] Total keys in storage:', Object.keys(allStorage).length);
+          console.log('[background][RUN_WORKFLOW] All storage keys:', Object.keys(allStorage));
+
+          // Ищем любые ключи, связанные с htmlTransmission
+          const htmlTransmissionKeys = Object.keys(allStorage).filter(key =>
+            key.toLowerCase().includes('html') ||
+            key.toLowerCase().includes('transmission') ||
+            key.toLowerCase().includes('mode')
+          );
+          console.log('[background][RUN_WORKFLOW] HTML/Transmission related keys found:', htmlTransmissionKeys);
+
+          // Логируем значения этих ключей
+          htmlTransmissionKeys.forEach(key => {
+            console.log(`[background][RUN_WORKFLOW] ${key}:`, allStorage[key]);
+          });
+
         } catch (settingsError) {
-          console.warn('[background][RUN_WORKFLOW] Failed to read htmlTransmissionMode, using default:', settingsError);
+          console.error('[background][RUN_WORKFLOW] ❌ ERROR reading htmlTransmissionMode:');
+          console.error('[background][RUN_WORKFLOW] Error message:', (settingsError as Error).message);
+          console.error('[background][RUN_WORKFLOW] Error stack:', (settingsError as Error).stack);
+          console.error('[background][RUN_WORKFLOW] Error timestamp:', new Date().toISOString());
+          console.warn('[background][RUN_WORKFLOW] Fallback to chunks mode due to error');
         }
 
-        // ШАГ 6: УСЛОВНАЯ ЛОГИКА ВЫБОРА МЕТОДА ПЕРЕДАЧИ
+        // ШАГ 6: УСЛОВНАЯ ЛОГИКА ВЫБОРА МЕТОДА ПЕРЕДАЧИ С ДЕТАЛЬНЫМ ЛОГИРОВАНИЕМ
         console.log('[background][RUN_WORKFLOW] ===== CHOOSING TRANSMISSION METHOD =====');
-        console.log('[background][RUN_WORKFLOW] HTML size:', pageHtml.length, 'chars');
-        console.log('[background][RUN_WORKFLOW] Transmission mode:', htmlTransmissionMode);
+        console.log('[background][RUN_WORKFLOW] 📊 HTML size:', pageHtml.length, 'chars');
+        console.log('[background][RUN_WORKFLOW] 📊 Transmission mode:', htmlTransmissionMode);
+        console.log('[background][RUN_WORKFLOW] 📊 Timestamp:', new Date().toISOString());
+
+        // Дополнительное логирование fallback логики
+        if (htmlTransmissionMode === 'chunks') {
+          console.log('[background][RUN_WORKFLOW] 🔄 FALLBACK LOGIC ANALYSIS:');
+          console.log('[background][RUN_WORKFLOW] - htmlTransmissionMode is "chunks" (default/fallback)');
+          console.log('[background][RUN_WORKFLOW] - This could mean:');
+          console.log('[background][RUN_WORKFLOW]   1. Setting was not found in storage');
+          console.log('[background][RUN_WORKFLOW]   2. Setting was explicitly set to "chunks"');
+          console.log('[background][RUN_WORKFLOW]   3. Setting read failed and default was used');
+          console.log('[background][RUN_WORKFLOW]   4. Storage is empty or corrupted');
+          console.log('[background][RUN_WORKFLOW] - Expected value should be "direct" if set in options');
+        } else if (htmlTransmissionMode === 'direct') {
+          console.log('[background][RUN_WORKFLOW] ✅ CORRECT SETTING DETECTED:');
+          console.log('[background][RUN_WORKFLOW] - htmlTransmissionMode is "direct" (user preference)');
+          console.log('[background][RUN_WORKFLOW] - This indicates setting was read correctly from storage');
+        } else {
+          console.log('[background][RUN_WORKFLOW] ⚠️ UNEXPECTED VALUE:');
+          console.log('[background][RUN_WORKFLOW] - htmlTransmissionMode has unexpected value:', htmlTransmissionMode);
+          console.log('[background][RUN_WORKFLOW] - Expected "direct" or "chunks", got:', typeof htmlTransmissionMode);
+        }
 
         // ШАГ 7: Обеспечить наличие Offscreen Document
         if (!offscreenSupported()) {
@@ -1393,24 +1586,60 @@ chrome.runtime.onMessage.addListener(
         if (htmlTransmissionMode === 'direct') {
           // ПРЯМАЯ ПЕРЕДАЧА HTML
           console.log('[background][RUN_WORKFLOW] 📨 Using DIRECT HTML transmission');
-          await sendHtmlDirectly(msg.pluginId, pageKey, pageHtml, requestId, transferId);
-          console.log('[background][RUN_WORKFLOW] ✅ Direct transmission completed');
+          console.log('[background][RUN_WORKFLOW] HTML size:', pageHtml.length, 'chars');
 
-          // CONFIRMATION: Проверяем успешность передачи
           try {
-            const confirmResponse = await chrome.runtime.sendMessage({
-              type: 'CONFIRM_HTML_RECEIPT',
-              transferId,
-              pluginId: msg.pluginId,
-              timestamp: Date.now()
-            });
-            if (chrome.runtime.lastError) {
-              console.warn('[background][RUN_WORKFLOW] Confirmation failed:', chrome.runtime.lastError.message);
-            } else if (confirmResponse?.confirmed) {
-              console.log('[background][RUN_WORKFLOW] ✅ HTML receipt confirmed by offscreen');
-            }
-          } catch (confirmError) {
-            console.warn('[background][RUN_WORKFLOW] Confirmation check failed:', confirmError);
+            await sendHtmlDirectly(msg.pluginId, pageKey, pageHtml, requestId, transferId, pluginSettings);
+            console.log('[background][RUN_WORKFLOW] ✅ Direct transmission completed');
+          } catch (directError) {
+            console.log('[background][RUN_WORKFLOW] ❌ Direct transmission failed, switching to chunked mode');
+            console.log('[background][RUN_WORKFLOW] Error:', directError);
+            console.log('[background][RUN_WORKFLOW] 📊 Fallback timestamp:', new Date().toISOString());
+            console.log('[background][RUN_WORKFLOW] 🔄 FALLBACK ANALYSIS:');
+            console.log('[background][RUN_WORKFLOW] - Direct transmission failed with error:', (directError as Error).message);
+            console.log('[background][RUN_WORKFLOW] - Falling back to chunked transmission');
+            console.log('[background][RUN_WORKFLOW] - This is expected behavior when direct mode fails');
+
+            // Fallback: Переходим на чанки при неудаче прямой передачи
+            console.log('[background][RUN_WORKFLOW] 📦 Using CHUNKED HTML transmission as fallback');
+            const chunkingResult = createChunks(pageHtml, CHUNK_SIZE);
+            console.log('[background][RUN_WORKFLOW] Created chunks:', chunkingResult.totalChunks);
+
+            // Храним transfer для отслеживания
+            console.log('[BACKGROUND] 📦 Создаем transfer state с настройками плагина для chunked fallback');
+            console.log('[BACKGROUND] 📋 Plugin settings в transfer metadata:', pluginSettings);
+
+            const transferState = {
+              chunks: chunkingResult.chunks,
+              received: new Set<number>(),
+              totalChunks: chunkingResult.totalChunks,
+              metadata: {
+                pluginId: msg.pluginId,
+                pageKey: pageKey,
+                requestId: requestId,
+                totalSize: chunkingResult.totalSize,
+                timestamp: Date.now(),
+                fallbackFromDirect: true,
+                pluginSettings: pluginSettings  // Добавлено: передаем pluginSettings
+              },
+              resolve: () => {
+                console.log(`[CHUNKING] Transfer ${transferId} completed successfully`);
+                activeTransfers.delete(transferId);
+              },
+              reject: (error: any) => {
+                console.error(`[CHUNKING] Transfer ${transferId} failed:`, error);
+                activeTransfers.delete(transferId);
+              },
+              timeout: 0,
+              createdAt: Date.now(),
+              lastAccessed: Date.now()
+            };
+
+            activeTransfers.set(transferId, transferState);
+
+            // Отправляем chunks
+            await sendChunksToOffscreen(transferId, chunkingResult.chunks, transferState.metadata);
+            console.log('[background][RUN_WORKFLOW] ✅ Chunked transmission completed (fallback mode)');
           }
         } else {
           // CHUNKED ПЕРЕДАЧА HTML
@@ -1419,6 +1648,10 @@ chrome.runtime.onMessage.addListener(
           console.log('[background][RUN_WORKFLOW] Created chunks:', chunkingResult.totalChunks);
 
           // Храним transfer для отслеживания
+          console.log('[BACKGROUND] 📦 Создаем transfer state с настройками плагина для chunked передачи');
+          console.log('[BACKGROUND] 📋 Plugin settings в transfer metadata:', pluginSettings);
+          console.log('[BACKGROUND] 🔑 Response language в transfer metadata:', pluginSettings?.response_language);
+
           const transferState = {
             chunks: chunkingResult.chunks,
             received: new Set<number>(),
@@ -1428,7 +1661,8 @@ chrome.runtime.onMessage.addListener(
               pageKey: pageKey,
               requestId: requestId,
               totalSize: chunkingResult.totalSize,
-              timestamp: Date.now()
+              timestamp: Date.now(),
+              pluginSettings: pluginSettings  // Добавлено: передаем pluginSettings
             },
             resolve: () => {
               console.log(`[CHUNKING] Transfer ${transferId} completed successfully`);
@@ -1575,7 +1809,7 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (msg.type === 'GET_PLUGIN_CHAT_DRAFT') {
-      console.log('[background] Processing GET_PLUGIN_CHAT_DRAFT request for:', msg.pluginId, msg.pageKey);
+      // console.log('[background] Processing GET_PLUGIN_CHAT_DRAFT request for:', msg.pluginId, msg.pageKey);
       (async () => {
         try {
           const result = await pluginChatApi.getDraft(msg.pluginId, msg.pageKey);
@@ -1589,7 +1823,7 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (msg.type === 'GET_PLUGIN_CHAT') {
-      console.log('[background] Processing GET_PLUGIN_CHAT request for:', msg.pluginId, msg.pageKey);
+      // console.log('[background] Processing GET_PLUGIN_CHAT request for:', msg.pluginId, msg.pageKey);
       (async () => {
         try {
           const result = await pluginChatApi.getChat(msg.pluginId, msg.pageKey);
@@ -1613,21 +1847,26 @@ chrome.runtime.onMessage.addListener(
       console.log('[background] Processing SAVE_PLUGIN_CHAT_MESSAGE request for:', msg.pluginId, msg.pageKey);
       (async () => {
         try {
-          // Сохраняем сообщение в чате
+          // Сохраняем сообщение в чате с верификацией
           const result = await pluginChatApi.saveMessage(msg.pluginId, msg.pageKey, msg.message);
-          console.log('[background] SAVE_PLUGIN_CHAT_MESSAGE: message saved successfully', result);
+          console.log('[background] SAVE_PLUGIN_CHAT_MESSAGE: message saved and verified', result);
+
+          if (!result.verified) {
+            console.error('[background] SAVE_PLUGIN_CHAT_MESSAGE: message not verified in storage');
+            sendResponse({
+              error: 'Message not verified in storage',
+              messageId: msg.messageId,
+              type: 'SAVE_PLUGIN_CHAT_MESSAGE_RESPONSE'
+            });
+            return;
+          }
 
           // Очищаем черновик после успешного сохранения сообщения
           await pluginChatApi.deleteDraft(msg.pluginId, msg.pageKey);
           console.log('[background] SAVE_PLUGIN_CHAT_MESSAGE: draft cleared after message save');
 
           // Отправляем событие обновления чата для всех слушателей
-          chrome.runtime.sendMessage({
-            type: 'PLUGIN_CHAT_UPDATED',
-            pluginId: msg.pluginId,
-            pageKey: msg.pageKey,
-            messageId: msg.messageId
-          });
+          broadcastChatUpdate(msg.pluginId, msg.pageKey);
 
           // Отправляем ответ на сохранение сообщения
           sendResponse({
@@ -1643,6 +1882,19 @@ chrome.runtime.onMessage.addListener(
             messageId: msg.messageId,
             type: 'SAVE_PLUGIN_CHAT_MESSAGE_RESPONSE'
           });
+        }
+      })();
+      return true;
+    }
+
+    if (msg.type === 'DELETE_PLUGIN_CHAT') {
+      console.log('[background] Processing DELETE_PLUGIN_CHAT request for:', msg.pluginId, msg.pageKey);
+      (async () => {
+        try {
+          await handleDeletePluginChat(msg, sendResponse);
+        } catch (error: unknown) {
+          console.error('[background] Error in DELETE_PLUGIN_CHAT:', error);
+          sendResponse({ error: (error as Error).message });
         }
       })();
       return true;
@@ -1671,29 +1923,46 @@ chrome.runtime.onMessage.addListener(
             return;
           }
 
-          // Генерируем messageId
-          const messageId = `pyodide_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          // Обрабатываем сообщение - если это объект, сериализуем в строку
+          let messageContent = msg.message;
+          if (typeof msg.message === 'object') {
+            messageContent = JSON.stringify(msg.message, null, 2);
+            console.log('[background][PYODIDE_MESSAGE] 📦 Message object serialized to JSON string');
+          }
 
-          // Сохраняем сообщение в чат плагина
+          // Генерируем messageId с повышенной энтропией для максимальной уникальности
+          const messageId = `pyodide_${Date.now()}_${performance.now().toFixed(3)}_${messageIdCounter++}_${Math.random().toString(36).substr(2, 16)}_${(typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID().split('-')[0] : Math.random().toString(36).substr(2, 8)}`;
+
+          // СПЕЦИАЛЬНАЯ ОБРАБОТКА ДЛЯ ТРЕТЬЕГО СООБЩЕНИЯ: добавляем задержку
+          // Из логов видно, что третье сообщение (с AI результатами) приходит слишком быстро
+          // и не успевает пройти верификацию. Добавляем задержку в 500ms для третьего сообщения
+          const delayForThirdMessage = messageContent.includes('Gemini') || messageContent.includes('AI') || messageContent.length > 1000 ? 500 : 0;
+          if (delayForThirdMessage > 0) {
+            console.log('[background][PYODIDE_MESSAGE] ⏳ Adding delay for third message (AI analysis):', delayForThirdMessage, 'ms');
+            await new Promise(resolve => setTimeout(resolve, delayForThirdMessage));
+          }
+
+          // Сохраняем сообщение в чат плагина с встроенной верификацией
           const result = await pluginChatApi.saveMessage(msg.pluginId, msg.pageKey, {
+            content: messageContent,
+            role: 'plugin',
             id: messageId,
-            content: msg.message,
-            sender: 'plugin',
-            timestamp: msg.timestamp || Date.now(),
-            type: 'plugin_message'
+            timestamp: msg.timestamp || Date.now()
           });
 
-          console.log('[background][PYODIDE_MESSAGE] ✅ Message saved successfully:', result);
+          console.log('[background][PYODIDE_MESSAGE] ✅ Message saved:', result);
 
-          // Отправляем событие обновления чата для всех слушателей
-          chrome.runtime.sendMessage({
-            type: 'PLUGIN_CHAT_UPDATED',
-            pluginId: msg.pluginId,
-            pageKey: msg.pageKey,
-            messageId: messageId
-          }).catch((error) => {
-            console.warn('[background][PYODIDE_MESSAGE] Failed to send PLUGIN_CHAT_UPDATED event:', error);
-          });
+          // Обновляем UI независимо от верификации - fallback механизм обеспечит отображение
+          console.log('[background][PYODIDE_MESSAGE] 📡 Updating UI via broadcastChatUpdate');
+          broadcastChatUpdate(msg.pluginId, msg.pageKey);
+
+          // ДОПОЛНИТЕЛЬНОЕ ОБНОВЛЕНИЕ UI ДЛЯ ТРЕТЬЕГО СООБЩЕНИЯ: добавляем задержку и повтор
+          if (delayForThirdMessage > 0) {
+            setTimeout(() => {
+              console.log('[background][PYODIDE_MESSAGE] 📡 Force UI update for third message (delayed)');
+              broadcastChatUpdate(msg.pluginId, msg.pageKey);
+            }, 200);
+          }
 
           // Отправляем ответ
           sendResponse({
@@ -1742,7 +2011,7 @@ chrome.runtime.onMessage.addListener(
           console.log('[background][HTML_ASSEMBLED] ✅ HTML assembly confirmed, launching workflow...');
 
           // Теперь запускаем EXECUTE_WORKFLOW с собранным HTML
-          const executeWorkflowMessage = {
+          const executeWorkflowMessage: any = {
             type: 'EXECUTE_WORKFLOW',
             pluginId: msg.pluginId,
             pageKey: msg.pageKey,
@@ -1750,6 +2019,7 @@ chrome.runtime.onMessage.addListener(
             transferId: msg.transferId,
             useChunks: false, // HTML уже собран
             pageHtml: msg.html,
+            pluginSettings: msg.metadata?.pluginSettings, // Добавлено: передаем pluginSettings из метаданных
             timestamp: Date.now()
           };
 
@@ -1866,7 +2136,7 @@ const handleHostApiMessage = async (
           console.log('[HOST API] LLM call requested:', { modelAlias, pluginId });
 
           const currentPlugin = pluginId || 'ozon-analyzer';
-          const manifestUrl = chrome.runtime.getURL(`public/plugins/${currentPlugin}/manifest.json`);
+          const manifestUrl = chrome.runtime.getURL(`plugins/${currentPlugin}/manifest.json`);
 
           let manifestResponse;
           try {
@@ -1884,6 +2154,8 @@ const handleHostApiMessage = async (
           }
 
           const manifest = await manifestResponse.json();
+          console.log(`[DEBUG] manifest loaded:`, manifest);
+          console.log(`[DEBUG] manifestResponse status:`, manifestResponse.status);
           const aiModels = manifest.ai_models || {};
 
           const actualModel = aiModels[modelAlias];
@@ -1936,30 +2208,70 @@ const handleHostApiMessage = async (
             pluginId?: string
           };
 
-          console.log('[HOST API] Get setting requested:', { settingName, pluginId });
+          console.log('[BACKGROUND][HOST API] Get setting requested:', { settingName, pluginId });
 
           const currentPlugin = pluginId || 'ozon-analyzer';
-          const manifestUrl = chrome.runtime.getURL(`public/plugins/${currentPlugin}/manifest.json`);
+          console.log('[BACKGROUND][HOST API] Current plugin resolved:', currentPlugin);
 
-          let manifestResponse;
+          // Сначала загружаем manifest.json для получения дефолтных значений
+          const manifestUrl = chrome.runtime.getURL(`plugins/${currentPlugin}/manifest.json`);
+          let manifestDefaults: Partial<PluginSettings> = {};
+
           try {
-            manifestResponse = await fetch(manifestUrl);
+            const manifestResponse = await fetch(manifestUrl);
             if (!manifestResponse.ok) {
               throw new Error(`Failed to load manifest: ${manifestResponse.status}`);
             }
+            const manifest = await manifestResponse.json();
+            console.log(`[DEBUG] manifest loaded:`, manifest);
+            console.log(`[DEBUG] manifestResponse status:`, manifestResponse.status);
+            const manifestSettings = manifest.settings || {};
+
+            // Конвертируем настройки из manifest в формат PluginSettings
+            manifestDefaults = {
+              response_language: manifestSettings.response_language,
+              enable_deep_analysis: manifestSettings.enable_deep_analysis,
+              auto_request_deep_analysis: manifestSettings.auto_request_deep_analysis,
+            };
           } catch (error) {
-            console.error('[HOST API] Error loading manifest:', error);
-            sendResponse({
-              error: true,
-              error_message: `Не удалось загрузить настройки плагина ${currentPlugin}: ${(error as Error).message}`
-            });
-            return true;
+            console.warn('[HOST API] Could not load manifest defaults, using built-in defaults:', error);
           }
 
-          const manifest = await manifestResponse.json();
-          const settings = manifest.settings || {};
+          // Получаем настройки из chrome.storage.local с fallback на manifest.json дефолты
+          let manifest: any = null;
 
-          let settingValue = settings[settingName];
+          try {
+            const manifestUrl = chrome.runtime.getURL(`plugins/${currentPlugin}/manifest.json`);
+            const manifestResponse = await fetch(manifestUrl);
+            if (!manifestResponse.ok) {
+              throw new Error(`Failed to load manifest: ${manifestResponse.status}`);
+            }
+            manifest = await manifestResponse.json();
+            console.log(`[DEBUG] manifest loaded:`, manifest);
+            console.log(`[DEBUG] manifestResponse status:`, manifestResponse.status);
+            const manifestSettings = manifest.settings || {};
+
+            // Конвертируем настройки из manifest в формат PluginSettings
+            manifestDefaults = {
+              response_language: manifestSettings.response_language,
+              enable_deep_analysis: manifestSettings.enable_deep_analysis,
+              auto_request_deep_analysis: manifestSettings.auto_request_deep_analysis,
+            };
+          } catch (error) {
+            console.warn('[HOST API] Could not load manifest defaults, using built-in defaults:', error);
+          }
+
+          const customSettingsKeys = manifest?.options ? Object.keys(manifest.options) : [];
+          console.log('[BACKGROUND][HOST API] Custom settings keys:', customSettingsKeys);
+          console.log('[BACKGROUND][HOST API] Manifest defaults:', manifestDefaults);
+
+          const pluginSettings = await getPluginSettings(currentPlugin, manifestDefaults, customSettingsKeys);
+
+          console.log('[BACKGROUND][HOST API] ✅ Plugin settings retrieved for', currentPlugin, ':', pluginSettings);
+          console.log('[BACKGROUND][HOST API] 🔑 Response language setting:', pluginSettings?.response_language);
+
+          // Возвращаем запрошенную настройку
+          let settingValue = (pluginSettings as any)[settingName];
 
           if (settingValue === undefined) {
             settingValue = defaultValue;
@@ -2046,7 +2358,7 @@ const handleTestPyodideDirect = async (message: ExtensionMessage): Promise<{
         const testRequest = {
           type: 'TEST_PYODIDE_DIRECT_EXEC',
           pythonCode: message.pythonCode || 'print("Hello from Pyodide!")',
-          requestId: `test_pyodide_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          requestId: `test_pyodide_${Date.now()}_${messageIdCounter++}_${Math.random().toString(36).substr(2, 9)}`,
           timestamp: Date.now()
         };
 
@@ -2132,7 +2444,7 @@ async function sendChunksSequentially(transferId: string): Promise<void> {
 */
 
 // Функция для обработки сообщений через порт (аналогично основному message handler)
-async function handleMessage(message: any, sender: chrome.runtime.MessageSender): Promise<any> {
+async function handleMessage(message: any, sender: any): Promise<any> {
   console.debug('[background][PORT] Processing message:', message);
 
   // Обработка RUN_WORKFLOW сообщений
@@ -2171,20 +2483,96 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
       const pageHtml = results[0].result as string;
       console.log('[background][PORT][RUN_WORKFLOW] ✓ HTML extracted:', pageHtml.length, 'chars');
 
-      // Проверить настройки плагина
-      const settings = await getPluginSettings(message.pluginId);
+      // Загрузить настройки из manifest.json для получения дефолтных значений
+      const manifestUrl = chrome.runtime.getURL(`plugins/${message.pluginId}/manifest.json`);
+      let manifestDefaults: Partial<PluginSettings> = {};
+
+      try {
+        const manifestResponse = await fetch(manifestUrl);
+        if (manifestResponse.ok) {
+          const manifest = await manifestResponse.json();
+          console.log(`[background][PORT][RUN_WORKFLOW] ✅ Manifest loaded for ${message.pluginId}:`, manifest);
+          const manifestSettings = manifest.options || {};
+          manifestDefaults = {
+            response_language: manifestSettings.response_language?.default,
+            enable_deep_analysis: manifestSettings.enable_deep_analysis?.default,
+            auto_request_deep_analysis: manifestSettings.auto_request_deep_analysis?.default,
+          };
+        } else {
+          console.warn('[background][PORT][RUN_WORKFLOW] ⚠️ Could not load manifest for', message.pluginId, '- using built-in defaults');
+        }
+      } catch (error) {
+        console.warn('[background][PORT][RUN_WORKFLOW] ⚠️ Failed to load manifest for', message.pluginId, '- using built-in defaults:', error);
+      }
+
+      // Проверить настройки плагина с manifest defaults
+      console.log('[BACKGROUND][PORT][RUN_WORKFLOW] 🔍 Получаем настройки плагина из chrome.storage.local');
+      console.log('[BACKGROUND][PORT][RUN_WORKFLOW] 📋 Manifest defaults:', manifestDefaults);
+
+      const settings = await getPluginSettings(message.pluginId, manifestDefaults);
+
+      console.log('[BACKGROUND][PORT][RUN_WORKFLOW] ✅ Настройки плагина получены:', settings);
+      console.log('[BACKGROUND][PORT][RUN_WORKFLOW] 🔑 Response language:', settings?.response_language);
       if (!settings.enabled) {
         throw new Error('Плагин отключен');
       }
 
-      // ЧИТАТЬ НАСТРОЙКУ htmlTransmissionMode ИЗ STORAGE
-      let htmlTransmissionMode = 'chunks';
+      // ЧИТАТЬ НАСТРОЙКУ htmlTransmissionMode ИЗ STORAGE С ДЕТАЛЬНЫМ ЛОГИРОВАНИЕМ
+      console.log('[background][PORT][RUN_WORKFLOW] 🔍 Reading htmlTransmissionMode setting via port...');
+      console.log('[background][PORT][RUN_WORKFLOW] 📊 Timestamp:', new Date().toISOString());
+
+      let htmlTransmissionMode = 'chunks'; // Унифицировано с основным обработчиком
       try {
-        const allSettings = await pluginSettingsStorage.get();
-        const pluginSettings = allSettings[message.pluginId] || {};
-        htmlTransmissionMode = pluginSettings.htmlTransmissionMode || 'chunks';
+        console.log('[background][PORT][RUN_WORKFLOW] 📦 Executing chrome.storage.local.get() for htmlTransmissionMode...');
+
+        // Читать настройки напрямую из chrome.storage.local, как делает UI
+        const settings = await chrome.storage.local.get(['htmlTransmissionMode']);
+
+        console.log('[background][PORT][RUN_WORKFLOW] 📊 FULL STORAGE READ RESULT:');
+        console.log('[background][PORT][RUN_WORKFLOW] Raw settings object:', settings);
+        console.log('[background][PORT][RUN_WORKFLOW] Keys in storage:', Object.keys(settings));
+        console.log('[background][PORT][RUN_WORKFLOW] htmlTransmissionMode value from storage:', settings.htmlTransmissionMode);
+        console.log('[background][PORT][RUN_WORKFLOW] Type of htmlTransmissionMode value:', typeof settings.htmlTransmissionMode);
+
+        htmlTransmissionMode = settings.htmlTransmissionMode || 'chunks';
+
+        console.log('[background][PORT][RUN_WORKFLOW] 🔍 DETAILED ANALYSIS:');
+        console.log('[background][PORT][RUN_WORKFLOW] - Final htmlTransmissionMode value:', htmlTransmissionMode);
+        console.log('[background][PORT][RUN_WORKFLOW] - Final htmlTransmissionMode type:', typeof htmlTransmissionMode);
+        console.log('[background][PORT][RUN_WORKFLOW] - Is htmlTransmissionMode "direct"?', htmlTransmissionMode === 'direct');
+        console.log('[background][PORT][RUN_WORKFLOW] - Is htmlTransmissionMode "chunks"?', htmlTransmissionMode === 'chunks');
+        console.log('[background][PORT][RUN_WORKFLOW] - Using transmission mode:', htmlTransmissionMode, '(fallback to chunks if not set)');
+
+        // Проверяем все ключи в storage для диагностики
+        console.log('[background][PORT][RUN_WORKFLOW] 🔍 CHECKING ALL STORAGE KEYS:');
+        const allStorage = await chrome.storage.local.get(null);
+        console.log('[background][PORT][RUN_WORKFLOW] Total keys in storage:', Object.keys(allStorage).length);
+        console.log('[background][PORT][RUN_WORKFLOW] All storage keys:', Object.keys(allStorage));
+
+        // Ищем любые ключи, связанные с htmlTransmission
+        const htmlTransmissionKeys = Object.keys(allStorage).filter(key =>
+          key.toLowerCase().includes('html') ||
+          key.toLowerCase().includes('transmission') ||
+          key.toLowerCase().includes('mode')
+        );
+        console.log('[background][PORT][RUN_WORKFLOW] HTML/Transmission related keys found:', htmlTransmissionKeys);
+
+        // Логируем значения этих ключей
+        htmlTransmissionKeys.forEach(key => {
+          console.log(`[background][PORT][RUN_WORKFLOW] ${key}:`, allStorage[key]);
+        });
+
       } catch (settingsError) {
-        console.warn('[background][PORT][RUN_WORKFLOW] Failed to read htmlTransmissionMode:', settingsError);
+        console.error('[background][PORT][RUN_WORKFLOW] ❌ ERROR reading htmlTransmissionMode:');
+        console.error('[background][PORT][RUN_WORKFLOW] Error message:', (settingsError as Error).message);
+        console.error('[background][PORT][RUN_WORKFLOW] Error stack:', (settingsError as Error).stack);
+        console.error('[background][PORT][RUN_WORKFLOW] Error timestamp:', new Date().toISOString());
+        console.warn('[background][PORT][RUN_WORKFLOW] Fallback to chunks mode due to error');
+        console.warn('[background][PORT][RUN_WORKFLOW] Error details:', {
+          message: (settingsError as Error).message,
+          stack: (settingsError as Error).stack,
+          timestamp: Date.now()
+        });
       }
 
       // Обеспечить наличие Offscreen Document
@@ -2208,7 +2596,32 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
         return { success: false, error: 'Offscreen document creation failed' };
       }
 
-      // ВЫПОЛНИТЬ ПЕРЕДАЧУ В ЗАВИСИМОСТИ ОТ НАСТРОЙКИ
+      // ВЫПОЛНИТЬ ПЕРЕДАЧУ В ЗАВИСИМОСТИ ОТ НАСТРОЙКИ С ДЕТАЛЬНЫМ ЛОГИРОВАНИЕМ
+      console.log('[background][PORT][RUN_WORKFLOW] ===== CHOOSING TRANSMISSION METHOD =====');
+      console.log('[background][PORT][RUN_WORKFLOW] 📊 HTML size:', pageHtml.length, 'chars');
+      console.log('[background][PORT][RUN_WORKFLOW] 📊 Transmission mode:', htmlTransmissionMode);
+      console.log('[background][PORT][RUN_WORKFLOW] 📊 Timestamp:', new Date().toISOString());
+
+      // Дополнительное логирование fallback логики
+      if (htmlTransmissionMode === 'chunks') {
+        console.log('[background][PORT][RUN_WORKFLOW] 🔄 FALLBACK LOGIC ANALYSIS:');
+        console.log('[background][PORT][RUN_WORKFLOW] - htmlTransmissionMode is "chunks" (default/fallback)');
+        console.log('[background][PORT][RUN_WORKFLOW] - This could mean:');
+        console.log('[background][PORT][RUN_WORKFLOW]   1. Setting was not found in storage');
+        console.log('[background][PORT][RUN_WORKFLOW]   2. Setting was explicitly set to "chunks"');
+        console.log('[background][PORT][RUN_WORKFLOW]   3. Setting read failed and default was used');
+        console.log('[background][PORT][RUN_WORKFLOW]   4. Storage is empty or corrupted');
+        console.log('[background][PORT][RUN_WORKFLOW] - Expected value should be "direct" if set in options');
+      } else if (htmlTransmissionMode === 'direct') {
+        console.log('[background][PORT][RUN_WORKFLOW] ✅ CORRECT SETTING DETECTED:');
+        console.log('[background][PORT][RUN_WORKFLOW] - htmlTransmissionMode is "direct" (user preference)');
+        console.log('[background][PORT][RUN_WORKFLOW] - This indicates setting was read correctly from storage');
+      } else {
+        console.log('[background][PORT][RUN_WORKFLOW] ⚠️ UNEXPECTED VALUE:');
+        console.log('[background][PORT][RUN_WORKFLOW] - htmlTransmissionMode has unexpected value:', htmlTransmissionMode);
+        console.log('[background][PORT][RUN_WORKFLOW] - Expected "direct" or "chunks", got:', typeof htmlTransmissionMode);
+      }
+
       const requestId = message.requestId || `workflow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const transferId = `${requestId}_html_${Date.now()}`;
 
@@ -2390,29 +2803,36 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
           return { error: 'Missing required fields: pluginId, pageKey, or message' };
         }
 
-        // Генерируем messageId
-        const messageId = `pyodide_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        // Обрабатываем сообщение - если это объект, сериализуем в строку
+        let messageContent = message.message;
+        if (typeof message.message === 'object') {
+          messageContent = JSON.stringify(message.message, null, 2);
+          console.log('[background][PORT][PYODIDE_MESSAGE] 📦 Message object serialized to JSON string');
+        }
 
-        // Сохраняем сообщение в чат плагина
+        // Генерируем messageId с повышенной энтропией для максимальной уникальности
+        const messageId = `pyodide_${Date.now()}_${performance.now().toFixed(3)}_${messageIdCounter++}_${Math.random().toString(36).substr(2, 16)}_${(typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID().split('-')[0] : Math.random().toString(36).substr(2, 8)}`;
+
+        // Сохраняем сообщение в чат плагина с встроенной верификацией
         const result = await pluginChatApi.saveMessage(message.pluginId, message.pageKey, {
+          content: messageContent,
+          role: 'plugin',
           id: messageId,
-          content: message.message,
-          sender: 'plugin',
-          timestamp: message.timestamp || Date.now(),
-          type: 'plugin_message'
+          timestamp: message.timestamp || Date.now()
         });
 
-        console.log('[background][PORT][PYODIDE_MESSAGE] ✅ Message saved successfully:', result);
+        console.log('[background][PORT][PYODIDE_MESSAGE] ✅ Message saved:', result);
 
-        // Отправляем событие обновления чата для всех слушателей
-        chrome.runtime.sendMessage({
-          type: 'PLUGIN_CHAT_UPDATED',
-          pluginId: message.pluginId,
-          pageKey: message.pageKey,
-          messageId: messageId
-        }).catch((error) => {
-          console.warn('[background][PORT][PYODIDE_MESSAGE] Failed to send PLUGIN_CHAT_UPDATED event:', error);
-        });
+        // Обновляем UI независимо от верификации - fallback механизм обеспечит отображение
+        console.log('[background][PORT][PYODIDE_MESSAGE] 📡 Updating UI via broadcastChatUpdate');
+        broadcastChatUpdate(message.pluginId, message.pageKey);
+
+        // Всегда возвращаем успешный ответ, так как сообщение сохранено
+        return {
+          success: true,
+          messageId: messageId,
+          type: 'PYODIDE_MESSAGE_RESPONSE'
+        };
 
         // Возвращаем успешный ответ
         return {
@@ -2459,7 +2879,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
         console.log('[background][PORT][HTML_ASSEMBLED] ✅ HTML assembly confirmed, launching workflow...');
 
         // Теперь запускаем EXECUTE_WORKFLOW с собранным HTML
-        const executeWorkflowMessage = {
+        const executeWorkflowMessage: any = {
           type: 'EXECUTE_WORKFLOW',
           pluginId: message.pluginId,
           pageKey: message.pageKey,
@@ -2467,6 +2887,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
           transferId: message.transferId,
           useChunks: false, // HTML уже собран
           pageHtml: message.html,
+          pluginSettings: message.metadata?.pluginSettings, // Добавлено: передаем pluginSettings из метаданных
           timestamp: Date.now()
         };
 
@@ -2591,7 +3012,7 @@ function keepAlive() {
 
   // Слушаем messages для дополнительной активности
   chrome.runtime.onMessage.addListener((message) => {
-    console.log('[background][KEEP-ALIVE] 📨 Message received - keeping alive');
+    // console.log('[background][KEEP-ALIVE] 📨 Message received - keeping alive');
     return true; // Важно для async responses
   });
 }

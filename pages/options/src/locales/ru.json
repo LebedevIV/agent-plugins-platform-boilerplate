@@ -19,6 +19,20 @@
         "hostPermissions": "Разрешения хостов",
         "permissions": "Разрешения",
         "selectPlugin": "Выберите плагин из списка слева."
+      },
+      "ozonAnalyzer": {
+        "customSettings": "Пользовательские настройки",
+        "enableDeepAnalysis": "Глубокий анализ",
+        "enableDeepAnalysisTooltip": "Включает детальный анализ товаров с использованием продвинутых моделей ИИ",
+        "autoRequestDeepAnalysis": "Автоматический запрос глубокого анализа",
+        "autoRequestDeepAnalysisTooltip": "Автоматически запрашивать глубокий анализ при обнаружении сложных товаров",
+        "responseLanguage": "Язык ответов:",
+        "responseLanguageTooltip": "Выберите язык для ответов анализатора",
+        "languages": {
+          "ru": "Русский",
+          "en": "English",
+          "auto": "Автоматически"
+        }
       }
     },
     "settings": {

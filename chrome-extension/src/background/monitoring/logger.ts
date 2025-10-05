@@ -5,7 +5,7 @@
  * буфер сообщений и экспорт логов для диагностики
  */
 
-import { MonitoringEvent, LogLevel, MonitoringConfig } from './monitoring-core.js';
+import { MonitoringEvent, LogLevel, MonitoringConfig } from './monitoring-core.ts';
 
 export interface LogFilter {
   component?: string;

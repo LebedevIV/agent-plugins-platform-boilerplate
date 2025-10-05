@@ -3,6 +3,7 @@ import { cn } from '@extension/ui';
 import type { AIKey } from '../hooks/useAIKeys';
 import { useTranslations } from '../hooks/useTranslations';
 import ToggleButton from './ToggleButton';
+import { exampleChatAlignmentStorage, type ChatAlignment } from '@extension/storage';
 
 type HtmlTransmissionMode = 'chunks' | 'direct';
 
@@ -18,7 +19,7 @@ interface SettingsTabProps {
   getStatusText: (status: string) => string;
   getStatusClass: (status: string) => string;
   theme: 'light' | 'dark' | 'system';
-  setTheme: (theme: 'light' | 'dark' | 'system') => void;
+  onThemeChange: (theme: string) => void;
   locale?: 'en' | 'ru';
 }
 
@@ -34,46 +35,96 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   getStatusText,
   getStatusClass,
   theme,
-  setTheme,
+  onThemeChange,
   locale = 'en',
 }) => {
   const { t } = useTranslations(locale);
-  console.log('[SettingsTab] theme:', theme, 'setTheme:', typeof setTheme);
+  console.log('[SettingsTab] theme:', theme, 'onThemeChange:', typeof onThemeChange);
 
   // Состояние для настройки htmlTransmissionMode
-  const [htmlTransmissionMode, setHtmlTransmissionMode] = React.useState<HtmlTransmissionMode>('chunks');
+  const [htmlTransmissionMode, setHtmlTransmissionMode] = React.useState<HtmlTransmissionMode>('direct');
+
+  // Состояние для настройки chatAlignment
+  const [chatAlignment, setChatAlignment] = React.useState<ChatAlignment>('left');
 
   // Загрузка настройки htmlTransmissionMode при монтировании компонента
   React.useEffect(() => {
     const loadHtmlTransmissionMode = async () => {
       try {
-        console.log('[SettingsTab][DEBUG] 🔍 Loading htmlTransmissionMode from chrome.storage.local...');
+        console.log('[SettingsTab][DEBUG] 🔍 Загружаем htmlTransmissionMode из chrome.storage.local...');
+        console.log('[SettingsTab][DEBUG]   - Начальное состояние компонента:', htmlTransmissionMode);
+
         const result = await chrome.storage.local.get(['htmlTransmissionMode']);
-        const mode = (result.htmlTransmissionMode as HtmlTransmissionMode) || 'chunks';
-        console.log('[SettingsTab][DEBUG] 📊 Loaded htmlTransmissionMode:', mode, '(from storage:', result.htmlTransmissionMode, ')');
+        console.log('[SettingsTab][DEBUG]   - Результат из storage:', result);
+        console.log('[SettingsTab][DEBUG]   - Сырое значение из storage:', result.htmlTransmissionMode);
+        console.log('[SettingsTab][DEBUG]   - Тип значения из storage:', typeof result.htmlTransmissionMode);
+
+        let mode = result.htmlTransmissionMode as HtmlTransmissionMode;
+
+        // Если ключа нет в storage, устанавливаем значение по умолчанию и сохраняем
+        if (mode === undefined) {
+          mode = 'direct';
+          console.log('[SettingsTab][DEBUG]   - Ключ htmlTransmissionMode не найден, устанавливаем значение по умолчанию "direct"');
+          await chrome.storage.local.set({ htmlTransmissionMode: mode });
+          console.log('[SettingsTab][DEBUG]   - Значение по умолчанию сохранено в storage');
+        }
+
+        console.log('[SettingsTab][DEBUG] 📊 htmlTransmissionMode загружен:');
+        console.log('[SettingsTab][DEBUG]   - Финальное значение:', mode);
+        console.log('[SettingsTab][DEBUG]   - Обновляем состояние компонента...');
+
         setHtmlTransmissionMode(mode);
+        console.log('[SettingsTab][DEBUG] ✅ Загрузка htmlTransmissionMode завершена успешно');
       } catch (error) {
-        console.error('[SettingsTab][DEBUG] ❌ Error loading htmlTransmissionMode:', error);
+        console.error('[SettingsTab][DEBUG] ❌ Ошибка при загрузке htmlTransmissionMode:', error);
+        console.error('[SettingsTab][DEBUG]   - Текущее состояние компонента:', htmlTransmissionMode);
+        console.error('[SettingsTab][DEBUG]   - Ошибка:', error);
       }
     };
 
     loadHtmlTransmissionMode();
   }, []);
 
+  // useEffect для загрузки и подписки на изменения chatAlignment
+  React.useEffect(() => {
+    const loadAlignment = async () => {
+      const alignment = await exampleChatAlignmentStorage.getAlignment();
+      setChatAlignment(alignment);
+    };
+
+    loadAlignment();
+
+    const unsubscribe = exampleChatAlignmentStorage.subscribe(() => {
+      loadAlignment();
+    });
+
+    return unsubscribe;
+  }, []);
+
   // Сохранение настройки htmlTransmissionMode
   const saveHtmlTransmissionMode = async (mode: HtmlTransmissionMode) => {
+    // Сначала обновляем локальное состояние для немедленного отклика UI
+    setHtmlTransmissionMode(mode);
+
     try {
-      console.log('[SettingsTab][DEBUG] 💾 Saving htmlTransmissionMode:', mode);
+      console.log('[SettingsTab][DEBUG] 💾 Перед сохранением htmlTransmissionMode:');
+      console.log('[SettingsTab][DEBUG]   - Новое значение:', mode);
+      console.log('[SettingsTab][DEBUG]   - Тип режима:', typeof mode);
+
+      console.log('[SettingsTab][DEBUG] 💾 Сохраняем htmlTransmissionMode в chrome.storage.local...');
       await chrome.storage.local.set({ htmlTransmissionMode: mode });
-      console.log('[SettingsTab][DEBUG] ✅ htmlTransmissionMode saved to chrome.storage.local');
-      setHtmlTransmissionMode(mode);
+      console.log('[SettingsTab][DEBUG] ✅ htmlTransmissionMode успешно сохранен в chrome.storage.local');
+      console.log('[SettingsTab][DEBUG]   - Сохраненное значение:', mode);
     } catch (error) {
-      console.error('[SettingsTab][DEBUG] ❌ Error saving htmlTransmissionMode:', error);
+      console.error('[SettingsTab][DEBUG] ❌ Ошибка при сохранении htmlTransmissionMode:', error);
+      console.error('[SettingsTab][DEBUG]   - Пытались сохранить:', mode);
+      // Состояние уже обновлено выше, так что UI останется в новом состоянии
+      // даже если сохранение провалилось
     }
   };
 
-  if (!theme || typeof setTheme !== 'function') {
-    return <div className="settings-section">Ошибка: theme/setTheme не переданы</div>;
+  if (!theme || typeof onThemeChange !== 'function') {
+    return <div className="settings-section">Ошибка: theme/onThemeChange не переданы</div>;
   }
 
   return (
@@ -86,7 +137,16 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             {/* HTML Transmission Mode Toggle */}
             <ToggleButton
               checked={htmlTransmissionMode === 'direct'}
-              onChange={(checked) => saveHtmlTransmissionMode(checked ? 'direct' : 'chunks')}
+              onChange={async (checked) => {
+                const mode = checked ? 'direct' : 'chunks';
+                console.log('[SettingsTab] ToggleButton onChange triggered:', { checked, mode });
+                try {
+                  await saveHtmlTransmissionMode(mode);
+                  console.log('[SettingsTab] Successfully saved htmlTransmissionMode:', mode);
+                } catch (error) {
+                  console.error('[SettingsTab] Error saving htmlTransmissionMode:', error);
+                }
+              }}
               label="Отправлять HTML целиком"
             />
             <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px', marginLeft: '40px' }}>
@@ -116,10 +176,26 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           <div className="setting-item">
             <label>
               {t('options_settings_general_theme')}
-              <select value={theme} onChange={e => setTheme(e.target.value as 'light' | 'dark' | 'system')}>
+              <select value={theme} onChange={e => onThemeChange(e.target.value)}>
                 <option value="light">{t('options_settings_general_theme_light')}</option>
                 <option value="dark">{t('options_settings_general_theme_dark')}</option>
                 <option value="system">{t('options_settings_general_theme_system')}</option>
+              </select>
+            </label>
+          </div>
+          <div className="setting-item">
+            <label>Chat text alignment:
+              <select
+                value={chatAlignment}
+                onChange={(e) => {
+                  const newAlignment = e.target.value as ChatAlignment;
+                  setChatAlignment(newAlignment);
+                  exampleChatAlignmentStorage.setAlignment(newAlignment);
+                }}
+              >
+                <option value="left">Left</option>
+                <option value="center">Center</option>
+                <option value="right">Right</option>
               </select>
             </label>
           </div>

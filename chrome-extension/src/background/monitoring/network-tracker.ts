@@ -4,9 +4,9 @@
  * Мониторит HTTP запросы, их время выполнения, статусы ответов и ошибки
  */
 
-import type { MonitoringConfig } from './monitoring-core.js';
-import type { MonitoringLogger } from './logger.js';
-import type { MetricsCollector } from './metrics-collector.js';
+import type { MonitoringConfig } from './monitoring-core.ts';
+import type { MonitoringLogger } from './logger.ts';
+import type { MetricsCollector } from './metrics-collector.ts';
 
 export interface NetworkRequest {
   url: string;

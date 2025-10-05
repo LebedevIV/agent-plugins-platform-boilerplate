@@ -13,6 +13,7 @@ interface PluginsTabProps {
   loading: boolean;
   error: string | null;
   locale?: 'en' | 'ru';
+  isLight: boolean;
 }
 
 const PluginsTab = function ({
@@ -22,6 +23,7 @@ const PluginsTab = function ({
   loading,
   error,
   locale = 'en',
+  isLight,
 }: PluginsTabProps) {
   const { t } = useTranslations(locale);
 
@@ -54,6 +56,7 @@ const PluginsTab = function ({
           plugin={plugin}
           selected={selectedPlugin?.id === plugin.id}
           onClick={() => handlePluginClick(plugin)}
+          isLight={isLight}
         />
       ));
     } catch (e) {

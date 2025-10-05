@@ -4,6 +4,7 @@
 import { ensureOffscreenDocument } from './offscreen-manager';
 import { TransferMetadataManager } from './transfer-metadata-manager';
 import { getPluginSettings } from '../../packages/storage/lib/plugin-settings';
+import { pluginChatApi } from './plugin-chat-api';
 
 // ===============================================================================
 // GLOBAL SETTINGS TYPES AND FUNCTIONS
@@ -18,25 +19,36 @@ interface GlobalSettings {
 }
 
 /**
- * Получает глобальные настройки расширения из chrome.storage.local
+ * Получает глобальные настройки расширения из chrome.storage (сначала sync, потом local)
  */
 async function getGlobalSettings(): Promise<GlobalSettings> {
   try {
-    console.log('[background][GLOBAL_SETTINGS] Reading global settings from chrome.storage.local...');
-    const settings = await chrome.storage.local.get([
-      'htmlTransmissionMode'
-    ]);
+    console.log('[background][GLOBAL_SETTINGS] Reading global settings from chrome.storage (sync first, then local)...');
 
-    const htmlTransmissionMode = settings.htmlTransmissionMode || 'chunks';
-    console.log(`[background][GLOBAL_SETTINGS] ✅ Successfully loaded global settings: htmlTransmissionMode=${htmlTransmissionMode}`);
+    // First try sync storage
+    const syncResult = await chrome.storage.sync.get(['htmlTransmissionMode']);
+
+    if (syncResult.htmlTransmissionMode !== undefined) {
+      console.log(`[background][GLOBAL_SETTINGS] ✅ Found settings in sync storage: htmlTransmissionMode=${syncResult.htmlTransmissionMode}`);
+      return {
+        htmlTransmissionMode: syncResult.htmlTransmissionMode
+      };
+    }
+
+    // Fall back to local storage
+    console.log('[background][GLOBAL_SETTINGS] 🔄 Settings not found in sync, trying local storage...');
+    const localResult = await chrome.storage.local.get(['htmlTransmissionMode']);
+
+    const htmlTransmissionMode = localResult.htmlTransmissionMode || 'direct';
+    console.log(`[background][GLOBAL_SETTINGS] ✅ Successfully loaded global settings from local: htmlTransmissionMode=${htmlTransmissionMode}`);
 
     return {
       htmlTransmissionMode
     };
   } catch (error) {
-    console.error('[background][GLOBAL_SETTINGS] ❌ Failed to load global settings from chrome.storage.local:', error);
-    console.warn('[background][GLOBAL_SETTINGS] 🔄 Using fallback: htmlTransmissionMode=chunks');
-    return { htmlTransmissionMode: 'chunks' }; // fallback
+    console.error('[background][GLOBAL_SETTINGS] ❌ Failed to load global settings from chrome.storage:', error);
+    console.warn('[background][GLOBAL_SETTINGS] 🔄 Using fallback: htmlTransmissionMode=direct');
+    return { htmlTransmissionMode: 'direct' }; // fallback
   }
 }
 
@@ -48,13 +60,42 @@ const MAX_DIRECT_SIZE = 50 * 1024 * 1024; // 50MB безопасный лими�
 const WARN_SIZE = 10 * 1024 * 1024; // 10MB - предупреждение о большом размере
 
 // ===============================================================================
+// CHAT UTILITY FUNCTIONS
+// ===============================================================================
+
+/**
+ * Нормализует pageKey для обеспечения консистентности
+ */
+function getPageKey(pageKey: string): string {
+  if (!pageKey) return 'unknown_page';
+  // Удаляем лишние слеши и пробелы
+  return pageKey.replace(/^\/+|\/+$/g, '').replace(/\s+/g, '_');
+}
+
+/**
+ * Отправляет уведомление об обновлении чата всем слушателям
+ */
+function broadcastChatUpdate(pluginId: string, pageKey: string): void {
+  console.log('[background] Broadcasting chat update:', { pluginId, pageKey });
+
+  chrome.runtime.sendMessage({
+    type: 'PLUGIN_CHAT_UPDATED',
+    pluginId,
+    pageKey,
+    timestamp: Date.now()
+  }).catch(error => {
+    console.warn('[background] Failed to broadcast chat update:', error);
+  });
+}
+
+// ===============================================================================
 // HTML DIRECT TRANSMISSION - Alternative to chunked transmission
 // ===============================================================================
 
 /**
  * Прямая передача HTML без разделения на чанки
  * @param pageHtml HTML содержимое страницы
- * @param workflowPayload Объект с данными workflow (pluginId, requestId, transferId)
+ * @param workflowPayload Объект с данными workflow (pluginId, requestId, transferId, pluginSettings)
  */
 async function sendHtmlDirectly(
   pageHtml: string,
@@ -62,6 +103,7 @@ async function sendHtmlDirectly(
     pluginId: string;
     requestId: string;
     transferId: string;
+    pluginSettings: any;
   }
 ): Promise<void> {
   const htmlSize = pageHtml.length;
@@ -103,7 +145,8 @@ async function sendHtmlDirectly(
           pageKey: `transfer_${workflowPayload.transferId}`,
           useChunks: false, // Отмечаем, что не используем чанки
           pageHtml: '', // Пустая строка, так как передаем assembledHtml
-          assembledHtml: pageHtml // Передаем полный HTML напрямую
+          assembledHtml: pageHtml, // Передаем полный HTML напрямую
+          pluginSettings: workflowPayload.pluginSettings // Передаем настройки плагина
         }, 10000); // Увеличенный таймаут для больших данных
 
         console.log(`[HtmlDirect] ✅ EXECUTE_WORKFLOW отправлен успешно (попытка ${attempt})`);
@@ -594,7 +637,7 @@ class HeartbeatMonitor {
 
   constructor(backgroundController: BackgroundController) {
     this.backgroundController = backgroundController;
-    console.log('[HeartbeatMonitor] 🔧 Circuit breaker initialized for heartbeat protection');
+    // console.log('[HeartbeatMonitor] 🔧 Circuit breaker initialized for heartbeat protection');
   }
 
   start(): void {
@@ -603,7 +646,7 @@ class HeartbeatMonitor {
       return;
     }
 
-    console.log('[HeartbeatMonitor] 🚀 Starting heartbeat monitoring');
+    // console.log('[HeartbeatMonitor] 🚀 Starting heartbeat monitoring');
     this.isRunning = true;
     this.resetStats();
     this.scheduleNextHeartbeat();
@@ -615,7 +658,7 @@ class HeartbeatMonitor {
       return;
     }
 
-    console.log('[HeartbeatMonitor] 🛑 Stopping heartbeat monitoring');
+    // console.log('[HeartbeatMonitor] 🛑 Stopping heartbeat monitoring');
     this.isRunning = false;
 
     if (this.intervalId) {
@@ -629,7 +672,7 @@ class HeartbeatMonitor {
   }
 
   reset(): void {
-    console.log('[HeartbeatMonitor] 🔄 Resetting heartbeat monitor');
+    // console.log('[HeartbeatMonitor] 🔄 Resetting heartbeat monitor');
     this.stop();
     this.resetStats();
     this.start();
@@ -913,6 +956,9 @@ interface PendingWorkflow {
   reject: (reason?: any) => void;
   startTime: number;
   pluginId: string;
+  requestId: string;
+  pageHtml: string;
+  pluginSettings?: any;
 }
 
 interface ChunkTransfer {
@@ -2765,14 +2811,14 @@ class BackgroundController {
     this.setupMessageHandling();
     this.setupPeriodicCleanup();
     this.restorePersistedTransfers();
-    console.log('Background Controller initialized (Enhanced v3.0 with Transfer Recovery)');
+    // console.log('Background Controller initialized (Enhanced v3.0 with Transfer Recovery)');
 
     // DIAGNOSTIC: Setup transfer scope monitoring
     setInterval(() => this.logTransferScopeState(), 10000); // Every 10 seconds
 
     // Start heartbeat monitoring
     this.heartbeatMonitor.start();
-    console.log('[BackgroundController] Heartbeat monitoring started');
+    // console.log('[BackgroundController] Heartbeat monitoring started');
   }
 
   private delay(ms: number): Promise<void> {
@@ -2820,7 +2866,8 @@ class BackgroundController {
       }
     }, this.CLEANUP_INTERVAL);
 
-      // Очистка устаревших метаданных трансферов
+    // Очистка устаревших метаданных трансферов
+    {
       try {
         await this.metadataManager.cleanupExpired();
       } catch (error) {
@@ -2857,6 +2904,7 @@ class BackgroundController {
           avgAge: `${metadataStats.avgAge}h`
         });
       }
+    }
     }, 30000); // Every 30 seconds
   }
   
@@ -3019,10 +3067,13 @@ class BackgroundController {
                     console.log(`[Background][ASSEMBLY] ✅ Найдены метаданные: pluginId=${metadata.pluginId}, pageKey=${metadata.pageKey}`);
 
                     // Создаем workflow с восстановленными метаданными
+                    // Определяем customSettingsKeys для плагина ozon-analyzer
+                    const customSettingsKeys = metadata.pluginId === 'ozon-analyzer' ? ['response_language', 'enable_deep_analysis', 'auto_request_deep_analysis', 'analysis_threshold'] : [];
                     const recoveredWorkflow = {
                       requestId: metadata.pageKey,
                       pluginId: metadata.pluginId,
-                      pageHtml: (message as any).html || '<html><body>Recovered content</body></html>'
+                      pageHtml: (message as any).html || '<html><body>Recovered content</body></html>',
+                      pluginSettings: await getPluginSettings(metadata.pluginId, {}, customSettingsKeys)
                     };
 
                     // Сохраняем в pendingWorkflows для использования ниже
@@ -3039,7 +3090,8 @@ class BackgroundController {
                     const basicWorkflow = {
                       requestId: `fallback_${message.transferId}`,
                       pluginId: 'unknown_plugin',
-                      pageHtml: (message as any).html || '<html><body>Content unavailable</body></html>'
+                      pageHtml: (message as any).html || '<html><body>Content unavailable</body></html>',
+                      pluginSettings: {}
                     };
 
                     this.pendingWorkflows.set(message.transferId, basicWorkflow);
@@ -3052,7 +3104,8 @@ class BackgroundController {
                   const errorWorkflow = {
                     requestId: `error_${message.transferId}`,
                     pluginId: 'error_plugin',
-                    pageHtml: '<html><body>Metadata recovery error</body></html>'
+                    pageHtml: '<html><body>Metadata recovery error</body></html>',
+                    pluginSettings: {}
                   };
 
                   this.pendingWorkflows.set(message.transferId, errorWorkflow);
@@ -3074,9 +3127,12 @@ class BackgroundController {
             }
 
             // WAIT FOR OFFSCREEN READINESS BEFORE SENDING EXECUTE_WORKFLOW
-            console.log(`[Background][EXECUTE_WORKFLOW] ⏳ Checking offscreen readiness before sending EXECUTE_WORKFLOW for ${message.transferId}`);
+            // console.log(`[Background][EXECUTE_WORKFLOW] ⏳ Checking offscreen readiness before sending EXECUTE_WORKFLOW for ${message.transferId}`);
             const offscreenReady = await isOffscreenAvailable();
-            console.log(`[Background][EXECUTE_WORKFLOW] Offscreen available: ${offscreenReady}`);
+            // console.log(`[Background][EXECUTE_WORKFLOW] Offscreen available: ${offscreenReady}`);
+            if (!offscreenReady) {
+              console.warn(`[Background][EXECUTE_WORKFLOW] ❌ Offscreen not available, aborting EXECUTE_WORKFLOW`);
+            }
 
             if (!offscreenReady) {
               console.warn(`[Background][EXECUTE_WORKFLOW] ⚠️ Offscreen not available, waiting 2 seconds...`);
@@ -3119,7 +3175,8 @@ class BackgroundController {
                   pageKey: workflowPageKey, // Use recovered pageKey if available
                   useChunks: false, // HTML is already assembled, no need to use chunks
                   pageHtml: pendingWorkflow.pageHtml, // Original HTML (fallback if needed)
-                  assembledHtml: (message as any).html // Pre-assembled HTML from chunks
+                  assembledHtml: (message as any).html, // Pre-assembled HTML from chunks
+                  pluginSettings: pendingWorkflow.pluginSettings || {} // Передаем настройки плагина
                 }, 3000); // 3 second timeout for EXECUTE_WORKFLOW
 
                 console.log(`[Background][EXECUTE_WORKFLOW] ✅ EXECUTE_WORKFLOW message sent successfully to offscreen on attempt ${sendAttempts + 1}`);
@@ -3133,7 +3190,7 @@ class BackgroundController {
                 if (sendAttempts < maxSendAttempts) {
                   // CHECK OFFSCREEN AVAILABILITY BEFORE RETRY
                   const stillAvailable = await isOffscreenAvailable();
-                  console.log(`[Background][EXECUTE_WORKFLOW] Offscreen still available before retry: ${stillAvailable}`);
+                  // console.log(`[Background][EXECUTE_WORKFLOW] Offscreen still available before retry: ${stillAvailable}`);
 
                   if (!stillAvailable) {
                     console.error(`[Background][EXECUTE_WORKFLOW] ❌ Offscreen became unavailable, cannot retry EXECUTE_WORKFLOW`);
@@ -3188,15 +3245,24 @@ class BackgroundController {
         case 'HOST_CALL':
           await this.handleHostCall(message, sendResponse);
           break;
-          
+
+        case 'DELETE_PLUGIN_CHAT':
+          await this.handleDeletePluginChat(message, sendResponse);
+          break;
+
         case 'LOG_MESSAGE':
         case 'WORKFLOW_RESULT':
-          // Forward to UI
-          chrome.runtime.sendMessage(message);
-          break;
-          
+           // Forward to UI
+           chrome.runtime.sendMessage(message);
+           break;
+
+        case 'pyodide_log':
+           // Вывести логи из Pyodide worker в консоль браузера
+           console.log(`[${(message as any).level?.toUpperCase() || 'INFO'}] ${(message as any).message}`);
+           break;
+
         default:
-          console.warn('[Background] Unknown message type:', (message as any).type);
+           console.warn('[Background] Unknown message type:', (message as any).type);
       }
     } catch (error) {
       console.error('[Background] Error handling message:', error);
@@ -3205,7 +3271,7 @@ class BackgroundController {
   }
   
   private async handleRunWorkflow(
-    message: WorkflowMessage, 
+    message: WorkflowMessage,
     sendResponse: (response?: any) => void
   ): Promise<void> {
     try {
@@ -3213,13 +3279,36 @@ class BackgroundController {
       if (!tabs[0]?.id) {
         throw new Error('No active tab found');
       }
-      
+
       const pageHtml = await this.extractPageHtml(tabs[0].id);
       await ensureOffscreenDocument();
-      
+
       const requestId = message.requestId || `workflow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const transferId = `${requestId}_html`;
-      
+
+      // Читаем manifest.json плагина и получаем настройки
+      console.log(`[Background][PLUGIN_SETTINGS] 🔍 Reading manifest.json for plugin ${message.pluginId}`);
+      let pluginSettings: any = {};
+      try {
+        const manifestUrl = chrome.runtime.getURL(`public/plugins/${message.pluginId}/manifest.json`);
+        const manifestResponse = await fetch(manifestUrl);
+        if (manifestResponse.ok) {
+          const manifest = await manifestResponse.json();
+          console.log(`[Background][PLUGIN_SETTINGS] ✅ Manifest loaded for ${message.pluginId}:`, manifest);
+
+          // Получаем настройки плагина с defaults из manifest.json
+          const customSettingsKeys = manifest?.options ? Object.keys(manifest.options) : [];
+          pluginSettings = await getPluginSettings(message.pluginId, manifest.options || {}, customSettingsKeys);
+          console.log(`[Background][PLUGIN_SETTINGS] ✅ Plugin settings loaded:`, pluginSettings);
+        } else {
+          console.warn(`[Background][PLUGIN_SETTINGS] ⚠️ Failed to load manifest for ${message.pluginId}, using default settings`);
+          pluginSettings = await getPluginSettings(message.pluginId);
+        }
+      } catch (error) {
+        console.error(`[Background][PLUGIN_SETTINGS] ❌ Error loading manifest/settings for ${message.pluginId}:`, error);
+        pluginSettings = await getPluginSettings(message.pluginId);
+      }
+
       // Create workflow promise before sending data
       const resultPromise = this.promiseManager.create(requestId, message.pluginId);
 
@@ -3252,7 +3341,8 @@ class BackgroundController {
           await sendHtmlDirectly(pageHtml, {
             pluginId: message.pluginId,
             requestId,
-            transferId
+            transferId,
+            pluginSettings
           });
 
           // Для прямой передачи не нужен pending workflow, так как EXECUTE_WORKFLOW отправляется сразу
@@ -3271,7 +3361,8 @@ class BackgroundController {
           this.pendingWorkflows.set(transferId, {
             requestId,
             pluginId: message.pluginId,
-            pageHtml
+            pageHtml,
+            pluginSettings
           });
         }
 
@@ -3293,13 +3384,6 @@ class BackgroundController {
           pageHtml
         });
       }
-
-      // Store workflow data for later when HTML is assembled
-      this.pendingWorkflows.set(transferId, {
-        requestId,
-        pluginId: message.pluginId,
-        pageHtml
-      });
 
       // Wait to ensure chunks are processed and acknowledged
       console.log(`[Background][DIAG] ⏳ WAITING for chunks processing and acknowledgments (1s delay)`);
@@ -3429,6 +3513,55 @@ class BackgroundController {
     }
   }
 
+  private async handleDeletePluginChat(
+    message: any,
+    sendResponse: (response?: any) => void
+  ): Promise<void> {
+    try {
+      const { pluginId, pageKey, messageId } = message;
+
+      if (!pluginId || !pageKey) {
+        throw new Error('Missing required fields: pluginId and pageKey are required');
+      }
+
+      const normPageKey = getPageKey(pageKey);
+
+      console.log('[background] DELETE_PLUGIN_CHAT pageKey:', pageKey, 'messageId:', messageId, 'norm:', normPageKey);
+
+      // Выполняем удаление чата
+      await pluginChatApi.deleteChat(pluginId, normPageKey);
+
+      // Отправляем успешный ответ UI
+      chrome.runtime.sendMessage({
+        type: 'DELETE_PLUGIN_CHAT_RESPONSE',
+        messageId,
+        success: true,
+        pluginId,
+        pageKey: normPageKey,
+        timestamp: Date.now()
+      });
+
+      // Отправляем уведомление об обновлении чата всем слушателям
+      broadcastChatUpdate(pluginId, normPageKey);
+
+      console.log('[background] DELETE_PLUGIN_CHAT completed successfully for:', { pluginId, pageKey: normPageKey });
+
+    } catch (error) {
+      console.error('[background] DELETE_PLUGIN_CHAT failed:', error);
+
+      // Отправляем ответ об ошибке
+      chrome.runtime.sendMessage({
+        type: 'DELETE_PLUGIN_CHAT_RESPONSE',
+        messageId: message.messageId,
+        success: false,
+        error: (error as Error).message,
+        pluginId: message.pluginId,
+        pageKey: message.pageKey,
+        timestamp: Date.now()
+      });
+    }
+  }
+
   private handleHeartbeatResponse(message: HeartbeatResponseMessage): void {
     console.log(`[BackgroundController] 📥 Received heartbeat response for ${message.heartbeatId}`);
 
@@ -3527,4 +3660,4 @@ chrome.action.onClicked.addListener(async (tab) => {
   }
 });
 
-console.log('Enhanced Background Script loaded successfully');
+// console.log('Enhanced Background Script loaded successfully');

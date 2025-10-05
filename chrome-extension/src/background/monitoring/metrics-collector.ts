@@ -5,8 +5,8 @@
  * агрегацию, квантили и экспорт метрик для мониторинга
  */
 
-import { Metric, MetricType, MonitoringConfig } from './monitoring-core.js';
-import type { MonitoringLogger } from './logger.js';
+import { Metric, MetricType, MonitoringConfig } from './monitoring-core.ts';
+import type { MonitoringLogger } from './logger.ts';
 
 export interface MetricsStats {
   counters: Record<string, number>;

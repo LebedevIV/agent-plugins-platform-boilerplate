@@ -1559,7 +1559,7 @@ function checkAiAlerts(stats) {
 const MODEL_CONFIGS = {
   "gemini-flash": {
     provider: "google",
-    model_name: "gemini-2.5-flash-lite:generateContent",
+    model_name: "gemini-flash-lite-latest:generateContent",
     endpoint: "https://generativelanguage.googleapis.com/v1beta/models/",
     api_key_env: "GOOGLE_AI_API_KEY"
   },
@@ -2761,15 +2761,7 @@ chrome.runtime.onMessage.addListener(
         return true;
       }
       if (msg.type === "RUN_WORKFLOW") {
-        console.log("[background][DEBUG] ===== MESSAGE TYPE IS RUN_WORKFLOW =====");
-        console.log("[background][DEBUG] RUN_WORKFLOW message detected:", {
-          type: msg.type,
-          pluginId: msg.pluginId,
-          pageKey: msg.pageKey,
-          hasPluginId: !!msg.pluginId,
-          hasPageKey: !!msg.pageKey,
-          fullMessage: JSON.stringify(msg, null, 2)
-        });
+        // RUN_WORKFLOW processing starts
       }
       if (msg.type === "PING") {
         sendResponse({ pong: true, timestamp: Date.now() });
@@ -3020,13 +3012,7 @@ chrome.runtime.onMessage.addListener(
       console.log("[background][DEBUG] Timestamp:", (/* @__PURE__ */ new Date()).toISOString());
       if (msg.type === "RUN_WORKFLOW") {
         console.log("[background][OFFSCREEN DELEGATION] ===== RUN_WORKFLOW REQUEST RECEIVED =====");
-        console.log("[background][OFFSCREEN DELEGATION] Plugin ID:", msg.pluginId);
-        console.log("[background][OFFSCREEN DELEGATION] Page Key:", msg.pageKey);
-        console.log("[background][OFFSCREEN DELEGATION] Request timestamp:", (/* @__PURE__ */ new Date()).toISOString());
-        console.log("[background][DEBUG] Condition checks:");
-        console.log("[background][DEBUG] - msg.type === RUN_WORKFLOW:", msg.type === "RUN_WORKFLOW");
-        console.log("[background][DEBUG] - msg.pluginId exists:", !!msg.pluginId);
-        console.log("[background][DEBUG] - msg.pageKey exists:", !!msg.pageKey);
+        console.log("[background][OFFSCREEN DELEGATION] Plugin ID:", msg.pluginId, "Page Key:", msg.pageKey);
         try {
           console.log("[background][DEBUG] Starting async handler for RUN_WORKFLOW");
           (async () => {
@@ -3129,6 +3115,7 @@ chrome.runtime.onMessage.addListener(
                   transferId: requestId,
                   useChunks: false,
                   directExchange: true,
+                  pluginSettings: settings,
                   timestamp: Date.now()
                 };
                 console.log("[background][OFFSCREEN DELEGATION] Direct execution payload prepared:", {
@@ -3888,6 +3875,34 @@ ${JSON.stringify(msg.data, null, 2)}
         } else if (msg.type === "HTML_CHUNK_ACK") {
           console.log("[background][CHUNKING] Chunk acknowledgment received:", msg);
           handleChunkAcknowledgment(msg);
+          return true;
+        } else if (msg.type === "CONFIRM_HTML_RECEIPT") {
+          console.log("[background][CONFIRM_HTML_RECEIPT] HTML receipt confirmed from offscreen:", msg);
+          if (msg.transferId) {
+            console.log(`[background][CONFIRM_HTML_RECEIPT] ✅ HTML transfer ${msg.transferId} confirmed by offscreen document`);
+
+            // Update transfer status in active transfers if exists
+            const transfer = activeTransfers.get(msg.transferId);
+            if (transfer) {
+              transfer.htmlReceiptConfirmed = true;
+              transfer.lastAccessed = Date.now();
+              console.log(`[background][CONFIRM_HTML_RECEIPT] Transfer ${msg.transferId} status updated: htmlReceiptConfirmed=true`);
+            } else {
+              console.log(`[background][CONFIRM_HTML_RECEIPT] Transfer ${msg.transferId} not found in active transfers (may have been cleaned up)`);
+            }
+
+            // Cleanup direct data storage if it exists
+            if (typeof cleanupDirectData === 'function') {
+              try {
+                cleanupDirectData(msg.transferId);
+                console.log(`[background][CONFIRM_HTML_RECEIPT] Direct data storage cleaned up for transfer ${msg.transferId}`);
+              } catch (cleanupError) {
+                console.warn(`[background][CONFIRM_HTML_RECEIPT] Error cleaning up direct data:`, cleanupError);
+              }
+            }
+          } else {
+            console.warn("[background][CONFIRM_HTML_RECEIPT] Missing transferId in confirmation message");
+          }
           return true;
         } else if (msg.type === "PYODIDE_MESSAGE_SERVICE_WORKER") {
           console.log("[background][PYODIDE_SERVICE_WORKER] PYODIDE_MESSAGE received from offscreen:", msg);

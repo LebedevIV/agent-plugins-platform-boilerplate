@@ -4,9 +4,10 @@ interface ThemeSwitcherProps {
   theme: 'light' | 'dark' | 'system';
   isLight: boolean;
   onToggle: () => void;
+  isInSidebar?: boolean; // Контекст использования: sidebar или options
 }
 
-const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ theme, isLight, onToggle }) => {
+const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ theme, isLight, onToggle, isInSidebar = false }) => {
   const getIcon = () => {
     switch (theme) {
       case 'light':
@@ -44,8 +45,8 @@ const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ theme, isLight, onToggle 
     justifyContent: 'center',
     cursor: 'pointer',
     fontSize: '20px',
-    marginTop: '20px',
-    alignSelf: 'center'
+    // marginTop только для Options (не в sidebar)
+    ...(isInSidebar ? {} : { marginTop: '20px' })
   };
 
   return (

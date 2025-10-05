@@ -1,10 +1,13 @@
-import { resolve } from 'node:path';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react-swc';
 import { readFileSync } from 'node:fs';
 
-const rootDir = resolve(import.meta.dirname);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const rootDir = __dirname;
 const srcDir = resolve(rootDir, 'src');
-const pkg = JSON.parse(readFileSync(resolve(import.meta.dirname, '../../package.json'), 'utf8'));
+const pkg = JSON.parse(readFileSync(resolve(__dirname, '../../package.json'), 'utf8'));
 
 function versionReplacePlugin() {
   return {
