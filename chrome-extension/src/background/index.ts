@@ -1373,7 +1373,7 @@ async function executeWorkflowInOffscreen(
 // Активируем основной обработчик сообщений
 chrome.runtime.onMessage.addListener(
   async (message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => {
-    console.log('[background] Main message handler activated with message:', message);
+    // console.log('[background] Main message handler activated with message:', message);
 
     const msg = message as any;
 
@@ -1809,7 +1809,7 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (msg.type === 'GET_PLUGIN_CHAT_DRAFT') {
-      console.log('[background] Processing GET_PLUGIN_CHAT_DRAFT request for:', msg.pluginId, msg.pageKey);
+      // console.log('[background] Processing GET_PLUGIN_CHAT_DRAFT request for:', msg.pluginId, msg.pageKey);
       (async () => {
         try {
           const result = await pluginChatApi.getDraft(msg.pluginId, msg.pageKey);
@@ -1823,7 +1823,7 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (msg.type === 'GET_PLUGIN_CHAT') {
-      console.log('[background] Processing GET_PLUGIN_CHAT request for:', msg.pluginId, msg.pageKey);
+      // console.log('[background] Processing GET_PLUGIN_CHAT request for:', msg.pluginId, msg.pageKey);
       (async () => {
         try {
           const result = await pluginChatApi.getChat(msg.pluginId, msg.pageKey);
@@ -3012,7 +3012,7 @@ function keepAlive() {
 
   // Слушаем messages для дополнительной активности
   chrome.runtime.onMessage.addListener((message) => {
-    console.log('[background][KEEP-ALIVE] 📨 Message received - keeping alive');
+    // console.log('[background][KEEP-ALIVE] 📨 Message received - keeping alive');
     return true; // Важно для async responses
   });
 }

@@ -101,14 +101,14 @@ const pluginChatApi = {
   },
 
   // Получить чат по pluginId и pageKey (публичная функция для совместимости)
-  async getChat(pluginId: string, pageKey: string): Promise<PluginChat | null> {
-    const chatKey = `${pluginId}::${getPageKey(pageKey)}`;
-    console.log('[pluginChatApi] getChat: формирование chatKey', {
-      pluginId,
-      pageKey,
-      chatKey,
-      normalizedPageKey: getPageKey(pageKey)
-    });
+    async getChat(pluginId: string, pageKey: string): Promise<PluginChat | null> {
+      const chatKey = `${pluginId}::${getPageKey(pageKey)}`;
+      // console.log('[pluginChatApi] getChat: формирование chatKey', {
+      //   pluginId,
+      //   pageKey,
+      //   chatKey,
+      //   normalizedPageKey: getPageKey(pageKey)
+      // });
 
     return this.getOrLoadChat(chatKey);
   },
@@ -240,9 +240,9 @@ const pluginChatApi = {
   },
 
   // Получить черновик
-  async getDraft(pluginId: string, pageKey: string): Promise<{ draftText: string }> {
-    const draftKey = `${pluginId}::${getPageKey(pageKey)}::draft`;
-    console.log('[pluginChatApi][getDraft] BEFORE', { draftKey, pluginId, pageKey });
+    async getDraft(pluginId: string, pageKey: string): Promise<{ draftText: string }> {
+      const draftKey = `${pluginId}::${getPageKey(pageKey)}::draft`;
+      // console.log('[pluginChatApi][getDraft] BEFORE', { draftKey, pluginId, pageKey });
     return new Promise(resolve => {
       chrome.storage.local.get([draftKey], result => {
         const draft = result[draftKey];
@@ -268,7 +268,7 @@ const pluginChatApi = {
 
   // Вспомогательный метод для верификации сообщения с retry logic
   async verifyMessageWithRetry(chatKey: string, message: ChatMessage): Promise<{ success: boolean, verified: boolean, messageId: string, verificationReason?: string }> {
-    const retryDelays = [200, 400, 600, 800, 1000];
+    const retryDelays = [500, 1000, 1500, 2000, 2500];
     let isVerified = false;
     let verificationReason = 'unknown';
     let lastSavedChat = null;
@@ -368,7 +368,7 @@ const pluginChatApi = {
           }
         } else {
           verificationReason = 'message_not_found_by_id';
-          console.warn(`[pluginChatApi][saveMessage] ВЕРИФИКАЦИЯ попытка ${attempt}: сообщение не найдено ни по ID, ни по содержимому`, {
+          console.error(`[pluginChatApi][saveMessage] ВЕРИФИКАЦИЯ попытка ${attempt}: сообщение не найдено ни по ID, ни по содержимому`, {
             attempt,
             messageId: message.id,
             availableIds: savedChat.messages.map(m => m.id),
@@ -376,7 +376,16 @@ const pluginChatApi = {
             lastMessage: savedChat.messages[savedChat.messages.length - 1],
             expectedContentLength: message.content.length,
             expectedRole: message.role,
-            expectedTimestamp: message.timestamp
+            expectedTimestamp: message.timestamp,
+            timeSinceSave: Date.now() - chat.updatedAt,
+            chatUpdatedAt: chat.updatedAt,
+            allMessagesInChat: savedChat.messages.map(m => ({
+              id: m.id,
+              role: m.role,
+              contentLength: m.content.length,
+              timestamp: m.timestamp
+            })),
+            storageKeys: Object.keys(result)
           });
 
           // Дополнительная диагностика при message_not_found_by_id
