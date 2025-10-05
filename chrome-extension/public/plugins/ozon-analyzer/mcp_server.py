@@ -236,9 +236,21 @@ def clean_reasoning_for_chat(reasoning: str) -> str:
 def console_log(message: str, force: bool = False):
     """Логирование в консоль offscreen.html для отладочной информации."""
     try:
-        js.console.log(f"[background] {message}")
-    except Exception:
-        pass  # Игнорируем ошибки логирования
+        # Используем специальный метод js bridge для логирования
+        if hasattr(js, 'consoleLog'):
+            js.consoleLog(f"[PYTHON_LOG] {message}")
+            # Дополнительная отладка - выводим в системную консоль
+            print(f"[PYTHON_LOG_DEBUG] {message}")
+        elif hasattr(js, 'console') and hasattr(js.console, 'log'):
+            # Fallback: прямой вызов console.log
+            js.console.log(f"[background] {message}")
+        else:
+            # Двойной fallback: отправляем в чат как отладочное сообщение (только для критичных)
+            if force:
+                chat_message(f"🐛 DEBUG: {message}")
+    except Exception as e:
+        # Тройной fallback: игнорируем ошибки логирования
+        pass
 def safe_len(text):
     """Безопасное получение длины с защитой от ошибок типов"""
     try:
@@ -2226,7 +2238,7 @@ def _run_async_in_sync(coro):
             # Возвращаем fallback значения
             return ({"score": 5, "reasoning": "Ошибка выполнения асинхронного кода"}, [])
 
-async def _analyze_product_async(description: str, composition: str, categories: List[str], plugin_settings: Dict[str, Any] = None) -> tuple:
+async def _analyze_product_async(description: str, composition: str, categories: List[str], plugin_settings: Dict[str, Any] = None, content_language: str = "ru") -> tuple:
     """
     Асинхронная версия анализа продукта для внутреннего использования.
     Возвращает кортеж (analysis_result, analogs)
@@ -2235,8 +2247,8 @@ async def _analyze_product_async(description: str, composition: str, categories:
         plugin_settings = {}
 
     # Запускаем анализ соответствия и поиск аналогов параллельно
-    analysis_task = _analyze_composition_vs_description(description, composition, plugin_settings)
-    analogs_task = _find_similar_products(categories, composition, plugin_settings)
+    analysis_task = _analyze_composition_vs_description(description, composition, plugin_settings, content_language)
+    analogs_task = _find_similar_products(categories, composition, plugin_settings, content_language)
 
     analysis_result, analogs = await asyncio.gather(analysis_task, analogs_task, return_exceptions=True)
 
@@ -2281,6 +2293,11 @@ def get_safe_content_language(plugin_settings: Dict[str, Any]) -> str:
         'ru'  # default fallback
     """
     console_log("[LANGUAGE_VALIDATION] ===== НАЧАЛО ВАЛИДАЦИИ ЯЗЫКА =====")
+
+    # ДОПОЛНИТЕЛЬНАЯ ПРОБЕРКА plugin_settings В get_safe_content_language
+    if not isinstance(plugin_settings, dict):
+        console_log(f"[LANGUAGE_VALIDATION] ВНИМАНИЕ: plugin_settings не является словарем в get_safe_content_language! Тип: {type(plugin_settings)}, Значение: {plugin_settings}")
+        plugin_settings = {}  # Принудительно устанавливаем пустой словарь для безопасности
 
     # Извлечение значения response_language из plugin_settings
     raw_response_language = safe_dict_get(plugin_settings, "response_language", "ru")
@@ -2337,6 +2354,19 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None) -> Dict[str, Any]:
         возвращаются на верхнем уровне, чтобы быть доступными для последующих
         шагов в `workflow.json` (например, для `perform_deep_analysis`).
     """
+    # [DIAGNOSTIC] РАННЕЕ ЛОГИРОВАНИЕ В НАЧАЛЕ ФУНКЦИИ
+    console_log("[DIAGNOSTIC] >>>>>> analyze_ozon_product FUNCTION CALLED <<<<<<")
+    console_log(f"[DIAGNOSTIC] Timestamp: {datetime.now().isoformat()}")
+    console_log(f"[DIAGNOSTIC] input_data: {input_data}")
+    console_log(f"[DIAGNOSTIC] input_data type: {type(input_data)}")
+    if input_data and isinstance(input_data, dict):
+        console_log(f"[DIAGNOSTIC] input_data keys: {list(input_data.keys())}")
+
+    # ТЕСТОВЫЙ ВЫЗОВ для проверки работы console_log
+    console_log("🧪 ТЕСТОВЫЙ ВЫЗОВ console_log - если вы видите это сообщение, логирование работает!")
+    console_log(f"🧪 Текущая метка времени: {datetime.now().isoformat()}")
+    console_log("🧪 Тестовое сообщение с force=True", force=True)
+
     console_log("[DIAGNOSTIC] ===== analyze_ozon_product STARTED =====")
     console_log(f"[DIAGNOSTIC] input_data type: {type(input_data)}")
 
@@ -2350,12 +2380,28 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None) -> Dict[str, Any]:
         response_lang = plugin_settings.get('response_language', 'КЛЮЧ НЕ НАЙДЕН') if plugin_settings else 'plugin_settings is None'
         console_log(f"[PLUGIN_SETTINGS] response_language в plugin_settings: {response_lang}")
 
+    # ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА plugin_settings В analyze_ozon_product
+    if not isinstance(plugin_settings, dict):
+        console_log(f"[PLUGIN_SETTINGS] ВНИМАНИЕ: plugin_settings не является словарем в analyze_ozon_product! Тип: {type(plugin_settings)}, Значение: {plugin_settings}")
+        plugin_settings = {}  # Принудительно устанавливаем пустой словарь
+
     # Определение языка контента для сообщений чата с использованием безопасной функции
     content_language = get_safe_content_language(plugin_settings)
     console_log(f"[LANGUAGE] Язык контента определен: '{content_language}'")
     console_log(f"[LANGUAGE] Финальный результат get_safe_content_language: '{content_language}'")
+    console_log(f"[LANGUAGE] plugin_settings в момент вызова get_safe_content_language: {plugin_settings}")
+    console_log(f"[LANGUAGE] Тип plugin_settings: {type(plugin_settings)}")
+    if isinstance(plugin_settings, dict):
+        console_log(f"[LANGUAGE] Ключи plugin_settings: {list(plugin_settings.keys())}")
+        console_log(f"[LANGUAGE] response_language в plugin_settings: {plugin_settings.get('response_language', 'KEY_NOT_FOUND')}")
 
     try:
+        # === ДОПОЛНИТЕЛЬНОЕ ЛОГИРОВАНИЕ ДЛЯ ОТЛАДКИ ОШИБКИ 'get' ===
+        console_log("[DEBUG] ===== НАЧАЛО analyze_ozon_product =====")
+        console_log(f"[DEBUG] input_data: {input_data}")
+        console_log(f"[DEBUG] plugin_settings: {plugin_settings}")
+        console_log(f"[DEBUG] Тип plugin_settings: {type(plugin_settings)}")
+
         # === ОПТИМИЗИРОВАННОЕ ЛОГИРОВАНИЕ ===
         logger.log("🔍 ===== НАЧАЛО АНАЛИЗА ТОВАРА OZON =====", "analysis_start", force=True)
         logger.log(f"📊 Timestamp: {datetime.now().isoformat()}", "timestamp")
@@ -2842,8 +2888,9 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None) -> Dict[str, Any]:
             # Выполняем асинхронные AI вызовы через wrapper
             try:
                 console_log("Запускаю асинхронный анализ...")
+                # ПЕРЕДАЕМ content_language В АСИНХРОННЫЕ ФУНКЦИИ
                 analysis_result, analogs = _run_async_in_sync(
-                _analyze_product_async(description, composition, categories, plugin_settings)
+                _analyze_product_async(description, composition, categories, plugin_settings, content_language)
                 )
 
                 # Кешируем успешные результаты
@@ -2938,20 +2985,29 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None) -> Dict[str, Any]:
         truncated_description = description[:100] + ('...' if len(description) > 100 else '')
         truncated_composition = composition[:100] + ('...' if len(composition) > 100 else '')
         console_log("[DIAGNOSTIC] ===== ОТПРАВКА СООБЩЕНИЯ С ОПИСАНИЕМ И СОСТАВОМ =====")
-        console_log(f"[DEBUG] content_language перед отправкой описания: '{content_language}'")
+        console_log(f"[DEBUG] content_language перед отправкой описания: '{content_language}' (тип: {type(content_language)})")
+        console_log(f"[DEBUG] условие content_language == 'ru': {content_language == 'ru'}")
+        console_log(f"[DEBUG] условие content_language == 'en': {content_language == 'en'}")
+
+        # Принудительная проверка значения для отладки
         if content_language == "ru":
+            console_log("[DEBUG] Выбрана ветка РУССКИЙ для описания")
             chat_message(f"📝 Описание: {truncated_description}\n📝 Состав: {truncated_composition}")
-        else:
+        elif content_language == "en":
+            console_log("[DEBUG] Выбрана ветка ENGLISH для описания")
             chat_message(f"📝 Description: {truncated_description}\n📝 Composition: {truncated_composition}")
+        else:
+            console_log(f"[DEBUG] Неизвестный язык '{content_language}', используем fallback (русский)")
+            chat_message(f"📝 Описание: {truncated_description}\n📝 Состав: {truncated_composition} [LANG:{content_language}]")
 
         # Проверяем, что переменные корректны
         score_str = str(score) if score is not None else 'N/A'
-        reasoning_str = str(reasoning) if reasoning is not None else 'Объяснение не доступно'
+        reasoning_str = str(reasoning) if reasoning is not None else ('Объяснение не доступно' if content_language == "ru" else 'Explanation not available')
 
         console_log("[DIAGNOSTIC] ===== ОТПРАВКА СООБЩЕНИЯ С РЕЗУЛЬТАМИ AI =====")
         console_log(f"[DEBUG] content_language перед отправкой результатов AI: '{content_language}'")
         console_log(f"[DEBUG] score_str: '{score_str}', reasoning_str length: {len(reasoning_str)}")
-        if score_str == 'N/A' and reasoning_str == 'Объяснение не доступно':
+        if score_str == 'N/A' and reasoning_str == ('Объяснение не доступно' if content_language == "ru" else 'Explanation not available'):
             if content_language == "ru":
                 chat_message("⚠️ Не удалось получить результаты анализа от нейросети")
             else:
@@ -3015,10 +3071,16 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None) -> Dict[str, Any]:
             chat_message(analogs_message.strip())
         else:
             console_log("[DEBUG] Отправка сообщения об отсутствии аналогов")
+            console_log(f"[DEBUG] content_language в сообщении аналогов: '{content_language}'")
             if content_language == "ru":
-                chat_message("🔍 Аналоги не найдены или информация недоступна " + content_language)
-            else:
+                console_log("[DEBUG] Отправка русского сообщения об аналогах")
+                chat_message("🔍 Аналоги не найдены или информация недоступна "+ content_language)
+            elif content_language == "en":
+                console_log("[DEBUG] Отправка английского сообщения об аналогах")
                 chat_message("🔍 No analogs found or information unavailable")
+            else:
+                console_log(f"[DEBUG] Неизвестный язык '{content_language}' для аналогов")
+                chat_message("🔍 Аналоги не найдены или информация недоступна [LANG:" + str(content_language) + "]")
 
         # Логируем в консоль полную информацию для разработчиков
         title_preview = product_info['title'][:50] + "..." if safe_len(product_info['title']) > 50 else product_info['title']
@@ -3026,6 +3088,13 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None) -> Dict[str, Any]:
         comp_length = safe_len(composition)
         category_info = categories[0] if categories else "не определена"
         console_log(f"Анализ завершен: '{title_preview}' | Описание: {desc_length} симв. | Состав: {comp_length} симв. | Категория: {category_info} | Оценка: {score}/10")
+
+        # [DIAGNOSTIC] ЛОГИРОВАНИЕ ПЕРЕД ВОЗВРАТОМ РЕЗУЛЬТАТА
+        console_log("[DIAGNOSTIC] ===== analyze_ozon_product ABOUT TO RETURN =====")
+        console_log(f"[DIAGNOSTIC] result type: {type(result)}")
+        console_log(f"[DIAGNOSTIC] result keys: {list(result.keys()) if isinstance(result, dict) else 'not dict'}")
+        console_log(f"[DIAGNOSTIC] content_language in result: {result.get('pluginSettings', {}).get('response_language', 'NOT FOUND') if isinstance(result, dict) and 'pluginSettings' in result else 'NO pluginSettings'}")
+        console_log("[DIAGNOSTIC] >>>>>> analyze_ozon_product FUNCTION ENDING <<<<<<")
 
         return result
         
@@ -3081,6 +3150,14 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
     Выполняет глубокий, ресурсоемкий анализ с помощью самой мощной
     AI-модели, доступной платформе.
     """
+    # [DIAGNOSTIC] РАННЕЕ ЛОГИРОВАНИЕ В perform_deep_analysis
+    console_log("[DIAGNOSTIC] >>>>>> perform_deep_analysis FUNCTION CALLED <<<<<<")
+    console_log(f"[DIAGNOSTIC] Timestamp: {datetime.now().isoformat()}")
+    console_log(f"[DIAGNOSTIC] input_data: {input_data}")
+    console_log(f"[DIAGNOSTIC] input_data type: {type(input_data)}")
+    if input_data and isinstance(input_data, dict):
+        console_log(f"[DIAGNOSTIC] input_data keys: {list(input_data.keys())}")
+
     console_log("[DIAGNOSTIC] ===== perform_deep_analysis STARTED =====")
     console_log(f"[DIAGNOSTIC] input_data type: {type(input_data)}")
     console_log(f"[DIAGNOSTIC] input_data keys: {list(input_data.keys()) if isinstance(input_data, dict) else 'not dict'}")
@@ -3098,6 +3175,12 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
     console_log(f"[PLUGIN_SETTINGS] pluginSettings получены из pyodide.globals: {plugin_settings}")
     console_log(f"[PLUGIN_SETTINGS] Тип plugin_settings: {type(plugin_settings)}")
+
+    # ДОПОЛНИТЕЛЬНАЯ ПРОБЕРКА ТИПА plugin_settings ДЛЯ ОТЛАДКИ ОШИБКИ 'get'
+    if not isinstance(plugin_settings, dict):
+        console_log(f"[PLUGIN_SETTINGS] ВНИМАНИЕ: plugin_settings не является словарём! Тип: {type(plugin_settings)}, Значение: {plugin_settings}")
+        plugin_settings = {}  # Принудительно устанавливаем пустой словарь
+
     if isinstance(plugin_settings, dict):
         console_log(f"[PLUGIN_SETTINGS] Ключи в plugin_settings: {list(plugin_settings.keys())}")
         response_lang = plugin_settings.get('response_language', 'КЛЮЧ НЕ НАЙДЕН') if plugin_settings else 'plugin_settings is None'
@@ -3149,8 +3232,14 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
         return { "deep_analysis_report": result }
     except Exception as e:
-        chat_message(f"❌ Ошибка глубокого анализа: {str(e)}")
+        console_log(f"[ERROR] Исключение в perform_deep_analysis: {type(e).__name__}: {str(e)}")
+        import traceback
+        console_log(f"[ERROR] Traceback: {traceback.format_exc()}")
+        chat_message(f"❌ Ошибка глубокого анализа: {str(e)[:100]}...")
         return { "status": "error", "message": f"Ошибка глубокого анализа: {str(e)}" }
+    finally:
+        # [DIAGNOSTIC] ЛОГИРОВАНИЕ В КОНЦЕ perform_deep_analysis
+        console_log("[DIAGNOSTIC] >>>>>> perform_deep_analysis FUNCTION ENDING <<<<<<")
 
 # ==============================================================================
 # Секция 2: "Приватные" Вспомогательные Функции
@@ -3450,7 +3539,7 @@ def _reconstruct_chunked_strings(input_data: Dict[str, Any]) -> Dict[str, Any]:
         console_log(f"❌ Traceback: {traceback.format_exc()}")
         return input_data  # Возвращаем исходные данные при ошибке
 
-async def _analyze_composition_vs_description(description: str, composition: str, plugin_settings: Dict[str, Any] = None) -> Dict[str, Any]:
+async def _analyze_composition_vs_description(description: str, composition: str, plugin_settings: Dict[str, Any] = None, content_language: str = "ru") -> Dict[str, Any]:
     """
     Оптимизированный анализ соответствия описания и состава с предобработкой.
     Использует преданализ для сокращения размера промпта и cache busting.
@@ -3473,27 +3562,10 @@ async def _analyze_composition_vs_description(description: str, composition: str
         console_log("[DIAGNOSTIC] ===== ВЫХОД ИЗ _analyze_composition_vs_description (пустые данные) =====")
         return { "score": 0, "reasoning": "Не удалось извлечь описание или состав товара." }
 
-    # Получение настройки языка
-    response_language = safe_dict_get(plugin_settings, "response_language", "ru")
-    console_log(f"[LANGUAGE] Настройка языка: {response_language}")
-
-    # Определение языка контента для режима "auto"
-    content_language = "ru"  # По умолчанию русский
-    if response_language == "auto":
-        # Проверяем наличие русских букв в описании и составе
-        russian_chars = re.findall(r'[а-яА-ЯёЁ]', description + " " + composition)
-        if russian_chars:
-            content_language = "ru"
-            console_log("[LANGUAGE] Автоопределение: русский язык (найдены русские буквы)")
-        else:
-            content_language = get_safe_content_language(plugin_settings)
-            console_log(f"[LANGUAGE] Автоопределение: нет русских букв, используем настройку пользователя '{content_language}'")
-    else:
-        content_language = response_language
-
+    # ИСПОЛЬЗУЕМ ПЕРЕДАННЫЙ content_language ИЗ analyze_ozon_product
+    console_log(f"[LANGUAGE] Используем переданный content_language: '{content_language}'")
     console_log(f"Анализ соответствия: desc='{description[:100]}...', comp='{composition[:100]}...', язык={content_language}")
     console_log(f"[DIAGNOSTIC] Финальный content_language в _analyze_composition_vs_description: '{content_language}'")
-    console_log(f"[DIAGNOSTIC] Процесс определения языка завершен")
 
     # Предварительный анализ для сокращения размера промпта
     analysis_cache_key = f"pre_analysis:{hash(description[:100] + composition[:100])}"
@@ -4103,7 +4175,7 @@ def _extract_description_and_composition(soup: 'SimpleHTMLParser') -> tuple:
     """Заглушка для извлечения описания и состава."""
     return "Пример описания", "Пример состава"
 
-async def _find_similar_products(categories: List[str], composition: str, plugin_settings: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+async def _find_similar_products(categories: List[str], composition: str, plugin_settings: Dict[str, Any] = None, content_language: str = "ru") -> List[Dict[str, Any]]:
     """
     Оптимизированный поиск аналогичных продуктов на основе категорий и состава.
     Использует параллельные AI запросы для поиска аналогичных товаров в разных категориях.
@@ -4114,29 +4186,9 @@ async def _find_similar_products(categories: List[str], composition: str, plugin
 
     console_log(f"[DIAGNOSTIC] plugin_settings в _find_similar_products: {plugin_settings}")
     console_log(f"[DIAGNOSTIC] Тип plugin_settings: {type(plugin_settings)}")
-    if isinstance(plugin_settings, dict):
-        console_log(f"[DIAGNOSTIC] Ключи в plugin_settings: {list(plugin_settings.keys())}")
-        response_lang = plugin_settings.get('response_language', 'КЛЮЧ НЕ НАЙДЕН') if plugin_settings else 'plugin_settings is None'
-        console_log(f"[DIAGNOSTIC] response_language в plugin_settings: {response_lang}")
 
-    # Получение настройки языка из plugin_settings
-    response_language = safe_dict_get(plugin_settings, "response_language", "ru")
-    console_log(f"[LANGUAGE] Настройка языка в _find_similar_products: {response_language}")
-
-    # Определение языка контента для режима "auto"
-    content_language = "ru"  # По умолчанию русский
-    if response_language == "auto":
-        # Проверяем наличие русских букв в категориях и составе
-        russian_chars = re.findall(r'[а-яА-ЯёЁ]', " ".join(categories) + " " + composition)
-        if russian_chars:
-            content_language = "ru"
-            console_log("[LANGUAGE] Автоопределение в _find_similar_products: русский язык (найдены русские буквы)")
-        else:
-            content_language = get_safe_content_language(plugin_settings)
-            console_log(f"[LANGUAGE] Автоопределение в _find_similar_products: нет русских букв, используем настройку пользователя '{content_language}'")
-    else:
-        content_language = response_language
-
+    # ИСПОЛЬЗУЕМ ПЕРЕДАННЫЙ content_language ИЗ analyze_ozon_product
+    console_log(f"[LANGUAGE] Используем переданный content_language в _find_similar_products: '{content_language}'")
     console_log(f"[DIAGNOSTIC] Финальный content_language в _find_similar_products: '{content_language}'")
     console_log(f"[DIAGNOSTIC] Начат поиск аналогов для типа: {product_type}")
 

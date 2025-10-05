@@ -182,15 +182,17 @@ const LOG_LEVELS = {
   DEBUG: 3
 };
 
-// Текущий уровень логирования (WARN для экономии токенов)
-let currentLogLevel = LOG_LEVELS.WARN;
+// Текущий уровень логирования (ОТКЛЮЧЕНО для максимальной экономии токенов)
+let currentLogLevel = 999; // Уровень выше всех возможных, полностью отключает логирование
 
-// Флаги для разных типов логирования (отключены verbose логи)
+// Флаги для разных типов логирования (все отключены для экономии токенов)
 const LOG_FLAGS = {
   CHUNKING: false,
   PYODIDE: false,
   EXECUTION: false,
-  CHANNEL: false
+  CHANNEL: false,
+  SYSTEM: false,
+  HTML_DIRECT: false
 };
 
 // Троттлинг для повторяющихся логов
@@ -756,6 +758,12 @@ async function initializePyodide() {
       // Функция для логирования из Python
       logInfo: (message) => {
         logInfo('PYTHON', `Python log: ${message}`);
+        return true;
+      },
+
+      // Функция для логирования напрямую в консоль из Python
+      consoleLog: (message) => {
+        console.log(`[PYTHON_LOG] ${message}`);
         return true;
       }
     };
