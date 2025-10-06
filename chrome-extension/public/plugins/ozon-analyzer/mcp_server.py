@@ -2052,7 +2052,12 @@ class FastDOMParser:
         Потоковое извлечение информации из больших HTML документов.
         Разбивает документ на чанки для предотвращения переполнения памяти.
         """
-        chat_message("🔍 Анализ продукта начат... Пожалуйста, подождите.")
+        plugin_settings = get_pyodide_var('pluginSettings', {})
+        content_language = get_safe_content_language(plugin_settings)
+        if content_language == "ru":
+            chat_message("🔍 Анализ продукта начат... Пожалуйста, подождите.")
+        else:  # English
+            chat_message("🔍 Product analysis started... Please wait.")
         if len(self.html) <= chunk_size:
             return self.extract_product_info()  # Для небольших документов используем обычный парсинг
 
@@ -3930,7 +3935,10 @@ async def _analyze_composition_vs_description(description: str, composition: str
     except Exception as e:
         # console_log(f"Критическая ошибка в _analyze_composition_vs_description: {str(e)}")
         # Отправляем ошибку AI в чат для пользователя
-        chat_message(f"⚠️ Произошла ошибка при анализе товара: {str(e)[:100]}...")
+        if content_language == "ru":
+            chat_message(f"⚠️ Произошла ошибка при анализе товара: {str(e)[:100]}...")
+        else:  # English
+            chat_message(f"⚠️ An error occurred during product analysis: {str(e)[:100]}...")
         # Безопасная конвертация типов данных для избежания ошибок len()
         try:
             desc_len = safe_len(description)
