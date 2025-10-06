@@ -1,6 +1,6 @@
 {
   "name": "@extension/options",
-  "version": "0.5.1278",
+  "version": "0.5.1281",
   "description": "chrome extension - options",
   "type": "module",
   "private": true,

@@ -39,6 +39,18 @@
         "en": "Automatically request deep analysis"
       }
     },
+    "search_for_analogs": {
+      "type": "boolean",
+      "default": false,
+      "label": {
+        "ru": "Поиск аналогов",
+        "en": "Search for analogs"
+      },
+      "description": {
+        "ru": "Включить поиск аналогов",
+        "en": "Enable search for analogs"
+      }
+    },
     "response_language": {
       "type": "select",
       "default": "ru",

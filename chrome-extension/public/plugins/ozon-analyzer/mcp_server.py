@@ -1172,287 +1172,164 @@ class FastDOMParser:
         return "Название товара не найдено"
 
     def _extract_description(self) -> str:
-        """Извлечение описания товара с многоуровневым fallback: lxml > html.parser > regex."""
+        """Извлечение описания товара с гибридным подходом: LXML приоритет > regex fallback."""
 
-        # Попытка 1: lxml
+        # Попытка 1: LXML с множественными селекторами для разных версий макета
         if lxml_available:
             try:
+                console_log("[EXTRACT_DESC] Попытка извлечения описания с помощью LXML")
                 tree = lxml.html.fromstring(self.html)
 
-                # Ищем #section-description > div:nth-child(2) > div > div > div
-                section_desc = tree.xpath('//*[@id="section-description"]')
-                if section_desc:
-                    # Ищем вложенные div'ы по селектору
-                    nested_divs = section_desc[0].xpath('.//div//div//div//div')
-                    for div in nested_divs:
-                        content = div.text_content().strip()
-                        if len(content) > 20:
-                            return content
+                # Селекторы для описания в порядке приоритета (от специфичных к общим)
+                description_selectors = [
+                    # Приоритет 1: Найти конкретный блок webDescription, затем h2 "Описание", затем следующий контент
+                    '//div[@data-widget="webPdpGrid"]//div[@data-widget="webDescription"]//h2[contains(text(), "Описание")]/following::div[contains(@class, "pdp_ao9")][1]',
+                    # Приоритет 2: Альтернативный layout с pdp_sa1
+                    '//div[contains(@class, "pdp_sa1")]//div[@data-widget="webDescription"]//div[contains(@class, "pdp_ao9")]',
+                    # Приоритет 3: Общий селектор без блока webDescription
+                    '//h2[contains(text(), "Описание")]/following::div[contains(@class, "pdp_ao9")][1]'
+                ]
 
-                # Ищем div с классом description
-                desc_divs = tree.xpath('//div[contains(@class, "description")]')
-                for div in desc_divs:
-                    content = div.text_content().strip()
-                    if len(content) > 20:
-                        return content
+                for selector_idx, selector in enumerate(description_selectors, 1):
+                    try:
+                        console_log(f"[EXTRACT_DESC] Пробуем селектор {selector_idx}: {selector}")
+                        elements = tree.xpath(selector)
 
-                # Ищем мета description
-                meta_desc = tree.xpath('//meta[@name="description"]/@content')
-                if meta_desc:
-                    content = meta_desc[0].strip()
-                    if len(content) > 20:
-                        return content
+                        if elements:
+                            console_log(f"[EXTRACT_DESC] ✅ Найден элемент по селектору {selector_idx}")
+                            for element in elements:
+                                content = element.text_content().strip()
+                                if len(content) > 20:
+                                    console_log(f"[EXTRACT_DESC] ✅ Извлечено описание длиной {len(content)} символов")
+                                    return content
+                            console_log(f"[EXTRACT_DESC] ⚠️ Элементы найдены, но контент слишком короткий")
+                        else:
+                            console_log(f"[EXTRACT_DESC] ❌ Селектор {selector_idx} не нашел элементов")
 
-                # Ищем параграфы с описанием
-                desc_paragraphs = tree.xpath('//p[contains(@class, "description")]')
-                for p in desc_paragraphs:
-                    content = p.text_content().strip()
-                    if len(content) > 20:
-                        return content
+                    except Exception as selector_error:
+                        console_log(f"[EXTRACT_DESC] ❌ Ошибка в селекторе {selector_idx}: {str(selector_error)}")
+                        continue
 
-            except Exception as e:
-                pass
+                console_log("[EXTRACT_DESC] ❌ LXML не смог извлечь описание ни по одному селектору")
 
-        # Попытка 2: html.parser
-        try:
-            from html.parser import HTMLParser
-            class DescriptionParser(HTMLParser):
-                def __init__(self):
-                    super().__init__()
-                    self.description = None
-                    self.in_description_div = False
-                    self.in_description_p = False
-                    self.in_section_description = False
-                    self.section_depth = 0
-                    self.current_data = []
+            except Exception as lxml_error:
+                console_log(f"[EXTRACT_DESC] ❌ Критическая ошибка LXML: {str(lxml_error)}")
 
-                def handle_starttag(self, tag, attrs):
-                    attrs_dict = dict(attrs)
+        # Попытка 2: Regex fallback
+        console_log("[EXTRACT_DESC] Переход на regex fallback")
 
-                    if tag == 'div':
-                        if attrs_dict.get('id') == 'section-description':
-                            self.in_section_description = True
-                            self.section_depth = 0
-                        elif self.in_section_description:
-                            self.section_depth += 1
-                        elif 'description' in attrs_dict.get('class', ''):
-                            self.in_description_div = True
-
-                    elif tag == 'p' and 'description' in attrs_dict.get('class', ''):
-                        self.in_description_p = True
-
-                    elif tag == 'meta' and attrs_dict.get('name') == 'description':
-                        content = attrs_dict.get('content', '').strip()
-                        if content and len(content) > 20 and not self.description:
-                            self.description = content
-
-                def handle_endtag(self, tag):
-                    if tag == 'div':
-                        if self.in_section_description:
-                            self.section_depth -= 1
-                            if self.section_depth < 0:
-                                self.in_section_description = False
-                        elif self.in_description_div:
-                            self.in_description_div = False
-
-                    elif tag == 'p' and self.in_description_p:
-                        self.in_description_p = False
-
-                def handle_data(self, data):
-                    if (self.in_description_div or self.in_description_p or
-                        (self.in_section_description and self.section_depth >= 3)):
-                        content = data.strip()
-                        if len(content) > 20 and not self.description:
-                            self.description = content
-
-            parser = DescriptionParser()
-            parser.feed(self.html)
-
-            if parser.description and len(parser.description) > 20:
-                return parser.description
-
-        except Exception as e:
-            pass
-
-        # Попытка 3: regex
-        # Паттерн для селектора: #section-description > div:nth-child(2) > div > div > div
-        desc_pattern = r'id="section-description"[^>]*>(.*?)<div[^>]*>(.*?)<div[^>]*>(.*?)<div[^>]*>(.*?)</div>.*?</div>.*?</div>.*?</div>'
-
-        match = re.search(desc_pattern, self.html, re.IGNORECASE | re.DOTALL)
-        if match:
-            content_groups = match.groups()
-            if len(content_groups) >= 4:
-                content = content_groups[3]
-                clean_pattern = self._get_cached_pattern(r'<[^>]+>', re.I)
-                cleaned_content = clean_pattern.sub('', content).strip()
-
-                if len(cleaned_content) > 20:
-                    return cleaned_content
-
-        # Fallback regex
-        desc_fallback_patterns = [
+        desc_regex_patterns = [
+            # Regex эквиваленты LXML селекторов
+            r'<h2[^>]*>[^<]*Описание[^<]*</h2>\s*(?:<[^>]*>)*\s*<div[^>]*class="[^"]*pdp_ao9[^"]*"[^>]*>(.*?)</div>',
+            r'<div[^>]*data-widget="webDescription"[^>]*>.*?<h2[^>]*>[^<]*Описание[^<]*</h2>.*?<div[^>]*class="[^"]*pdp_ao9[^"]*"[^>]*>(.*?)</div>',
+            # Общие fallback паттерны
             r'<div[^>]*class="[^"]*description[^"]*"[^>]*>([^<]*(?:<[^/][^>]*>[^<]*</[^>]+>[^<]*)*)</div>',
-            r'<meta[^>]+name="description"[^>]+content="([^"]+)"',
-            r'<p[^>]*class="[^"]*description[^"]*"[^>]*>([^<]+)</p>'
+            r'<meta[^>]+name="description"[^>]+content="([^"]+)"'
         ]
 
-        match = self._search_with_pattern(desc_fallback_patterns, re.IGNORECASE | re.DOTALL)
-        if match:
-            clean_pattern = self._get_cached_pattern(r'<[^>]+>', re.I)
-            cleaned_content = clean_pattern.sub('', match.group(1)).strip()
+        for pattern_idx, pattern in enumerate(desc_regex_patterns, 1):
+            try:
+                console_log(f"[EXTRACT_DESC] Пробуем regex паттерн {pattern_idx}")
+                match = re.search(pattern, self.html, re.IGNORECASE | re.DOTALL)
+                if match:
+                    content = match.group(1)
+                    clean_pattern = self._get_cached_pattern(r'<[^>]+>', re.I)
+                    cleaned_content = clean_pattern.sub('', content).strip()
 
-            if len(cleaned_content) > 20:
-                return cleaned_content
+                    if len(cleaned_content) > 20:
+                        console_log(f"[EXTRACT_DESC] ✅ Regex fallback успешен, извлечено {len(cleaned_content)} символов")
+                        return cleaned_content
+                    else:
+                        console_log(f"[EXTRACT_DESC] ⚠️ Regex паттерн {pattern_idx} нашел контент, но он слишком короткий")
+                else:
+                    console_log(f"[EXTRACT_DESC] ❌ Regex паттерн {pattern_idx} не нашел совпадений")
 
+            except Exception as regex_error:
+                console_log(f"[EXTRACT_DESC] ❌ Ошибка в regex паттерне {pattern_idx}: {str(regex_error)}")
+                continue
+
+        console_log("[EXTRACT_DESC] ❌ Все методы извлечения описания провалились")
         return "Описание товара не найдено"
 
     def _extract_composition(self) -> str:
-        """Извлечение состава товара с многоуровневым fallback: lxml > html.parser > regex."""
+        """Извлечение состава товара с гибридным подходом: LXML приоритет > regex fallback."""
 
-        # Попытка 1: lxml
+        # Попытка 1: LXML с множественными селекторами для разных версий макета
         if lxml_available:
             try:
+                console_log("[EXTRACT_COMP] Попытка извлечения состава с помощью LXML")
                 tree = lxml.html.fromstring(self.html)
 
-                # Ищем h3 с текстом "Состав" или "Ингредиенты" в section-description
-                section_desc = tree.xpath('//*[@id="section-description"]')
-                if section_desc:
-                    h3_headers = section_desc[0].xpath('.//h3')
-                    for h3 in h3_headers:
-                        header_text = h3.text_content().strip().lower()
-                        if any(word in header_text for word in ['состав', 'ингредиенты', 'ingredients', 'состав:']):
-                            # Ищем следующий за h3 контент
-                            next_sibling = h3.getnext()
-                            if next_sibling is not None:
-                                content = next_sibling.text_content().strip()
-                                if len(content) > 10:
+                # Селекторы для состава в порядке приоритета (от специфичных к общим)
+                composition_selectors = [
+                    # Приоритет 1: Найти конкретный блок webDescription, затем h3 "Состав", затем следующий контент (p)
+                    '//div[@data-widget="webPdpGrid"]//div[@data-widget="webDescription"]//h3[contains(text(), "Состав")]/following::p[1]',
+                    # Приоритет 2: Альтернативный layout с pdp_sa1
+                    '//div[contains(@class, "pdp_sa1")]//div[@data-widget="webDescription"]//h3[contains(text(), "Состав")]/following::p[1]',
+                    # Приоритет 3: Общий селектор без блока webDescription
+                    '//h3[contains(text(), "Состав")]/following::p[1]'
+                ]
+
+                for selector_idx, selector in enumerate(composition_selectors, 1):
+                    try:
+                        console_log(f"[EXTRACT_COMP] Пробуем селектор {selector_idx}: {selector}")
+                        elements = tree.xpath(selector)
+
+                        if elements:
+                            console_log(f"[EXTRACT_COMP] ✅ Найден элемент по селектору {selector_idx}")
+                            for element in elements:
+                                content = element.text_content().strip()
+                                if len(content) > 20:
+                                    console_log(f"[EXTRACT_COMP] ✅ Извлечено состав длиной {len(content)} символов")
                                     return content
-                            # Если нет следующего sibling, ищем родительский контейнер
-                            parent = h3.getparent()
-                            if parent is not None:
-                                siblings = parent.xpath('./*')
-                                h3_index = siblings.index(h3)
-                                if h3_index + 1 < len(siblings):
-                                    next_elem = siblings[h3_index + 1]
-                                    content = next_elem.text_content().strip()
-                                    if len(content) > 10:
-                                        return content
+                            console_log(f"[EXTRACT_COMP] ⚠️ Элементы найдены, но контент слишком короткий")
+                        else:
+                            console_log(f"[EXTRACT_COMP] ❌ Селектор {selector_idx} не нашел элементов")
 
-                # Ищем div с классом composition или ingredients
-                comp_divs = tree.xpath('//div[contains(@class, "composition")] | //div[contains(@class, "ingredients")]')
-                for div in comp_divs:
-                    content = div.text_content().strip()
-                    if len(content) > 10:
-                        return content
+                    except Exception as selector_error:
+                        console_log(f"[EXTRACT_COMP] ❌ Ошибка в селекторе {selector_idx}: {str(selector_error)}")
+                        continue
 
-                # Ищем span с composition
-                comp_spans = tree.xpath('//span[contains(@class, "composition")] | //span[contains(@class, "ingredients")]')
-                for span in comp_spans:
-                    content = span.text_content().strip()
-                    if len(content) > 10:
-                        return content
+                console_log("[EXTRACT_COMP] ❌ LXML не смог извлечь состав ни по одному селектору")
 
-            except Exception as e:
-                pass
+            except Exception as lxml_error:
+                console_log(f"[EXTRACT_COMP] ❌ Критическая ошибка LXML: {str(lxml_error)}")
 
-        # Попытка 2: html.parser
-        try:
-            from html.parser import HTMLParser
-            class CompositionParser(HTMLParser):
-                def __init__(self):
-                    super().__init__()
-                    self.composition = None
-                    self.in_composition_div = False
-                    self.in_composition_span = False
-                    self.in_section_description = False
-                    self.found_composition_header = False
-                    self.section_depth = 0
-                    self.current_data = []
+        # Попытка 2: Regex fallback
+        console_log("[EXTRACT_COMP] Переход на regex fallback")
 
-                def handle_starttag(self, tag, attrs):
-                    attrs_dict = dict(attrs)
-
-                    if tag == 'div':
-                        if attrs_dict.get('id') == 'section-description':
-                            self.in_section_description = True
-                            self.section_depth = 0
-                        elif self.in_section_description:
-                            self.section_depth += 1
-                        elif 'composition' in attrs_dict.get('class', '') or 'ingredients' in attrs_dict.get('class', ''):
-                            self.in_composition_div = True
-
-                    elif tag == 'span' and ('composition' in attrs_dict.get('class', '') or 'ingredients' in attrs_dict.get('class', '')):
-                        self.in_composition_span = True
-
-                    elif tag == 'h3' and self.in_section_description:
-                        # Проверим в handle_data
-                        pass
-
-                def handle_endtag(self, tag):
-                    if tag == 'div':
-                        if self.in_section_description:
-                            self.section_depth -= 1
-                            if self.section_depth < 0:
-                                self.in_section_description = False
-                        elif self.in_composition_div:
-                            self.in_composition_div = False
-
-                    elif tag == 'span' and self.in_composition_span:
-                        self.in_composition_span = False
-
-                def handle_data(self, data):
-                    if self.in_composition_div or self.in_composition_span:
-                        content = data.strip()
-                        if len(content) > 10 and not self.composition:
-                            self.composition = content
-                    elif self.in_section_description and not self.composition:
-                        # Проверяем на заголовок состава
-                        data_lower = data.lower().strip()
-                        if any(word in data_lower for word in ['состав', 'ингредиенты', 'ingredients', 'состав:']):
-                            self.found_composition_header = True
-                        elif self.found_composition_header and len(data.strip()) > 10:
-                            self.composition = data.strip()
-                            self.found_composition_header = False
-
-            parser = CompositionParser()
-            parser.feed(self.html)
-
-            if parser.composition and len(parser.composition) > 10:
-                return parser.composition
-
-        except Exception as e:
-            pass
-
-        # Попытка 3: regex
-        comp_pattern = r'<div[^>]*id="section-description"[^>]*>.*?<div[^>]*>.*?<div[^>]*>.*?<div[^>]*>.*?<h3[^>]*>([^<]*(?:состав|ингредиенты|состав:|ingredients)[^<]*)</h3>.*?(.*?)(?=<h\d|$)'
-
-        match = re.search(comp_pattern, self.html, re.IGNORECASE | re.DOTALL)
-        if match:
-            header_text = match.group(1).strip()
-            content = match.group(2).strip()
-
-            if any(word in header_text.lower() for word in ['состав', 'ингредиенты', 'ingredients']):
-                clean_pattern = self._get_cached_pattern(r'<[^>]+>', re.I)
-                cleaned_content = clean_pattern.sub('', content).strip()
-
-                if len(cleaned_content) > 10:
-                    return cleaned_content
-
-        # Fallback regex
-        comp_fallback_patterns = [
-            r'<div[^>]*class="[^"]*composition[^"]*">([^<]*(?:<[^/][^>]*>[^<]*</[^>]+>[^<]*)*)</div>',
-            r'<div[^>]*class="[^"]*ingredients[^"]*">([^<]*(?:<[^/][^>]*>[^<]*</[^>]+>[^<]*)*)</div>',
-            r'<span[^>]*class="[^"]*composition[^"]*">([^<]+)</span>'
+        comp_regex_patterns = [
+            # Regex эквиваленты LXML селекторов
+            r'<h3[^>]*>[^<]*Состав[^<]*</h3>\s*(?:<[^>]*>)*\s*<p[^>]*>(.*?)</p>',
+            r'<div[^>]*data-widget="webDescription"[^>]*>.*?<h3[^>]*>[^<]*Состав[^<]*</h3>.*?<p[^>]*>(.*?)</p>',
+            # Общие fallback паттерны
+            r'<div[^>]*id="section-description"[^>]*>.*?<h3[^>]*>([^<]*(?:состав|ингредиенты|состав:|ingredients)[^<]*)</h3>.*?(.*?)(?=<h\d|$)',
+            r'<div[^>]*class="[^"]*composition[^"]*"[^>]*>([^<]*(?:<[^/][^>]*>[^<]*</[^>]+>[^<]*)*)</div>',
+            r'<div[^>]*class="[^"]*ingredients[^"]*"[^>]*>([^<]*(?:<[^/][^>]*>[^<]*</[^>]+>[^<]*)*)</div>'
         ]
 
-        match = self._search_with_pattern(comp_fallback_patterns, re.IGNORECASE | re.DOTALL)
-        if match:
-            clean_pattern = self._get_cached_pattern(r'<[^>]+>', re.I)
-            cleaned_content = clean_pattern.sub('', match.group(1)).strip()
+        for pattern_idx, pattern in enumerate(comp_regex_patterns, 1):
+            try:
+                console_log(f"[EXTRACT_COMP] Пробуем regex паттерн {pattern_idx}")
+                match = re.search(pattern, self.html, re.IGNORECASE | re.DOTALL)
+                if match:
+                    content = match.group(1)
+                    clean_pattern = self._get_cached_pattern(r'<[^>]+>', re.I)
+                    cleaned_content = clean_pattern.sub('', content).strip()
 
-            if len(cleaned_content) > 10:
-                return cleaned_content
+                    if len(cleaned_content) > 20:
+                        console_log(f"[EXTRACT_COMP] ✅ Regex fallback успешен, извлечено {len(cleaned_content)} символов")
+                        return cleaned_content
+                    else:
+                        console_log(f"[EXTRACT_COMP] ⚠️ Regex паттерн {pattern_idx} нашел контент, но он слишком короткий")
+                else:
+                    console_log(f"[EXTRACT_COMP] ❌ Regex паттерн {pattern_idx} не нашел совпадений")
 
+            except Exception as regex_error:
+                console_log(f"[EXTRACT_COMP] ❌ Ошибка в regex паттерне {pattern_idx}: {str(regex_error)}")
+                continue
+
+        console_log("[EXTRACT_COMP] ❌ Все методы извлечения состава провалились")
         return "Состав не указан"
 
     def _extract_categories(self) -> List[str]:
@@ -3853,32 +3730,144 @@ async def _analyze_composition_vs_description(description: str, composition: str
 
     # Оптимизированный промпт с учетом выбранного языка
     if content_language == "ru":
+        # prompt = f"""
+        # Проведи глубокий анализ (reasoning) соответствия Описания и Состава товара с медицинской и научной точки зрения:
+        # Описание: {description}
+        # Состав: {composition}
+        # Проанализируй:
+        # 1. Научную обоснованность заявленных свойств.
+        # 2. Потенциальные побочные эффекты и противопоказания.
+        # 3. Эффективность по сравнению с аналогами.
+        # Отвечай честно. Общую уверенность в ответе вырази в confidence.
+        # На основании этого анализа оцени соответствие Описания и Состава по шкале 1-10 (score) и верни JSON: {{"score": число, "reasoning": "подробное_обоснование_оценки", "confidence": значение_0_1}}
+        # Требуется вернуть ТОЛЬКО валидный JSON без какого-либо дополнительного текста, объяснений или форматирования.
+        # Выведи ответ на русском языке.
+        # """
         prompt = f"""
-        Проведи глубокий анализ (reasoning) соответствия Описания и Состава товара с медицинской и научной точки зрения:
+        Ты - токсиколог и химик-косметолог с 15-летним опытом. Твоя задача: провести КРИТИЧЕСКИЙ анализ косметического продукта, разоблачая маркетинговые уловки.
+
+        ДАННЫЕ:
         Описание: {description}
         Состав: {composition}
-        Проанализируй:
-        1. Научную обоснованность заявленных свойств.
-        2. Потенциальные побочные эффекты и противопоказания.
-        3. Эффективность по сравнению с аналогами.
-        Отвечай честно. Общую уверенность в ответе вырази в confidence.
-        На основании этого анализа оцени соответствие Описания и Состава по шкале 1-10 (score) и верни JSON: {{"score": число, "reasoning": "подробное_обоснование_оценки", "confidence": значение_0_1}}
-        Требуется вернуть ТОЛЬКО валидный JSON без какого-либо дополнительного текста, объяснений или форматирования.
-        Выведи ответ на русском языке.
+
+        ОБЯЗАТЕЛЬНАЯ МЕТОДОЛОГИЯ АНАЛИЗА:
+
+        1. ПРОВЕРКА МАРКЕТИНГОВЫХ ЗАЯВЛЕНИЙ:
+        - Термины типа "3D/4D/5D", "революционный", "инновационный" - ТРЕБУЮТ доказательств
+        - Для каждого заявления ("лифтинг", "против морщин"):
+            * Найди КОНКРЕТНЫЙ активный компонент
+            * Оцени его ПОЗИЦИЮ в списке (начало = высокая концентрация, конец = маркетинг)
+            * Укажи ЭФФЕКТИВНУЮ концентрацию из исследований vs вероятную в продукте
+
+        2. ТОКСИКОЛОГИЧЕСКИЙ СКРИНИНГ (приоритет №1):
+        - Проверь КАЖДЫЙ компонент на:
+            * Формальдегид-релизеры (DMDM Hydantoin, Quaternium-15, и т.д.)
+            * Парабены (особенно butyl-, propyl-)
+            * Устаревшие УФ-фильтры (Octinoxate, Oxybenzone)
+            * Потенциальные эндокринные дизрапторы
+        - Если найдено ≥3 проблемных компонента → оценка НЕ МОЖЕТ быть >5/10
+
+        3. РЕАЛИСТИЧНАЯ ОЦЕНКА ПЕПТИДОВ/АКТИВОВ:
+        - Palmitoyl Tripeptide-38: эффективен при 2-4%, если в середине списка → скорее <1% → эффект минимален
+        - Collagen/Elastin: молекулы НЕ проникают, работают только как пленка
+        - Hyaluronic acid: увлажняет ПОВЕРХНОСТНО, НЕ разглаживает глубокие морщины
+
+        4. СРАВНЕНИЕ С СОВРЕМЕННЫМИ СТАНДАРТАМИ:
+        - Современная косметика = без парабенов, с новыми консервантами
+        - Устаревшие формулы → снижение оценки на 2-3 балла
+
+        5. ШКАЛА ОЦЕНКИ (СТРОГАЯ):
+        - 9-10: Идеальный состав, доказанные активы в высоких концентрациях, без токсичных компонентов
+        - 7-8: Хороший состав, минимум проблемных компонентов
+        - 5-6: Средний продукт, есть проблемные компоненты ИЛИ активы в низких дозах
+        - 3-4: Устаревшая формула, много токсичных компонентов, маркетинговые заявления не подтверждены
+        - 1-2: Опасный или полностью бесполезный продукт
+
+        КРИТИЧЕСКИ ВАЖНО:
+        - Будь СКЕПТИЧЕН к маркетингу
+        - НЕ завышай оценку из вежливости
+        - Если состав устаревший (парабены + формальдегид-релизеры) → максимум 5/10
+        - Если заявления не подтверждены активами в ДОСТАТОЧНОЙ концентрации → снижай оценку
+
+        ФОРМАТ ОТВЕТА - ТОЛЬКО JSON:
+        {{
+        "score": число_от_1_до_10,
+        "reasoning": "ДЕТАЛЬНЫЙ анализ:
+            1. Проверка маркетинга: [разбери каждое заявление]
+            2. Токсикологический профиль: [перечисли ВСЕ проблемные компоненты]
+            3. Реальная эффективность активов: [концентрации vs заявления]
+            4. Сравнение с современными стандартами: [почему устарел/актуален]
+            5. Итоговый вердикт: [честное заключение]",
+        "confidence": число_от_0_до_1,
+        "red_flags": ["список всех токсичных/проблемных компонентов"],
+        "marketing_lies": ["список не подтвержденных маркетинговых заявлений"]
+        }}
+
+        ЯЗЫК: Русский, технический стиль с примерами.
         """
     else:  # English
         prompt = f"""
-        Conduct a deep analysis (reasoning) of the correspondence between the Product Description and Composition from a medical and scientific perspective:
+        You are a board-certified toxicologist and cosmetic chemist with 15 years of experience in ingredient safety assessment. Your task: conduct a CRITICAL, evidence-based analysis of this cosmetic product, exposing marketing manipulation.
+
+        DATA:
         Description: {description}
         Composition: {composition}
-        Analyze:
-        1. Scientific validity of the claimed properties.
-        2. Potential side effects and contraindications.
-        3. Effectiveness compared to analogs.
-        Answer honestly. Express overall confidence in the answer as confidence.
-        Based on this analysis, evaluate the correspondence between Description and Composition on a scale of 1-10 (score) and return JSON: {{"score": number, "reasoning": "detailed_justification_of_score", "confidence": value_0_1}}
-        You must return ONLY valid JSON without any additional text, explanations, or formatting.
-        Write the answer in English.
+
+        MANDATORY ANALYSIS PROTOCOL:
+
+        1. TOXICOLOGICAL SCREENING (highest priority):
+        - Screen EVERY ingredient for:
+            * Formaldehyde-releasers (DMDM Hydantoin, Quaternium-15, Diazolidinyl Urea, Imidazolidinyl Urea)
+            * Parabens (particularly butylparaben, propylparaben - EU restricted)
+            * Obsolete UV filters (Octinoxate/Ethylhexyl Methoxycinnamate, Oxybenzone)
+            * Known/suspected endocrine disruptors
+        - HARD RULE: ≥3 high-concern ingredients → score CAPPED at 5/10 maximum
+
+        2. MARKETING CLAIMS VERIFICATION:
+        - Buzzwords like "3D/4D/5D technology", "revolutionary", "clinical breakthrough" - DEMAND evidence
+        - For each claim ("lifting", "anti-wrinkle", "firming"):
+            * Identify the SPECIFIC active ingredient responsible
+            * Evaluate its POSITION in INCI list (first 5 = meaningful dose, after position 10 = cosmetic dose)
+            * Compare PROVEN effective concentration from peer-reviewed studies vs. LIKELY concentration in this product
+
+        3. REALISTIC EFFICACY ASSESSMENT:
+        - Palmitoyl Tripeptide-38 (Matrixyl synthe'6): clinically effective at 2-4%; if listed mid-INCI → probably <1% → negligible effect
+        - Collagen/Hydrolyzed Elastin: molecular weight >500 Da → CANNOT penetrate stratum corneum → function only as humectants/film-formers
+        - Sodium Hyaluronate: provides surface hydration only, CANNOT affect dermal structure or deep wrinkles
+
+        4. MODERN FORMULATION STANDARDS COMPARISON:
+        - 2025 best practices: phenoxyethanol or modern preservative systems, NO paraben cocktails
+        - Formulations using 4+ parabens + formaldehyde-releasers = outdated 2000s technology → automatic -2 to -3 point deduction
+
+        5. EVIDENCE-BASED SCORING RUBRIC (strict grading):
+        - 9-10: Exceptional formulation, clinically-validated actives at proven concentrations, clean safety profile
+        - 7-8: Well-formulated, minor concerns only, actives present at reasonable levels
+        - 5-6: Mediocre product with significant concerns (problematic preservatives OR underdosed actives OR misleading claims)
+        - 3-4: Poor formulation with multiple red flags, outdated technology, unsubstantiated marketing
+        - 1-2: Potentially harmful or fraudulent product
+
+        CRITICAL ASSESSMENT RULES:
+        - Maintain scientific skepticism toward all marketing language
+        - Apply evidence-based standards, NOT brand reputation
+        - Outdated preservation system (multiple parabens + formaldehyde-releaser) = AUTOMATIC cap at 5/10
+        - Claims unsupported by adequate active concentrations = reduce score proportionally
+        - Default to LOWER score when ingredient concentrations are ambiguous
+
+        OUTPUT FORMAT - VALID JSON ONLY:
+        {{
+        "score": integer_1_to_10,
+        "reasoning": "COMPREHENSIVE ANALYSIS:
+            1. Toxicological Profile: [enumerate ALL concerning ingredients with specific risks]
+            2. Marketing Claims Audit: [fact-check each claim against ingredient reality]
+            3. Active Ingredient Efficacy: [compare claimed benefits vs. probable concentrations vs. scientific evidence]
+            4. Formulation Modernity Assessment: [evaluate against current industry standards]
+            5. Evidence-Based Verdict: [objective conclusion with no marketing bias]",
+        "confidence": float_0_to_1,
+        "red_flags": ["comprehensive list of problematic/toxic/outdated ingredients"],
+        "marketing_lies": ["specific unsubstantiated or misleading marketing claims"]
+        }}
+
+        RESPONSE LANGUAGE: English, using precise technical terminology.
         """
 
     # prompt = f"""
