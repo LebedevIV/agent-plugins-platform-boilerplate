@@ -276,7 +276,12 @@ def console_log(message: str, force: bool = False):
         else:
             # Двойной fallback: отправляем в чат как отладочное сообщение (только для критичных)
             if force:
-                chat_message(f"🐛 DEBUG: {message}")
+                plugin_settings = get_pyodide_var('pluginSettings', {})
+                content_language = get_safe_content_language(plugin_settings)
+                if content_language == "ru":
+                    chat_message(f"🐛 ОТЛАДКА: {message}")
+                else:
+                    chat_message(f"🐛 DEBUG: {message}")
     except Exception as e:
         # Тройной fallback: игнорируем ошибки логирования
         pass
