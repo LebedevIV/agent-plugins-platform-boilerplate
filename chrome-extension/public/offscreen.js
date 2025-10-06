@@ -696,8 +696,26 @@ async function initializePyodide() {
           });
 
           if (!response.ok) {
-            const errorData = await response.text();
-            throw new Error(`Gemini API error (${response.status}): ${errorData}`);
+            // ДОСТАТЬ ПОЛНЫЙ ОБЪЕКТ ОШИБКИ API ДЛЯ ПЕРЕДАЧИ В PYTHON
+            let apiErrorData = null;
+            try {
+              const errorText = await response.text();
+              // Попытаться распарсить как JSON для получения полного объекта ошибки
+              try {
+                apiErrorData = JSON.parse(errorText);
+              } catch (parseError) {
+                // Если не JSON, сохранить как текст
+                apiErrorData = { error: { message: errorText, status: response.status } };
+              }
+            } catch (textError) {
+              apiErrorData = { error: { message: `HTTP ${response.status}`, status: response.status } };
+            }
+
+            // Создать объект ошибки с полными данными API
+            const errorObj = new Error(`Gemini API error (${response.status}): ${apiErrorData?.error?.message || 'Unknown error'}`);
+            errorObj.apiError = apiErrorData;
+            errorObj.status = response.status;
+            throw errorObj;
           }
 
           const responseData = await response.json();
@@ -731,12 +749,17 @@ async function initializePyodide() {
         } catch (error) {
           // logError('PYODIDE', 'LLM call failed:', error);
 
-          // Graceful fallback - возвращаем понятное сообщение об ошибке
+          // ПЕРЕДАТЬ ПОЛНЫЙ ОБЪЕКТ ОШИБКИ API В PYTHON
           const errorMessage = error.message.includes('API key not found')
             ? 'Gemini API key not configured. Please set your API key in the extension settings.'
             : `Gemini API call failed: ${error.message}`;
 
-          return pyodide.toPy({ error: errorMessage });
+          const errorResult = {
+            error: errorMessage,
+            api_error: error.apiError || null  // Передаем полный объект ошибки API
+          };
+
+          return pyodide.toPy(errorResult);
         }
       },
       get_setting: (settingName, defaultValue, category) => {

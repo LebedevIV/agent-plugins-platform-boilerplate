@@ -202,18 +202,14 @@ def get_pyodide_var(name: str, default: Any = None) -> Any:
     Логирует процесс доступа для отладки.
     """
     try:
-        # console_log(f"🔍 get_pyodide_var: Проверяем переменную '{name}'")
 
         # Проверяем наличие переменной в globals()
         if name in globals():
             value = globals()[name]
-            # console_log(f"✅ get_pyodide_var: Переменная '{name}' найдена, значение = {value}, тип = {type(value)}")
             return value
         else:
-            # console_log(f"ℹ️ get_pyodide_var: Переменная '{name}' не найдена в globals(), возвращаем default: {default}")
             return default
     except Exception as e:
-        # console_log(f"⚠️ get_pyodide_var: Ошибка доступа к переменной '{name}': {e}, возвращаем default: {default}")
         return default
 
 
@@ -290,7 +286,7 @@ def safe_len(text):
     try:
         return len(str(text or ""))
     except Exception as e:
-        # console_log(f"Ошибка при подсчете длины: {str(e)}")
+        console_log(f"Ошибка при подсчете длины: {str(e)}")
         return 0
 
 # ==============================================================================
@@ -304,7 +300,7 @@ def chat_message(message: str, message_type: str = None):
         js.sendMessageToChat({"content": message})
         # console_log(f"✅ Сообщение успешно отправлено в чат ({len(message)} символов)")
     except Exception as e:
-        # console_log(f"❌ ОШИБКА отправки в чат: {message[:200]}... Ошибка: {str(e)}")
+        console_log(f"❌ ОШИБКА отправки в чат: {message[:200]}... Ошибка: {str(e)}")
         # Отправляем ошибку в чат для пользователя
         try:
             error_msg = f"⚠️ Ошибка отправки сообщения в чат: {str(e)[:100]}..."
@@ -674,41 +670,26 @@ class OzonAnalyzerServer:
         start_time = datetime.now()
 
         try:
-            # console_log(f"[BRIDGE DIAGNOSTIC] ===== ВЫЗОВ js.llm_call =====")
-            # console_log(f"[BRIDGE DIAGNOSTIC] Model alias: {model_alias}")
-            # console_log(f"[BRIDGE DIAGNOSTIC] Prompt length: {len(prompt)} characters")
-            # console_log(f"[BRIDGE DIAGNOSTIC] Prompt preview: {prompt[:200]}...")
 
             # Асинхронный вызов AI модели
             response_proxy = await js.llm_call(model_alias, {"prompt": prompt, "maxOutputTokens": 4096})
 
-            # console_log(f"[BRIDGE DIAGNOSTIC] js.llm_call returned: {response_proxy}")
-            # console_log(f"[BRIDGE DIAGNOSTIC] Response proxy type: {type(response_proxy)}")
-
             if response_proxy is None:
-                # console_log(f"[BRIDGE DIAGNOSTIC] ❌ js.llm_call вернул None!")
+                console_log(f"[BRIDGE DIAGNOSTIC] ❌ js.llm_call вернул None!")
                 raise Exception("js.llm_call вернул None")
 
             # Правильная обработка PyodideFuture
             if hasattr(response_proxy, 'to_py'):
-                # console_log(f"[BRIDGE DIAGNOSTIC] Конвертация PyodideFuture в Python объект...")
                 # Если это PyodideFuture, конвертируем
                 result = response_proxy.to_py()
-                # console_log(f"[BRIDGE DIAGNOSTIC] После конвертации: {result}")
-                # console_log(f"[BRIDGE DIAGNOSTIC] Тип после конвертации: {type(result)}")
             else:
-                # console_log(f"[BRIDGE DIAGNOSTIC] Результат уже в Python формате")
                 # Если уже готовый результат
                 result = response_proxy
 
             # ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ СЫРОГО ОТВЕТА ОТ js.llm_call
             console_log("[RAW JS RESPONSE] ===== СЫРОЙ ОТВЕТ ОТ js.llm_call =====")
-            # console_log(f"[RAW JS RESPONSE] Тип результата: {type(result)}")
-            # console_log(f"[RAW JS RESPONSE] Содержимое результата: {result}")
             if isinstance(result, dict):
-                # console_log(f"[RAW JS RESPONSE] Ключи в результате: {list(result.keys())}")
                 for key, value in result.items():
-                    # console_log(f"[RAW JS RESPONSE]   {key}: {type(value)} = {value}")
                     pass
         
                 # Проверяем новый формат ответа с полем 'result'
@@ -749,34 +730,91 @@ class OzonAnalyzerServer:
                 final_response_text = None
             console_log("[RAW JS RESPONSE] ===== КОНЕЦ СЫРОГО ОТВЕТА =====")
 
+            # ДОБАВИТЬ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ НЕПОСРЕДСТВЕННО ПЕРЕД ОБРАБОТКОЙ ОШИБОК
+            if result is not None:
+                console_log(f"[ERROR PROCESSING] result type: {type(result)}")
+                console_log(f"[ERROR PROCESSING] result keys: {list(result.keys()) if isinstance(result, dict) else 'not dict'}")
+                console_log(f"[ERROR PROCESSING] result content: {result}")
+                console_log(f"[ERROR PROCESSING] safe_dict_get(result, 'error'): {safe_dict_get(result, 'error')}")
+                console_log(f"[ERROR PROCESSING] safe_dict_get(result, 'api_error'): {safe_dict_get(result, 'api_error')}")
+                # ДОПОЛНИТЕЛЬНОЕ ЛОГИРОВАНИЕ ДЛЯ api_error СТРУКТУРЫ
+                api_error_value = safe_dict_get(result, 'api_error')
+                if api_error_value is not None:
+                    console_log(f"[ERROR PROCESSING] api_error is not None: type={type(api_error_value)}")
+                    if isinstance(api_error_value, dict):
+                        console_log(f"[ERROR PROCESSING] api_error keys: {list(api_error_value.keys())}")
+                        console_log(f"[ERROR PROCESSING] api_error content preview: {str(api_error_value)[:500]}...")
+                    else:
+                        console_log(f"[ERROR PROCESSING] api_error value: {str(api_error_value)[:500]}...")
+                else:
+                    console_log("[ERROR PROCESSING] api_error is None")
+            console_log("[ERROR PROCESSING] ===== КОНЕЦ ДЕТАЛЬНОГО ЛОГИРОВАНИЯ =====")
+
             if result is None or safe_dict_get(result, "error"):
-                error_msg = safe_dict_get(result, "error_message", "Неизвестная ошибка") if result else "Пустой ответ от хоста"
+                # Проверяем, есть ли полный объект ошибки API (новый формат)
+                api_error = safe_dict_get(result, "api_error")
+                console_log(f"[API ERROR PROCESSING] Извлечен api_error: {api_error}")
+                console_log(f"[API ERROR PROCESSING] Тип api_error: {type(api_error)}")
+
+                if api_error:
+                    console_log("[API ERROR PROCESSING] Вошли в блок обработки api_error")
+                    # Используем полный объект ошибки API вместо обобщенного сообщения
+                    if isinstance(api_error, dict):
+                        console_log("[API ERROR PROCESSING] api_error является словарем")
+                        console_log(f"[API ERROR PROCESSING] api_error keys: {list(api_error.keys())}")
+                        console_log(f"[API ERROR PROCESSING] api_error content: {api_error}")
+
+                        if safe_dict_get(api_error, "error"):
+                            console_log("[API ERROR PROCESSING] Найдено вложенное поле 'error' (формат Google Gemini)")
+                            # Формат ошибки Google Gemini API с вложенным полем error
+                            error_details = safe_dict_get(api_error, "error")
+                            console_log(f"[API ERROR PROCESSING] error_details: {error_details}")
+                            console_log(f"[API ERROR PROCESSING] error_details type: {type(error_details)}")
+
+                            if isinstance(error_details, dict):
+                                error_code = safe_dict_get(error_details, "code", "Unknown")
+                                error_message = safe_dict_get(error_details, "message", "No message")
+                                error_status = safe_dict_get(error_details, "status", "Unknown status")
+                                error_msg = f"API Error {error_code}: {error_message} (Status: {error_status})"
+                                console_log(f"[API ERROR PROCESSING] Сформированное сообщение об ошибке: {error_msg}")
+                            else:
+                                error_msg = json.dumps(error_details) if error_details else "API Error details"
+                                console_log(f"[API ERROR PROCESSING] error_details не словарь, json.dumps: {error_msg}")
+                        else:
+                            console_log("[API ERROR PROCESSING] Вложенное поле 'error' не найдено, сериализуем api_error как JSON")
+                            # Другие форматы ошибок API - сериализуем как JSON
+                            error_msg = json.dumps(api_error)
+                            console_log(f"[API ERROR PROCESSING] Сериализованный api_error: {error_msg}")
+                    else:
+                        console_log("[API ERROR PROCESSING] api_error НЕ является словарем")
+                        # Если api_error не словарь, конвертируем в строку
+                        error_msg = str(api_error)
+                        console_log(f"[API ERROR PROCESSING] api_error как строка: {error_msg}")
+                else:
+                    console_log("[API ERROR PROCESSING] api_error отсутствует, используем fallback")
+                    # Fallback к старому формату error_message для обратной совместимости
+                    error_msg = safe_dict_get(result, "error_message", "Неизвестная ошибка") if result else "Пустой ответ от хоста"
+                    console_log(f"[API ERROR PROCESSING] Fallback error_msg: {error_msg}")
+                console_log(f"[API ERROR PROCESSING] Финальное сообщение об ошибке перед исключением: {error_msg}")
                 raise Exception(f"Ошибка вызова API: {error_msg}")
         
             # ДОБАВИТЬ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ ЗДЕСЬ:
             console_log("=== СЫРОЙ ОТВЕТ ОТ js.llm_call ===")
-            # console_log(f"Тип результата: {type(result)}")
-            # console_log(f"Содержимое результата: {result}")
             if isinstance(result, dict):
-                # console_log(f"Ключи в результате: {list(result.keys())}")
                 for key, value in result.items():
-                    # console_log(f"  {key}: {type(value)} = {value}")
                     pass
             console_log("=== КОНЕЦ СЫРОГО ОТВЕТА ===")
 
             # ИСПОЛЬЗУЕМ final_response_text ИЗ РАСШИРЕННОГО ЛОГИРОВАНИЯ
             if 'final_response_text' in locals() and final_response_text is not None:
                 response_text = final_response_text
-                # console_log(f"✅ Используем final_response_text: {type(response_text)} длиной {safe_len(response_text)}")
             else:
                 # Fallback для обратной совместимости
                 response_text = safe_dict_get(result, "response", "Нет ответа от модели.")
-                # console_log(f"⚠️ Используем fallback response_text: {safe_dict_get(result, 'response', 'None')}")
             response_time = int((datetime.now() - start_time).total_seconds() * 1000)
 
             # Проверяем тип ответа
             if not isinstance(response_text, str):
-                # console_log(f"AI вернул {type(response_text)} вместо строки, конвертируем")
                 response_text = str(response_text)
             elif response_text is None:
                 console_log("AI вернул None, устанавливаем fallback")
@@ -972,10 +1010,10 @@ class FastDOMParser:
                 if extracted_value is not None:
                     info[field_name] = extracted_value
                 else:
-                    # console_log(f"⚠️ {field_name} вернул None, использую fallback")
+                    console_log(f"⚠️ {field_name} вернул None, использую fallback")
                     info[field_name] = fallback_value
             except Exception as e:
-                # console_log(f"❌ Ошибка извлечения {field_name}: {e}")
+                console_log(f"❌ Ошибка извлечения {field_name}: {e}")
                 info[field_name] = fallback_value
 
         # Вычисляем время парсинга
@@ -1010,7 +1048,7 @@ class FastDOMParser:
         try:
             return self._extract_price()
         except Exception as e:
-            # console_log(f"❌ Ошибка извлечения цены: {e}")
+            console_log(f"❌ Ошибка извлечения цены: {e}")
             return {'text': 'Цена не найдена', 'amount': 0, 'currency': 'unknown'}
 
     def _extract_rating_safe(self) -> Dict[str, Any]:
@@ -1018,7 +1056,7 @@ class FastDOMParser:
         try:
             return self._extract_rating()
         except Exception as e:
-            # console_log(f"❌ Ошибка извлечения рейтинга: {e}")
+            console_log(f"❌ Ошибка извлечения рейтинга: {e}")
             return {'text': 'Рейтинг не найден', 'value': 0, 'max_value': 5.0}
 
     def _extract_title(self) -> str:
@@ -1586,7 +1624,7 @@ class FastDOMParser:
             return []
 
         except Exception as e:
-            # console_log(f"Ошибка в _extract_with_html_parser: {e}")
+            console_log(f"Ошибка в _extract_with_html_parser: {e}")
             return []
 
     def _extract_with_lxml(self, tree) -> List[str]:
@@ -1615,14 +1653,14 @@ class FastDOMParser:
                         # Ищем ссылку в первом li
                         first_link = first_li[0].xpath('.//a')[0] if first_li[0].xpath('.//a') else None
                         if first_link:
-                            console_log("Найдена первая ссылка в breadcrumb")
+                            # console_log("Найдена первая ссылка в breadcrumb")
                             break
 
                     # Если не нашли в li, ищем первую ссылку в контейнере
                     all_links = breadcrumb_container[0].xpath('.//a')
                     if all_links:
                         first_link = all_links[0]
-                        console_log("Найдена первая ссылка в breadcrumb контейнере")
+                        # console_log("Найдена первая ссылка в breadcrumb контейнере")
                         break
 
             if not first_link:
@@ -1654,7 +1692,7 @@ class FastDOMParser:
             return []
 
         except Exception as e:
-            # console_log(f"Ошибка в _extract_with_lxml: {e}")
+            console_log(f"Ошибка в _extract_with_lxml: {e}")
             return []
 
     def _extract_with_regex(self) -> List[str]:
@@ -1680,7 +1718,7 @@ class FastDOMParser:
                     break
 
             if not breadcrumbs_html:
-                # console_log("Не найден breadcrumb контейнер ни по одному паттерну")
+                console_log("Не найден breadcrumb контейнер ни по одному паттерну")
                 return []
 
             # Ищем список элементов (ol, ul)
@@ -1737,7 +1775,7 @@ class FastDOMParser:
             return []
 
         except Exception as e:
-            # console_log(f"Ошибка в _extract_with_regex: {e}")
+            console_log(f"Ошибка в _extract_with_regex: {e}")
             return []
 
     def is_product_in_target_category(self, categories: List[str]) -> bool:
@@ -2183,11 +2221,11 @@ def _diagnose_variable_access(variable_name: str) -> Dict[str, Any]:
     except KeyError as e:
         methods['globals_direct'] = {'success': False, 'error': 'KeyError', 'details': str(e)}
         error_details['globals_direct'] = str(e)
-        # console_log(f"❌ globals()['{variable_name}'] - KeyError: {e}")
+        console_log(f"❌ globals()['{variable_name}'] - KeyError: {e}")
     except Exception as e:
         methods['globals_direct'] = {'success': False, 'error': type(e).__name__, 'details': str(e)}
         error_details['globals_direct'] = str(e)
-        # console_log(f"❌ globals()['{variable_name}'] - {type(e).__name__}: {e}")
+        console_log(f"❌ globals()['{variable_name}'] - {type(e).__name__}: {e}")
 
     # Метод 2: pyodide.globals (прямой доступ)
     try:
@@ -2205,7 +2243,7 @@ def _diagnose_variable_access(variable_name: str) -> Dict[str, Any]:
     except Exception as e:
         methods['pyodide_globals_direct'] = {'success': False, 'error': type(e).__name__, 'details': str(e)}
         error_details['pyodide_globals_direct'] = str(e)
-        # console_log(f"❌ pyodide.globals['{variable_name}'] - {type(e).__name__}: {e}")
+        console_log(f"❌ pyodide.globals['{variable_name}'] - {type(e).__name__}: {e}")
 
     # Метод 2.1: Проверка существования pyodide.globals.get() (тест на ошибку)
     try:
@@ -2228,7 +2266,7 @@ def _diagnose_variable_access(variable_name: str) -> Dict[str, Any]:
     except Exception as e:
         methods['pyodide_globals_get_method'] = {'success': False, 'error': type(e).__name__, 'details': str(e)}
         error_details['pyodide_globals_get_method'] = str(e)
-        # console_log(f"❌ Проверка pyodide.globals.get() - {type(e).__name__}: {e}")
+        console_log(f"❌ Проверка pyodide.globals.get() - {type(e).__name__}: {e}")
 
     # Метод 3: hasattr + getattr
     try:
@@ -2243,11 +2281,11 @@ def _diagnose_variable_access(variable_name: str) -> Dict[str, Any]:
             # console_log(f"✅ getattr(pyodide.globals, '{variable_name}') = {getattr_result}")
         else:
             methods['pyodide_getattr'] = {'success': False, 'error': 'AttributeError', 'details': f"hasattr вернул False"}
-            # console_log(f"❌ hasattr(pyodide.globals, '{variable_name}') вернул False")
+            console_log(f"❌ hasattr(pyodide.globals, '{variable_name}') вернул False")
     except Exception as e:
         methods['pyodide_getattr'] = {'success': False, 'error': type(e).__name__, 'details': str(e)}
         error_details['pyodide_getattr'] = str(e)
-        # console_log(f"❌ getattr(pyodide.globals, '{variable_name}') - {type(e).__name__}: {e}")
+        console_log(f"❌ getattr(pyodide.globals, '{variable_name}') - {type(e).__name__}: {e}")
 
     # Метод 4: Проверка через dir()
     try:
@@ -2263,7 +2301,7 @@ def _diagnose_variable_access(variable_name: str) -> Dict[str, Any]:
         # console_log(f"📊 Ключ '{variable_name}' в pyodide.globals: {variable_name in pyodide_keys}")
     except Exception as e:
         methods['globals_keys'] = {'success': False, 'error': type(e).__name__, 'details': str(e)}
-        # console_log(f"❌ Ошибка проверки ключей: {e}")
+        console_log(f"❌ Ошибка проверки ключей: {e}")
 
     # Рекомендация лучшего метода
     successful_methods = [k for k, v in methods.items() if isinstance(v, dict) and v.get('success', False)]
@@ -2272,10 +2310,10 @@ def _diagnose_variable_access(variable_name: str) -> Dict[str, Any]:
         # console_log(f"🎯 РЕКОМЕНДУЕМЫЙ МЕТОД: {best_method}")
         # if result is not None:
             # console_log(f"📋 ИСПОЛЬЗУЕМ ЗНАЧЕНИЕ: {result}")
-    # else:
-        # console_log("❌ НИ ОДИН МЕТОД НЕ СРАБОТАЛ!")
+    else:
+        console_log("❌ НИ ОДИН МЕТОД НЕ СРАБОТАЛ!")
 
-    # console_log(f"🔍 ===== КОНЕЦ ДИАГНОСТИКИ '{variable_name}' =====")
+    console_log(f"🔍 ===== КОНЕЦ ДИАГНОСТИКИ '{variable_name}' =====")
 
     return {
         'variable_name': variable_name,
@@ -2306,7 +2344,7 @@ def _run_async_in_sync(coro):
             new_loop.close()
             return result
         except Exception as e2:
-            # console_log(f"Не удалось создать новый event loop: {e2}")
+            console_log(f"Не удалось создать новый event loop: {e2}")
             # Возвращаем fallback значения
             return ({"score": 5, "reasoning": "Ошибка выполнения асинхронного кода"}, [])
 
@@ -2326,11 +2364,11 @@ async def _analyze_product_async(description: str, composition: str, categories:
 
     # Обрабатываем исключения
     if isinstance(analysis_result, Exception):
-        # console_log(f"Ошибка в анализе соответствия: {analysis_result}")
+        console_log(f"Ошибка в анализе соответствия: {analysis_result}")
         analysis_result = {"score": 5, "reasoning": f"Ошибка анализа: {str(analysis_result)}"}
 
     if isinstance(analogs, Exception):
-        # console_log(f"Ошибка в поиске аналогов: {analogs}")
+        console_log(f"Ошибка в поиске аналогов: {analogs}")
         analogs = [{"name": f"Ошибка поиска аналогов: {str(analogs)}", "error": True}]
 
     return analysis_result, analogs
@@ -2366,9 +2404,9 @@ def get_safe_content_language(plugin_settings: Dict[str, Any]) -> str:
     """
     console_log("[LANGUAGE_VALIDATION] ===== НАЧАЛО ВАЛИДАЦИИ ЯЗЫКА =====")
 
-    # ДОПОЛНИТЕЛЬНАЯ ПРОБЕРКА plugin_settings В get_safe_content_language
+    # ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА plugin_settings В get_safe_content_language
     if not isinstance(plugin_settings, dict):
-        # console_log(f"[LANGUAGE_VALIDATION] ВНИМАНИЕ: plugin_settings не является словарем в get_safe_content_language! Тип: {type(plugin_settings)}, Значение: {plugin_settings}")
+        console_log(f"[LANGUAGE_VALIDATION] ВНИМАНИЕ: plugin_settings не является словарем в get_safe_content_language! Тип: {type(plugin_settings)}, Значение: {plugin_settings}")
         plugin_settings = {}  # Принудительно устанавливаем пустой словарь для безопасности
 
     # Извлечение значения response_language из plugin_settings
@@ -2470,7 +2508,7 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
                 console_log(f"[PYODIDE GLOBALS DIAGNOSTIC] ошибка при получении ключей: {e}")
     except Exception as e:
         console_log(f"[PYODIDE GLOBALS DIAGNOSTIC] ошибка диагностики pyodide.globals: {e}")
-    # console_log("[PYODIDE GLOBALS DIAGNOSTIC] ===== КОНЕЦ ПРОВЕРКИ pyodide.globals =====")
+    console_log("[PYODIDE GLOBALS DIAGNOSTIC] ===== КОНЕЦ ПРОВЕРКИ pyodide.globals =====")
 
     # ТЕСТОВЫЙ ВЫЗОВ для проверки работы console_log
     # console_log("🧪 ТЕСТОВЫЙ ВЫЗОВ console_log - если вы видите это сообщение, логирование работает!")
@@ -2492,7 +2530,7 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
         for var_name in critical_vars:
             if var_name in pyodide.globals:
                 value = pyodide.globals[var_name]
-                console_log(f"[CRITICAL DIAGNOSTIC] ✅ {var_name} = {value} (тип: {type(value)})")
+                # console_log(f"[CRITICAL DIAGNOSTIC] ✅ {var_name} = {value} (тип: {type(value)})")
             else:
                 console_log(f"[CRITICAL DIAGNOSTIC] ❌ {var_name} ОТСУТСТВУЕТ в pyodide.globals")
     except Exception as e:
@@ -2525,7 +2563,7 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
     # console_log(f"[LANGUAGE] plugin_settings в момент вызова get_safe_content_language: {plugin_settings}")
     # console_log(f"[LANGUAGE] Тип plugin_settings: {type(plugin_settings)}")
     if isinstance(plugin_settings, dict):
-        console_log(f"[LANGUAGE] Ключи plugin_settings: {list(plugin_settings.keys())}")
+        # console_log(f"[LANGUAGE] Ключи plugin_settings: {list(plugin_settings.keys())}")
         console_log(f"[LANGUAGE] response_language в plugin_settings: {plugin_settings.get('response_language', 'KEY_NOT_FOUND')}")
 
     try:
@@ -2673,9 +2711,9 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
         # Координация режимов передачи
         console_log("🔄 Координация режимов передачи данных...")
         if transmission_mode == 'direct':
-            console_log("📨 Режим DIRECT: Ожидание прямой передачи HTML")
-            console_log("📋 Координация: Проверяем наличие page_html_direct в globals")
-            console_log("📋 Состояние: Ожидание завершения прямой передачи")
+            # console_log("📨 Режим DIRECT: Ожидание прямой передачи HTML")
+            # console_log("📋 Координация: Проверяем наличие page_html_direct в globals")
+            # console_log("📋 Состояние: Ожидание завершения прямой передачи")
 
             # Проверяем метаданные прямой передачи
             try:
@@ -2688,9 +2726,9 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
                 console_log(f"⚠️ Не удалось прочитать метаданные прямой передачи: {e}")
 
         else:
-            console_log("📦 Режим CHUNKS: Ожидание передачи чанков")
+            # console_log("📦 Режим CHUNKS: Ожидание передачи чанков")
             # console_log(f"📋 Координация: Ожидаем {chunk_count} чанков (page_html_chunk_0 до page_html_chunk_{chunk_count-1})")
-            console_log("📋 Состояние: Ожидание завершения всех чанков")
+            # console_log("📋 Состояние: Ожидание завершения всех чанков")
 
             # Проверяем метаданные чанковой передачи
             try:
@@ -2705,17 +2743,17 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
         # console_log(f"🔄 Координация завершена для режима {transmission_mode}")
 
         # Финальная проверка готовности данных и сборка HTML
-        console_log("🔍 Финальная проверка готовности данных и сборка HTML...")
+        # console_log("🔍 Финальная проверка готовности данных и сборка HTML...")
 
         if transmission_mode == 'direct':
             # Режим прямой передачи - HTML уже готов
-            console_log("📨 Обработка прямой передачи HTML")
+            # console_log("📨 Обработка прямой передачи HTML")
             # console_log(f"📋 Проверка качества прямого HTML: {type(direct_html_data)}")
 
             if direct_html_data and len(direct_html_data) > 100:
                 page_html = direct_html_data
                 # console_log(f"✅ HTML получен напрямую: {len(page_html)} символов")
-                console_log("📊 Проверка целостности прямого HTML:")
+                # console_log("📊 Проверка целостности прямого HTML:")
                 _check_html_integrity(page_html, "direct_transmission")
             else:
                 console_log("❌ Данные не готовы - прямая передача не удалась")
@@ -2814,13 +2852,13 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
                 # console_log(f"Чанк {i} добавлен: накоплено {len(chunks)} чанков, размер={total_chunks_size} символов")
 
             # Безопасная сборка полного HTML из чанков
-            console_log("🔧 Безопасная сборка полного HTML из чанков")
+            # console_log("🔧 Безопасная сборка полного HTML из чанков")
             page_html = _safe_assemble_chunks(chunks, total_length, "ozon_analyzer")
             assembled_length = len(page_html)
             # console_log(f"✅ HTML безопасно собран: длина={assembled_length} символов")
 
         # Итоговый отчет по чанкам
-        console_log("===== ОТЧЕТ ПО ЧАНКАМ =====")
+        # console_log("===== ОТЧЕТ ПО ЧАНКАМ =====")
         # console_log(f"Всего прочитано: {len(chunks)} чанков")
         # console_log(f"Общий размер: {total_chunks_size} символов")
 
@@ -2840,7 +2878,7 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
 
         if transmission_mode == 'chunks':
             # Итоговый отчет по чанкам только в режиме chunks
-            console_log("===== ОТЧЕТ ПО ЧАНКАМ =====")
+            # console_log("===== ОТЧЕТ ПО ЧАНКАМ =====")
             # console_log(f"Всего прочитано: {len(chunks)} чанков")
             # console_log(f"Общий размер: {total_chunks_size} символов")
 
@@ -2918,14 +2956,14 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
         total_close_tags = page_html.count('</')
         self_closing_tags = page_html.count('/>')
 
-        # console_log(f"Теги - всего: {total_open_tags}, закрывающих: {total_close_tags}, самозакрывающихся: {self_closing_tags}")
+        console_log(f"Теги - всего: {total_open_tags}, закрывающих: {total_close_tags}, самозакрывающихся: {self_closing_tags}")
 
         # Расчет баланса тегов
         tag_balance = total_open_tags - total_close_tags - self_closing_tags
-        # console_log(f"Баланс тегов: {tag_balance}")
+        console_log(f"Баланс тегов: {tag_balance}")
 
         if abs(tag_balance) > 5:
-            # console_log(f"ОБНАРУЖЕН ДИСБАЛАНС ТЕГОВ: {tag_balance}")
+            console_log(f"ОБНАРУЖЕН ДИСБАЛАНС ТЕГОВ: {tag_balance}")
             if tag_balance > 0:
                 console_log("Больше незакрытых тегов - возможна обрезка")
             else:
@@ -2939,7 +2977,7 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
             'HTML_entities': has_entities,
             'Unicode_chars': has_unicode
         }
-        # console_log(f"Кодировка: {encoding_check}")
+        console_log(f"Кодировка: {encoding_check}")
 
         # Финальная валидация HTML с расширенными проверками
         console_log("Финальная валидация HTML...")
@@ -2988,11 +3026,11 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
                 raise ValueError(f"HTML validation failed: {'; '.join(validation_errors)}")
 
         console_log("HTML прошел все проверки валидации")
-        # console_log(f"Финальная длина HTML: {len(page_html)} символов")
+        console_log(f"Финальная длина HTML: {len(page_html)} символов")
 
         # Шаг 5: Финальное логирование перед анализом
-        console_log("Финальная подготовка к анализу")
-        console_log("Данные из Python globals успешно прочитаны и собраны")
+        # console_log("Финальная подготовка к анализу")
+        # console_log("Данные из Python globals успешно прочитаны и собраны")
         # console_log(f"Финальная длина HTML: {len(page_html)} символов")
         # console_log(f"Эффективность передачи: {(len(page_html) / total_length * 100):.1f}% от ожидаемого")
 
@@ -3026,7 +3064,7 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
         console_log("===== НАЧИНАЕМ АНАЛИЗ СТРАНИЦЫ ТОВАРА =====")
 
         # Статус сообщения - подтверждение запуска функции
-        console_log("Анализ товара Ozon запущен")
+        # console_log("Анализ товара Ozon запущен")
 
         # Временная заглушка для парсера. В будущем здесь будет использоваться
         # библиотека `beautifulsoup4`, которая будет установлена как зависимость
@@ -3042,7 +3080,7 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
             }
         
         analysis_start = datetime.now()
-        console_log("Начинаю анализ страницы товара...")
+        # console_log("Начинаю анализ страницы товара...")
 
         # Шаг 1: Оптимизированное извлечение структурированных данных со страницы
         console_log("Быстрый DOM парсинг...")
@@ -3185,12 +3223,12 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
 
         # Детальное логирование полных данных в консоль для разработчиков
         console_log("=== ДЕТАЛЬНЫЕ ДАННЫЕ АНАЛИЗА ===")
-        # console_log(f"Название товара: {product_info['title']}")
-        # console_log(f"Полное описание ({safe_len(description)} символов): {description}")
-        # console_log(f"Полный состав ({safe_len(composition)} символов): {composition}")
-        # console_log(f"Категории: {categories}")
-        # console_log(f"Цена: {product_info['price']}")
-        # console_log(f"Рейтинг: {product_info['rating']}")
+        console_log(f"Название товара: {product_info['title']}")
+        console_log(f"Полное описание ({safe_len(description)} символов): {description}")
+        console_log(f"Полный состав ({safe_len(composition)} символов): {composition}")
+        console_log(f"Категории: {categories}")
+        console_log(f"Цена: {product_info['price']}")
+        console_log(f"Рейтинг: {product_info['rating']}")
         console_log("=== КОНЕЦ ДЕТАЛЬНЫХ ДАННЫХ ===")
 
         # Получаем оценку для логирования и отображения в чате
@@ -3201,9 +3239,9 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
         truncated_description = description[:100] + ('...' if len(description) > 100 else '')
         truncated_composition = composition[:100] + ('...' if len(composition) > 100 else '')
         console_log("[DIAGNOSTIC] ===== ОТПРАВКА СООБЩЕНИЯ С ОПИСАНИЕМ И СОСТАВОМ =====")
-        # console_log(f"[DEBUG] content_language перед отправкой описания: '{content_language}' (тип: {type(content_language)})")
-        # console_log(f"[DEBUG] условие content_language == 'ru': {content_language == 'ru'}")
-        # console_log(f"[DEBUG] условие content_language == 'en': {content_language == 'en'}")
+        console_log(f"[DEBUG] content_language перед отправкой описания: '{content_language}' (тип: {type(content_language)})")
+        console_log(f"[DEBUG] условие content_language == 'ru': {content_language == 'ru'}")
+        console_log(f"[DEBUG] условие content_language == 'en': {content_language == 'en'}")
 
         # ДОБАВИТЬ ЗАДЕРЖКУ ПЕРЕД ОТПРАВКОЙ СООБЩЕНИЯ ОБ ОПИСАНИИ И СОСТАВЕ
         time.sleep(1.0)  # 1 секунда задержки для предотвращения дублирования
@@ -3227,8 +3265,8 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
         time.sleep(1.5)  # 1.5 секунды задержки
 
         console_log("[DIAGNOSTIC] ===== ОТПРАВКА СООБЩЕНИЯ С РЕЗУЛЬТАМИ AI =====")
-        # console_log(f"[DEBUG] content_language перед отправкой результатов AI: '{content_language}'")
-        # console_log(f"[DEBUG] score_str: '{score_str}', reasoning_str length: {len(reasoning_str)}")
+        console_log(f"[DEBUG] content_language перед отправкой результатов AI: '{content_language}'")
+        console_log(f"[DEBUG] score_str: '{score_str}', reasoning_str length: {len(reasoning_str)}")
         if score_str == 'N/A' and reasoning_str == ('Объяснение не доступно' if content_language == "ru" else 'Explanation not available'):
             if content_language == "ru":
                 chat_message("⚠️ Не удалось получить результаты анализа от нейросети")
@@ -3242,9 +3280,9 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
 
         # Отправляем информацию об аналогах в чат
         console_log("[DIAGNOSTIC] ===== ОТПРАВКА СООБЩЕНИЯ С АНАЛОГАМИ =====")
-        # console_log(f"[DEBUG] content_language перед отправкой аналогов: '{content_language}'")
-        # console_log(f"[DEBUG] analogs: {analogs}")
-        # console_log(f"[DEBUG] len(analogs): {len(analogs) if analogs else 0}")
+        console_log(f"[DEBUG] content_language перед отправкой аналогов: '{content_language}'")
+        console_log(f"[DEBUG] analogs: {analogs}")
+        console_log(f"[DEBUG] len(analogs): {len(analogs) if analogs else 0}")
 
         # ДОБАВИТЬ ЗАДЕРЖКУ ПЕРЕД ОТПРАВКОЙ АНАЛОГОВ
         time.sleep(2.0)  # 2 секунды задержки
@@ -3252,7 +3290,7 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
         # Проверяем, есть ли валидные аналоги (без ошибки)
         valid_analogs = [a for a in analogs if isinstance(a, dict) and not a.get('error', False)] if analogs else []
 
-        # console_log(f"[DEBUG] valid_analogs count: {len(valid_analogs)}")
+        console_log(f"[DEBUG] valid_analogs count: {len(valid_analogs)}")
 
         if valid_analogs:
             if content_language == "ru":
@@ -3292,11 +3330,11 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
                     analogs_message += f"   ✨ {features_str}\n"
                 analogs_message += "\n"
 
-            # console_log(f"[DEBUG] Отправка analogs_message: {analogs_message[:100]}...")
+            console_log(f"[DEBUG] Отправка analogs_message: {analogs_message[:100]}...")
             chat_message(analogs_message.strip())
         else:
             console_log("[DEBUG] Отправка сообщения об отсутствии аналогов")
-            # console_log(f"[DEBUG] content_language в сообщении аналогов: '{content_language}'")
+            console_log(f"[DEBUG] content_language в сообщении аналогов: '{content_language}'")
             if content_language == "ru":
                 console_log("[DEBUG] Отправка русского сообщения об аналогах")
                 chat_message("🔍 Аналоги не найдены или информация недоступна "+ content_language)
@@ -3304,7 +3342,7 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
                 console_log("[DEBUG] Отправка английского сообщения об аналогах")
                 chat_message("🔍 No analogs found or information unavailable")
             else:
-                # console_log(f"[DEBUG] Неизвестный язык '{content_language}' для аналогов")
+                console_log(f"[DEBUG] Неизвестный язык '{content_language}' для аналогов")
                 chat_message("🔍 Аналоги не найдены или информация недоступна [LANG:" + str(content_language) + "]")
 
         # Логируем в консоль полную информацию для разработчиков
@@ -3312,13 +3350,13 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
         desc_length = safe_len(description)
         comp_length = safe_len(composition)
         category_info = categories[0] if categories else "не определена"
-        # console_log(f"Анализ завершен: '{title_preview}' | Описание: {desc_length} симв. | Состав: {comp_length} симв. | Категория: {category_info} | Оценка: {score}/10")
+        console_log(f"Анализ завершен: '{title_preview}' | Описание: {desc_length} симв. | Состав: {comp_length} симв. | Категория: {category_info} | Оценка: {score}/10")
 
         # [DIAGNOSTIC] ЛОГИРОВАНИЕ ПЕРЕД ВОЗВРАТОМ РЕЗУЛЬТАТА
         console_log("[DIAGNOSTIC] ===== analyze_ozon_product ABOUT TO RETURN =====")
-        # console_log(f"[DIAGNOSTIC] result type: {type(result)}")
-        # console_log(f"[DIAGNOSTIC] result keys: {list(result.keys()) if isinstance(result, dict) else 'not dict'}")
-        # console_log(f"[DIAGNOSTIC] content_language in result: {result.get('pluginSettings', {}).get('response_language', 'NOT FOUND') if isinstance(result, dict) and 'pluginSettings' in result else 'NO pluginSettings'}")
+        console_log(f"[DIAGNOSTIC] result type: {type(result)}")
+        console_log(f"[DIAGNOSTIC] result keys: {list(result.keys()) if isinstance(result, dict) else 'not dict'}")
+        console_log(f"[DIAGNOSTIC] content_language in result: {result.get('pluginSettings', {}).get('response_language', 'NOT FOUND') if isinstance(result, dict) and 'pluginSettings' in result else 'NO pluginSettings'}")
         console_log("[DIAGNOSTIC] >>>>>> analyze_ozon_product FUNCTION ENDING <<<<<<")
 
         return result
@@ -3328,7 +3366,7 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
             chat_message(f"❌ Критическая ошибка при анализе товара: {str(e)}")
         else:
             chat_message(f"❌ Critical error during product analysis: {str(e)}")
-        # console_log(f"Критическая ошибка при анализе: {e}")
+        console_log(f"Критическая ошибка при анализе: {e}")
         # Возвращаем стандартизированный объект ошибки
         return { "status": "error", "message": f"Ошибка анализа товара: {str(e)}" }
 
@@ -3357,7 +3395,7 @@ async def pre_warm_pyodide_engine() -> Dict[str, Any]:
             }
         else:
             errorMsg = warmResult.get('message', 'Unknown error')
-            # console_log(f"⚠️ Разогрев не удался: {errorMsg}")
+            console_log(f"⚠️ Разогрев не удался: {errorMsg}")
 
             return {
                 "status": "info",
@@ -3366,7 +3404,7 @@ async def pre_warm_pyodide_engine() -> Dict[str, Any]:
             }
 
     except Exception as e:
-        # console_log(f"❌Ошибка разогрева Pyodide: {e}")
+        console_log(f"❌Ошибка разогрева Pyodide: {e}")
         return {
             "status": "error",
             "message": f"Pre-warm failed: {str(e)}",
@@ -3453,7 +3491,7 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
             # console_log(f"🔄 Deep analysis AI вернул {type(result)} вместо строки, конвертируем")
             result = str(result)
         elif result is None:
-            # console_log(f"⚠️ Deep analysis AI вернул None")
+            console_log(f"⚠️ Deep analysis AI вернул None")
             result = "Отчет не сформирован"
 
         return { "deep_analysis_report": result }
@@ -3482,7 +3520,7 @@ def _safe_assemble_chunks(chunks: List[str], expected_length: int, source_name: 
     Безопасная сборка HTML из чанков с обработкой ошибок и проверкой целостности.
     """
     try:
-        # console_log(f"🔧 Сборка {len(chunks)} чанков ({source_name})")
+        console_log(f"🔧 Сборка {len(chunks)} чанков ({source_name})")
 
         if not chunks:
             raise ValueError("Список чанков пустой")
@@ -3493,16 +3531,16 @@ def _safe_assemble_chunks(chunks: List[str], expected_length: int, source_name: 
 
         for i, chunk in enumerate(chunks):
             if chunk is None:
-                # console_log(f"⚠️ Чанк {i} равен None - пропускаем")
+                console_log(f"⚠️ Чанк {i} равен None - пропускаем")
                 corrupted_chunks.append(i)
                 continue
 
             if not isinstance(chunk, str):
-                # console_log(f"⚠️ Чанк {i} не является строкой (тип: {type(chunk)}) - конвертируем")
+                console_log(f"⚠️ Чанк {i} не является строкой (тип: {type(chunk)}) - конвертируем")
                 try:
                     chunk = str(chunk)
                 except Exception as e:
-                    # console_log(f"❌ Не удалось конвертировать чанк {i}: {e}")
+                    console_log(f"❌ Не удалось конвертировать чанк {i}: {e}")
                     corrupted_chunks.append(i)
                     continue
 
@@ -3532,10 +3570,10 @@ def _safe_assemble_chunks(chunks: List[str], expected_length: int, source_name: 
 
         # Проверка соответствия ожидаемой длине
         if actual_length != expected_length:
-            # console_log(f"⚠️ Разница в длине: ожидалось {expected_length}, получено {actual_length}")
+            console_log(f"⚠️ Разница в длине: ожидалось {expected_length}, получено {actual_length}")
             length_diff = abs(actual_length - expected_length)
             if length_diff > 0:
-                # console_log(f"⚠️ Отклонение: {length_diff} символов ({length_diff/expected_length*100:.1f}%)")
+                console_log(f"⚠️ Отклонение: {length_diff} символов ({length_diff/expected_length*100:.1f}%)")
                 if actual_length < expected_length:
                     console_log("⚠️ СТРОКА ОБРЕЗАНА! Возможно потеря данных.")
                 else:
@@ -3556,7 +3594,7 @@ def _safe_assemble_chunks(chunks: List[str], expected_length: int, source_name: 
         return assembled_html
 
     except Exception as e:
-        # console_log(f"❌ Критическая ошибка при сборке чанков: {e}")
+        console_log(f"❌ Критическая ошибка при сборке чанков: {e}")
         raise ValueError(f"Не удалось собрать чанки: {e}")
 
 def _check_html_integrity(html_content: str, source_name: str) -> None:
@@ -3567,7 +3605,7 @@ def _check_html_integrity(html_content: str, source_name: str) -> None:
         # console_log(f"🔍 Проверка целостности HTML ({source_name})")
 
         if not html_content or not isinstance(html_content, str):
-            # console_log(f"❌ HTML контент пустой или не является строкой")
+            console_log(f"❌ HTML контент пустой или не является строкой")
             return
 
         content_length = len(html_content)
@@ -3582,7 +3620,7 @@ def _check_html_integrity(html_content: str, source_name: str) -> None:
         # console_log(f"📊 HTML теги: открытых={open_tags}, закрытых={close_tags}, самозакрывающихся={self_closing_tags}")
 
         if abs(tag_balance) > 3:  # Допускаем небольшую погрешность
-            # console_log(f"⚠️ ОБНАРУЖЕН ДИСБАЛАНС ТЕГОВ: {tag_balance}")
+            console_log(f"⚠️ ОБНАРУЖЕН ДИСБАЛАНС ТЕГОВ: {tag_balance}")
             if tag_balance > 0:
                 console_log("⚠️ Больше открытых тегов - возможна обрезка в конце")
             else:
@@ -3723,7 +3761,7 @@ def _reconstruct_chunked_strings(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     console_log(f"⚠️ Несоответствие количества чанков: ожидалось {expected_count}, собрано {len(chunks_list)}")
 
                 if actual_length != expected_length:
-                    # console_log(f"⚠️ Несоответствие длины: ожидалось {expected_length}, собрано {actual_length}")
+                    console_log(f"⚠️ Несоответствие длины: ожидалось {expected_length}, собрано {actual_length}")
                     if actual_length < expected_length:
                         console_log("⚠️ СТРОКА ОБРЕЗАНА! Возможно потеря данных.")
             else:
@@ -3770,7 +3808,7 @@ def _reconstruct_chunked_strings(input_data: Dict[str, Any]) -> Dict[str, Any]:
         else:
             chat_message(f"CRITICAL error when assembling chunks: {e}")
         import traceback
-        # console_log(f"❌ Traceback: {traceback.format_exc()}")
+        console_log(f"❌ Traceback: {traceback.format_exc()}")
         return input_data  # Возвращаем исходные данные при ошибке
 
 async def _analyze_composition_vs_description(description: str, composition: str, plugin_settings: Dict[str, Any] = None, content_language: str = "ru") -> Dict[str, Any]:
@@ -3790,7 +3828,7 @@ async def _analyze_composition_vs_description(description: str, composition: str
     if isinstance(plugin_settings, dict):
         # console_log(f"[DIAGNOSTIC] Ключи в plugin_settings: {list(plugin_settings.keys())}")
         response_lang = plugin_settings.get('response_language', 'КЛЮЧ НЕ НАЙДЕН') if plugin_settings else 'plugin_settings is None'
-        # console_log(f"[DIAGNOSTIC] response_language: {response_lang}")
+        console_log(f"[DIAGNOSTIC] response_language: {response_lang}")
 
     if not description or not composition:
         console_log("[DIAGNOSTIC] ===== ВЫХОД ИЗ _analyze_composition_vs_description (пустые данные) =====")
@@ -3877,11 +3915,11 @@ async def _analyze_composition_vs_description(description: str, composition: str
         console_log("[GEMINI REQUEST] ===== END REQUEST =====")
         # [DIAGNOSTIC] ===== ВЫЗОВ AI МОДЕЛИ =====
         console_log("[DIAGNOSTIC] ===== ВЫЗОВ AI МОДЕЛИ =====")
-        console_log("[DIAGNOSTIC] Перед вызовом compliance_check")
+        # console_log("[DIAGNOSTIC] Перед вызовом compliance_check")
         # console_log(f"[DIAGNOSTIC] Модель: compliance_check")
         # console_log(f"[DIAGNOSTIC] Длина промпта: {safe_len(prompt)} символов")
         # console_log(f"[DIAGNOSTIC] Промпт начинается: {prompt[:100]}...")
-        console_log("[DIAGNOSTIC] ===== НАЧАЛО ВЫЗОВА _call_ai_model() =====")
+        # console_log("[DIAGNOSTIC] ===== НАЧАЛО ВЫЗОВА _call_ai_model() =====")
         # Используем псевдоним "compliance_check" для проверки соответствия описания и состава
         result_str = await ozon_analyzer_server._call_ai_model("compliance_check", prompt)
         console_log("[DIAGNOSTIC] ===== КОНЕЦ ВЫЗОВА _call_ai_model() =====")
@@ -3955,7 +3993,7 @@ async def _analyze_composition_vs_description(description: str, composition: str
                     return parsed
                 else:
                     console_log(f"[BRIDGE DIAGNOSTIC] ⚠️ Прямой парсинг вернул словарь без поля 'score': {parsed}")
-                    # console_log(f"[BRIDGE DIAGNOSTIC] Доступные ключи: {list(parsed.keys()) if isinstance(parsed, dict) else 'не словарь'}")
+                    console_log(f"[BRIDGE DIAGNOSTIC] Доступные ключи: {list(parsed.keys()) if isinstance(parsed, dict) else 'не словарь'}")
             except json.JSONDecodeError as je:
                 console_log(f"[BRIDGE DIAGNOSTIC] ❌ Прямой JSON парсинг провалился: {str(je)}")
                 # console_log(f"[BRIDGE DIAGNOSTIC] Позиция ошибки: {je.pos if hasattr(je, 'pos') else 'неизвестно'}")
@@ -4051,7 +4089,7 @@ def _extract_json_from_ai_response(ai_response: str) -> Optional[Dict[str, Any]]
     # console_log(f"🔍 Начинаем альтернативное извлечение JSON из ответа длиной {len(ai_response)} символов")
 
     # Стратегия 1: Прямой поиск JSON объекта
-    console_log("Стратегия 1: Прямой поиск JSON объекта")
+    # console_log("Стратегия 1: Прямой поиск JSON объекта")
     try:
         # Сначала пробуем распарсить весь ответ как чистый JSON (без markdown)
         try:
@@ -4082,7 +4120,7 @@ def _extract_json_from_ai_response(ai_response: str) -> Optional[Dict[str, Any]]
         console_log(f"Ошибка в стратегии 1: {e}")
 
     # Стратегия 2: Улучшенный поиск между маркерами кода
-    console_log("Стратегия 2: Поиск между маркерами кода")
+    # console_log("Стратегия 2: Поиск между маркерами кода")
     try:
         # Улучшенные паттерны для поиска JSON в markdown блоках
         code_block_patterns = [
@@ -4105,14 +4143,14 @@ def _extract_json_from_ai_response(ai_response: str) -> Optional[Dict[str, Any]]
                         # console_log(f"✅ Найден валидный JSON в код-блоке по стратегии 2.{pattern_idx + 1}: score={score}")
                         return parsed
                 except json.JSONDecodeError as e:
-                    # console_log(f"Парсинг совпадения {match_idx + 1} провалился: {e}")
+                    console_log(f"Парсинг совпадения {match_idx + 1} провалился: {e}")
                     continue
 
     except Exception as e:
         console_log(f"Ошибка в стратегии 2: {e}")
 
     # Стратегия 3: Поиск по ключевым словам и извлечение структуры
-    console_log("Стратегия 3: Поиск по ключевым словам")
+    # console_log("Стратегия 3: Поиск по ключевым словам")
     try:
         # Ищем score
         score_pattern = r'"score"\s*:\s*(\d+)'
@@ -4146,7 +4184,7 @@ def _attempt_json_repair(broken_json: str) -> Optional[Dict[str, Any]]:
     if not isinstance(broken_json, str) or not broken_json.strip():
         return None
 
-    # console_log(f"🔧 Начинаем ремонт JSON длиной {len(broken_json)} символов")
+    console_log(f"🔧 Начинаем ремонт JSON длиной {len(broken_json)} символов")
 
     original_json = broken_json
 
@@ -4211,7 +4249,7 @@ def _attempt_json_repair(broken_json: str) -> Optional[Dict[str, Any]]:
             console_log("ℹ️ После очистки JSON всё ещё невалидный, продолжаем ремонт")
 
     except Exception as e:
-        # console_log(f"Ошибка в шаге 1: {e}")
+        console_log(f"Ошибка в шаге 1: {e}")
         cleaned = broken_json
 
     # Шаг 2: Исправление кавычек
@@ -4229,7 +4267,7 @@ def _attempt_json_repair(broken_json: str) -> Optional[Dict[str, Any]]:
         console_log("✅ Исправлены кавычки")
 
     except Exception as e:
-        # console_log(f"Ошибка в шаге 2: {e}")
+        console_log(f"Ошибка в шаге 2: {e}")
         fixed_quotes = cleaned
 
     # Шаг 3: Исправление структуры
@@ -4270,7 +4308,7 @@ def _attempt_json_repair(broken_json: str) -> Optional[Dict[str, Any]]:
             console_log("❌ Отремонтированный JSON не содержит ожидаемой структуры")
 
     except json.JSONDecodeError as je:
-        # console_log(f"❌ Парсинг отремонтированного JSON не удался: {str(je)}")
+        console_log(f"❌ Парсинг отремонтированного JSON не удался: {str(je)}")
 
         # Шаг 5: Агрессивный ремонт
         console_log("Шаг 5: Агрессивный ремонт JSON")
@@ -4517,7 +4555,7 @@ async def _find_similar_products(categories: List[str], composition: str, plugin
                 chat_message("⚠️ AI вернул пустой ответ при поиске аналогов, используем резервные данные")
             else:
                 chat_message("⚠️ AI returned empty response when searching for analogs, using fallback data")
-            # console_log(f"Пустой ответ от AI: '{response}' (длина: {len(response) if response else 0})")
+            console_log(f"Пустой ответ от AI: '{response}' (длина: {len(response) if response else 0})")
             return _generate_fallback_analogs(categories, product_type, content_language)
 
         # ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ ОТВЕТА ОТ AI В _find_similar_products
@@ -4562,8 +4600,8 @@ async def _find_similar_products(categories: List[str], composition: str, plugin
                 return _generate_fallback_analogs(categories, product_type, content_language)
 
         except json.JSONDecodeError as je:
-            # console_log(f"JSON парсинг ошибка в _find_similar_products: {str(je)}")
-            # console_log(f"Необработанный ответ AI: {response[:500]}...")  # Логируем первые 500 символов для диагностики
+            console_log(f"JSON парсинг ошибка в _find_similar_products: {str(je)}")
+            console_log(f"Необработанный ответ AI: {response[:500]}...")  # Логируем первые 500 символов для диагностики
 
             # Расширенная попытка исправить распространенные проблемы с JSON
             try:
@@ -4591,7 +4629,7 @@ async def _find_similar_products(categories: List[str], composition: str, plugin
                 # Исправляем отсутствующие кавычки в ключах
                 fixed_json = re.sub(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', fixed_json)
 
-                # console_log(f"Исправленный JSON: {fixed_json[:200]}...")
+                console_log(f"Исправленный JSON: {fixed_json[:200]}...")
 
                 parsed = json.loads(fixed_json)
                 console_log("JSON удалось исправить автоматически в _find_similar_products")
@@ -4601,7 +4639,7 @@ async def _find_similar_products(categories: List[str], composition: str, plugin
                 else:
                     return _generate_fallback_analogs(categories, product_type, content_language)
             except Exception as fix_error:
-                # console_log(f"Автоматическое исправление JSON не удалось: {str(fix_error)}")
+                console_log(f"Автоматическое исправление JSON не удалось: {str(fix_error)}")
                 return _generate_fallback_analogs(categories, product_type, content_language)
 
     except Exception as e:
