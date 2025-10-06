@@ -805,7 +805,12 @@ class OzonAnalyzerServer:
             return response_text
 
         except Exception as e:
-            chat_message(f"Ошибка при вызове модели '{model_alias}': {e}")
+            plugin_settings = get_pyodide_var('pluginSettings', {})
+            content_language = get_safe_content_language(plugin_settings)
+            if content_language == "ru":
+                chat_message(f"Ошибка при вызове модели '{model_alias}': {e}")
+            else:
+                chat_message(f"Error calling model '{model_alias}': {e}")
             raise RuntimeError(f"Ошибка при вызове модели '{model_alias}': {e}") from e
 
 # Глобальный экземпляр AI кеша (сохраняем для обратной совместимости)
@@ -2553,11 +2558,19 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
             if chunk_count is None:
                 console_log("⚠️ VARIABLE DIAGNOSTIC: chunk_count не установлен - возможна проблема с передачей данных")
         except KeyError as e:
-            chat_message(f"page_html_chunk_count отсутствует в globals(): {e}")
-            raise ValueError(f"page_html_chunk_count отсутствует в globals(): {e}")
+            if content_language == "ru":
+                chat_message(f"page_html_chunk_count отсутствует в globals(): {e}")
+                raise ValueError(f"page_html_chunk_count отсутствует в globals(): {e}")
+            else:
+                chat_message(f"page_html_chunk_count is missing in globals(): {e}")
+                raise ValueError(f"page_html_chunk_count is missing in globals(): {e}")
         except Exception as e:
-            chat_message(f"Ошибка чтения page_html_chunk_count: {e}")
-            raise ValueError(f"Ошибка чтения page_html_chunk_count: {e}")
+            if content_language == "ru":
+                chat_message(f"Ошибка чтения page_html_chunk_count: {e}")
+                raise ValueError(f"Ошибка чтения page_html_chunk_count: {e}")
+            else:
+                chat_message(f"Error reading page_html_chunk_count: {e}")
+                raise ValueError(f"Error reading page_html_chunk_count: {e}")
 
         try:
             # Попытка использовать переданный параметр, fallback на globals
@@ -2567,11 +2580,19 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
             if total_length is None:
                 console_log("⚠️ VARIABLE DIAGNOSTIC: total_length не установлен - возможна проблема с передачей данных")
         except KeyError as e:
-            chat_message(f"page_html_total_length отсутствует в globals(): {e}")
-            raise ValueError(f"page_html_total_length отсутствует в globals(): {e}")
+            if content_language == "ru":
+                chat_message(f"page_html_total_length отсутствует в globals(): {e}")
+                raise ValueError(f"page_html_total_length отсутствует в globals(): {e}")
+            else:
+                chat_message(f"page_html_total_length is missing in globals(): {e}")
+                raise ValueError(f"page_html_total_length is missing in globals(): {e}")
         except Exception as e:
-            chat_message(f"Ошибка чтения page_html_total_length: {e}")
-            raise ValueError(f"Ошибка чтения page_html_total_length: {e}")
+            if content_language == "ru":
+                chat_message(f"Ошибка чтения page_html_total_length: {e}")
+                raise ValueError(f"Ошибка чтения page_html_total_length: {e}")
+            else:
+                chat_message(f"Error reading page_html_total_length: {e}")
+                raise ValueError(f"Error reading page_html_total_length: {e}")
 
         # Финальное логирование результатов диагностики
         # console_log(f"Метаданные прочитаны: chunk_count={chunk_count}, total_length={total_length}")
@@ -2579,12 +2600,20 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
 
         # Валидация метаданных
         if chunk_count is None:
-            chat_message("page_html_chunk_count отсутствует в pyodide.globals")
-            raise ValueError("Метаданные page_html_chunk_count отсутствует в pyodide.globals")
+            if content_language == "ru":
+                chat_message("page_html_chunk_count отсутствует в pyodide.globals")
+                raise ValueError("Метаданные page_html_chunk_count отсутствует в pyodide.globals")
+            else:
+                chat_message("page_html_chunk_count is missing in pyodide.globals")
+                raise ValueError("Metadata page_html_chunk_count is missing in pyodide.globals")
 
         if total_length is None:
-            chat_message("page_html_total_length отсутствует в pyodide.globals")
-            raise ValueError("Метаданные page_html_total_length отсутствует в pyodide.globals")
+            if content_language == "ru":
+                chat_message("page_html_total_length отсутствует в pyodide.globals")
+                raise ValueError("Метаданные page_html_total_length отсутствует в pyodide.globals")
+            else:
+                chat_message("page_html_total_length is missing in pyodide.globals")
+                raise ValueError("Metadata page_html_total_length is missing in pyodide.globals")
 
         console_log("Все метаданные найдены и не равны None")
 
@@ -2593,8 +2622,12 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
             total_length = int(total_length)
             # console_log(f"Метаданные валидны: chunk_count={chunk_count}, total_length={total_length}")
         except (ValueError, TypeError) as e:
-            chat_message(f"Ошибка преобразования метаданных: {e}")
-            raise ValueError(f"Метаданные должны быть числами: {e}")
+            if content_language == "ru":
+                chat_message(f"Ошибка преобразования метаданных: {e}")
+                raise ValueError(f"Метаданные должны быть числами: {e}")
+            else:
+                chat_message(f"Error converting metadata: {e}")
+                raise ValueError(f"Metadata must be numbers: {e}")
 
         # Шаг 2: Определение режима передачи и чтение данных
         console_log("Определение режима передачи данных...")
@@ -2712,17 +2745,29 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
                             # console_log(f"⚠️ VARIABLE DIAGNOSTIC: {chunk_key} не найден в globals")
                         # console_log(f"{chunk_key} прочитан: тип={type(chunk).__name__}, длина={len(str(chunk))} символов")
                 except KeyError as e:
-                    chat_message(f"{chunk_key} отсутствует в globals(): {e}")
-                    raise ValueError(f"{chunk_key} отсутствует в globals(): {e}")
+                    if content_language == "ru":
+                        chat_message(f"{chunk_key} отсутствует в globals(): {e}")
+                        raise ValueError(f"{chunk_key} отсутствует в globals(): {e}")
+                    else:
+                        chat_message(f"{chunk_key} is missing in globals(): {e}")
+                        raise ValueError(f"{chunk_key} is missing in globals(): {e}")
                 except Exception as e:
-                    chat_message(f"Ошибка чтения {chunk_key}: {e}")
-                    raise ValueError(f"Ошибка чтения {chunk_key}: {e}")
+                    if content_language == "ru":
+                        chat_message(f"Ошибка чтения {chunk_key}: {e}")
+                        raise ValueError(f"Ошибка чтения {chunk_key}: {e}")
+                    else:
+                        chat_message(f"Error reading {chunk_key}: {e}")
+                        raise ValueError(f"Error reading {chunk_key}: {e}")
 
                 # Дополнительная валидация
                 if chunk is None:
-                    chat_message(f"Чанк {chunk_key} равен None")
+                    if content_language == "ru":
+                        chat_message(f"Чанк {chunk_key} равен None")
+                        raise ValueError(f"Чанк {chunk_key} отсутствует в globals")
+                    else:
+                        chat_message(f"Chunk {chunk_key} is None")
+                        raise ValueError(f"Chunk {chunk_key} is missing in globals")
                     console_log("Доступ через globals() завершен с ошибкой")
-                    raise ValueError(f"Чанк {chunk_key} отсутствует в globals")
 
                 # Проверка типа и конвертация
                 try:
@@ -2735,9 +2780,13 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
                     # console_log(f"Чанк {i} прочитан: тип={type(chunk).__name__}, длина={len(chunk_str)}")
 
                 except Exception as e:
-                    chat_message(f"Ошибка конвертации чанка {chunk_key}: {e}")
+                    if content_language == "ru":
+                        chat_message(f"Ошибка конвертации чанка {chunk_key}: {e}")
+                        raise ValueError(f"Не удалось конвертировать чанк {chunk_key}: {e}")
+                    else:
+                        chat_message(f"Error converting chunk {chunk_key}: {e}")
+                        raise ValueError(f"Failed to convert chunk {chunk_key}: {e}")
                     # console_log(f"Состояние на момент ошибки: прочитано {len(chunks)} чанков")
-                    raise ValueError(f"Не удалось конвертировать чанк {chunk_key}: {e}")
 
                 # Проверка целостности чанка
                 if len(chunk_str.strip()) == 0:
@@ -2897,16 +2946,25 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
                 page_html = str(page_html)
                 # console_log(f"Конвертация HTML в строку: {type(page_html)}")
             except Exception as e:
-                validation_errors.append(f"Не удалось конвертировать в строку: {e}")
+                if content_language == "ru":
+                    validation_errors.append(f"Не удалось конвертировать в строку: {e}")
+                else:
+                    validation_errors.append(f"Failed to convert to string: {e}")
 
         stripped_length = len(page_html.strip())
         # console_log(f"Длина после strip: {stripped_length} символов")
 
         if stripped_length < 50:
-            validation_errors.append(f"HTML слишком короткий ({stripped_length} символов). Минимум 50 символов.")
+            if content_language == "ru":
+                validation_errors.append(f"HTML слишком короткий ({stripped_length} символов). Минимум 50 символов.")
+            else:
+                validation_errors.append(f"HTML too short ({stripped_length} characters). Minimum 50 characters.")
 
         if not (has_html_tag or has_body_tag or has_div_tag):
-            validation_errors.append("HTML не содержит типичных тегов. Возможно, это не полноценная страница.")
+            if content_language == "ru":
+                validation_errors.append("HTML не содержит типичных тегов. Возможно, это не полноценная страница.")
+            else:
+                validation_errors.append("HTML does not contain typical tags. It might not be a complete page.")
             console_log("HTML не содержит типичных тегов")
 
         # Проверка первых и последних символов
@@ -2919,7 +2977,10 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
         if validation_errors:
             for error in validation_errors:
                 chat_message(f"{error}")
-            raise ValueError(f"Валидация HTML не пройдена: {'; '.join(validation_errors)}")
+            if content_language == "ru":
+                raise ValueError(f"Валидация HTML не пройдена: {'; '.join(validation_errors)}")
+            else:
+                raise ValueError(f"HTML validation failed: {'; '.join(validation_errors)}")
 
         console_log("HTML прошел все проверки валидации")
         # console_log(f"Финальная длина HTML: {len(page_html)} символов")
@@ -2940,7 +3001,10 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
         # console_log(f"Готовность к анализу: {'✅ ДА' if analysis_ready else '❌ НЕТ'}")
 
         if not analysis_ready:
-            chat_message("❌ Ошибка: HTML контент недостаточно качественный для анализа")
+            if content_language == "ru":
+                chat_message("❌ Ошибка: HTML контент недостаточно качественный для анализа")
+            else:
+                chat_message("❌ Error: HTML content is not of sufficient quality for analysis")
             console_log("HTML недостаточно качественный для анализа")
             return {
                 "status": "error",
@@ -2994,7 +3058,10 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
 
         # Проверка категории товара - прерываем анализ если не косметика
         if not fast_parser.is_product_in_target_category(categories):
-            chat_message("❌ Анализ прерван: товар не из категории косметики и ухода за собой")
+            if content_language == "ru":
+                chat_message("❌ Анализ прерван: товар не из категории косметики и ухода за собой")
+            else:
+                chat_message("❌ Analysis interrupted: product not from cosmetics and personal care category")
             console_log("Анализ прерван: товар не из категории косметики")
             return {
                 "status": "category_error",
@@ -3252,7 +3319,10 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
         return result
         
     except Exception as e:
-        chat_message(f"❌ Критическая ошибка при анализе товара: {str(e)}")
+        if content_language == "ru":
+            chat_message(f"❌ Критическая ошибка при анализе товара: {str(e)}")
+        else:
+            chat_message(f"❌ Critical error during product analysis: {str(e)}")
         # console_log(f"Критическая ошибка при анализе: {e}")
         # Возвращаем стандартизированный объект ошибки
         return { "status": "error", "message": f"Ошибка анализа товара: {str(e)}" }
@@ -3386,7 +3456,10 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
         # console_log(f"[ERROR] Исключение в perform_deep_analysis: {type(e).__name__}: {str(e)}")
         import traceback
         # console_log(f"[ERROR] Traceback: {traceback.format_exc()}")
-        chat_message(f"❌ Ошибка глубокого анализа: {str(e)[:100]}...")
+        if content_language == "ru":
+            chat_message(f"❌ Ошибка глубокого анализа: {str(e)[:100]}...")
+        else:  # English
+            chat_message(f"❌ Deep analysis error: {str(e)[:100]}...")
         return { "status": "error", "message": f"Ошибка глубокого анализа: {str(e)}" }
     finally:
         # [DIAGNOSTIC] ЛОГИРОВАНИЕ В КОНЦЕ perform_deep_analysis
@@ -3685,7 +3758,12 @@ def _reconstruct_chunked_strings(input_data: Dict[str, Any]) -> Dict[str, Any]:
         return reconstructed
 
     except Exception as e:
-        chat_message(f"КРИТИЧЕСКАЯ ошибка при сборке чанков: {e}")
+        plugin_settings = get_pyodide_var('pluginSettings', {})
+        content_language = get_safe_content_language(plugin_settings)
+        if content_language == "ru":
+            chat_message(f"КРИТИЧЕСКАЯ ошибка при сборке чанков: {e}")
+        else:
+            chat_message(f"CRITICAL error when assembling chunks: {e}")
         import traceback
         # console_log(f"❌ Traceback: {traceback.format_exc()}")
         return input_data  # Возвращаем исходные данные при ошибке
@@ -3812,7 +3890,10 @@ async def _analyze_composition_vs_description(description: str, composition: str
 
         # Проверка типа данных от AI и конвертация при необходимости
         if not isinstance(result_str, str):
-            chat_message(f"🔄 AI вернул {type(result_str)} вместо строки, конвертируем")
+            if content_language == "ru":
+                chat_message(f"🔄 AI вернул {type(result_str)} вместо строки, конвертируем")
+            else:
+                chat_message(f"🔄 AI returned {type(result_str)} instead of string, converting")
             result_str = str(result_str)
 
         # [DIAGNOSTIC] ===== ОБРАБОТКА РЕЗУЛЬТАТА =====
@@ -3927,7 +4008,10 @@ async def _analyze_composition_vs_description(description: str, composition: str
             # console_log(f"[BRIDGE DIAGNOSTIC] Финальный результат (финальный fallback): {fallback_result}")
             return fallback_result
         else:
-            chat_message(f"⚠️ AI вернул пустой или некорректный ответ: {type(result_str)}")
+            if content_language == "ru":
+                chat_message(f"⚠️ AI вернул пустой или некорректный ответ: {type(result_str)}")
+            else:
+                chat_message(f"⚠️ AI returned empty or incorrect response: {type(result_str)}")
             error_result = {"score": 5, "reasoning": f"AI вернул некорректный тип данных: {type(result_str)}"}
             # console_log(f"[DIAGNOSTIC] Финальный результат (некорректный ответ AI): {error_result}")
             return error_result
@@ -4229,10 +4313,15 @@ async def _call_ai_model_immediate(model_alias: str, prompt: str, context: Optio
     # Проверяем кеш
     cached_response = await ai_cache.get(model_alias, prompt, context)
     if cached_response:
-        chat_message(f"📋 Немедленный кеш hit для {model_alias}")
+        if content_language == "ru":
+            chat_message(f"📋 Кеш hit для {model_alias}")
+        else:
+            chat_message(f"📋 Cache hit for {model_alias}")
         return cached_response
 
     start_time = datetime.now()
+    plugin_settings = get_pyodide_var('pluginSettings', {})
+    content_language = get_safe_content_language(plugin_settings)
 
     try:
         response_proxy = await js.llm_call(model_alias, {"prompt": prompt})
@@ -4401,7 +4490,10 @@ async def _find_similar_products(categories: List[str], composition: str, plugin
 
         # Детальная проверка ответа AI перед обработкой
         if response is None:
-            chat_message("⚠️ AI вернул пустой ответ при поиске аналогов, используем резервные данные")
+            if content_language == "ru":
+                chat_message("⚠️ AI вернул пустой ответ при поиске аналогов, используем резервные данные")
+            else:
+                chat_message("⚠️ AI returned empty response when searching for analogs, using fallback data")
             console_log("AI вернул None - переходим на fallback")
             return _generate_fallback_analogs(categories, product_type, content_language)
 
@@ -4416,7 +4508,10 @@ async def _find_similar_products(categories: List[str], composition: str, plugin
 
         # Проверяем, что ответ не пустой после конвертации
         if not response or len(response.strip()) == 0:
-            chat_message("⚠️ AI вернул пустой ответ при поиске аналогов, используем резервные данные")
+            if content_language == "ru":
+                chat_message("⚠️ AI вернул пустой ответ при поиске аналогов, используем резервные данные")
+            else:
+                chat_message("⚠️ AI returned empty response when searching for analogs, using fallback data")
             # console_log(f"Пустой ответ от AI: '{response}' (длина: {len(response) if response else 0})")
             return _generate_fallback_analogs(categories, product_type, content_language)
 
@@ -4435,7 +4530,10 @@ async def _find_similar_products(categories: List[str], composition: str, plugin
 
                 # Дополнительная проверка очищенного ответа
                 if not cleaned_response or cleaned_response.isspace():
-                    chat_message("⚠️ После очистки ответ AI стал пустым, используем резервные данные")
+                    if content_language == "ru":
+                        chat_message("⚠️ После очистки ответ AI стал пустым, используем резервные данные")
+                    else:
+                        chat_message("⚠️ After cleaning, AI response became empty, using fallback data")
                     return _generate_fallback_analogs(categories, product_type)
 
                 parsed = json.loads(cleaned_response)
@@ -4446,10 +4544,16 @@ async def _find_similar_products(categories: List[str], composition: str, plugin
                     return analogs[:5]  # Ограничение до 5 результатов
                 else:
                     # Fallback - генерируем на основе состава
-                    chat_message("⚠️ AI не вернул аналоги, используем резервные данные")
+                    if content_language == "ru":
+                        chat_message("⚠️ AI не вернул аналоги, используем резервные данные")
+                    else:
+                        chat_message("⚠️ AI did not return analogs, using fallback data")
                     return _generate_fallback_analogs(categories, product_type, content_language)
             else:
-                chat_message(f"⚠️ AI вернул некорректный ответ при поиске аналогов: {type(response)}")
+                if content_language == "ru":
+                    chat_message(f"⚠️ AI вернул некорректный ответ при поиске аналогов: {type(response)}")
+                else:
+                    chat_message(f"⚠️ AI returned incorrect response when searching for analogs: {type(response)}")
                 return _generate_fallback_analogs(categories, product_type, content_language)
 
         except json.JSONDecodeError as je:
@@ -4496,9 +4600,11 @@ async def _find_similar_products(categories: List[str], composition: str, plugin
                 return _generate_fallback_analogs(categories, product_type, content_language)
 
     except Exception as e:
-        error_msg = f"❌ Критическая ошибка при поиске аналогов: {str(e)[:100]}..."
-        console_log(error_msg)
-        chat_message(error_msg)
+        if content_language == "ru":
+            chat_message(f"❌ Критическая ошибка при поиске аналогов: {str(e)[:100]}...")
+        else:
+            chat_message(f"❌ Critical error when searching for analogs: {str(e)[:100]}...")
+        console_log(f"❌ Критическая ошибка при поиске аналогов: {str(e)[:100]}...")
         return [{"name": f"Ошибка поиска аналогов: {str(e)}", "error": True}]
 
 def _categorize_product_by_composition(composition: str) -> str:
