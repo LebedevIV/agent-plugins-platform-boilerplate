@@ -77,5 +77,6 @@
   "options_settings_security_isolatedMode": "Isolated execution mode",
   "options_settings_performance_title": "Performance",
   "options_settings_performance_maxPlugins": "Maximum number of active plugins:",
-  "options_settings_performance_cacheData": "Cache plugin data"
+  "options_settings_performance_cacheData": "Cache plugin data",
+  "options_plugins_details_title": "Plugin Details"
 }

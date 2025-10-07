@@ -345,7 +345,6 @@ const PluginDetails = (props: PluginDetailsProps) => {
             </div>
           )}
 
-          {/* Настройки плагина */}
           <div className="detail-section" id="plugin-settings">
             <h3>Настройки плагина</h3>
             <div className="setting-item">
@@ -388,8 +387,8 @@ const PluginDetails = (props: PluginDetailsProps) => {
           {selectedPlugin.manifest?.options && Object.keys(selectedPlugin.manifest.options).length > 0 && (
             <div className="detail-section" id="custom-settings">
               <h3>Дополнительные настройки</h3>
-              {selectedPlugin.manifest?.options && Object.entries(selectedPlugin.manifest?.options).map(([key, config]) =>
-                renderCustomSetting(key, config)
+              {(Object.entries(selectedPlugin.manifest?.options || {})).map(([key, config]: [string, unknown]) =>
+                renderCustomSetting(key, config as CustomSetting)
               )}
             </div>
           )}
@@ -400,5 +399,7 @@ const PluginDetails = (props: PluginDetailsProps) => {
     </LocalErrorBoundary>
   );
 };
+
+export { PluginDetails };
 
 export default PluginDetails;

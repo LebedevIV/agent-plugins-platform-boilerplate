@@ -59,7 +59,7 @@ const LogRun: React.FC<{ run: LogRun }> = ({ run }) => {
         {run.messages.map((msg, index) => (
           <LogMessage key={index} message={msg} />
         ))}
-        {run.result && (
+        {run.result ? (
           <LogResult
             result={run.result}
             isExpanded={isResultExpanded}
@@ -67,7 +67,7 @@ const LogRun: React.FC<{ run: LogRun }> = ({ run }) => {
             onToggleExpanded={() => setIsResultExpanded(!isResultExpanded)}
             onToggleViewMode={() => setResultViewMode(resultViewMode === 'viewer' ? 'raw' : 'viewer')}
           />
-        )}
+        ) : null}
       </div>
     </div>
   );

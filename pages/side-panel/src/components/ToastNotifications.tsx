@@ -49,6 +49,8 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onRemove }) => {
 
       return () => clearTimeout(timer);
     }
+
+    return undefined; // Explicitly return undefined when no timer is set
   }, [toast.duration]);
 
   const handleRemove = useCallback(() => {

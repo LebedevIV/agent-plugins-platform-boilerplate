@@ -91,5 +91,6 @@
   "options_settings_security_isolatedMode": "Изолированный режим выполнения",
   "options_settings_performance_title": "Производительность",
   "options_settings_performance_maxPlugins": "Максимальное количество активных плагинов:",
-  "options_settings_performance_cacheData": "Кэширование данных плагинов"
+  "options_settings_performance_cacheData": "Кэширование данных плагинов",
+  "options_plugins_details_title": "Детали плагина"
 }

@@ -1,6 +1,14 @@
 import type React from 'react';
 import './PluginCard.css';
 
+interface PluginManifest {
+  author?: string;
+  last_updated?: string;
+  permissions?: string[];
+  host_permissions?: string[];
+  [key: string]: unknown;
+}
+
 type Plugin = {
   id: string;
   name: string;
@@ -8,7 +16,7 @@ type Plugin = {
   description?: string;
   icon?: string;
   iconUrl?: string;
-  manifest?: Record<string, unknown>;
+  manifest?: PluginManifest;
   host_permissions?: string[];
   settings?: {
     enabled?: boolean;
@@ -36,7 +44,7 @@ const PluginCard: React.FC<PluginCardProps> = ({ plugin, selected, onClick, isLi
       }}>
       <div className="plugin-card-name">{plugin.name}</div>
       <div className="plugin-card-version">v{plugin.version}</div>
-      <div className="plugin-card-description">{plugin.description}</div>
+      <div className="plugin-card-description">{plugin.description || 'Описание не указано'}</div>
       <div className={`plugin-card-status${enabled ? ' enabled' : ' disabled'}`}>
         {enabled ? 'Активен' : 'Неактивен'}
       </div>
@@ -45,3 +53,4 @@ const PluginCard: React.FC<PluginCardProps> = ({ plugin, selected, onClick, isLi
 };
 
 export default PluginCard;
+export type { Plugin };
