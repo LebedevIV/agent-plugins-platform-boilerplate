@@ -2235,7 +2235,12 @@ async def _analyze_product_async(description: str, composition: str, categories:
 
     # Запускаем анализ соответствия и поиск аналогов параллельно
     analysis_task = _analyze_composition_vs_description(description, composition, plugin_settings, content_language)
-    analogs_task = _find_similar_products(categories, composition, plugin_settings, content_language)
+
+    # Проверяем настройку search_for_analogs
+    if plugin_settings.get('search_for_analogs', False):
+        analogs_task = _find_similar_products(categories, composition, plugin_settings, content_language)
+    else:
+        analogs_task = asyncio.create_task(asyncio.sleep(0, []))
 
     analysis_result, analogs = await asyncio.gather(analysis_task, analogs_task, return_exceptions=True)
 
@@ -3156,71 +3161,72 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
                 chat_message(f"🤖 Neural Network Response (Gemini AI):\n📊 Compliance Score: {score_str}/10\n{clean_reasoning_for_chat(reasoning_str)}")
 
         # Отправляем информацию об аналогах в чат
-        console_log("[DIAGNOSTIC] ===== ОТПРАВКА СООБЩЕНИЯ С АНАЛОГАМИ =====")
-        console_log(f"[DEBUG] content_language перед отправкой аналогов: '{content_language}'")
-        console_log(f"[DEBUG] analogs: {analogs}")
-        console_log(f"[DEBUG] len(analogs): {len(analogs) if analogs else 0}")
+        # console_log("[DIAGNOSTIC] ===== ОТПРАВКА СООБЩЕНИЯ С АНАЛОГАМИ =====")
+        # console_log(f"[DEBUG] content_language перед отправкой аналогов: '{content_language}'")
+        # console_log(f"[DEBUG] analogs: {analogs}")
+        # console_log(f"[DEBUG] len(analogs): {len(analogs) if analogs else 0}")
 
-        # ДОБАВИТЬ ЗАДЕРЖКУ ПЕРЕД ОТПРАВКОЙ АНАЛОГОВ
-        time.sleep(2.0)  # 2 секунды задержки
+        if plugin_settings.get('search_for_analogs', False):
+            # ДОБАВИТЬ ЗАДЕРЖКУ ПЕРЕД ОТПРАВКОЙ АНАЛОГОВ
+            time.sleep(2.0)  # 2 секунды задержки
 
-        # Проверяем, есть ли валидные аналоги (без ошибки)
-        valid_analogs = [a for a in analogs if isinstance(a, dict) and not a.get('error', False)] if analogs else []
+            # Проверяем, есть ли валидные аналоги (без ошибки)
+            valid_analogs = [a for a in analogs if isinstance(a, dict) and not a.get('error', False)] if analogs else []
 
-        console_log(f"[DEBUG] valid_analogs count: {len(valid_analogs)}")
+            console_log(f"[DEBUG] valid_analogs count: {len(valid_analogs)}")
 
-        if valid_analogs:
-            if content_language == "ru":
-                analogs_message = "🔍 Найденные аналоги:\n"
-            else:
-                analogs_message = "🔍 Found analogs:\n"
-
-            for i, analog in enumerate(valid_analogs[:3], 1):  # Показываем максимум 3 аналога
-                name = analog.get('name', 'Название не указано' if content_language == "ru" else 'Name not specified')
-                price_range = analog.get('price_range', 'Цена не указана' if content_language == "ru" else 'Price not specified')
-                similarity = analog.get('similarity_score', 'N/A')
-                key_features = analog.get('key_features', [])
-
-                analogs_message += f"{i}. **{name}**\n"
-                analogs_message += f"   💰 {price_range}\n"
-                url = analog.get('url', '')
-                if url and url.startswith('http') and not any(x in url.lower() for x in ['пример', 'example', 'placeholder']):
-                    analogs_message += f"   🔗 {url}\n"
-                elif url and any(x in url.lower() for x in ['пример', 'example', 'placeholder']):
-                    if content_language == "ru":
-                        analogs_message += f"   🔗 Примерная ссылка (требуется уточнение)\n"
-                    else:
-                        analogs_message += f"   🔗 Example link (needs clarification)\n"
-                elif url and not url.startswith('http'):
-                    if content_language == "ru":
-                        analogs_message += f"   🔗 Некорректная ссылка\n"
-                    else:
-                        analogs_message += f"   🔗 Invalid link\n"
+            if valid_analogs:
+                if content_language == "ru":
+                    analogs_message = "🔍 Найденные аналоги:\n"
                 else:
-                    if content_language == "ru":
-                        analogs_message += f"   🔗 Ссылка не найдена\n"
-                    else:
-                        analogs_message += f"   🔗 Link not found\n"
-                analogs_message += f"   📊 Схожесть: {similarity}%\n"
-                if key_features and len(key_features) > 0:
-                    features_str = ', '.join(key_features[:3])  # Максимум 3 особенности
-                    analogs_message += f"   ✨ {features_str}\n"
-                analogs_message += "\n"
+                    analogs_message = "🔍 Found analogs:\n"
 
-            console_log(f"[DEBUG] Отправка analogs_message: {analogs_message[:100]}...")
-            chat_message(analogs_message.strip())
-        else:
-            console_log("[DEBUG] Отправка сообщения об отсутствии аналогов")
-            console_log(f"[DEBUG] content_language в сообщении аналогов: '{content_language}'")
-            if content_language == "ru":
-                console_log("[DEBUG] Отправка русского сообщения об аналогах")
-                chat_message("🔍 Аналоги не найдены или информация недоступна "+ content_language)
-            elif content_language == "en":
-                console_log("[DEBUG] Отправка английского сообщения об аналогах")
-                chat_message("🔍 No analogs found or information unavailable")
+                for i, analog in enumerate(valid_analogs[:3], 1):  # Показываем максимум 3 аналога
+                    name = analog.get('name', 'Название не указано' if content_language == "ru" else 'Name not specified')
+                    price_range = analog.get('price_range', 'Цена не указана' if content_language == "ru" else 'Price not specified')
+                    similarity = analog.get('similarity_score', 'N/A')
+                    key_features = analog.get('key_features', [])
+
+                    analogs_message += f"{i}. **{name}**\n"
+                    analogs_message += f"   💰 {price_range}\n"
+                    url = analog.get('url', '')
+                    if url and url.startswith('http') and not any(x in url.lower() for x in ['пример', 'example', 'placeholder']):
+                        analogs_message += f"   🔗 {url}\n"
+                    elif url and any(x in url.lower() for x in ['пример', 'example', 'placeholder']):
+                        if content_language == "ru":
+                            analogs_message += f"   🔗 Примерная ссылка (требуется уточнение)\n"
+                        else:
+                            analogs_message += f"   🔗 Example link (needs clarification)\n"
+                    elif url and not url.startswith('http'):
+                        if content_language == "ru":
+                            analogs_message += f"   🔗 Некорректная ссылка\n"
+                        else:
+                            analogs_message += f"   🔗 Invalid link\n"
+                    else:
+                        if content_language == "ru":
+                            analogs_message += f"   🔗 Ссылка не найдена\n"
+                        else:
+                            analogs_message += f"   🔗 Link not found\n"
+                    analogs_message += f"   📊 Схожесть: {similarity}%\n"
+                    if key_features and len(key_features) > 0:
+                        features_str = ', '.join(key_features[:3])  # Максимум 3 особенности
+                        analogs_message += f"   ✨ {features_str}\n"
+                    analogs_message += "\n"
+
+                console_log(f"[DEBUG] Отправка analogs_message: {analogs_message[:100]}...")
+                chat_message(analogs_message.strip())
             else:
-                console_log(f"[DEBUG] Неизвестный язык '{content_language}' для аналогов")
-                chat_message("🔍 Аналоги не найдены или информация недоступна [LANG:" + str(content_language) + "]")
+                console_log("[DEBUG] Отправка сообщения об отсутствии аналогов")
+                console_log(f"[DEBUG] content_language в сообщении аналогов: '{content_language}'")
+                if content_language == "ru":
+                    console_log("[DEBUG] Отправка русского сообщения об аналогах")
+                    chat_message("🔍 Аналоги не найдены или информация недоступна ")
+                elif content_language == "en":
+                    console_log("[DEBUG] Отправка английского сообщения об аналогах")
+                    chat_message("🔍 No analogs found or information unavailable")
+                else:
+                    console_log(f"[DEBUG] Неизвестный язык '{content_language}' для аналогов")
+                    chat_message("🔍 Аналоги не найдены или информация недоступна [LANG:" + str(content_language) + "]")
 
         # Логируем в консоль полную информацию для разработчиков
         title_preview = product_info['title'][:50] + "..." if safe_len(product_info['title']) > 50 else product_info['title']
