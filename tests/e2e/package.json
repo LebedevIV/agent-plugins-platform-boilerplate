@@ -1,6 +1,6 @@
 {
   "name": "@extension/e2e",
-  "version": "0.5.1284",
+  "version": "0.5.1287",
   "description": "E2e tests configuration boilerplate",
   "private": true,
   "sideEffects": false,

@@ -1,6 +1,6 @@
 {
   "name": "chrome-extension",
-  "version": "0.5.1284",
+  "version": "0.5.1287",
   "description": "chrome extension - core settings",
   "type": "module",
   "private": true,

@@ -192,7 +192,7 @@
 .panel-content {
   flex: 1;
   overflow: hidden;
-  padding: 20px;
+  padding: 0;
   background: var(--content-bg, #0f172a);
 }
 
