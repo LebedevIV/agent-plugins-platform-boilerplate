@@ -15,7 +15,7 @@
   font-size: calc(10px + 2vmin);
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* align-items: center; */ /* Закомментировано чтобы не ломать sidepanel */
   justify-content: center;
 }
 
