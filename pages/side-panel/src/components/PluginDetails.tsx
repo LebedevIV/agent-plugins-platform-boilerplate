@@ -1,3 +1,4 @@
+import '../../../options/src/Options.css'; // Импорт стилей из options для идентичности
 import type React from 'react';
 import OptionsPluginDetails from '../../../options/src/components/PluginDetails';
 import type { PluginSettings } from '@extension/storage';
