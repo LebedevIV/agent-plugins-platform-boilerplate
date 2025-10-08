@@ -208,6 +208,26 @@
             </div>
 
             <div class="setting-group">
+                <h3>🤖 Промпты анализа</h3>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Статус загрузки промптов</span>
+                        <span class="setting-description" id="prompts-status">
+                            Загрузка...
+                        </span>
+                    </div>
+                </div>
+                <div class="setting-item" id="prompts-container" style="display: none;">
+                    <div class="setting-info">
+                        <span class="setting-label">Загруженные промпты</span>
+                        <span class="setting-description" id="prompts-info">
+                            Промпты загружены из manifest.json
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="setting-group">
                 <h3>ℹ️ Информация</h3>
                 <div class="setting-item">
                     <div class="setting-info">
@@ -226,6 +246,7 @@
     <script>
         // Глобальные переменные
         let currentSettings = {};
+        let defaultPrompts = {};
 
         // Показ уведомления
         function showNotification(message, isError = false) {
@@ -317,6 +338,82 @@
             }
         }
 
+        // Загрузка промптов по умолчанию из manifest.json
+        async function loadDefaultPrompts() {
+            const statusElement = document.getElementById('prompts-status');
+            const containerElement = document.getElementById('prompts-container');
+            const infoElement = document.getElementById('prompts-info');
+
+            try {
+                console.log('[options][DEBUG] 🔍 Loading default prompts from manifest.json...');
+
+                // Используем chrome.runtime.getURL() для получения корректного пути в контексте расширения
+                const manifestUrl = chrome.runtime.getURL('plugins/ozon-analyzer/manifest.json');
+                console.log('[options][DEBUG] 📂 Manifest URL:', manifestUrl);
+
+                const response = await fetch(manifestUrl);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const manifest = await response.json();
+                console.log('[options][DEBUG] 📋 Manifest loaded successfully');
+
+                // Извлекаем промпты из раздела options.prompts
+                if (manifest.options && manifest.options.prompts) {
+                    defaultPrompts = manifest.options.prompts;
+                    console.log('[options][DEBUG] 🤖 Prompts loaded:', Object.keys(defaultPrompts));
+
+                    // Обновляем UI
+                    statusElement.innerHTML = '<span style="color: #10b981;">●</span> Промпты загружены успешно';
+                    containerElement.style.display = 'block';
+                    infoElement.textContent = `Загружено промптов: ${Object.keys(defaultPrompts).length} типов`;
+
+                    showNotification('Промпты загружены успешно');
+                } else {
+                    throw new Error('Раздел prompts не найден в manifest.json');
+                }
+
+            } catch (error) {
+                console.error('[options][DEBUG] ❌ Error loading prompts:', error);
+
+                // Fallback на встроенные значения промптов
+                defaultPrompts = {
+                    optimized: {
+                        ru: {
+                            type: "text",
+                            default: "Ты - токсиколог и химик-косметолог с опытом. Проведи анализ косметического продукта...",
+                            label: { ru: "Оптимизированный промпт (русский)", en: "Optimized Prompt (Russian)" }
+                        },
+                        en: {
+                            type: "text",
+                            default: "You are a toxicologist and cosmetic chemist. Conduct analysis of cosmetic product...",
+                            label: { ru: "Оптимизированный промпт (английский)", en: "Optimized Prompt (English)" }
+                        }
+                    },
+                    deep: {
+                        ru: {
+                            type: "text",
+                            default: "Промпт для глубокого анализа на русском языке...",
+                            label: { ru: "Промпт глубокого анализа (русский)", en: "Deep Analysis Prompt (Russian)" }
+                        },
+                        en: {
+                            type: "text",
+                            default: "Deep analysis prompt in English...",
+                            label: { ru: "Промпт глубокого анализа (английский)", en: "Deep Analysis Prompt (English)" }
+                        }
+                    }
+                };
+
+                statusElement.innerHTML = '<span style="color: #f59e0b;">●</span> Используются встроенные промпты (ошибка загрузки)';
+                containerElement.style.display = 'block';
+                infoElement.textContent = `Используются встроенные промпты (${Object.keys(defaultPrompts).length} типов)`;
+
+                showNotification('Используются встроенные промпты', true);
+            }
+        }
+
         // Инициализация страницы
         async function init() {
             // Скрываем индикатор загрузки
@@ -327,6 +424,9 @@
 
             // Загружаем настройки
             await loadSettings();
+
+            // Загружаем промпты по умолчанию
+            await loadDefaultPrompts();
 
             // Добавляем обработчик события для переключателя
             document.getElementById('htmlTransmissionMode').addEventListener('change', function() {

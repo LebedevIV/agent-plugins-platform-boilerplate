@@ -212,6 +212,52 @@ def get_pyodide_var(name: str, default: Any = None) -> Any:
     except Exception as e:
         return default
 
+def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Загружает промпты из настроек пользователя или использует значения по умолчанию из manifest.json.
+
+    Args:
+        plugin_settings: Настройки плагина из Pyodide globals
+
+    Returns:
+        Структура промптов: {optimized: {ru: "...", en: "..."}, deep: {ru: "...", en: "..."}}
+    """
+    try:
+        # Попытка загрузить кастомные промпты из chrome.storage
+        custom_prompts = safe_js_get_setting('custom_prompts', {})
+
+        prompts = {
+            'optimized': {'ru': '', 'en': ''},
+            'deep': {'ru': '', 'en': ''}
+        }
+
+        # Получаем manifest.json из globals для fallback значений
+        manifest = get_pyodide_var('manifest', {})
+        manifest_prompts = safe_dict_get(manifest, 'options.prompts', {})
+
+        for prompt_type in ['optimized', 'deep']:
+            for lang in ['ru', 'en']:
+                # Сначала пробуем кастомные промпты
+                custom_value = safe_dict_get(custom_prompts, f'{prompt_type}.{lang}', None)
+                if custom_value and isinstance(custom_value, str) and len(custom_value.strip()) > 10:
+                    prompts[prompt_type][lang] = custom_value
+                    console_log(f"✅ Используем кастомный промпт: {prompt_type}.{lang}")
+                else:
+                    # Fallback на manifest.json
+                    manifest_value = safe_dict_get(manifest_prompts, f'{prompt_type}.{lang}.default', '')
+                    prompts[prompt_type][lang] = manifest_value
+                    console_log(f"ℹ️ Используем промпт по умолчанию: {prompt_type}.{lang}")
+
+        return prompts
+
+    except Exception as e:
+        console_log(f"❌ Ошибка загрузки промптов: {str(e)}")
+        # Критический fallback - возвращаем пустые промпты
+        return {
+            'optimized': {'ru': '', 'en': ''},
+            'deep': {'ru': '', 'en': ''}
+        }
+
 
 def clean_reasoning_for_chat(reasoning: str) -> str:
     """
@@ -3339,8 +3385,37 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
     # console_log(f"[LANGUAGE] Финальный результат get_safe_content_language: '{content_language}'")
 
 
+    # Получить пользовательские промпты
+    try:
+        user_prompts = await get_user_prompts(plugin_settings)
+        console_log(f"ℹ️ Используем {'пользовательские' if 'custom' in str(user_prompts) else 'стандартные'} промпты для глубокого анализа")
+    except Exception as e:
+        console_log(f"❌ Ошибка загрузки промптов: {str(e)}, используем fallback")
+        user_prompts = {
+            'optimized': {'ru': '', 'en': ''},
+            'deep': {'ru': '', 'en': ''}
+        }
+
     # console_log(f"Глубокий анализ: desc='{description[:100]}...', comp='{composition[:100]}...', язык={content_language}")
-    if content_language == "ru":
+
+    # Получить промпт из пользовательских настроек или дефолтный
+    try:
+        deep_prompt = user_prompts.get('deep', {}).get(content_language)
+        if not deep_prompt or len(deep_prompt.strip()) < 10:
+            console_log(f"⚠️ Промпт deep.{content_language} не найден или слишком короткий, используем fallback")
+            deep_prompt = None
+        else:
+            console_log(f"✅ Используем промпт deep.{content_language}")
+    except Exception as e:
+        console_log(f"❌ Ошибка получения промпта deep.{content_language}: {str(e)}, используем fallback")
+        deep_prompt = None
+
+    # Оптимизированный промпт с учетом выбранного языка
+    if deep_prompt:
+        prompt = deep_prompt
+        console_log(f"📋 Используем пользовательский промпт deep для языка {content_language}")
+    elif content_language == "ru":
+        # Старый хардкод промпт как fallback
         prompt = f"""
         Проведи глубокий анализ товара с медицинской и научной точки зрения.
         Описание: {description}
@@ -3351,7 +3426,9 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
         3. Эффективность по сравнению с аналогами.
         Верни детальный максимально подробный обоснованный анализ в структурированном виде (используй Markdown).
         """
+        console_log(f"⚠️ Используем fallback промпт deep для языка {content_language}")
     else:  # English
+        # Старый хардкод промпт как fallback для английского
         prompt = f"""
         Conduct a deep analysis of the product from a medical and scientific perspective.
         Description: {description}
@@ -3362,6 +3439,7 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
         3. Effectiveness compared to analogs.
         Return a detailed, maximally comprehensive, reasoned analysis in a structured form (use Markdown).
         """
+        console_log(f"⚠️ Используем fallback промпт deep для языка {content_language}")
 
     try:
         # "deep_analysis" - это псевдоним из `manifest.json` этого плагина.
@@ -3717,6 +3795,17 @@ async def _analyze_composition_vs_description(description: str, composition: str
         console_log("[DIAGNOSTIC] ===== ВЫХОД ИЗ _analyze_composition_vs_description (пустые данные) =====")
         return { "score": 0, "reasoning": "Не удалось извлечь описание или состав товара." }
 
+    # Получить пользовательские промпты
+    try:
+        user_prompts = await get_user_prompts(plugin_settings)
+        console_log(f"ℹ️ Используем {'пользовательские' if 'custom' in str(user_prompts) else 'стандартные'} промпты для анализа соответствия")
+    except Exception as e:
+        console_log(f"❌ Ошибка загрузки промптов: {str(e)}, используем fallback")
+        user_prompts = {
+            'optimized': {'ru': '', 'en': ''},
+            'deep': {'ru': '', 'en': ''}
+        }
+
     # ИСПОЛЬЗУЕМ ПЕРЕДАННЫЙ content_language ИЗ analyze_ozon_product
     # console_log(f"[LANGUAGE] Используем переданный content_language: '{content_language}'")
     # console_log(f"Анализ соответствия: desc='{description[:100]}...', comp='{composition[:100]}...', язык={content_language}")
@@ -3734,8 +3823,24 @@ async def _analyze_composition_vs_description(description: str, composition: str
         key_elements = pre_analyzed
 
 
+    # Получить промпт из пользовательских настроек или дефолтный
+    try:
+        optimized_prompt = user_prompts.get('optimized', {}).get(content_language)
+        if not optimized_prompt or len(optimized_prompt.strip()) < 10:
+            # Fallback на старый хардкод промпт
+            console_log(f"⚠️ Промпт optimized.{content_language} не найден или слишком короткий, используем fallback")
+            optimized_prompt = None
+        else:
+            console_log(f"✅ Используем промпт optimized.{content_language}")
+    except Exception as e:
+        console_log(f"❌ Ошибка получения промпта optimized.{content_language}: {str(e)}, используем fallback")
+        optimized_prompt = None
+
     # Оптимизированный промпт с учетом выбранного языка
-    if content_language == "ru":
+    if optimized_prompt:
+        prompt = optimized_prompt
+        console_log(f"📋 Используем пользовательский промпт optimized для языка {content_language}")
+    elif content_language == "ru":
         # prompt = f"""
         # Проведи глубокий анализ (reasoning) соответствия Описания и Состава товара с медицинской и научной точки зрения:
         # Описание: {description}

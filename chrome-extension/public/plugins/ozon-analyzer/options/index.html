@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ozon Analyzer - Настройки промптов</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8fafc;
+            color: #1f2937;
+            height: 100vh;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            color: #1f2937;
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: #6b7280;
+            font-size: 16px;
+        }
+
+        .setting-group {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .setting-group h3 {
+            color: #1f2937;
+            font-size: 18px;
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #10b981;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+            z-index: 1000;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification.error {
+            background: #ef4444;
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 200px;
+            font-size: 16px;
+            color: #6b7280;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10b981;
+            margin-right: 8px;
+        }
+
+        .status-indicator.loading {
+            background: #f59e0b;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Специфические стили для редактора промптов */
+        #custom-settings {
+            margin-top: 30px;
+        }
+
+        .prompt-type-tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .prompt-tab {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            color: #6b7280;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .prompt-tab.active {
+            color: #1f2937;
+            border-bottom-color: #2196f3;
+        }
+
+        .language-tabs {
+            display: flex;
+            margin-bottom: 20px;
+            gap: 4px;
+        }
+
+        .lang-tab {
+            padding: 8px 16px;
+            background: #f3f4f6;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #6b7280;
+            transition: all 0.2s ease;
+        }
+
+        .lang-tab.active {
+            background: #2196f3;
+            color: white;
+        }
+
+        .prompt-editor {
+            display: flex;
+            gap: 16px;
+            align-items: stretch;
+        }
+
+        .prompt-column {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .prompt-column h4 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 8px;
+        }
+
+        .prompt-textarea {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 13px;
+            line-height: 1.4;
+            resize: vertical;
+            min-height: 400px;
+            background: white;
+        }
+
+        .prompt-textarea.readonly {
+            background: #f9fafb;
+            color: #6b7280;
+        }
+
+        .prompt-textarea:focus {
+            outline: none;
+            border-color: #2196f3;
+            box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+        }
+
+        .copy-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            background: #2196f3;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.2s ease;
+            align-self: flex-start;
+            margin-top: 32px;
+        }
+
+        .copy-button:hover {
+            background: #1976d2;
+        }
+
+        .copy-button:active {
+            transform: scale(0.95);
+        }
+
+        .save-button {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background: #10b981;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s ease;
+            margin-top: 20px;
+        }
+
+        .save-button:hover {
+            background: #059669;
+        }
+
+        .save-button:disabled {
+            background: #d1d5db;
+            cursor: not-allowed;
+        }
+
+        @media (max-width: 768px) {
+            .prompt-editor {
+                flex-direction: column;
+            }
+
+            .copy-button {
+                align-self: center;
+                margin: 16px 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔬 Ozon Analyzer</h1>
+            <p>Настройка промптов для анализа товаров</p>
+        </div>
+
+        <div id="loading-indicator" class="loading">
+            <span class="status-indicator loading"></span>
+            Загрузка настроек...
+        </div>
+
+        <div id="settings-content" style="display: none;">
+            <div class="setting-group">
+                <h3>⚙️ Общие настройки</h3>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-label">Настройки промптов</span>
+                        <span class="setting-description">
+                            Настройте промпты для анализа товаров Ozon. Можете редактировать существующие или создать свои варианты.
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="custom-settings" class="setting-group">
+                <h3>📝 Редактор промптов</h3>
+
+                <!-- Tabs для типов промптов -->
+                <div class="prompt-type-tabs">
+                    <button class="prompt-tab active" data-type="optimized">Оптимизированный анализ</button>
+                    <button class="prompt-tab" data-type="deep">Глубокий анализ</button>
+                </div>
+
+                <!-- Tabs для языков -->
+                <div class="language-tabs">
+                    <button class="lang-tab active" data-lang="ru">Русский</button>
+                    <button class="lang-tab" data-lang="en">English</button>
+                </div>
+
+                <!-- Редактор промптов -->
+                <div class="prompt-editor">
+                    <div class="prompt-column">
+                        <h4>Оригинальный промпт (только чтение)</h4>
+                        <textarea class="prompt-textarea readonly" id="original-prompt" readonly></textarea>
+                    </div>
+
+                    <button class="copy-button" id="copy-button" title="Копировать в редактируемое поле">>></button>
+
+                    <div class="prompt-column">
+                        <h4>Кастомный промпт (редактируемый)</h4>
+                        <textarea class="prompt-textarea" id="custom-prompt" placeholder="Нажмите >> чтобы скопировать оригинальный промпт или введите свой вариант..."></textarea>
+                    </div>
+                </div>
+
+                <button class="save-button" id="save-button">💾 Сохранить изменения</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification" class="notification"></div>
+
+    <script>
+        // Глобальные переменные
+        let currentSettings = {};
+        let originalPrompts = {};
+        let currentType = 'optimized';
+        let currentLang = 'ru';
+
+        // Показ уведомления
+        function showNotification(message, isError = false) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${isError ? 'error' : ''} show`;
+
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+
+        // Получение оригинальных промптов из manifest.json
+        async function getOriginalPrompts() {
+            try {
+                // Получаем manifest.json через chrome.runtime.getManifest()
+                // Но поскольку это options страница плагина, используем fetch для локального файла
+                const response = await fetch('../manifest.json');
+                const manifest = await response.json();
+
+                if (manifest.options && manifest.options.prompts) {
+                    originalPrompts = manifest.options.prompts;
+                    console.log('[options] Оригинальные промпты загружены:', originalPrompts);
+                }
+            } catch (error) {
+                console.error('[options] Ошибка загрузки manifest.json:', error);
+                showNotification('Ошибка загрузки оригинальных промптов', true);
+            }
+        }
+
+        // Загрузка настроек
+        async function loadSettings() {
+            try {
+                console.log('[options][DEBUG] 🔍 Loading custom prompts from chrome.storage...');
+
+                // Загружаем кастомные промпты из chrome.storage.sync
+                const result = await chrome.storage.sync.get(['ozon-analyzer-prompts']);
+                currentSettings = result['ozon-analyzer-prompts'] || {};
+
+                console.log('[options][DEBUG] 📊 Loaded custom prompts:', currentSettings);
+                showNotification('Настройки загружены');
+            } catch (error) {
+                console.error('[options][DEBUG] ❌ Error loading settings:', error);
+                showNotification('Ошибка загрузки настроек', true);
+            }
+        }
+
+        // Сохранение настроек
+        async function saveSettings() {
+            try {
+                const saveButton = document.getElementById('save-button');
+                saveButton.disabled = true;
+                saveButton.textContent = 'Сохранение...';
+
+                const customPrompt = document.getElementById('custom-prompt').value.trim();
+
+                // Сохраняем только если есть изменения
+                if (!currentSettings[currentType]) {
+                    currentSettings[currentType] = {};
+                }
+                if (!currentSettings[currentType][currentLang]) {
+                    currentSettings[currentType][currentLang] = {};
+                }
+
+                currentSettings[currentType][currentLang] = customPrompt;
+
+                console.log('[options][DEBUG] 💾 Saving custom prompts:', currentSettings);
+
+                await chrome.storage.sync.set({
+                    'ozon-analyzer-prompts': currentSettings
+                });
+
+                console.log('[options][DEBUG] ✅ Settings saved to chrome.storage.sync');
+
+                saveButton.disabled = false;
+                saveButton.textContent = '💾 Сохранить изменения';
+                showNotification('Промпты сохранены');
+
+            } catch (error) {
+                console.error('[options][DEBUG] ❌ Error saving settings:', error);
+                const saveButton = document.getElementById('save-button');
+                saveButton.disabled = false;
+                saveButton.textContent = '💾 Сохранить изменения';
+                showNotification('Ошибка сохранения промптов', true);
+            }
+        }
+
+        // Обновление отображения промптов
+        function updatePromptDisplay() {
+            const originalTextarea = document.getElementById('original-prompt');
+            const customTextarea = document.getElementById('custom-prompt');
+
+            // Показываем оригинальный промпт
+            if (originalPrompts[currentType] && originalPrompts[currentType][currentLang] && originalPrompts[currentType][currentLang].default) {
+                originalTextarea.value = originalPrompts[currentType][currentLang].default;
+            } else {
+                originalTextarea.value = 'Оригинальный промпт не найден';
+            }
+
+            // Показываем кастомный промпт
+            const customPrompt = currentSettings[currentType]?.[currentLang] || '';
+            customTextarea.value = customPrompt;
+        }
+
+        // Переключение типа промпта
+        function switchPromptType(type) {
+            currentType = type;
+            document.querySelectorAll('.prompt-tab').forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.type === type);
+            });
+            updatePromptDisplay();
+        }
+
+        // Переключение языка
+        function switchLanguage(lang) {
+            currentLang = lang;
+            document.querySelectorAll('.lang-tab').forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.lang === lang);
+            });
+            updatePromptDisplay();
+        }
+
+        // Копирование промпта
+        function copyPrompt() {
+            const originalTextarea = document.getElementById('original-prompt');
+            const customTextarea = document.getElementById('custom-prompt');
+
+            customTextarea.value = originalTextarea.value;
+            showNotification('Промпт скопирован в редактируемое поле');
+        }
+
+        // Инициализация страницы
+        async function init() {
+            try {
+                // Скрываем индикатор загрузки
+                document.getElementById('loading-indicator').style.display = 'none';
+
+                // Показываем контент настроек
+                document.getElementById('settings-content').style.display = 'block';
+
+                // Загружаем оригинальные промпты и настройки
+                await Promise.all([
+                    getOriginalPrompts(),
+                    loadSettings()
+                ]);
+
+                // Обновляем отображение
+                updatePromptDisplay();
+
+                // Добавляем обработчики событий
+                document.querySelectorAll('.prompt-tab').forEach(tab => {
+                    tab.addEventListener('click', () => switchPromptType(tab.dataset.type));
+                });
+
+                document.querySelectorAll('.lang-tab').forEach(tab => {
+                    tab.addEventListener('click', () => switchLanguage(tab.dataset.lang));
+                });
+
+                document.getElementById('copy-button').addEventListener('click', copyPrompt);
+                document.getElementById('save-button').addEventListener('click', saveSettings);
+
+                console.log('Редактор промптов инициализирован');
+                showNotification('Редактор промптов готов к работе');
+            } catch (error) {
+                console.error('Ошибка инициализации:', error);
+                showNotification('Ошибка инициализации редактора', true);
+            }
+        }
+
+        // Запуск инициализации
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+
+        // Обработка ошибок
+        window.addEventListener('error', (event) => {
+            console.error('JavaScript error:', event.error);
+            showNotification('Произошла ошибка в приложении', true);
+        });
+
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error('Unhandled promise rejection:', event.reason);
+            showNotification('Произошла необработанная ошибка', true);
+        });
+    </script>
+</body>
+</html>

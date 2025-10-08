@@ -1,6 +1,6 @@
 {
   "name": "chrome-extension-background",
-  "version": "1.0.759",
+  "version": "1.0.766",
   "scripts": {
     "build": "webpack --mode=production",
     "dev": "webpack --mode=development --watch"

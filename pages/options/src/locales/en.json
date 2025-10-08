@@ -21,6 +21,19 @@
         "selectPlugin": "Select a plugin from the list on the left."
       }
     },
+    "prompts": {
+      "settings": "Prompt Settings",
+      "type": "Prompt Type:",
+      "optimized": "Optimized",
+      "deep": "Deep",
+      "language": "Language:",
+      "russian": "Russian",
+      "english": "English",
+      "originalPrompt": "Original Prompt (read-only)",
+      "customPrompt": "Custom Prompt",
+      "copyToCustom": ">>",
+      "save": "Save"
+    },
     "settings": {
       "title": "Platform Settings",
       "aiKeys": {

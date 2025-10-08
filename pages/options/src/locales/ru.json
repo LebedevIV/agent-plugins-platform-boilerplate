@@ -33,6 +33,19 @@
           "en": "English",
           "auto": "Автоматически"
         }
+      },
+      "prompts": {
+        "settings": "Настройки промптов",
+        "type": "Тип промпта:",
+        "optimized": "Оптимизированный",
+        "deep": "Глубокий",
+        "language": "Язык:",
+        "russian": "Русский",
+        "english": "Английский",
+        "originalPrompt": "Оригинальный промпт (только чтение)",
+        "customPrompt": "Кастомный промпт",
+        "copyToCustom": ">>",
+        "save": "Сохранить"
       }
     },
     "settings": {
