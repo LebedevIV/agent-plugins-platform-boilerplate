@@ -1,6 +1,6 @@
 {
   "name": "@extension/vite-config",
-  "version": "0.5.1317",
+  "version": "0.5.1328",
   "description": "chrome extension - vite base configuration",
   "type": "module",
   "private": true,
@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@extension/env": "workspace:*",
-    "@vitejs/plugin-react": "^4.6.0",
+    "@vitejs/plugin-react-swc": "^4.1.0",
     "deepmerge": "^4.3.1",
     "vite-plugin-node-polyfills": "^0.22.0"
   },

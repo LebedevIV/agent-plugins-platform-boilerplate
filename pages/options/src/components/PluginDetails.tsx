@@ -81,8 +81,12 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t }: Prompts
   const getCustomPrompt = (): string => {
     try {
       const prompts = value || {};
-      const typePrompts = prompts[promptType] || {};
-      const langPrompts = typePrompts[language] || {};
+      const typePrompts = (prompts as any)[promptType] || {};
+      const langPrompts = (typePrompts as any)[language];
+
+      // If stored as plain text, show as-is. Only stringify objects.
+      if (typeof langPrompts === 'string') return langPrompts;
+      if (langPrompts == null) return '';
       return JSON.stringify(langPrompts, null, 2);
     } catch {
       return '';
@@ -100,16 +104,17 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t }: Prompts
 
   const handleSave = () => {
     try {
-      const parsedPrompt = JSON.parse(customPrompt);
-      const newValue = { ...value };
+      const newValue: any = { ...value };
 
-      if (!newValue[promptType]) newValue[promptType] = { ru: {}, en: {} };
-      if (!newValue[promptType][language]) newValue[promptType][language] = {};
+      // Ensure container objects exist
+      if (!newValue[promptType]) newValue[promptType] = { ru: '', en: '' };
 
-      newValue[promptType][language] = parsedPrompt;
+      // Store verbatim text (plain string), no JSON requirement
+      newValue[promptType][language] = customPrompt;
+
       onSave(newValue);
     } catch (error) {
-      console.error('Invalid JSON in custom prompt:', error);
+      console.error('Failed to save custom prompt:', error);
       // Можно добавить уведомление об ошибке
     }
   };
@@ -560,7 +565,53 @@ const PluginDetails = (props: PluginDetailsProps) => {
     }
   };
 
-  // @ts-ignore - TypeScript JSX inference issue
+  // Precompute custom settings elements to satisfy TypeScript
+  const optionEntries = Object.entries(selectedPlugin.manifest?.options ?? {}) as [string, CustomSetting][];
+  const customSettingElements: ReactNode[] = optionEntries
+    .map(([key, config]) => renderCustomSetting(key, config))
+    .filter((item): item is ReactNode => item !== null);
+
+  // Render helper to avoid union/unknown in JSX for plugin settings section
+  const PluginSettingsSection = () => (
+    <div className="detail-section" id="plugin-settings">
+      <h3>Настройки плагина</h3>
+      <div className="setting-item">
+        <ToggleButton
+          checked={settings.enabled ?? true}
+          disabled={isUpdating === 'enabled'}
+          onChange={val => handleSettingChange('enabled', val)}
+          label={
+            <>
+              Включен
+              <span
+                className="info-icon"
+                title="Управляет активностью плагина. Отключение делает плагин неактивным.">
+                i
+              </span>
+            </>
+          }
+        />
+      </div>
+      <div className="setting-item">
+        <ToggleButton
+          checked={settings.autorun ?? false}
+          disabled={isUpdating === 'autorun' || !(settings.enabled ?? true)}
+          onChange={val => handleSettingChange('autorun', val)}
+          label={
+            <>
+              Автоматический запуск
+              <span
+                className="info-icon"
+                title="Если включено, плагин будет автоматически запускаться на подходящих страницах.">
+                i
+              </span>
+            </>
+          }
+        />
+      </div>
+    </div>
+  );
+
   return (
     <LocalErrorBoundary>
       <div className="plugin-details">
@@ -602,67 +653,26 @@ const PluginDetails = (props: PluginDetailsProps) => {
             </div>
           )}
 
-          {selectedPlugin.manifest?.permissions && Array.isArray(selectedPlugin.manifest.permissions) && (
+          {Array.isArray(selectedPlugin.manifest?.permissions) ? (
             <div className="detail-section" id="plugin-permissions">
               <h3>Разрешения</h3>
               <ul>
-                {selectedPlugin.manifest.permissions.map((permission: string, idx: number) => (
+                {(selectedPlugin.manifest?.permissions ?? []).map((permission: string, idx: number) => (
                   <li key={idx}>{permission}</li>
                 ))}
               </ul>
             </div>
-          )}
+          ) : null}
 
-          <div className="detail-section" id="plugin-settings">
-            <h3>Настройки плагина</h3>
-            <div className="setting-item">
-              <ToggleButton
-                checked={settings.enabled ?? true}
-                disabled={isUpdating === 'enabled'}
-                onChange={val => handleSettingChange('enabled', val)}
-                label={
-                  <>
-                    Включен
-                    <span
-                      className="info-icon"
-                      title="Управляет активностью плагина. Отключение делает плагин неактивным.">
-                      i
-                    </span>
-                  </>
-                }
-              />
-            </div>
-            <div className="setting-item">
-              <ToggleButton
-                checked={settings.autorun ?? false}
-                disabled={isUpdating === 'autorun' || !(settings.enabled ?? true)}
-                onChange={val => handleSettingChange('autorun', val)}
-                label={
-                  <>
-                    Автоматический запуск
-                    <span
-                      className="info-icon"
-                      title="Если включено, плагин будет автоматически запускаться на подходящих страницах.">
-                      i
-                    </span>
-                  </>
-                }
-              />
-            </div>
-          </div>
+         <PluginSettingsSection />
 
           {/* Пользовательские настройки */}
-          {selectedPlugin.manifest?.options && Object.keys(selectedPlugin.manifest.options).length > 0 && (
+          {(selectedPlugin.manifest?.options && Object.keys(selectedPlugin.manifest.options).length > 0) ? (
             <div className="detail-section" id="custom-settings">
               <h3>Дополнительные настройки</h3>
-              {(() => {
-                const customSettingElements = (Object.entries(selectedPlugin.manifest?.options || {})).map(([key, config]: [string, unknown]) =>
-                  renderCustomSetting(key, config as CustomSetting)
-                ).filter(item => item !== null);
-                return customSettingElements;
-              })()}
+              {customSettingElements}
             </div>
-          )}
+          ) : null}
 
 
         </div>
