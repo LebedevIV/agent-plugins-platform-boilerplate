@@ -330,12 +330,42 @@ const PluginDetails = (props: PluginDetailsProps) => {
           ...prev,
           [setting]: value
         }));
+
+        // Диагностика: проверяем правильность сохранения промптов
+        if (setting === 'prompts') {
+          await verifyPromptStorage();
+        }
       } else {
         console.warn('chrome.storage.local is not available');
       }
     } catch (error) {
       console.error(`Failed to save setting ${setting} to chrome.storage.local:`, error);
       throw error; // Пробрасываем ошибку для обработки в handleSettingChange
+    }
+  };
+
+  // Диагностическая функция для проверки сохранения промптов
+  const verifyPromptStorage = async () => {
+    if (!selectedPlugin) return;
+
+    try {
+      const key = `${selectedPlugin.id}_prompts`;
+      const stored = await chrome.storage.local.get([key]);
+      console.log('🔍 Диагностика промптов:');
+      console.log(`   Plugin ID: ${selectedPlugin.id}`);
+      console.log(`   Storage key: ${key}`);
+      console.log('   Сохраненные промпты:', stored[key]);
+
+      if (stored[key]) {
+        const prompts = stored[key] as PromptsStructure;
+        console.log('   Структура промптов:');
+        console.log(`     - optimized.ru: ${prompts.optimized?.ru ? '✓' : '✗'} (${prompts.optimized?.ru?.length || 0} символов)`);
+        console.log(`     - optimized.en: ${prompts.optimized?.en ? '✓' : '✗'} (${prompts.optimized?.en?.length || 0} символов)`);
+        console.log(`     - deep.ru: ${prompts.deep?.ru ? '✓' : '✗'} (${prompts.deep?.ru?.length || 0} символов)`);
+        console.log(`     - deep.en: ${prompts.deep?.en ? '✓' : '✗'} (${prompts.deep?.en?.length || 0} символов)`);
+      }
+    } catch (error) {
+      console.error('Ошибка диагностики промптов:', error);
     }
   };
 
