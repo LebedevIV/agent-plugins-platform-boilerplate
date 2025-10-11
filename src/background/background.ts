@@ -3300,6 +3300,24 @@ class BackgroundController {
           const customSettingsKeys = manifest?.options ? Object.keys(manifest.options) : [];
           pluginSettings = await getPluginSettings(message.pluginId, manifest.options || {}, customSettingsKeys);
           console.log(`[Background][PLUGIN_SETTINGS] ✅ Plugin settings loaded:`, pluginSettings);
+
+          // Добавляем manifest в pluginSettings для передачи в EXECUTE_WORKFLOW
+          if (pluginSettings) {
+            pluginSettings.manifest = manifest;
+          }
+
+          // Добавить manifest в Pyodide globals для доступа к оригинальным промптам
+          (globalThis as any).pyodideWorker?.postMessage({
+            type: 'SET_GLOBAL',
+            key: 'manifest',
+            value: manifest
+          });
+
+          // Верификация что manifest добавлен
+          (globalThis as any).pyodideWorker?.postMessage({
+            type: 'VERIFY_MANIFEST',
+            manifest: manifest
+          });
         } else {
           console.warn(`[Background][PLUGIN_SETTINGS] ⚠️ Failed to load manifest for ${message.pluginId}, using default settings`);
           pluginSettings = await getPluginSettings(message.pluginId);

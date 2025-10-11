@@ -1,0 +1,99 @@
+{
+  "name": "Ozon Analyzer",
+  "version": "1.1.0",
+  "description": "Анализатор товаров Ozon с проверкой соответствия описания и состава",
+  "author": "Igor Lebedev",
+  "main_server": "mcp_server.py",
+  "host_permissions": [
+    "*://*.ozon.ru/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "icon": "icon.svg",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "ai_models": {
+    "basic_analysis": "gemini-flash",
+    "compliance_check": "gemini-flash",
+    "detailed_comparison": "gemini-pro",
+    "deep_analysis": "gemini-pro",
+    "scraping_fallback": "gemini-flash"
+  },
+  "options": {
+    "enable_deep_analysis": {
+      "type": "boolean",
+      "default": true,
+      "label": {
+        "ru": "Включить глубокий анализ",
+        "en": "Enable deep analysis"
+      },
+      "description": {
+        "ru": "Запускать дополнительный анализ при низкой оценке соответствия",
+        "en": "Run additional analysis when compliance score is low"
+      }
+    },
+    "auto_request_deep_analysis": {
+      "type": "boolean",
+      "default": true,
+      "label": {
+        "ru": "Автоматически запрашивать глубокий анализ",
+        "en": "Automatically request deep analysis"
+      }
+    },
+    "search_for_analogs": {
+      "type": "boolean",
+      "default": false,
+      "label": {
+        "ru": "Поиск аналогов",
+        "en": "Search for analogs"
+      },
+      "description": {
+        "ru": "Включить поиск аналогов",
+        "en": "Enable search for analogs"
+      }
+    },
+    "response_language": {
+      "type": "select",
+      "default": "ru",
+      "values": [
+        "ru",
+        "en",
+        "auto"
+      ],
+      "labels": {
+        "ru": {
+          "ru": "Русский",
+          "en": "Russian"
+        },
+        "en": {
+          "ru": "Английский",
+          "en": "English"
+        },
+        "auto": {
+          "ru": "Автоопределение",
+          "en": "Auto-detect"
+        }
+      },
+      "label": {
+        "ru": "Язык ответа",
+        "en": "Response language"
+      }
+    },
+    "analysis_threshold": {
+      "type": "number",
+      "default": 7,
+      "min": 1,
+      "max": 10,
+      "step": 1,
+      "label": {
+        "ru": "Порог для глубокого анализа",
+        "en": "Deep analysis threshold"
+      }
+    },
+    "prompts": {
+      "optimized": {
+        "ru": {
+          "type": "text",
+}

@@ -221,186 +221,51 @@ def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> Dict[s
     Returns:
         Структура промптов: {optimized: {ru: "...", en: "..."}, deep: {ru: "...", en: "..."}}
     """
-    console_log(f"🔍 ===== НАЧАЛО ЗАГРУЗКИ ПРОМПТОВ =====")
-
     try:
-        # ДИАГНОСТИКА: Проверяем получение manifest из plugin_settings или globals для обратной совместимости
-        console_log(f"🔍 ДИАГНОСТИКА ДОСТУПА К MANIFEST:")
-        manifest = None
-
-        # Сначала пытаемся получить manifest из plugin_settings для обратной совместимости
-        if plugin_settings and isinstance(plugin_settings, dict):
-            manifest_from_settings = safe_dict_get(plugin_settings, 'manifest', None)
-            if manifest_from_settings and isinstance(manifest_from_settings, dict):
-                console_log(f"   ✅ manifest найден в plugin_settings")
-                manifest = manifest_from_settings
-            else:
-                console_log(f"   ℹ️ manifest не найден в plugin_settings, проверяем globals")
-
-        # Если не нашли в plugin_settings, fallback на globals
-        if manifest is None:
-            manifest = get_pyodide_var('manifest', {})
-            if manifest:
-                console_log(f"   ✅ manifest найден в globals")
-            else:
-                console_log(f"   ❌ manifest НЕ НАЙДЕН ни в plugin_settings, ни в globals")
-
-        console_log(f"   manifest type: {type(manifest)}")
-        if manifest:
-            console_log(f"   manifest ключи: {list(manifest.keys())}")
-            console_log(f"   manifest.options: {manifest.get('options') is not None}")
-            if manifest.get('options'):
-                console_log(f"   manifest.options.prompts: {manifest.get('options', {}).get('prompts') is not None}")
-
-        # Диагностика входных данных
-        console_log(f"🔍 Диагностика входных данных:")
-        console_log(f"   plugin_settings type: {type(plugin_settings)}")
-        console_log(f"   plugin_settings is None: {plugin_settings is None}")
-        console_log(f"   plugin_settings keys: {list(plugin_settings.keys()) if isinstance(plugin_settings, dict) else 'не словарь'}")
-
         # Исправлено: промпты уже доступны в plugin_settings
         custom_prompts_raw = safe_dict_get(plugin_settings, 'prompts', {})
-        console_log(f"   custom_prompts_raw: {custom_prompts_raw}")
-        console_log(f"   custom_prompts_raw type: {type(custom_prompts_raw)}")
 
         prompts = {
             'optimized': {'ru': '', 'en': ''},
             'deep': {'ru': '', 'en': ''}
         }
 
-        # Используем manifest, полученный выше (из plugin_settings или globals)
-        console_log(f"   manifest: {manifest is not None}")
-        console_log(f"   manifest type: {type(manifest)}")
+        # Получаем manifest.json из globals для fallback значений
+        manifest = get_pyodide_var('manifest', {})
+        manifest_prompts = safe_dict_get(manifest, 'options.prompts', {})
 
-        if manifest:
-            console_log(f"   manifest ключи: {list(manifest.keys())}")
-            options = safe_dict_get(manifest, 'options', {})
-            console_log(f"   manifest.options: {options is not None}")
-            if options:
-                console_log(f"   manifest.options ключи: {list(options.keys())}")
-                console_log(f"   manifest.options.prompts: {options.get('prompts') is not None}")
-                if options.get('prompts'):
-                    console_log(f"   manifest.options.prompts ключи: {list(options.get('prompts', {}).keys())}")
-
-            manifest_prompts = safe_dict_get(manifest, 'options', {}).get('prompts', {})
-            console_log(f"   manifest_prompts: {manifest_prompts}")
-            console_log(f"   manifest_prompts type: {type(manifest_prompts)}")
-        else:
-            console_log(f"   ❌ manifest не найден в globals - ЭТО ОСНОВНАЯ ПРОБЛЕМА!")
-            manifest_prompts = {}
-
-        # Детальная диагностика структуры промптов
         for prompt_type in ['optimized', 'deep']:
             for lang in ['ru', 'en']:
-                console_log(f"🔍 Обработка {prompt_type}.{lang}:")
-
                 # Правильно извлекаем промпт из nested структуры plugin_settings
                 prompt_type_data = safe_dict_get(custom_prompts_raw, prompt_type, {})
-                console_log(f"   prompt_type_data ({prompt_type}): {prompt_type_data}")
 
                 custom_value = safe_dict_get(prompt_type_data, lang, '')
-                console_log(f"   custom_value для {lang}: {repr(custom_value)}")
-                console_log(f"   custom_value type: {type(custom_value)}")
-                console_log(f"   custom_value length: {len(custom_value) if custom_value else 0}")
 
                 if custom_value and isinstance(custom_value, str) and len(custom_value.strip()) > 0:
                     prompts[prompt_type][lang] = custom_value
                     console_log(f"✅ Используем кастомный промпт: {prompt_type}.{lang} (длина: {len(custom_value)})")
                 else:
-                    console_log(f"ℹ️ Кастомный промпт не найден или пустой для {prompt_type}.{lang}")
+                    # Fallback на manifest.json
+                    lang_data = safe_dict_get(manifest_prompts, f'{prompt_type}.{lang}', {})
 
-                    # Fallback 1: manifest.json - исправленная логика извлечения
-                    type_prompts = safe_dict_get(manifest_prompts, prompt_type, {})
-                    console_log(f"   type_prompts из manifest ({prompt_type}): {type_prompts}")
+                    manifest_value = safe_dict_get(lang_data, 'default', '')
+                    prompts[prompt_type][lang] = manifest_value
+                    console_log(f"ℹ️ Используем промпт по умолчанию: {prompt_type}.{lang}")
 
-                    if type_prompts:
-                        lang_data = safe_dict_get(type_prompts, lang, {})
-                        console_log(f"   lang_data для {lang}: {lang_data}")
-
-                        manifest_value = safe_dict_get(lang_data, 'default', '')
-                        console_log(f"   manifest_value для {prompt_type}.{lang}: {repr(manifest_value)}")
-                        console_log(f"   manifest_value length: {len(manifest_value) if manifest_value else 0}")
-
-                        if manifest_value and len(manifest_value.strip()) > 0:
-                            prompts[prompt_type][lang] = manifest_value
-                            console_log(f"✅ Используем промпт по умолчанию из manifest: {prompt_type}.{lang}")
-                        else:
-                            console_log(f"⚠️ Промпт по умолчанию не найден или пустой для {prompt_type}.{lang}")
-                            # Fallback 2: встроенные промпты по умолчанию
-                            default_value = _get_builtin_default_prompt(prompt_type, lang)
-                            if default_value:
-                                prompts[prompt_type][lang] = default_value
-                                console_log(f"✅ Используем встроенный промпт по умолчанию: {prompt_type}.{lang}")
-                            else:
-                                console_log(f"⚠️ Встроенный промпт по умолчанию не найден для {prompt_type}.{lang}")
-                                console_log(f"ℹ️ Оставляем пустой промпт для {prompt_type}.{lang}")
-                    else:
-                        console_log(f"⚠️ Тип промпта {prompt_type} не найден в manifest")
-                        # Fallback 2: встроенные промпты по умолчанию
-                        default_value = _get_builtin_default_prompt(prompt_type, lang)
-                        if default_value:
-                            prompts[prompt_type][lang] = default_value
-                            console_log(f"✅ Используем встроенный промпт по умолчанию: {prompt_type}.{lang}")
-                        else:
-                            console_log(f"⚠️ Встроенный промпт по умолчанию не найден для {prompt_type}.{lang}")
-                            console_log(f"ℹ️ Оставляем пустой промпт для {prompt_type}.{lang}")
-
-        # Итоговая диагностика
-        console_log(f"🔍 Итоговая диагностика промптов:")
+        console_log(f"🔍 Диагностика промптов:")
         console_log(f"   Plugin settings prompts: {custom_prompts_raw}")
         console_log(f"   Manifest prompts: {manifest_prompts}")
+        console_log(f"   Plugin settings prompts: {custom_prompts_raw}")
         console_log(f"   Final prompts structure: {prompts}")
-
-        # Подробная диагностика каждого промпта
-        console_log(f"🔍 ДЕТАЛЬНАЯ ДИАГНОСТИКА ПРОМПТОВ:")
-        for prompt_type in ['optimized', 'deep']:
-            for lang in ['ru', 'en']:
-                prompt_value = prompts[prompt_type][lang]
-                if prompt_value and len(prompt_value.strip()) > 0:
-                    console_log(f"   ✅ {prompt_type}.{lang}: загружен ({len(prompt_value)} символов)")
-                else:
-                    console_log(f"   ❌ {prompt_type}.{lang}: НЕ загружен (пустой)")
-
-        # Подсчет загруженных промптов
-        loaded_prompts = len([p for pt in prompts.values() for p in pt.values() if p and len(p.strip()) > 0])
-        total_prompts = len([p for pt in prompts.values() for p in pt.values()])
-        console_log(f"📋 Загружено промптов: {loaded_prompts}/{total_prompts} (кастомных: {loaded_prompts})")
-
-        # ДИАГНОСТИКА ПРОБЛЕМЫ: Проверяем источник каждого промпта
-        console_log(f"🔍 ДИАГНОСТИКА ИСТОЧНИКОВ ПРОМПТОВ:")
-        for prompt_type in ['optimized', 'deep']:
-            for lang in ['ru', 'en']:
-                prompt_value = prompts[prompt_type][lang]
-                if prompt_value and len(prompt_value.strip()) > 0:
-                    # Определяем источник промпта
-                    if custom_prompts_raw and custom_prompts_raw.get(prompt_type, {}).get(lang) == prompt_value:
-                        source = "кастомный"
-                    elif manifest_prompts and manifest_prompts.get(prompt_type, {}).get(lang, {}).get('default') == prompt_value:
-                        source = "manifest default"
-                    else:
-                        source = "встроенный fallback"
-                    console_log(f"   📍 {prompt_type}.{lang}: источник = {source}")
-                else:
-                    console_log(f"   ❌ {prompt_type}.{lang}: источник = отсутствует")
-
-        console_log(f"🔍 ===== УСПЕШНО ЗАВЕРШЕНА ЗАГРУЗКА ПРОМПТОВ =====")
+        console_log(f"📋 Загружено промптов: {len([p for pt in prompts.values() for p in pt.values() if p])} кастомных")
         return prompts
 
     except Exception as e:
-        console_log(f"❌ Критическая ошибка загрузки промптов: {str(e)}")
-        console_log(f"🔍 Детальная диагностика ошибки:")
-        console_log(f"   Exception type: {type(e).__name__}")
-        console_log(f"   Exception args: {e.args}")
+        console_log(f"❌ Ошибка загрузки промптов: {str(e)}")
+        console_log(f"🔍 Диагностика ошибки:")
         console_log(f"   Plugin settings: {plugin_settings}")
         console_log(f"   Plugin settings type: {type(plugin_settings)}")
-
-        # Трассировка стека для диагностики
-        import traceback
-        stack_trace = traceback.format_exc()
-        console_log(f"   Stack trace: {stack_trace}")
-
         # Критический fallback - возвращаем пустые промпты
-        console_log(f"⚠️ Возвращаем критический fallback с пустыми промптами")
         return {
             'optimized': {'ru': '', 'en': ''},
             'deep': {'ru': '', 'en': ''}
@@ -411,11 +276,8 @@ def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> Dict[s
             'deep': {'ru': '', 'en': ''}
         }
 
-        # Получаем manifest из plugin_settings или globals для fallback значений
-        if plugin_settings and isinstance(plugin_settings, dict):
-            manifest = safe_dict_get(plugin_settings, 'manifest', get_pyodide_var('manifest', {}))
-        else:
-            manifest = get_pyodide_var('manifest', {})
+        # Получаем manifest.json из globals для fallback значений
+        manifest = get_pyodide_var('manifest', {})
         manifest_prompts = safe_dict_get(manifest, 'options.prompts', {})
 
         for prompt_type in ['optimized', 'deep']:
@@ -455,168 +317,6 @@ def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> Dict[s
             'deep': {'ru': '', 'en': ''}
         }
 
-
-def _get_builtin_default_prompt(prompt_type: str, lang: str) -> str:
-    """
-    Возвращает встроенные промпты по умолчанию для случаев когда они не найдены в manifest.json.
-
-    Args:
-        prompt_type: Тип промпта ('optimized' или 'deep')
-        lang: Язык промпта ('ru' или 'en')
-
-    Returns:
-        Строка с промптом по умолчанию или пустая строка если не найден
-    """
-    builtin_prompts = {
-        'optimized': {
-            'ru': 
-#             """Ты - токсиколог и химик-косметолог с 15-летним опытом. Твоя задача: провести КРИТИЧЕСКИЙ анализ косметического продукта, разоблачая маркетинговые уловки.
-
-# ДАННЫЕ:
-# Описание: {description}
-# Состав: {composition}
-
-# ОБЯЗАТЕЛЬНАЯ МЕТОДОЛОГИЯ АНАЛИЗА:
-
-# 1. ПРОВЕРКА МАРКЕТИНГОВЫХ ЗАЯВЛЕНИЙ:
-# - Термины типа "3D/4D/5D", "революционный", "инновационный" - ТРЕБУЮТ доказательств
-# - Для каждого заявления ("лифтинг", "против морщин"):
-#     * Найди КОНКРЕТНЫЙ активный компонент
-#     * Оцени его ПОЗИЦИЮ в списке (начало = высокая концентрация, конец = маркетинг)
-#     * Укажи ЭФФЕКТИВНУЮ концентрацию из исследований vs вероятную в продукте
-
-# 2. ТОКСИКОЛОГИЧЕСКИЙ СКРИНИНГ (приоритет №1):
-# - Проверь КАЖДЫЙ компонент на:
-#     * Формальдегид-релизеры (DMDM Hydantoin, Quaternium-15, и т.д.)
-#     * Парабены (особенно butyl-, propyl-)
-#     * Устаревшие УФ-фильтры (Octinoxate, Oxybenzone)
-#     * Потенциальные эндокринные дизрапторы
-# - Если найдено ≥3 проблемных компонента → оценка НЕ МОЖЕТ быть >5/10
-
-# 3. РЕАЛИСТИЧНАЯ ОЦЕНКА ПЕПТИДОВ/АКТИВОВ:
-# - Palmitoyl Tripeptide-38: эффективен при 2-4%, если в середине списка → скорее <1% → эффект минимален
-# - Collagen/Elastin: молекулы НЕ проникают, работают только как пленка
-# - Hyaluronic acid: увлажняет ПОВЕРХНОСТНО, НЕ разглаживает глубокие морщины
-
-# 4. СРАВНЕНИЕ С СОВРЕМЕННЫМИ СТАНДАРТАМИ:
-# - Современная косметика = без парабенов, с новыми консервантами
-# - Устаревшие формулы → снижение оценки на 2-3 балла
-
-# 5. ШКАЛА ОЦЕНКИ (СТРОГАЯ):
-# - 9-10: Идеальный состав, доказанные активы в высоких концентрациях, без токсичных компонентов
-# - 7-8: Хороший состав, минимум проблемных компонентов
-# - 5-6: Средний продукт, есть проблемные компоненты ИЛИ активы в низких дозах
-# - 3-4: Устаревшая формула, много токсичных компонентов, маркетинговые заявления не подтверждены
-# - 1-2: Опасный или полностью бесполезный продукт
-
-# КРИТИЧЕСКИ ВАЖНО:
-# - Будь СКЕПТИЧЕН к маркетингу
-# - НЕ завышай оценку из вежливости
-# - Если состав устаревший (парабены + формальдегид-релизеры) → максимум 5/10
-# - Если заявления не подтверждены активами в ДОСТАТОЧНОЙ концентрации → снижай оценку
-
-# ФОРМАТ ОТВЕТА - ТОЛЬКО JSON:
-# {{
-# "score": число_от_1_до_10,
-# "reasoning": "ДЕТАЛЬНЫЙ анализ:
-#     1. Проверка маркетинга: [разбери каждое заявление]
-#     2. Токсикологический профиль: [перечисли ВСЕ проблемные компоненты]
-#     3. Реальная эффективность активов: [концентрации vs заявления]
-#     4. Сравнение с современными стандартами: [почему устарел/актуален]
-#     5. Итоговый вердикт: [честное заключение]",
-# "confidence": число_от_0_до_1,
-# "red_flags": ["список всех токсичных/проблемных компонентов"],
-# "marketing_lies": ["список не подтвержденных маркетинговых заявлений"]
-# }}
-
-# ЯЗЫК: Русский, технический стиль с примерами."""
-"""
-Тестовый пример: сколько будет 1+2
-"""
-,
-            'en': """You are a board-certified toxicologist and cosmetic chemist with 15 years of experience in ingredient safety assessment. Your task: conduct a CRITICAL, evidence-based analysis of this cosmetic product, exposing marketing manipulation.
-
-DATA:
-Description: {description}
-Composition: {composition}
-
-MANDATORY ANALYSIS PROTOCOL:
-
-1. TOXICOLOGICAL SCREENING (highest priority):
-- Screen EVERY ingredient for:
-    * Formaldehyde-releasers (DMDM Hydantoin, Quaternium-15, Diazolidinyl Urea, Imidazolidinyl Urea)
-    * Parabens (particularly butylparaben, propylparaben - EU restricted)
-    * Obsolete UV filters (Octinoxate/Ethylhexyl Methoxycinnamate, Oxybenzone)
-    * Known/suspected endocrine disruptors
-- HARD RULE: ≥3 high-concern ingredients → score CAPPED at 5/10 maximum
-
-2. MARKETING CLAIMS VERIFICATION:
-- Buzzwords like "3D/4D/5D technology", "revolutionary", "clinical breakthrough" - DEMAND evidence
-- For each claim ("lifting", "anti-wrinkle", "firming"):
-    * Identify the SPECIFIC active ingredient responsible
-    * Evaluate its POSITION in INCI list (first 5 = meaningful dose, after position 10 = cosmetic dose)
-    * Compare PROVEN effective concentration from peer-reviewed studies vs. LIKELY concentration in this product
-
-3. REALISTIC EFFICACY ASSESSMENT:
-- Palmitoyl Tripeptide-38 (Matrixyl synthe'6): clinically effective at 2-4%; if listed mid-INCI → probably <1% → negligible effect
-- Collagen/Hydrolyzed Elastin: molecular weight >500 Da → CANNOT penetrate stratum corneum → function only as humectants/film-formers
-- Sodium Hyaluronate: provides surface hydration only, CANNOT affect dermal structure or deep wrinkles
-
-4. MODERN FORMULATION STANDARDS COMPARISON:
-- 2025 best practices: phenoxyethanol or modern preservative systems, NO paraben cocktails
-- Formulations using 4+ parabens + formaldehyde-releasers = outdated 2000s technology → automatic -2 to -3 point deduction
-
-5. EVIDENCE-BASED SCORING RUBRIC (strict grading):
-- 9-10: Exceptional formulation, clinically-validated actives at proven concentrations, clean safety profile
-- 7-8: Well-formulated, minor concerns only, actives present at reasonable levels
-- 5-6: Mediocre product with significant concerns (problematic preservatives OR underdosed actives OR misleading claims)
-- 3-4: Poor formulation with multiple red flags, outdated technology, unsubstantiated marketing
-- 1-2: Potentially harmful or fraudulent product
-
-CRITICAL ASSESSMENT RULES:
-- Maintain scientific skepticism toward all marketing language
-- Apply evidence-based standards, NOT brand reputation
-- Outdated preservation system (multiple parabens + formaldehyde-releaser) = AUTOMATIC cap at 5/10
-- Claims unsupported by adequate active concentrations = reduce score proportionally
-- Default to LOWER score when ingredient concentrations are ambiguous
-
-OUTPUT FORMAT - VALID JSON ONLY:
-{{
-"score": integer_1_to_10,
-"reasoning": "COMPREHENSIVE ANALYSIS:
-    1. Toxicological Profile: [enumerate ALL concerning ingredients with specific risks]
-    2. Marketing Claims Audit: [fact-check each claim against ingredient reality]
-    3. Active Ingredient Efficacy: [compare claimed benefits vs. probable concentrations vs. scientific evidence]
-    4. Formulation Modernity Assessment: [evaluate against current industry standards]
-    5. Evidence-Based Verdict: [objective conclusion with no marketing bias]",
-"confidence": float_0_to_1,
-"red_flags": ["comprehensive list of problematic/toxic/outdated ingredients"],
-"marketing_lies": ["specific unsubstantiated or misleading marketing claims"]
-}}
-
-RESPONSE LANGUAGE: English, using precise technical terminology."""
-        },
-        'deep': {
-            'ru': """Проведи глубокий анализ товара с медицинской и научной точки зрения.
-Описание: {description}
-Состав: {composition}
-Проанализируй:
-1. Научную обоснованность заявленных свойств.
-2. Потенциальные побочные эффекты и противопоказания.
-3. Эффективность по сравнению с аналогами.
-Верни детальный максимально подробный обоснованный анализ в структурированном виде (используй Markdown).""",
-            'en': """Conduct a deep analysis of the product from a medical and scientific perspective.
-Description: {description}
-Composition: {composition}
-Analyze:
-1. Scientific validity of the claimed properties.
-2. Potential side effects and contraindications.
-3. Effectiveness compared to analogs.
-Return a detailed, maximally comprehensive, reasoned analysis in a structured form (use Markdown)."""
-        }
-    }
-
-    return builtin_prompts.get(prompt_type, {}).get(lang, '')
 
 def clean_reasoning_for_chat(reasoning: str) -> str:
     """
@@ -1582,7 +1282,7 @@ class FastDOMParser:
         # Попытка 1: LXML с множественными селекторами для разных версий макета
         if lxml_available:
             try:
-                # console_log("[EXTRACT_DESC] Попытка извлечения описания с помощью LXML")
+                console_log("[EXTRACT_DESC] Попытка извлечения описания с помощью LXML")
                 tree = lxml.html.fromstring(self.html)
 
                 # Селекторы для описания в порядке приоритета (от специфичных к общим)
@@ -1597,19 +1297,19 @@ class FastDOMParser:
 
                 for selector_idx, selector in enumerate(description_selectors, 1):
                     try:
-                        # console_log(f"[EXTRACT_DESC] Пробуем селектор {selector_idx}: {selector}")
+                        console_log(f"[EXTRACT_DESC] Пробуем селектор {selector_idx}: {selector}")
                         elements = tree.xpath(selector)
 
                         if elements:
-                            # console_log(f"[EXTRACT_DESC] ✅ Найден элемент по селектору {selector_idx}")
+                            console_log(f"[EXTRACT_DESC] ✅ Найден элемент по селектору {selector_idx}")
                             for element in elements:
                                 content = element.text_content().strip()
                                 if len(content) > 20:
-                                    # console_log(f"[EXTRACT_DESC] ✅ Извлечено описание длиной {len(content)} символов")
+                                    console_log(f"[EXTRACT_DESC] ✅ Извлечено описание длиной {len(content)} символов")
                                     return content
                             console_log(f"[EXTRACT_DESC] ⚠️ Элементы найдены, но контент слишком короткий")
-                        # else:
-                            # console_log(f"[EXTRACT_DESC] ❌ Селектор {selector_idx} не нашел элементов")
+                        else:
+                            console_log(f"[EXTRACT_DESC] ❌ Селектор {selector_idx} не нашел элементов")
 
                     except Exception as selector_error:
                         console_log(f"[EXTRACT_DESC] ❌ Ошибка в селекторе {selector_idx}: {str(selector_error)}")
@@ -1621,7 +1321,7 @@ class FastDOMParser:
                 console_log(f"[EXTRACT_DESC] ❌ Критическая ошибка LXML: {str(lxml_error)}")
 
         # Попытка 2: Regex fallback
-        # console_log("[EXTRACT_DESC] Переход на regex fallback")
+        console_log("[EXTRACT_DESC] Переход на regex fallback")
 
         desc_regex_patterns = [
             # Regex эквиваленты LXML селекторов
@@ -1634,7 +1334,7 @@ class FastDOMParser:
 
         for pattern_idx, pattern in enumerate(desc_regex_patterns, 1):
             try:
-                # console_log(f"[EXTRACT_DESC] Пробуем regex паттерн {pattern_idx}")
+                console_log(f"[EXTRACT_DESC] Пробуем regex паттерн {pattern_idx}")
                 match = re.search(pattern, self.html, re.IGNORECASE | re.DOTALL)
                 if match:
                     content = match.group(1)
@@ -1644,16 +1344,16 @@ class FastDOMParser:
                     if len(cleaned_content) > 20:
                         console_log(f"[EXTRACT_DESC] ✅ Regex fallback успешен, извлечено {len(cleaned_content)} символов")
                         return cleaned_content
-                    # else:
-                        # console_log(f"[EXTRACT_DESC] ⚠️ Regex паттерн {pattern_idx} нашел контент, но он слишком короткий")
-                # else:
-                    # console_log(f"[EXTRACT_DESC] ❌ Regex паттерн {pattern_idx} не нашел совпадений")
+                    else:
+                        console_log(f"[EXTRACT_DESC] ⚠️ Regex паттерн {pattern_idx} нашел контент, но он слишком короткий")
+                else:
+                    console_log(f"[EXTRACT_DESC] ❌ Regex паттерн {pattern_idx} не нашел совпадений")
 
             except Exception as regex_error:
                 console_log(f"[EXTRACT_DESC] ❌ Ошибка в regex паттерне {pattern_idx}: {str(regex_error)}")
                 continue
 
-        # console_log("[EXTRACT_DESC] ❌ Все методы извлечения описания провалились")
+        console_log("[EXTRACT_DESC] ❌ Все методы извлечения описания провалились")
         return "Описание товара не найдено"
 
     def _extract_composition(self) -> str:
@@ -1701,7 +1401,7 @@ class FastDOMParser:
                 console_log(f"[EXTRACT_COMP] ❌ Критическая ошибка LXML: {str(lxml_error)}")
 
         # Попытка 2: Regex fallback
-        # console_log("[EXTRACT_COMP] Переход на regex fallback")
+        console_log("[EXTRACT_COMP] Переход на regex fallback")
 
         comp_regex_patterns = [
             # Regex эквиваленты LXML селекторов
@@ -1715,7 +1415,7 @@ class FastDOMParser:
 
         for pattern_idx, pattern in enumerate(comp_regex_patterns, 1):
             try:
-                # console_log(f"[EXTRACT_COMP] Пробуем regex паттерн {pattern_idx}")
+                console_log(f"[EXTRACT_COMP] Пробуем regex паттерн {pattern_idx}")
                 match = re.search(pattern, self.html, re.IGNORECASE | re.DOTALL)
                 if match:
                     content = match.group(1)
@@ -1723,18 +1423,18 @@ class FastDOMParser:
                     cleaned_content = clean_pattern.sub('', content).strip()
 
                     if len(cleaned_content) > 20:
-                        # console_log(f"[EXTRACT_COMP] ✅ Regex fallback успешен, извлечено {len(cleaned_content)} символов")
+                        console_log(f"[EXTRACT_COMP] ✅ Regex fallback успешен, извлечено {len(cleaned_content)} символов")
                         return cleaned_content
                     else:
                         console_log(f"[EXTRACT_COMP] ⚠️ Regex паттерн {pattern_idx} нашел контент, но он слишком короткий")
-                # else:
-                    # console_log(f"[EXTRACT_COMP] ❌ Regex паттерн {pattern_idx} не нашел совпадений")
+                else:
+                    console_log(f"[EXTRACT_COMP] ❌ Regex паттерн {pattern_idx} не нашел совпадений")
 
             except Exception as regex_error:
                 console_log(f"[EXTRACT_COMP] ❌ Ошибка в regex паттерне {pattern_idx}: {str(regex_error)}")
                 continue
 
-        # console_log("[EXTRACT_COMP] ❌ Все методы извлечения состава провалились")
+        console_log("[EXTRACT_COMP] ❌ Все методы извлечения состава провалились")
         return "Состав не указан"
 
     def _extract_categories(self) -> List[str]:
@@ -2000,7 +1700,7 @@ class FastDOMParser:
                     break
 
             if not breadcrumbs_html:
-                # console_log("Не найден breadcrumb контейнер ни по одному паттерну")
+                console_log("Не найден breadcrumb контейнер ни по одному паттерну")
                 return []
 
             # Ищем список элементов (ol, ul)
@@ -3121,7 +2821,7 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
                 # Проверка целостности чанка
                 if len(chunk_str.strip()) == 0:
                     console_log(f"Чанк {chunk_key} пустой после strip")
-                elif len(chunk_str) < 3:
+                elif len(chunk_str) < 10:
                     console_log(f"Чанк {chunk_key} слишком короткий: {len(chunk_str)} символов")
 
                 # Сохранение диагностики
