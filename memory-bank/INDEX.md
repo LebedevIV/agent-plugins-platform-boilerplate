@@ -21,6 +21,7 @@
 - security-architecture.md - Security architecture
 - systemPatterns.md - System patterns
 - platform-core-analysis.md - Platform-core role analysis
+- manifest-data-flow.md - Manifest data flow architecture
 
 ### 🔧 [Development](./development/) - Development process
 - testing-results.md - Testing results
@@ -54,6 +55,7 @@
 - **Current Status**: [activeContext.md](./core/activeContext.md)
 - **Progress**: [progress.md](./core/progress.md)
 - **HTML Transmission**: [html-transmission-settings.md](./ui/html-transmission-settings.md)
+- **Manifest Data Flow**: [manifest-data-flow.md](./architecture/manifest-data-flow.md)
 - **Errors**: [errors.md](./errors/errors.md)
 - **Architecture**: [architecture-decisions.md](./architecture/architecture-decisions.md)
 - **Testing**: [testing-results.md](./development/testing-results.md)
@@ -66,9 +68,10 @@
 
 See [MEMORY_BANK_STRUCTURE.md](./MEMORY_BANK_STRUCTURE.md) for detailed organization rules.
 
-Last updated: 2025-09-23
+Last updated: 2025-10-11
 
 ### **Documentation Updates**
+- **Manifest Data Flow**: Comprehensive documentation of manifest.json to mcp_server.py data flow architecture
 - **HTML Transmission Settings**: New comprehensive documentation for HTML transmission configuration
 - **UI Documentation**: Added UI-specific documentation for HTML transmission settings
 - **ProjectGraphAgent**: Updated with HTML transmission entity and validation rules
@@ -89,6 +92,7 @@ Last updated: 2025-09-23
 - **ProjectGraphAgent**: Jsonnet-based project control and drift detection
 
 ### **Technical Achievements**
+- **Manifest Data Flow**: Fixed manifest.json to mcp_server.py data transmission
 - **Memory Management**: LRU caching and object pooling optimization
 - **Batch Processing**: 300% improvement in AI request efficiency
 - **FastDOMParser**: Streaming HTML parsing for large documents
