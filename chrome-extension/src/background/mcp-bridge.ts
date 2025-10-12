@@ -78,11 +78,12 @@ export async function runPythonTool(pluginId: string, toolName: string, toolInpu
   return new Promise((resolve, reject) => {
     promises.set(callId, { resolve, reject });
     pyodideWorker.postMessage({
-      type: 'run_python_tool', 
-      callId, 
-      pythonCode, 
-      toolName, 
-      toolInput
+      type: 'run_python_tool',
+      callId,
+      pythonCode,
+      toolName,
+      toolInput,
+      pluginId
     });
   });
 } 

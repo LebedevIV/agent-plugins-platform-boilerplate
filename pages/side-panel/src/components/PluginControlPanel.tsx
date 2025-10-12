@@ -1438,7 +1438,7 @@ export const PluginControlPanel: React.FC<PluginControlPanelProps> = ({
   };
 
   return (
-    <div className="plugin-control-panel" style={{ '--chat-text-align': chatTextAlign }}>
+    <div className="plugin-control-panel" style={{ '--chat-text-align': chatTextAlign } as any}>
       <div className="panel-header">
         <div className="plugin-info">
           <img

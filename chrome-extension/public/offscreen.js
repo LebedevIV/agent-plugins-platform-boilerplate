@@ -436,6 +436,25 @@ function safeSendMessageSync(message, silent = false) {
   }
 }
 
+// Function to load plugin manifest
+async function loadPluginManifest(pluginId) {
+  try {
+    const manifestUrl = chrome.runtime.getURL(`/plugins/${pluginId}/manifest.json`);
+    const response = await fetch(manifestUrl);
+
+    if (!response.ok) {
+      throw new Error(`Failed to load manifest: ${response.status} ${response.statusText}`);
+    }
+
+    const manifest = await response.json();
+    logInfo('SYSTEM', `Manifest loaded for plugin ${pluginId}: ${manifest.name || 'unknown'}`);
+    return manifest;
+  } catch (error) {
+    logError('SYSTEM', `Failed to load manifest for plugin ${pluginId}:`, error);
+    throw error;
+  }
+}
+
 // Initialize Pyodide when the offscreen document loads
 async function initializePyodide() {
   if (pyodide) {
@@ -696,8 +715,26 @@ async function initializePyodide() {
           });
 
           if (!response.ok) {
-            const errorData = await response.text();
-            throw new Error(`Gemini API error (${response.status}): ${errorData}`);
+            // ДОСТАТЬ ПОЛНЫЙ ОБЪЕКТ ОШИБКИ API ДЛЯ ПЕРЕДАЧИ В PYTHON
+            let apiErrorData = null;
+            try {
+              const errorText = await response.text();
+              // Попытаться распарсить как JSON для получения полного объекта ошибки
+              try {
+                apiErrorData = JSON.parse(errorText);
+              } catch (parseError) {
+                // Если не JSON, сохранить как текст
+                apiErrorData = { error: { message: errorText, status: response.status } };
+              }
+            } catch (textError) {
+              apiErrorData = { error: { message: `HTTP ${response.status}`, status: response.status } };
+            }
+
+            // Создать объект ошибки с полными данными API
+            const errorObj = new Error(`Gemini API error (${response.status}): ${apiErrorData?.error?.message || 'Unknown error'}`);
+            errorObj.apiError = apiErrorData;
+            errorObj.status = response.status;
+            throw errorObj;
           }
 
           const responseData = await response.json();
@@ -731,12 +768,17 @@ async function initializePyodide() {
         } catch (error) {
           // logError('PYODIDE', 'LLM call failed:', error);
 
-          // Graceful fallback - возвращаем понятное сообщение об ошибке
+          // ПЕРЕДАТЬ ПОЛНЫЙ ОБЪЕКТ ОШИБКИ API В PYTHON
           const errorMessage = error.message.includes('API key not found')
             ? 'Gemini API key not configured. Please set your API key in the extension settings.'
             : `Gemini API call failed: ${error.message}`;
 
-          return pyodide.toPy({ error: errorMessage });
+          const errorResult = {
+            error: errorMessage,
+            api_error: error.apiError || null  // Передаем полный объект ошибки API
+          };
+
+          return pyodide.toPy(errorResult);
         }
       },
       get_setting: (settingName, defaultValue, category) => {
@@ -1047,6 +1089,18 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
   // logInfo('EXECUTION', `Шаг 1: Инициализация Pyodide - ${new Date(Date.now()).toISOString()}`);
 
   try {
+    // Load plugin manifest and merge with pluginSettings
+    logInfo('SYSTEM', `Loading manifest for plugin: ${pluginId}`);
+    const manifest = await loadPluginManifest(pluginId);
+
+    // Merge manifest with pluginSettings
+    const enrichedPluginSettings = {
+      ...pluginSettings,
+      manifest: manifest
+    };
+
+    logInfo('SYSTEM', `Manifest loaded and merged with pluginSettings for ${pluginId}`);
+
     // Initialize Pyodide if needed
     if (!pyodide) {
       // logInfo('EXECUTION', `Шаг 2: Инициализация Pyodide - ${new Date(Date.now()).toISOString()}`);
@@ -1141,19 +1195,24 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
     // === НОВАЯ СИСТЕМА ПЕРЕДАЧИ ДАННЫХ ЧЕРЕЗ PYODIDE.GLOBALS ===
     logDebug('PYODIDE', 'Starting data transmission to Pyodide globals');
 
-    // КРИТИЧНОЕ ИСПРАВЛЕНИЕ: Установить pluginSettings В ПЕРВУЮ ОЧЕРЕДЬ
+    // КРИТИЧНОЕ ИСПРАВЛЕНИЕ: Установить enrichedPluginSettings В ПЕРВУЮ ОЧЕРЕДЬ
     // Python код читает pluginSettings в начале выполнения функции
-    logInfo('PYODIDE', '🔧 CRITICAL FIX: Setting pluginSettings FIRST before any other data');
-    logInfo('PYODIDE', `🔧 Plugin settings to set: ${JSON.stringify(pluginSettings)}`);
+    logInfo('PYODIDE', '🔧 CRITICAL FIX: Setting enrichedPluginSettings FIRST before any other data');
+    logInfo('PYODIDE', `🔧 Plugin settings to set: ${JSON.stringify(enrichedPluginSettings)}`);
 
-    if (pluginSettings && typeof pluginSettings === 'object') {
+    if (enrichedPluginSettings && typeof enrichedPluginSettings === 'object') {
       try {
         // Преобразовать JavaScript объект в Python dict
-        const pyPluginSettings = pyodide.toPy(pluginSettings);
+        const pyPluginSettings = pyodide.toPy(enrichedPluginSettings);
         pyodide.globals.set('pluginSettings', pyPluginSettings);
-        logInfo('PYODIDE', '✅ pluginSettings set in Pyodide globals FIRST');
 
-        // НЕМЕДЛЕННАЯ ВЕРИФИКАЦИЯ pluginSettings
+        // Также установить manifest как отдельную переменную для совместимости с Python кодом
+        const pyManifest = pyodide.toPy(manifest);
+        pyodide.globals.set('manifest', pyManifest);
+
+        logInfo('PYODIDE', '✅ enrichedPluginSettings and manifest set in Pyodide globals FIRST');
+
+        // НЕМЕДЛЕННАЯ ВЕРИФИКАЦИЯ enrichedPluginSettings
         try {
           const verifyPluginSettings = pyodide.globals.get('pluginSettings');
           if (verifyPluginSettings) {
@@ -1163,18 +1222,31 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
             // Специальная проверка response_language
             const responseLanguage = verifyPluginSettings.toJs ? verifyPluginSettings.toJs()['response_language'] : verifyPluginSettings['response_language'];
             logInfo('PYODIDE', `🔑 response_language in pluginSettings: '${responseLanguage}'`);
+
+            // Специальная проверка manifest
+            const manifestInSettings = verifyPluginSettings.toJs ? verifyPluginSettings.toJs()['manifest'] : verifyPluginSettings['manifest'];
+            logInfo('PYODIDE', `📄 manifest in pluginSettings: ${manifestInSettings ? 'AVAILABLE' : 'MISSING'}`);
           } else {
-            logWarn('PYODIDE', '⚠️ pluginSettings verification failed - may cause Python errors');
+            logWarn('PYODIDE', '⚠️ enrichedPluginSettings verification failed - may cause Python errors');
+          }
+
+          // ВЕРИФИКАЦИЯ manifest как отдельной переменной
+          const verifyManifest = pyodide.globals.get('manifest');
+          if (verifyManifest) {
+            const manifestKeys = Object.keys(verifyManifest.toJs ? verifyManifest.toJs() : verifyManifest);
+            logInfo('PYODIDE', `✅ manifest verified as separate variable: ${manifestKeys.length} keys available: ${manifestKeys.join(', ')}`);
+          } else {
+            logWarn('PYODIDE', '⚠️ manifest verification failed - Python may not access manifest properly');
           }
         } catch (verifyError) {
-          logError('PYODIDE', '❌ pluginSettings verification error:', verifyError);
+          logError('PYODIDE', '❌ enrichedPluginSettings/manifest verification error:', verifyError);
         }
       } catch (setError) {
-        logError('PYODIDE', '❌ CRITICAL: Failed to set pluginSettings FIRST:', setError);
+        logError('PYODIDE', '❌ CRITICAL: Failed to set enrichedPluginSettings and manifest:', setError);
         throw setError; // Это критическая ошибка - без pluginSettings Python код не сможет работать
       }
     } else {
-      logWarn('PYODIDE', `⚠️ No pluginSettings provided or invalid type: ${typeof pluginSettings}, value: ${pluginSettings}`);
+      logWarn('PYODIDE', `⚠️ No enrichedPluginSettings provided or invalid type: ${typeof enrichedPluginSettings}, value: ${enrichedPluginSettings}`);
     }
 
     // ДИАГНОСТИКА: Проверить тип и структуру workflowPayload.page_html
@@ -1265,8 +1337,8 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
       throw new Error("analyze_ozon_product function not found in Pyodide globals");
     }
 
-    // Подготовить input_data с pluginSettings для передачи в Python функцию
-    const inputData = { pluginSettings: pluginSettings };
+    // Подготовить input_data с enrichedPluginSettings для передачи в Python функцию
+    const inputData = { pluginSettings: enrichedPluginSettings };
     pyodide.globals.set('input_data', inputData);
 
     // КРИТИЧЕСКАЯ ДИАГНОСТИКА НЕПОСРЕДСТВЕННО ПЕРЕД ВЫЗОВОМ PYTHON ФУНКЦИИ

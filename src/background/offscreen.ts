@@ -285,7 +285,7 @@ class SimpleWorkflowEngine {
       this.logger.log(`[WorkflowEngine] Starting workflow for plugin: ${pluginId}, request: ${effectiveRequestId}`);
 
       // Execute actual Python analysis
-      const pythonResult = await this.executePythonAnalysis(pageHtml, pluginSettings);
+      const pythonResult = await this.executePythonAnalysis(pageHtml, pluginId, pluginSettings);
 
       // Set completed state
       this.currentWorkflow.status = 'completed';
@@ -474,7 +474,7 @@ except Exception as e:
     }
   }
 
-  private async executePythonAnalysis(htmlContent: string, pluginSettings?: Record<string, any>): Promise<any> {
+  private async executePythonAnalysis(htmlContent: string, pluginId: string, pluginSettings?: Record<string, any>): Promise<any> {
     await this.initializePyodide();
 
     try {
@@ -499,6 +499,25 @@ except Exception as e:
       const toolInput = { pluginSettings: pluginSettings || {} };
       this.pyodide.globals.set('tool_input', toolInput);
       console.log('[BRIDGE DIAGNOSTIC] Tool input prepared and set in Python globals:', toolInput);
+
+      if (pluginSettings && pluginSettings.manifest) {
+        this.pyodide.globals.set('manifest', pluginSettings.manifest);
+        console.log('[BRIDGE DIAGNOSTIC] ✅ Manifest передан в Pyodide globals из pluginSettings');
+      }
+
+      // ДИАГНОСТИКА ПРОМПТОВ: Логируем структуру промптов в pluginSettings
+      if (pluginSettings && pluginSettings.prompts) {
+        console.log('[BRIDGE DIAGNOSTIC] 🔍 ДИАГНОСТИКА ПРОМПТОВ В pluginSettings:');
+        console.log('[BRIDGE DIAGNOSTIC] pluginSettings.prompts:', pluginSettings.prompts);
+        console.log('[BRIDGE DIAGNOSTIC] Тип промптов:', typeof pluginSettings.prompts);
+        if (typeof pluginSettings.prompts === 'object') {
+          console.log('[BRIDGE DIAGNOSTIC] Ключи промптов:', Object.keys(pluginSettings.prompts));
+          console.log('[BRIDGE DIAGNOSTIC] optimized промпты:', pluginSettings.prompts.optimized);
+          console.log('[BRIDGE DIAGNOSTIC] deep промпты:', pluginSettings.prompts.deep);
+        }
+      } else {
+        console.log('[BRIDGE DIAGNOSTIC] ❌ Промпты НЕ НАЙДЕНЫ в pluginSettings');
+      }
 
       // Execute the analysis function with plugin settings
       const result = this.pyodide.runPython(`
@@ -531,6 +550,24 @@ js = MockJs()
 # Execute the analysis
 try:
     print("[BRIDGE DIAGNOSTIC] ===== ЗАПУСК PYTHON АНАЛИЗА =====")
+
+    # ВЕРИФИКАЦИЯ ДОСТУПНОСТИ MANIFEST В PYTHON
+    print("[BRIDGE DIAGNOSTIC] 🔍 ПРОВЕРКА ДОСТУПНОСТИ MANIFEST:")
+    manifest_available = 'manifest' in globals()
+    print(f"[BRIDGE DIAGNOSTIC] Manifest доступен в globals(): {manifest_available}")
+
+    if manifest_available:
+        manifest = globals().get('manifest', {})
+        print(f"[BRIDGE DIAGNOSTIC] ✅ Manifest получен: {type(manifest)}")
+        if isinstance(manifest, dict):
+            print(f"[BRIDGE DIAGNOSTIC] Ключи manifest: {list(manifest.keys())}")
+            print(f"[BRIDGE DIAGNOSTIC] Plugin ID из manifest: {manifest.get('pluginId', 'NOT_FOUND')}")
+            print(f"[BRIDGE DIAGNOSTIC] Version из manifest: {manifest.get('version', 'NOT_FOUND')}")
+        else:
+            print(f"[BRIDGE DIAGNOSTIC] ⚠️ Manifest не является словарем: {type(manifest)}")
+    else:
+        print("[BRIDGE DIAGNOSTIC] ❌ Manifest НЕДОСТУПЕН в Python globals()")
+
     # Import tool input from globals
     tool_input = globals().get('tool_input', {})
     plugin_settings = tool_input.get('pluginSettings', {})

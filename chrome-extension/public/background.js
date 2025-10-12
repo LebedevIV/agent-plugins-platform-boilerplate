@@ -1336,10 +1336,10 @@ const pluginChatApi = {
       text,
       updatedAt: Date.now()
     };
-    console.log("[pluginChatApi][saveDraft] BEFORE", { draftKey, pluginId, pageKey, text });
+    // console.log("[pluginChatApi][saveDraft] BEFORE", { draftKey, pluginId, pageKey, text });
     await new Promise((resolve) => {
       chrome.storage.local.set({ [draftKey]: draft }, () => {
-        console.log("[pluginChatApi][saveDraft] AFTER", { draftKey, pluginId, pageKey, text, draft });
+        // console.log("[pluginChatApi][saveDraft] AFTER", { draftKey, pluginId, pageKey, text, draft });
         resolve();
       });
     });
@@ -1348,12 +1348,12 @@ const pluginChatApi = {
   // Получить черновик
   async getDraft(pluginId, pageKey) {
     const draftKey = `${pluginId}::${getPageKey(pageKey)}::draft`;
-    console.log("[pluginChatApi][getDraft] BEFORE", { draftKey, pluginId, pageKey });
+    // console.log("[pluginChatApi][getDraft] BEFORE", { draftKey, pluginId, pageKey });
     return new Promise((resolve) => {
       chrome.storage.local.get([draftKey], (result2) => {
         const draft = result2[draftKey];
         const draftText = draft && typeof draft.text === "string" ? draft.text : "";
-        console.log("[pluginChatApi][getDraft] AFTER", { draftKey, pluginId, pageKey, draft, draftText });
+        // console.log("[pluginChatApi][getDraft] AFTER", { draftKey, pluginId, pageKey, draft, draftText });
         resolve({ draftText });
       });
     });
@@ -1361,10 +1361,10 @@ const pluginChatApi = {
   // Удалить черновик
   async deleteDraft(pluginId, pageKey) {
     const draftKey = `${pluginId}::${getPageKey(pageKey)}::draft`;
-    console.log("[pluginChatApi][deleteDraft] BEFORE", { draftKey, pluginId, pageKey });
+    // console.log("[pluginChatApi][deleteDraft] BEFORE", { draftKey, pluginId, pageKey });
     await new Promise((resolve) => {
       chrome.storage.local.remove([draftKey], () => {
-        console.log("[pluginChatApi][deleteDraft] AFTER", { draftKey, pluginId, pageKey });
+        // console.log("[pluginChatApi][deleteDraft] AFTER", { draftKey, pluginId, pageKey });
         resolve();
       });
     });
@@ -1377,7 +1377,7 @@ const pluginChatApi = {
         const drafts = Object.values(result2).filter(
           (item) => !!(item && typeof item === "object" && "draftKey" in item && "pluginId" in item && item.pluginId === pluginId)
         );
-        console.log("[pluginChatApi] listDraftsForPlugin:", pluginId, drafts);
+        // console.log("[pluginChatApi] listDraftsForPlugin:", pluginId, drafts);
         resolve(drafts);
       });
     });
@@ -1389,7 +1389,7 @@ const pluginChatApi = {
         const chats = Object.values(result2).filter(
           (item) => !!(item && typeof item === "object" && "chatKey" in item && "pluginId" in item && item.pluginId === pluginId)
         );
-        console.log("[pluginChatApi] listChatsForPlugin:", pluginId, chats);
+        // console.log("[pluginChatApi] listChatsForPlugin:", pluginId, chats);
         resolve(chats);
       });
     });
@@ -1398,19 +1398,19 @@ const pluginChatApi = {
 const PLUGIN_DIRS = ["ozon-analyzer", "google-helper", "test-plugin", "time-test"];
 async function getAvailablePlugins() {
   const plugins = [];
-  console.log("[plugin-manager] Starting getAvailablePlugins with dirs:", PLUGIN_DIRS);
+  // console.log("[plugin-manager] Starting getAvailablePlugins with dirs:", PLUGIN_DIRS);
   for (const dirName of PLUGIN_DIRS) {
     try {
-      console.log(`[plugin-manager] Processing plugin: ${dirName}`);
+      // console.log(`[plugin-manager] Processing plugin: ${dirName}`);
       const manifestUrl = chrome.runtime.getURL(`plugins/${dirName}/manifest.json`);
-      console.log(`[plugin-manager] Manifest URL for ${dirName}:`, manifestUrl);
+      // console.log(`[plugin-manager] Manifest URL for ${dirName}:`, manifestUrl);
       const response = await fetch(manifestUrl);
-      console.log(`[plugin-manager] Fetch response for ${dirName}:`, response.status, response.statusText);
+      // console.log(`[plugin-manager] Fetch response for ${dirName}:`, response.status, response.statusText);
       if (!response.ok) {
         throw new Error(`Failed to fetch manifest: ${response.statusText}`);
       }
       const manifest = await response.json();
-      console.log(`[plugin-manager] Parsed manifest for ${dirName}:`, manifest);
+      // console.log(`[plugin-manager] Parsed manifest for ${dirName}:`, manifest);
       const plugin = {
         id: dirName,
         name: manifest.name,
@@ -1420,7 +1420,7 @@ async function getAvailablePlugins() {
         iconUrl: chrome.runtime.getURL(`plugins/${dirName}/${manifest.icon || "icon.svg"}`),
         manifest
       };
-      console.log(`[plugin-manager] Created plugin object for ${dirName}:`, plugin);
+      // console.log(`[plugin-manager] Created plugin object for ${dirName}:`, plugin);
       plugins.push(plugin);
     } catch (error) {
       console.error(`[plugin-manager] Failed to load plugin from '${dirName}':`, error);
@@ -1430,8 +1430,8 @@ async function getAvailablePlugins() {
       });
     }
   }
-  console.log("[plugin-manager] Final plugins array:", plugins);
-  console.log("[plugin-manager] Returning", plugins.length, "plugins");
+  // console.log("[plugin-manager] Final plugins array:", plugins);
+  // console.log("[plugin-manager] Returning", plugins.length, "plugins");
   return plugins;
 }
 var define_process_env_default = { CLI_CEB_DEV: "false", CLI_CEB_FIREFOX: "false", CEB_EXAMPLE: "example_env", CEB_DEV_LOCALE: "", CEB_CI: "", CEB_NODE_ENV: "production" };
@@ -1898,20 +1898,20 @@ const getPluginSettings = async (pluginId) => {
   const currentSettings = await pluginSettingsStorage.get();
   return getPluginSettingsByIdFallback(pluginId, currentSettings);
 };
-console.log("[background] Initializing background imports...");
-console.log("[background] Plugin chat API loaded");
-console.log("[background] Host API loaded");
-console.log("[background] Plugin manager loaded");
-console.log("[background] Storage modules loaded");
-console.log("[background] Starting Offscreen Document integration - REFACTORED BACKGROUND ARCHITECTURE");
+// console.log("[background] Initializing background imports...");
+// console.log("[background] Plugin chat API loaded");
+// console.log("[background] Host API loaded");
+// console.log("[background] Plugin manager loaded");
+// console.log("[background] Storage modules loaded");
+// console.log("[background] Starting Offscreen Document integration - REFACTORED BACKGROUND ARCHITECTURE");
 const offscreenSupported = () => {
   var _a2;
   try {
-    console.log("[background][OFFSCREEN DETECTION] ========== STARTING OFFSCREEN API FEATURE DETECTION ==========");
-    console.log("[background][OFFSCREEN DETECTION] Timestamp:", (/* @__PURE__ */ new Date()).toISOString());
-    console.log("[background][OFFSCREEN DETECTION] Chrome User-Agent:", navigator.userAgent);
+    // console.log("[background][OFFSCREEN DETECTION] ========== STARTING OFFSCREEN API FEATURE DETECTION ==========");
+    // console.log("[background][OFFSCREEN DETECTION] Timestamp:", (/* @__PURE__ */ new Date()).toISOString());
+    // console.log("[background][OFFSCREEN DETECTION] Chrome User-Agent:", navigator.userAgent);
     const chromeExists = typeof chrome !== "undefined";
-    console.log("[background][OFFSCREEN DETECTION] Chrome object exists:", chromeExists);
+    // console.log("[background][OFFSCREEN DETECTION] Chrome object exists:", chromeExists);
     if (!chromeExists) {
       console.warn("[background][OFFSCREEN DETECTION] ❌ FAIL: Chrome API unavailable - extension running in unsupported environment");
       console.warn("[background][OFFSCREEN DETECTION] Current context:", {
@@ -1923,21 +1923,21 @@ const offscreenSupported = () => {
       return false;
     }
     const offscreenExists = typeof chrome.offscreen !== "undefined";
-    console.log("[background][OFFSCREEN DETECTION] chrome.offscreen property exists:", offscreenExists);
+    // console.log("[background][OFFSCREEN DETECTION] chrome.offscreen property exists:", offscreenExists);
     if (!offscreenExists) {
       console.warn("[background][OFFSCREEN DETECTION] ❌ FAIL: chrome.offscreen is undefined - Chrome version < 109");
       console.warn("[background][OFFSCREEN DETECTION] Available chrome API:", Object.keys(chrome).join(", "));
       return false;
     }
     const hasDocumentExists = typeof chrome.offscreen.hasDocument === "function";
-    console.log("[background][OFFSCREEN DETECTION] chrome.offscreen.hasDocument is function:", hasDocumentExists);
+    // console.log("[background][OFFSCREEN DETECTION] chrome.offscreen.hasDocument is function:", hasDocumentExists);
     if (!hasDocumentExists) {
       console.warn("[background][OFFSCREEN DETECTION] ❌ FAIL: chrome.offscreen.hasDocument is not a function");
       console.warn("[background][OFFSCREEN DETECTION] chrome.offscreen properties:", Object.keys(chrome.offscreen).join(", "));
       return false;
     }
     const createDocumentExists = typeof chrome.offscreen.createDocument === "function";
-    console.log("[background][OFFSCREEN DETECTION] chrome.offscreen.createDocument is function:", createDocumentExists);
+    // console.log("[background][OFFSCREEN DETECTION] chrome.offscreen.createDocument is function:", createDocumentExists);
     if (!createDocumentExists) {
       console.warn("[background][OFFSCREEN DETECTION] ❌ FAIL: chrome.offscreen.createDocument is not a function");
       console.warn("[background][OFFSCREEN DETECTION] chrome.offscreen methods:", Object.getOwnPropertyNames(chrome.offscreen).join(", "));
@@ -1947,8 +1947,8 @@ const offscreenSupported = () => {
     if (!permissionsCheck) {
       console.warn("[background][OFFSCREEN DETECTION] ⚠️ WARNING: Cannot verify permissions at runtime");
     }
-    console.log("[background][OFFSCREEN DETECTION] ✅ SUCCESS: All Offscreen API checks passed");
-    console.log("[background][OFFSCREEN DETECTION] ========== DETECTION COMPLETE ==========");
+//    console.log("[background][OFFSCREEN DETECTION] ✅ SUCCESS: All Offscreen API checks passed");
+//    console.log("[background][OFFSCREEN DETECTION] ========== DETECTION COMPLETE ==========");
     return true;
   } catch (error) {
     console.error("[background][OFFSCREEN DETECTION] ❌ CRITICAL ERROR during detection:", error);
@@ -3329,11 +3329,11 @@ chrome.runtime.onMessage.addListener(
       if (msg.type === "SAVE_PLUGIN_CHAT_DRAFT" && msg.pluginId && msg.pageKey && msg.draftText !== void 0) {
         const { pluginId, pageKey, draftText } = msg;
         const normPageKey = getPageKey(pageKey);
-        console.log("[background] SAVE_PLUGIN_CHAT_DRAFT pageKey:", pageKey, "norm:", normPageKey);
+        // console.log("[background] SAVE_PLUGIN_CHAT_DRAFT pageKey:", pageKey, "norm:", normPageKey);
         (async () => {
           try {
             await pluginChatApi.saveDraft(pluginId, normPageKey, draftText);
-            console.log("[background] sendResponse(SAVE_PLUGIN_CHAT_DRAFT):", { success: true });
+            // console.log("[background] sendResponse(SAVE_PLUGIN_CHAT_DRAFT):", { success: true });
             sendResponse({ success: true });
           } catch (error) {
             console.error("[background] Error saving plugin chat draft:", error);
@@ -3349,7 +3349,7 @@ chrome.runtime.onMessage.addListener(
         (async () => {
           try {
             const draftText = await pluginChatApi.getDraft(pluginId, normPageKey);
-            console.log("[background] sendResponse(GET_PLUGIN_CHAT_DRAFT):", { draftText });
+            // console.log("[background] sendResponse(GET_PLUGIN_CHAT_DRAFT):", { draftText });
             sendResponse({ draftText });
           } catch (error) {
             console.error("[background] Error getting plugin chat draft:", error);
@@ -3575,7 +3575,7 @@ const handleHostApiMessage = async (message, sendResponse) => {
       case "llm_call": {
         try {
           const { modelAlias, options, pluginId } = message.data;
-          console.log("[HOST API] LLM call requested:", { modelAlias, pluginId });
+          // console.log("[HOST API] LLM call requested:", { modelAlias, pluginId });
           const currentPlugin = pluginId || "ozon-analyzer";
           const manifestUrl = chrome.runtime.getURL(`public/plugins/${currentPlugin}/manifest.json`);
           let manifestResponse;
@@ -3618,10 +3618,85 @@ const handleHostApiMessage = async (message, sendResponse) => {
             });
           } catch (aiError) {
             console.error("[HOST API] AI API error:", aiError);
-            sendResponse({
-              error: true,
-              error_message: `Ошибка вызова AI API: ${aiError.message}`
+            // Попытка извлечь полный ответ API ошибки
+            let errorMessage = aiError.message;
+            let fullApiError = null;
+            let serializableApiError = null;
+
+            console.log("[HOST API] Processing AI error:", {
+              errorMessage: aiError.message,
+              hasResponse: !!aiError.response,
+              hasResponseData: !!(aiError.response && aiError.response.data),
+              responseType: aiError.response ? typeof aiError.response : 'undefined',
+              dataType: aiError.response && aiError.response.data ? typeof aiError.response.data : 'undefined'
             });
+
+            if (aiError.response && aiError.response.data) {
+              fullApiError = aiError.response.data;
+
+              console.log("[HOST API] Raw API error data:", fullApiError);
+
+              // Пытаемся сериализовать объект ошибки
+              try {
+                serializableApiError = JSON.parse(JSON.stringify(fullApiError));
+                console.log("[HOST API] Successfully serialized API error:", serializableApiError);
+              } catch (serializeError) {
+                console.warn("[HOST API] Failed to serialize API error object:", serializeError);
+                try {
+                  // Fallback: пытаемся сериализовать хотя бы поле error
+                  if (fullApiError && typeof fullApiError === 'object' && fullApiError.error) {
+                    serializableApiError = JSON.parse(JSON.stringify(fullApiError.error));
+                    console.log("[HOST API] Serialized API error.error field:", serializableApiError);
+                  } else {
+                    // Еще один fallback: конвертируем в строку
+                    serializableApiError = JSON.stringify(fullApiError);
+                    console.log("[HOST API] Converted API error to string:", serializableApiError);
+                  }
+                } catch (fallbackError) {
+                  console.warn("[HOST API] All serialization attempts failed:", fallbackError);
+                  serializableApiError = String(fullApiError);
+                }
+              }
+
+              // Формируем errorMessage
+              if (fullApiError.error) {
+                try {
+                  errorMessage = JSON.stringify(fullApiError.error);
+                } catch (e) {
+                  errorMessage = String(fullApiError.error);
+                }
+              } else {
+                try {
+                  errorMessage = JSON.stringify(fullApiError);
+                } catch (e) {
+                  errorMessage = String(fullApiError);
+                }
+              }
+            }
+
+            console.log("[HOST API] Final error processing result:", {
+              errorMessage: errorMessage.substring(0, 200) + "...",
+              hasSerializableApiError: !!serializableApiError,
+              serializableApiErrorType: typeof serializableApiError
+            });
+
+            // ДОБАВИТЬ ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ ПЕРЕД sendResponse
+            console.log("[HOST API] ===== sendResponse DIAGNOSTIC =====");
+            console.log("[HOST API] serializableApiError exists:", !!serializableApiError);
+            console.log("[HOST API] serializableApiError type:", typeof serializableApiError);
+            if (serializableApiError) {
+              console.log("[HOST API] serializableApiError value:", serializableApiError);
+              console.log("[HOST API] serializableApiError keys:", Object.keys(serializableApiError));
+            }
+            const responsePayload = {
+              error: true,
+              error_message: `Ошибка вызова AI API: ${errorMessage}`,
+              api_error: serializableApiError // Передаем сериализованный объект ошибки API
+            };
+            console.log("[HOST API] Full response payload:", responsePayload);
+            console.log("[HOST API] ===== END sendResponse DIAGNOSTIC =====");
+
+            sendResponse(responsePayload);
           }
         } catch (error) {
           console.error("[HOST API] llm_call error:", error);
@@ -3682,7 +3757,7 @@ chrome.runtime.onMessage.addListener(
   async (message, sender, sendResponse) => {
     var _a2, _b, _c, _d;
     if ((_a2 = sender.url) == null ? void 0 : _a2.includes("offscreen.html")) {
-      console.log("[background][OFFSCREEN RESPONSE] Message from offscreen received:", message);
+      // console.log("[background][OFFSCREEN RESPONSE] Message from offscreen received:", message);
       if (typeof message === "object" && message !== null && "type" in message) {
         const msg = message;
         if (msg.type === "HTML_ASSEMBLED") {

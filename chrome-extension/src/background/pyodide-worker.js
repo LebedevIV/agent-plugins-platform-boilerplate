@@ -121,12 +121,30 @@ self.onmessage = async (event) => {
       hostCallPromises.delete(callId);
     }
   } else if (type === 'run_python_tool') {
-    const { pythonCode, toolName, toolInput } = event.data;
+    const { pythonCode, toolName, toolInput, pluginId } = event.data;
     try {
+      // Загружаем manifest.json для плагина перед выполнением кода
+      if (pluginId) {
+        try {
+          const manifestUrl = `../public/plugins/${pluginId}/manifest.json`;
+          const manifestResponse = await fetch(manifestUrl);
+          if (manifestResponse.ok) {
+            const manifest = await manifestResponse.json();
+            // Передаем manifest в Pyodide globals
+            pyodide.globals.set('manifest', manifest);
+            console.log(`[Pyodide Worker] Manifest загружен для плагина ${pluginId}`);
+          } else {
+            console.log(`[Pyodide Worker] Не удалось загрузить manifest.json для плагина ${pluginId}`);
+          }
+        } catch (manifestError) {
+          console.log(`[Pyodide Worker] Ошибка загрузки manifest.json: ${manifestError.message}`);
+        }
+      }
+
       await pyodide.runPythonAsync(pythonCode);
       const toolFunc = pyodide.globals.get(toolName);
       if (!toolFunc) throw new Error(`Python-функция "${toolName}" не найдена.`);
-      
+
       const resultProxy = await toolFunc(toolInput);
       const result = resultProxy.toJs({ dict_converter: Object.fromEntries });
       resultProxy.destroy();

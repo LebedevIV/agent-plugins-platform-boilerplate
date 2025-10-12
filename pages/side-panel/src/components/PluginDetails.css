@@ -392,4 +392,39 @@
   --scroll-track: #1e293b;
   --scroll-thumb: #475569;
   --scroll-thumb-hover: #64748b;
+/* Plugin details content scrolling */
+.plugin-detail-content {
+  display: none;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.plugin-detail-content.active {
+  display: block;
+  padding-left: 24px;
+  padding-right: 24px;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.plugin-detail-content.active::-webkit-scrollbar {
+  width: 6px;
+}
+
+.plugin-detail-content.active::-webkit-scrollbar-track {
+  background: var(--scroll-track, #1e293b);
+  border-radius: 3px;
+}
+
+.plugin-detail-content.active::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb, #475569);
+  border-radius: 3px;
+  transition: background 0.2s ease;
+}
+
+.plugin-detail-content.active::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-thumb-hover, #64748b);
+}
 } 

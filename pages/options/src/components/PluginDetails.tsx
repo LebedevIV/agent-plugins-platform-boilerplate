@@ -6,6 +6,21 @@ import LocalErrorBoundary from './LocalErrorBoundary';
 import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 
+// Типы для структуры промптов
+interface PromptData {
+  [key: string]: any;
+}
+
+interface LanguagePrompts {
+  ru: PromptData;
+  en: PromptData;
+}
+
+interface PromptsStructure {
+  optimized: LanguagePrompts;
+  deep: LanguagePrompts;
+}
+
 const cn = (...args: (string | undefined | false)[]) => args.filter(Boolean).join(' ');
 
 interface PluginDetailsProps {
@@ -15,8 +30,8 @@ interface PluginDetailsProps {
 }
 
 interface CustomSetting {
-  type: 'boolean' | 'select' | 'text' | 'number';
-  default: boolean | string | number;
+  type: 'boolean' | 'select' | 'text' | 'number' | 'prompts';
+  default: boolean | string | number | PromptsStructure;
   label: string | { ru: string; en: string };
   description?: string | { ru: string; en: string };
   values?: string[];
@@ -26,11 +41,226 @@ interface CustomSetting {
   step?: number;
 }
 
+// Компонент для редактирования промптов
+interface PromptsEditorProps {
+  value: PromptsStructure;
+  manifest: any; // manifest.json структура
+  disabled: boolean;
+  onSave: (value: PromptsStructure) => void;
+  locale: 'en' | 'ru';
+  t: (key: string) => string; // функция перевода
+}
+
+const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t }: PromptsEditorProps) => {
+  const [promptType, setPromptType] = useState<'optimized' | 'deep'>('optimized');
+  const [language, setLanguage] = useState<'ru' | 'en'>('ru');
+  const [customPrompt, setCustomPrompt] = useState<string>('');
+
+  // Получаем оригинальный промпт из manifest
+  const getOriginalPrompt = (): string => {
+    try {
+      const promptsConfig = manifest?.options?.prompts;
+      if (!promptsConfig) return '';
+
+      const typePrompts = promptsConfig[promptType] || {};
+      const langPrompts = typePrompts[language] || {};
+      const defaultPrompt = langPrompts.default || '';
+
+      // Если defaultPrompt - это объект, преобразуем его
+      if (typeof defaultPrompt === 'object') {
+        return JSON.stringify(defaultPrompt, null, 2);
+      }
+
+      return defaultPrompt;
+    } catch {
+      return '';
+    }
+  };
+
+  // Получаем кастомный промпт
+  const getCustomPrompt = (): string => {
+    try {
+      const prompts = value || {};
+      const typePrompts = (prompts as any)[promptType] || {};
+      const langPrompts = (typePrompts as any)[language];
+
+      // If stored as plain text, show as-is. Only stringify objects.
+      if (typeof langPrompts === 'string') return langPrompts;
+      if (langPrompts == null) return '';
+      return JSON.stringify(langPrompts, null, 2);
+    } catch {
+      return '';
+    }
+  };
+
+  // Загружаем кастомный промпт при изменении типа или языка
+  useEffect(() => {
+    setCustomPrompt(getCustomPrompt());
+  }, [promptType, language, value]);
+
+  const handleCopyToCustom = () => {
+    setCustomPrompt(getOriginalPrompt());
+  };
+
+  const handleSave = () => {
+    try {
+      const newValue: any = { ...value };
+
+      // Ensure container objects exist
+      if (!newValue[promptType]) newValue[promptType] = { ru: '', en: '' };
+
+      // Store verbatim text (plain string), no JSON requirement
+      newValue[promptType][language] = customPrompt;
+
+      onSave(newValue);
+    } catch (error) {
+      console.error('Failed to save custom prompt:', error);
+      // Можно добавить уведомление об ошибке
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div>
+        <label style={{ fontSize: '15px', fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>
+          {t('options.plugins.prompts.settings')}
+        </label>
+
+        {/* Переключатели */}
+        <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+          <div>
+            <label style={{ fontSize: '14px', marginRight: '8px' }}>{t('options.plugins.prompts.type')}</label>
+            <select
+              value={promptType}
+              onChange={(e) => setPromptType(e.target.value as 'optimized' | 'deep')}
+              disabled={disabled}
+              style={{
+                padding: '4px 8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                backgroundColor: 'white',
+                fontSize: '14px'
+              }}
+            >
+              <option value="optimized">{t('options.plugins.prompts.optimized')}</option>
+              <option value="deep">{t('options.plugins.prompts.deep')}</option>
+            </select>
+          </div>
+
+          <div>
+            <label style={{ fontSize: '14px', marginRight: '8px' }}>{t('options.plugins.prompts.language')}</label>
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value as 'ru' | 'en')}
+              disabled={disabled}
+              style={{
+                padding: '4px 8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                backgroundColor: 'white',
+                fontSize: '14px'
+              }}
+            >
+              <option value="ru">{t('options.plugins.prompts.russian')}</option>
+              <option value="en">{t('options.plugins.prompts.english')}</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Textarea */}
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: '14px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
+              {t('options.plugins.prompts.originalPrompt')}
+            </label>
+            <textarea
+              value={getOriginalPrompt()}
+              readOnly
+              style={{
+                width: '100%',
+                height: '300px',
+                padding: '8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                backgroundColor: '#f5f5f5',
+                fontSize: '12px',
+                fontFamily: 'monospace',
+                resize: 'vertical'
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+            <button
+              onClick={handleCopyToCustom}
+              disabled={disabled}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#007bff',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: disabled ? 'not-allowed' : 'pointer',
+                fontSize: '16px',
+                fontWeight: 'bold'
+              }}
+            >
+              {t('options.plugins.prompts.copyToCustom')}
+            </button>
+          </div>
+
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: '14px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>
+              {t('options.plugins.prompts.customPrompt')}
+            </label>
+            <textarea
+              value={customPrompt}
+              onChange={(e) => setCustomPrompt(e.target.value)}
+              disabled={disabled}
+              style={{
+                width: '100%',
+                height: '300px',
+                padding: '8px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                backgroundColor: 'white',
+                fontSize: '12px',
+                fontFamily: 'monospace',
+                resize: 'vertical'
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Кнопка сохранения */}
+        <div style={{ marginTop: '16px', textAlign: 'center' }}>
+          <button
+            onClick={handleSave}
+            disabled={disabled}
+            style={{
+              padding: '8px 24px',
+              backgroundColor: '#28a745',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              fontSize: '14px',
+              fontWeight: 'bold'
+            }}
+          >
+            {t('options.plugins.prompts.save')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const PluginDetails = (props: PluginDetailsProps) => {
   const { selectedPlugin, locale = 'en', onUpdateSetting } = props;
   const { t } = useTranslations(locale);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
-  const [customSettings, setCustomSettings] = useState<Record<string, boolean | string | number> | null>(null);
+  const [customSettings, setCustomSettings] = useState<Record<string, boolean | string | number | PromptsStructure> | null>(null);
 
   // Хелперы для работы с локализацией
   const getLocalizedText = (text: string | { ru: string; en: string } | undefined): string => {
@@ -69,7 +299,7 @@ const PluginDetails = (props: PluginDetailsProps) => {
         const keys = optionKeys.map(key => `${selectedPlugin.id}_${key}`);
 
         const result = await chrome.storage.local.get(keys);
-        const loadedSettings: Record<string, boolean | string | number> = {};
+        const loadedSettings: Record<string, boolean | string | number | PromptsStructure> = {};
 
         // Преобразуем ключи обратно и применяем значения
         Object.entries(result).forEach(([key, value]) => {
@@ -87,7 +317,7 @@ const PluginDetails = (props: PluginDetailsProps) => {
     }
   };
 
-  const saveCustomSetting = async (setting: string, value: boolean | string | number) => {
+  const saveCustomSetting = async (setting: string, value: boolean | string | number | PromptsStructure) => {
     if (!selectedPlugin) return;
 
     try {
@@ -100,6 +330,11 @@ const PluginDetails = (props: PluginDetailsProps) => {
           ...prev,
           [setting]: value
         }));
+
+        // Диагностика: проверяем правильность сохранения промптов
+        if (setting === 'prompts') {
+          await verifyPromptStorage();
+        }
       } else {
         console.warn('chrome.storage.local is not available');
       }
@@ -109,12 +344,63 @@ const PluginDetails = (props: PluginDetailsProps) => {
     }
   };
 
+  // Диагностическая функция для проверки сохранения промптов
+  const verifyPromptStorage = async () => {
+    if (!selectedPlugin) return;
+
+    try {
+      const key = `${selectedPlugin.id}_prompts`;
+      const stored = await chrome.storage.local.get([key]);
+      console.log('🔍 Диагностика промптов:');
+      console.log(`   Plugin ID: ${selectedPlugin.id}`);
+      console.log(`   Storage key: ${key}`);
+      console.log('   Сохраненные промпты:', stored[key]);
+
+      if (stored[key]) {
+        const prompts = stored[key] as PromptsStructure;
+        console.log('   Структура промптов:');
+        console.log(`     - optimized.ru: ${prompts.optimized?.ru ? '✓' : '✗'} (${prompts.optimized?.ru?.length || 0} символов)`);
+        console.log(`     - optimized.en: ${prompts.optimized?.en ? '✓' : '✗'} (${prompts.optimized?.en?.length || 0} символов)`);
+        console.log(`     - deep.ru: ${prompts.deep?.ru ? '✓' : '✗'} (${prompts.deep?.ru?.length || 0} символов)`);
+        console.log(`     - deep.en: ${prompts.deep?.en ? '✓' : '✗'} (${prompts.deep?.en?.length || 0} символов)`);
+      }
+    } catch (error) {
+      console.error('Ошибка диагностики промптов:', error);
+    }
+  };
+
 
   // Хелпер для получения значения настройки с приоритетом: chrome.storage -> manifest
-  const getCustomSettingValue = (settingName: string, defaultValue: boolean | string | number): boolean | string | number => {
+  const getCustomSettingValue = (settingName: string, defaultValue: boolean | string | number | PromptsStructure): boolean | string | number | PromptsStructure => {
     if (customSettings && customSettings[settingName] !== undefined) {
       return customSettings[settingName];
     }
+
+    // Специальная обработка для промптов: преобразуем структуру из manifest в PromptsStructure
+    if (settingName === 'prompts' && typeof defaultValue === 'object' && defaultValue !== null) {
+      const promptsConfig = defaultValue as any;
+      const result: PromptsStructure = {
+        optimized: { ru: {}, en: {} },
+        deep: { ru: {}, en: {} }
+      };
+
+      // Извлекаем default значения из структуры manifest
+      if (promptsConfig.optimized?.ru?.default) {
+        result.optimized.ru = promptsConfig.optimized.ru.default;
+      }
+      if (promptsConfig.optimized?.en?.default) {
+        result.optimized.en = promptsConfig.optimized.en.default;
+      }
+      if (promptsConfig.deep?.ru?.default) {
+        result.deep.ru = promptsConfig.deep.ru.default;
+      }
+      if (promptsConfig.deep?.en?.default) {
+        result.deep.en = promptsConfig.deep.en.default;
+      }
+
+      return result;
+    }
+
     return defaultValue;
   };
 
@@ -123,6 +409,22 @@ const PluginDetails = (props: PluginDetailsProps) => {
     const disabled = isUpdating === key || !(settings.enabled ?? true);
     const localizedLabel = getLocalizedText(config.label);
     const localizedDescription = getLocalizedText(config.description);
+
+    // Специальная обработка для промптов
+    if (key === 'prompts') {
+      return (
+        <div className="setting-item" key={key}>
+          <PromptsEditor
+            value={value as any}
+            manifest={selectedPlugin.manifest}
+            disabled={disabled}
+            onSave={(newValue) => handleSettingChange(key, newValue)}
+            locale={locale}
+            t={t}
+          />
+        </div>
+      );
+    }
 
     if (config.type === 'boolean') {
       return (
@@ -259,7 +561,7 @@ const PluginDetails = (props: PluginDetailsProps) => {
     return null;
   };
 
-  const handleSettingChange = async (setting: string, value: boolean | string | number) => {
+  const handleSettingChange = async (setting: string, value: boolean | string | number | PromptsStructure) => {
     if (!selectedPlugin) return;
 
     // Проверяем, является ли настройка пользовательской
@@ -292,6 +594,53 @@ const PluginDetails = (props: PluginDetailsProps) => {
       }
     }
   };
+
+  // Precompute custom settings elements to satisfy TypeScript
+  const optionEntries = Object.entries(selectedPlugin.manifest?.options ?? {}) as [string, CustomSetting][];
+  const customSettingElements: ReactNode[] = optionEntries
+    .map(([key, config]) => renderCustomSetting(key, config))
+    .filter((item): item is ReactNode => item !== null);
+
+  // Render helper to avoid union/unknown in JSX for plugin settings section
+  const PluginSettingsSection = () => (
+    <div className="detail-section" id="plugin-settings">
+      <h3>Настройки плагина</h3>
+      <div className="setting-item">
+        <ToggleButton
+          checked={settings.enabled ?? true}
+          disabled={isUpdating === 'enabled'}
+          onChange={val => handleSettingChange('enabled', val)}
+          label={
+            <>
+              Включен
+              <span
+                className="info-icon"
+                title="Управляет активностью плагина. Отключение делает плагин неактивным.">
+                i
+              </span>
+            </>
+          }
+        />
+      </div>
+      <div className="setting-item">
+        <ToggleButton
+          checked={settings.autorun ?? false}
+          disabled={isUpdating === 'autorun' || !(settings.enabled ?? true)}
+          onChange={val => handleSettingChange('autorun', val)}
+          label={
+            <>
+              Автоматический запуск
+              <span
+                className="info-icon"
+                title="Если включено, плагин будет автоматически запускаться на подходящих страницах.">
+                i
+              </span>
+            </>
+          }
+        />
+      </div>
+    </div>
+  );
 
   return (
     <LocalErrorBoundary>
@@ -334,65 +683,26 @@ const PluginDetails = (props: PluginDetailsProps) => {
             </div>
           )}
 
-          {selectedPlugin.manifest?.permissions && Array.isArray(selectedPlugin.manifest.permissions) && (
+          {Array.isArray(selectedPlugin.manifest?.permissions) ? (
             <div className="detail-section" id="plugin-permissions">
               <h3>Разрешения</h3>
               <ul>
-                {selectedPlugin.manifest.permissions.map((permission: string, idx: number) => (
+                {(selectedPlugin.manifest?.permissions ?? []).map((permission: string, idx: number) => (
                   <li key={idx}>{permission}</li>
                 ))}
               </ul>
             </div>
-          )}
+          ) : null}
 
-          {/* Настройки плагина */}
-          <div className="detail-section" id="plugin-settings">
-            <h3>Настройки плагина</h3>
-            <div className="setting-item">
-              <ToggleButton
-                checked={settings.enabled ?? true}
-                disabled={isUpdating === 'enabled'}
-                onChange={val => handleSettingChange('enabled', val)}
-                label={
-                  <>
-                    Включен
-                    <span
-                      className="info-icon"
-                      title="Управляет активностью плагина. Отключение делает плагин неактивным.">
-                      i
-                    </span>
-                  </>
-                }
-              />
-            </div>
-            <div className="setting-item">
-              <ToggleButton
-                checked={settings.autorun ?? false}
-                disabled={isUpdating === 'autorun' || !(settings.enabled ?? true)}
-                onChange={val => handleSettingChange('autorun', val)}
-                label={
-                  <>
-                    Автоматический запуск
-                    <span
-                      className="info-icon"
-                      title="Если включено, плагин будет автоматически запускаться на подходящих страницах.">
-                      i
-                    </span>
-                  </>
-                }
-              />
-            </div>
-          </div>
+         <PluginSettingsSection />
 
           {/* Пользовательские настройки */}
-          {selectedPlugin.manifest?.options && Object.keys(selectedPlugin.manifest.options).length > 0 && (
+          {(selectedPlugin.manifest?.options && Object.keys(selectedPlugin.manifest.options).length > 0) ? (
             <div className="detail-section" id="custom-settings">
               <h3>Дополнительные настройки</h3>
-              {selectedPlugin.manifest?.options && Object.entries(selectedPlugin.manifest?.options).map(([key, config]) =>
-                renderCustomSetting(key, config)
-              )}
+              {customSettingElements}
             </div>
-          )}
+          ) : null}
 
 
         </div>
@@ -400,5 +710,7 @@ const PluginDetails = (props: PluginDetailsProps) => {
     </LocalErrorBoundary>
   );
 };
+
+export { PluginDetails };
 
 export default PluginDetails;

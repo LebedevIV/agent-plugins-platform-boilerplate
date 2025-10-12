@@ -191,8 +191,8 @@
 
 .panel-content {
   flex: 1;
-  overflow: hidden;
-  padding: 20px;
+  overflow: auto;
+  padding: 0;
   background: var(--content-bg, #0f172a);
 }
 
@@ -960,4 +960,37 @@
   --media-stop-bg: #dc2626;
   --media-close-bg: #6b7280;
   --media-close-hover-bg: #b91c1c;
+.theme-dark .plugin-detail-content.active::-webkit-scrollbar,
+.theme-dark .plugin-detail-content.active::-webkit-scrollbar {
+  width: 6px;
+}
+
+.theme-dark .plugin-detail-content.active::-webkit-scrollbar-track,
+.theme-dark .plugin-detail-content.active::-webkit-scrollbar-track {
+  background: #1e293b;
+  border-radius: 3px;
+}
+
+.theme-dark .plugin-detail-content.active::-webkit-scrollbar-thumb,
+.theme-dark .plugin-detail-content.active::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 3px;
+  transition: background 0.2s ease;
+}
+
+.theme-dark .plugin-detail-content.active::-webkit-scrollbar-thumb:hover,
+.theme-dark .plugin-detail-content.active::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* Force scrolling for plugin details content */
+.plugin-control-panel .panel-content .plugin-details .plugin-detail-content.active {
+  display: block !important;
+  padding-left: 24px !important;
+  padding-right: 24px !important;
+  height: calc(100vh - 200px) !important; /* Approximate available height */
+  max-height: calc(100vh - 200px) !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
 }

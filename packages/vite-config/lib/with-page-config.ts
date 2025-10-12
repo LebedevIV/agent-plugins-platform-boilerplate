@@ -1,6 +1,6 @@
 import env, { IS_DEV, IS_PROD } from '@extension/env';
 import { watchRebuildPlugin } from '@extension/hmr';
-import react from '@vitejs/plugin-react';
+import react from '@vitejs/plugin-react-swc';
 import deepmerge from 'deepmerge';
 import { defineConfig } from 'vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
