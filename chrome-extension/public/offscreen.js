@@ -10,16 +10,16 @@
  */
 // Маппинг типов анализа на технические имена моделей
 const ANALYSIS_TYPE_MAPPING = {
-  'basic_analysis': 'gemini-flash',
+  'basic_analysis': 'gemini-flash-lite',
   'detailed_comparison': 'gemini-pro',
   'deep_analysis': 'gemini-pro',
-  'scraping_fallback': 'gemini-flash',
-  'compliance_check': 'gemini-flash'
+  'scraping_fallback': 'gemini-flash-lite',
+  'compliance_check': 'gemini-flash-lite'
 };
 
 // Маппинг технических имён на конкретные модели API
 const MODEL_NAME_MAPPING = {
-  'gemini-flash': 'gemini-flash-lite-latest:generateContent',
+  'gemini-flash-lite': 'gemini-flash-lite-latest:generateContent',
   'gemini-pro': 'gemini-2.5-pro:generateContent'
 };
 

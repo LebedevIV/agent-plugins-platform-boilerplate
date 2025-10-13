@@ -239,7 +239,7 @@ const sendHtmlDirectly = async (
       // Получить API ключ для передачи в offscreen
       let geminiApiKey: string | undefined;
       try {
-        geminiApiKey = await getApiKeyForModel('gemini-flash') || undefined;
+        geminiApiKey = await getApiKeyForModel('gemini-flash-lite') || undefined;
         console.log('[background][DIRECT_TRANSMISSION] ✅ API key retrieved for workflow');
       } catch (keyError) {
         console.warn('[background][DIRECT_TRANSMISSION] ⚠️ Failed to get API key:', keyError);
@@ -850,7 +850,7 @@ async function processRecoveredAssembledTransfer(msg: any, transfer: any): Promi
 
     // Получить API ключ для Gemini и добавить к сообщению
     try {
-      const geminiApiKey = await getApiKeyForModel('gemini-flash');
+      const geminiApiKey = await getApiKeyForModel('gemini-flash-lite');
       executeMessage.geminiApiKey = geminiApiKey;
       console.log('[RECOVERY_PROCESSING] ✅ API key added to EXECUTE_WORKFLOW message');
     } catch (keyError) {
@@ -1323,7 +1323,7 @@ async function executeWorkflowInOffscreen(
   if (!geminiApiKey) {
     try {
       console.log('[WORKFLOW_EXECUTION] 🔑 Getting Gemini API key...');
-      geminiApiKey = await getApiKeyForModel('gemini-flash');
+      geminiApiKey = await getApiKeyForModel('gemini-flash-lite');
       console.log('[WORKFLOW_EXECUTION] ✅ Gemini API key retrieved successfully');
     } catch (keyError) {
       console.error('[WORKFLOW_EXECUTION] ❌ Failed to get Gemini API key:', keyError);
@@ -2032,7 +2032,7 @@ chrome.runtime.onMessage.addListener(
 
           // Получить API ключ и добавить к сообщению
           try {
-            const geminiApiKey = await getApiKeyForModel('gemini-flash');
+            const geminiApiKey = await getApiKeyForModel('gemini-flash-lite');
             executeWorkflowMessage.geminiApiKey = geminiApiKey;
             console.log('[background][HTML_ASSEMBLED] ✅ API key added to EXECUTE_WORKFLOW message');
           } catch (keyError) {
@@ -2900,7 +2900,7 @@ async function handleMessage(message: any, sender: any): Promise<any> {
 
         // Получить API ключ и добавить к сообщению
         try {
-          const geminiApiKey = await getApiKeyForModel('gemini-flash');
+          const geminiApiKey = await getApiKeyForModel('gemini-flash-lite');
           executeWorkflowMessage.geminiApiKey = geminiApiKey;
           console.log('[background][PORT][HTML_ASSEMBLED] ✅ API key added to EXECUTE_WORKFLOW message');
         } catch (keyError) {

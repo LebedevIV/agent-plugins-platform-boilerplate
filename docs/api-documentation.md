@@ -236,10 +236,10 @@ interface WorkflowStep {
 ### Model Mapping
 ```javascript
 const aiModelMapping = {
-  "basic_analysis": "gemini-flash",
+  "basic_analysis": "gemini-flash-lite",
   "detailed_comparison": "gemini-pro",
   "deep_analysis": "gemini-pro",
-  "scraping_fallback": "gemini-flash"
+  "scraping_fallback": "gemini-flash-lite"
 };
 ```
 
@@ -249,7 +249,7 @@ const aiProviders = {
   google: {
     apiUrl: "https://generativelanguage.googleapis.com",
     models: {
-      "gemini-flash": "models/gemini-1.5-flash",
+      "gemini-flash-lite": "models/gemini-1.5-flash",
       "gemini-pro": "models/gemini-1.5-pro"
     },
     rateLimits: {
@@ -326,7 +326,7 @@ const aiProviders = {
   },
   "ai_providers": {
     "google": {
-      "fallback_chain": ["gemini-flash", "gemini-pro"],
+      "fallback_chain": ["gemini-flash-lite", "gemini-pro"],
       "rate_limits": {
         "requests_per_minute": 60,
         "requests_per_hour": 1000

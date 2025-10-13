@@ -512,8 +512,8 @@ except Exception as e:
         console.log('[BRIDGE DIAGNOSTIC] Тип промптов:', typeof pluginSettings.prompts);
         if (typeof pluginSettings.prompts === 'object') {
           console.log('[BRIDGE DIAGNOSTIC] Ключи промптов:', Object.keys(pluginSettings.prompts));
-          console.log('[BRIDGE DIAGNOSTIC] optimized промпты:', pluginSettings.prompts.optimized);
-          console.log('[BRIDGE DIAGNOSTIC] deep промпты:', pluginSettings.prompts.deep);
+          console.log('[BRIDGE DIAGNOSTIC] basic_analysis промпты:', pluginSettings.prompts.basic_analysis);
+          console.log('[BRIDGE DIAGNOSTIC] deep_analysis промпты:', pluginSettings.prompts.deep_analysis);
         }
       } else {
         console.log('[BRIDGE DIAGNOSTIC] ❌ Промпты НЕ НАЙДЕНЫ в pluginSettings');
@@ -890,6 +890,7 @@ interface ExecuteWorkflowMessage {
     useChunks: boolean;
     pageHtml: string;
     assembledHtml?: string; // New field for pre-assembled HTML from chunks
+    pluginSettings?: Record<string, any>; // Plugin settings for workflow execution
   };
 }
 

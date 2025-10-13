@@ -26,7 +26,7 @@ export interface AiModelResponse {
 }
 
 // Доступные модели
-export type ModelAlias = 'gemini-flash' | 'gemini-pro' | 'gpt-3.5-turbo' | 'gpt-4';
+export type ModelAlias = 'gemini-flash-lite' | 'gemini-pro' | 'gpt-3.5-turbo' | 'gpt-4';
 
 // Конфигурация модели
 interface ModelConfig {
@@ -251,7 +251,7 @@ function handleAiError(error: any, context: any): never {
 
 // Поддерживаемые модели и их конфигурации с типизированными индексами
 const MODEL_CONFIGS: Record<ModelAlias, ModelConfig> = {
-  'gemini-flash': {
+  'gemini-flash-lite': {
     provider: 'google',
     //model_name: 'gemini-2.5-flash-lite:generateContent',
     model_name: 'gemini-flash-lite-latest:generateContent',

@@ -17,8 +17,8 @@ interface LanguagePrompts {
 }
 
 interface PromptsStructure {
-  optimized: LanguagePrompts;
-  deep: LanguagePrompts;
+  basic_analysis: LanguagePrompts;
+  deep_analysis: LanguagePrompts;
 }
 
 const cn = (...args: (string | undefined | false)[]) => args.filter(Boolean).join(' ');
@@ -52,7 +52,7 @@ interface PromptsEditorProps {
 }
 
 const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t }: PromptsEditorProps) => {
-  const [promptType, setPromptType] = useState<'optimized' | 'deep'>('optimized');
+  const [promptType, setPromptType] = useState<'basic_analysis' | 'deep_analysis'>('basic_analysis');
   const [language, setLanguage] = useState<'ru' | 'en'>('ru');
   const [customPrompt, setCustomPrompt] = useState<string>('');
 
@@ -132,7 +132,7 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t }: Prompts
             <label style={{ fontSize: '14px', marginRight: '8px' }}>{t('options.plugins.prompts.type')}</label>
             <select
               value={promptType}
-              onChange={(e) => setPromptType(e.target.value as 'optimized' | 'deep')}
+              onChange={(e) => setPromptType(e.target.value as 'basic_analysis' | 'deep_analysis')}
               disabled={disabled}
               style={{
                 padding: '4px 8px',
@@ -142,8 +142,8 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t }: Prompts
                 fontSize: '14px'
               }}
             >
-              <option value="optimized">{t('options.plugins.prompts.optimized')}</option>
-              <option value="deep">{t('options.plugins.prompts.deep')}</option>
+              <option value="basic_analysis">{t('options.plugins.prompts.basic_analysis')}</option>
+              <option value="deep_analysis">{t('options.plugins.prompts.deep_analysis')}</option>
             </select>
           </div>
 
@@ -359,10 +359,10 @@ const PluginDetails = (props: PluginDetailsProps) => {
       if (stored[key]) {
         const prompts = stored[key] as PromptsStructure;
         console.log('   Структура промптов:');
-        console.log(`     - optimized.ru: ${prompts.optimized?.ru ? '✓' : '✗'} (${prompts.optimized?.ru?.length || 0} символов)`);
-        console.log(`     - optimized.en: ${prompts.optimized?.en ? '✓' : '✗'} (${prompts.optimized?.en?.length || 0} символов)`);
-        console.log(`     - deep.ru: ${prompts.deep?.ru ? '✓' : '✗'} (${prompts.deep?.ru?.length || 0} символов)`);
-        console.log(`     - deep.en: ${prompts.deep?.en ? '✓' : '✗'} (${prompts.deep?.en?.length || 0} символов)`);
+        console.log(`     - basic_analysis.ru: ${prompts.basic_analysis?.ru ? '✓' : '✗'} (${prompts.basic_analysis?.ru?.length || 0} символов)`);
+        console.log(`     - basic_analysis.en: ${prompts.basic_analysis?.en ? '✓' : '✗'} (${prompts.basic_analysis?.en?.length || 0} символов)`);
+        console.log(`     - deep_analysis.ru: ${prompts.deep_analysis?.ru ? '✓' : '✗'} (${prompts.deep_analysis?.ru?.length || 0} символов)`);
+        console.log(`     - deep_analysis.en: ${prompts.deep_analysis?.en ? '✓' : '✗'} (${prompts.deep_analysis?.en?.length || 0} символов)`);
       }
     } catch (error) {
       console.error('Ошибка диагностики промптов:', error);
@@ -380,22 +380,22 @@ const PluginDetails = (props: PluginDetailsProps) => {
     if (settingName === 'prompts' && typeof defaultValue === 'object' && defaultValue !== null) {
       const promptsConfig = defaultValue as any;
       const result: PromptsStructure = {
-        optimized: { ru: {}, en: {} },
-        deep: { ru: {}, en: {} }
+        basic_analysis: { ru: {}, en: {} },
+        deep_analysis: { ru: {}, en: {} }
       };
 
       // Извлекаем default значения из структуры manifest
-      if (promptsConfig.optimized?.ru?.default) {
-        result.optimized.ru = promptsConfig.optimized.ru.default;
+      if (promptsConfig.basic_analysis?.ru?.default) {
+        result.basic_analysis.ru = promptsConfig.basic_analysis.ru.default;
       }
-      if (promptsConfig.optimized?.en?.default) {
-        result.optimized.en = promptsConfig.optimized.en.default;
+      if (promptsConfig.basic_analysis?.en?.default) {
+        result.basic_analysis.en = promptsConfig.basic_analysis.en.default;
       }
-      if (promptsConfig.deep?.ru?.default) {
-        result.deep.ru = promptsConfig.deep.ru.default;
+      if (promptsConfig.deep_analysis?.ru?.default) {
+        result.deep_analysis.ru = promptsConfig.deep_analysis.ru.default;
       }
-      if (promptsConfig.deep?.en?.default) {
-        result.deep.en = promptsConfig.deep.en.default;
+      if (promptsConfig.deep_analysis?.en?.default) {
+        result.deep_analysis.en = promptsConfig.deep_analysis.en.default;
       }
 
       return result;

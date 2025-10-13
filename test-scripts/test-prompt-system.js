@@ -75,9 +75,9 @@ class PromptSystemTester {
         try {
             const customPromptsSettings = {
                 prompts: {
-                    optimized: {
-                        ru: 'КАСТОМНЫЙ ПРОМПТ ДЛЯ ТЕСТИРОВАНИЯ - OPTIMIZED RU',
-                        en: 'CUSTOM PROMPT FOR TESTING - OPTIMIZED EN'
+                    basic_analysis: {
+                        ru: 'КАСТОМНЫЙ ПРОМПТ ДЛЯ ТЕСТИРОВАНИЯ - basic_analysis RU',
+                        en: 'CUSTOM PROMPT FOR TESTING - basic_analysis EN'
                     }
                 }
             };
@@ -85,7 +85,7 @@ class PromptSystemTester {
             const testResult = await this.executePythonCode(`
                 try:
                     prompts = get_user_prompts(${JSON.stringify(customPromptsSettings)})
-                    optimized_ru = prompts.get('optimized', {}).get('ru', '')
+                    optimized_ru = prompts.get('basic_analysis', {}).get('ru', '')
                     custom_found = 'КАСТОМНЫЙ ПРОМПТ ДЛЯ ТЕСТИРОВАНИЯ' in optimized_ru
                     
                     return {
@@ -119,7 +119,7 @@ class PromptSystemTester {
                 try:
                     empty_settings = {}
                     prompts = get_user_prompts(empty_settings)
-                    optimized_ru = prompts.get('optimized', {}).get('ru', '')
+                    optimized_ru = prompts.get('basic_analysis', {}).get('ru', '')
                     manifest_used = len(optimized_ru) > 100
                     
                     return {
@@ -153,14 +153,14 @@ class PromptSystemTester {
                 try:
                     plugin_settings = {
                         'prompts': {
-                            'optimized': {
+                            'basic_analysis': {
                                 'ru': 'ТЕСТОВЫЙ ПРОМПТ ДЛЯ ПРОВЕРКИ AI: Проанализируй состав: {composition}'
                             }
                         }
                     }
                     
                     prompts = get_user_prompts(plugin_settings)
-                    optimized_ru = prompts.get('optimized', {}).get('ru', '')
+                    optimized_ru = prompts.get('basic_analysis', {}).get('ru', '')
                     has_placeholder = '{composition}' in optimized_ru
                     sufficient_length = len(optimized_ru) > 50
                     

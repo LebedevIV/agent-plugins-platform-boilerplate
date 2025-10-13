@@ -175,7 +175,7 @@ async def perform_deep_analysis(input_data):
                     json: () => Promise.resolve({
                         "name": "Ozon Analyzer",
                         "ai_models": {
-                            "basic_analysis": "gemini-flash",
+                            "basic_analysis": "gemini-flash-lite",
                             "deep_analysis": "gemini-pro"
                         },
                         "settings": {

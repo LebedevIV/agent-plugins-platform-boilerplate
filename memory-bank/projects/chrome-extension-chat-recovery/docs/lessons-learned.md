@@ -394,7 +394,7 @@ class MessagingMonitor {
 |--------|------------------|---------------|
 | **Architecture** | Mixed, inconsistent | Clean, unified |
 | **Testing** | False confidence | Real reliability |
-| **Performance** | Memory leaks | Optimized usage |
+| **Performance** | Memory leaks | basic_analysis usage |
 | **Maintainability** | Hard to debug | Easy to understand |
 | **User Experience** | Unstable chat | Reliable messaging |
 

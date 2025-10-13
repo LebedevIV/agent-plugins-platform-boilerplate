@@ -96,7 +96,7 @@ export class AIApiTest {
         Assert.isDefined(manifest.ai_models.scraping_fallback, 'Должен быть scraping_fallback алиас');
 
         // Проверяем соответствие реальным названиям моделей
-        const expectedModels = ['gemini-flash', 'gemini-pro'];
+        const expectedModels = ['gemini-flash-lite', 'gemini-pro'];
         const configuredModels = Object.values(manifest.ai_models);
 
         for (const model of configuredModels) {

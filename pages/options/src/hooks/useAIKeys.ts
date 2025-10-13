@@ -15,8 +15,8 @@ export const useAIKeys = () => {
   const { t } = useTranslations('ru');
   const [aiKeys, setAiKeys] = React.useState<AIKey[]>([
     {
-      id: 'gemini-flash',
-      name: 'Google Gemini (Flash) - Базовый анализ',
+      id: 'gemini-flash-lite',
+      name: 'Google Gemini Flash Lite - Базовый анализ',
       key: '',
       status: 'not_configured',
       isFixed: true,
@@ -55,7 +55,7 @@ export const useAIKeys = () => {
       console.log('[useAIKeys] Starting to load AI keys...');
 
       // Загружаем зашифрованные ключи
-      const fixedKeyIds = ['gemini-flash', 'gemini-pro'];
+      const fixedKeyIds = ['gemini-flash-lite', 'gemini-pro'];
       const fixedKeysPromises = fixedKeyIds.map(async (keyId) => {
         const decryptedKey = await APIKeyManager.getDecryptedKey(keyId);
         console.log(`[useAIKeys] Loaded key ${keyId}:`, decryptedKey ? 'present' : 'empty');
