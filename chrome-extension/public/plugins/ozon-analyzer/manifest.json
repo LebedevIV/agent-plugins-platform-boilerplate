@@ -105,6 +105,11 @@
           "description": {
             "ru": "Промпт для базового анализа соответствия описания и состава",
             "en": "Prompt for basic compliance analysis"
+          },
+          "LLM": {
+            "default": {
+              "curl_file": "curl-templates/basic_analysis-ru.curl"
+            }
           }
         },
         "en": {
@@ -117,6 +122,11 @@
           "description": {
             "ru": "Промпт для базового анализа соответствия описания и состава",
             "en": "Prompt for basic compliance analysis"
+          },
+          "LLM": {
+            "default": {
+              "curl_file": "curl-templates/basic_analysis-en.curl"
+            }
           }
         }
       },
@@ -128,7 +138,11 @@
             "ru": "Промпт глубокого анализа (русский)",
             "en": "Deep Analysis Prompt (Russian)"
           },
-          "default_LLM": "gemini-2.5-pro:generateContent"
+          "LLM": {
+            "default": {
+              "curl_file": "curl-templates/deep_analysis-ru.curl"
+            }
+          }
         },
         "en": {
           "type": "text",
@@ -137,7 +151,11 @@
             "ru": "Промпт глубокого анализа (английский)",
             "en": "Deep Analysis Prompt (English)"
           },
-          "default_LLM": "gemini-2.5-pro:generateContent"
+          "LLM": {
+            "default": {
+              "curl_file": "curl-templates/deep_analysis-en.curl"
+            }
+          }
         }
       }
     }
