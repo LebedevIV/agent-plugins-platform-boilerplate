@@ -1,6 +1,6 @@
 {
   "name": "@extension/dev-utils",
-  "version": "0.5.1373",
+  "version": "0.5.1374",
   "description": "chrome extension - dev utils",
   "type": "module",
   "private": true,

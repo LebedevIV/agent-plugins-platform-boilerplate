@@ -327,7 +327,7 @@ def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> Dict[s
                         else:
                             console_log(f"⚠️ Промпт по умолчанию не найден или пустой для {prompt_type}.{lang}")
                             # Fallback 2: встроенные промпты по умолчанию
-                            # default_value = _get_builtin_default_prompt(prompt_type, lang)
+                            default_value = _get_builtin_default_prompt(prompt_type, lang)
                             if default_value:
                                 prompts[prompt_type][lang] = default_value
                                 console_log(f"✅ Используем встроенный промпт по умолчанию: {prompt_type}.{lang}")
@@ -401,55 +401,6 @@ def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> Dict[s
 
         # Критический fallback - возвращаем пустые промпты
         console_log(f"⚠️ Возвращаем критический fallback с пустыми промптами")
-        return {
-            'basic_analysis': {'ru': '', 'en': ''},
-            'deep_analysis': {'ru': '', 'en': ''}
-        }
-
-        prompts = {
-            'basic_analysis': {'ru': '', 'en': ''},
-            'deep_analysis': {'ru': '', 'en': ''}
-        }
-
-        # Получаем manifest из plugin_settings или globals для fallback значений
-        if plugin_settings and isinstance(plugin_settings, dict):
-            manifest = safe_dict_get(plugin_settings, 'manifest', get_pyodide_var('manifest', {}))
-        else:
-            manifest = get_pyodide_var('manifest', {})
-        manifest_prompts = safe_dict_get(manifest, 'options.prompts', {})
-
-        for prompt_type in ['basic_analysis', 'deep_analysis']:
-            for lang in ['ru', 'en']:
-                # Правильно извлекаем промпт из nested структуры plugin_settings
-                prompt_type_data = safe_dict_get(custom_prompts_raw, prompt_type, {})
-
-                custom_value = safe_dict_get(prompt_type_data, lang, '')
-
-                if custom_value and isinstance(custom_value, str) and len(custom_value.strip()) > 0:
-                    prompts[prompt_type][lang] = custom_value
-                    console_log(f"✅ Используем кастомный промпт: {prompt_type}.{lang} (длина: {len(custom_value)})")
-                else:
-                    # Fallback на manifest.json
-                    lang_data = safe_dict_get(manifest_prompts, f"{prompt_type}.{lang}", {})
-
-                    manifest_value = safe_dict_get(lang_data, "default", "")
-                    prompts[prompt_type][lang] = manifest_value
-                    console_log(f"ℹ️ Используем промпт по умолчанию: {prompt_type}.{lang}")
-
-        console_log(f"🔍 Диагностика промптов:")
-        console_log(f"   Plugin settings prompts: {custom_prompts_raw}")
-        console_log(f"   Manifest prompts: {manifest_prompts}")
-        console_log(f"   Plugin settings prompts: {custom_prompts_raw}")
-        console_log(f"   Final prompts structure: {prompts}")
-        console_log(f"📋 Загружено промптов: {len([p for pt in prompts.values() for p in pt.values() if p])} кастомных")
-        return prompts
-
-    except Exception as e:
-        console_log(f"❌ Ошибка загрузки промптов: {str(e)}")
-        console_log(f"🔍 Диагностика ошибки:")
-        console_log(f"   Plugin settings: {plugin_settings}")
-        console_log(f"   Plugin settings type: {type(plugin_settings)}")
-        # Критический fallback - возвращаем пустые промпты
         return {
             'basic_analysis': {'ru': '', 'en': ''},
             'deep_analysis': {'ru': '', 'en': ''}
@@ -2660,6 +2611,44 @@ async def _analyze_product_async(description: str, composition: str, categories:
 
     return analysis_result, analogs
 
+def get_selected_llm_config(plugin_settings: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+    """
+    Получает выбранные LLM модели для каждого типа анализа с fallback на manifest.json.
+
+    Args:
+        plugin_settings: Настройки плагина из Pyodide globals
+
+    Returns:
+        Словарь с выбранными моделями: {'basic_analysis': 'model_name', 'deep_analysis': 'model_name'}
+    """
+    console_log("[LLM_CONFIG] ===== ПОЛУЧЕНИЕ КОНФИГУРАЦИИ LLM =====")
+
+    # Получить manifest из plugin_settings или globals
+    manifest = None
+    if plugin_settings and isinstance(plugin_settings, dict):
+        manifest = safe_dict_get(plugin_settings, 'manifest', None)
+    if manifest is None:
+        manifest = get_pyodide_var('manifest', {})
+
+    console_log(f"[LLM_CONFIG] Manifest получен: {manifest is not None}")
+
+    # Получить ai_models из manifest
+    ai_models = safe_dict_get(manifest, 'ai_models', {})
+    console_log(f"[LLM_CONFIG] AI models из manifest: {ai_models}")
+
+    # Настроить модели для каждого типа анализа с fallback
+    result = {
+        'basic_analysis': safe_dict_get(ai_models, 'compliance_check',
+                                      safe_dict_get(ai_models, 'basic_analysis', 'gemini-flash-lite')),
+        'deep_analysis': safe_dict_get(ai_models, 'deep_analysis', 'gemini-pro')
+    }
+
+    console_log(f"[LLM_CONFIG] Финальная конфигурация LLM: {result}")
+    console_log("[LLM_CONFIG] ===== КОНЕЦ ПОЛУЧЕНИЯ КОНФИГУРАЦИИ LLM =====")
+
+    return result
+
+
 def get_safe_content_language(plugin_settings: Dict[str, Any]) -> str:
     """
     Безопасная функция определения языка контента для сообщений чата.
@@ -3721,7 +3710,6 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
     if not description or not composition:
         return { "status": "error", "message": "Описание или состав не были переданы для глубокого анализа."}
-
     # Получить pluginSettings из pyodide globals
     plugin_settings = get_pyodide_var('pluginSettings', {})
 
@@ -3742,6 +3730,13 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
     content_language = get_safe_content_language(plugin_settings)
     # console_log(f"[LANGUAGE] Язык контента определен: '{content_language}'")
     # console_log(f"[LANGUAGE] Финальный результат get_safe_content_language: '{content_language}'")
+
+    # Получить выбранную LLM для deep_analysis
+    llm_config = get_selected_llm_config(plugin_settings)
+    selected_model = llm_config.get('deep_analysis', 'deep_analysis')
+
+    console_log(f"[LLM_SELECTION] Выбрана модель для deep_analysis: {selected_model}")
+
 
 
     # Получить пользовательские промпты
@@ -3801,10 +3796,8 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
         console_log(f"⚠️ Используем fallback промпт deep_analysis для языка {content_language}")
 
     try:
-        # "deep_analysis" - это псевдоним из `manifest.json` этого плагина.
-        # Платформа сама определит, какую реальную модель (например, gemini-pro)
-        # использовать, и подставит соответствующий API-ключ.
-        result = await ozon_analyzer_server._call_ai_model("deep_analysis", prompt)
+        # Используем выбранную модель вместо хардкода "deep_analysis"
+        result = await ozon_analyzer_server._call_ai_model(selected_model, prompt)
 
         # Проверка типа данных от AI в perform_deep_analysis
         if not isinstance(result, str):
@@ -3823,7 +3816,11 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
             chat_message(f"❌ Ошибка глубокого анализа: {str(e)[:100]}...")
         else:  # English
             chat_message(f"❌ Deep analysis error: {str(e)[:100]}...")
-        return { "status": "error", "message": f"Ошибка глубокого анализа: {str(e)}" }
+        return {
+            "status": "error",
+            "message": f"Deep analysis error: {str(e)}" if content_language != "ru"
+                       else f"Ошибка глубокого анализа: {str(e)}"
+        }
     finally:
         # [DIAGNOSTIC] ЛОГИРОВАНИЕ В КОНЦЕ perform_deep_analysis
         console_log("[DIAGNOSTIC] >>>>>> perform_deep_analysis FUNCTION ENDING <<<<<<")
@@ -4383,8 +4380,14 @@ async def _analyze_composition_vs_description(description: str, composition: str
         # console_log(f"[DIAGNOSTIC] Длина промпта: {safe_len(prompt)} символов")
         # console_log(f"[DIAGNOSTIC] Промпт начинается: {prompt[:100]}...")
         # console_log("[DIAGNOSTIC] ===== НАЧАЛО ВЫЗОВА _call_ai_model() =====")
-        # Используем псевдоним "compliance_check" для проверки соответствия описания и состава
-        result_str = await ozon_analyzer_server._call_ai_model("compliance_check", prompt)
+        # Получить выбранную LLM для basic_analysis
+        llm_config = get_selected_llm_config(plugin_settings)
+        selected_model = llm_config.get('basic_analysis', 'compliance_check')
+
+        console_log(f"[LLM_SELECTION] Выбрана модель для basic_analysis: {selected_model}")
+
+        # Используем выбранную модель вместо хардкода "compliance_check"
+        result_str = await ozon_analyzer_server._call_ai_model(selected_model, prompt)
         console_log("[DIAGNOSTIC] ===== КОНЕЦ ВЫЗОВА _call_ai_model() =====")
 
         # [DIAGNOSTIC] ===== РЕЗУЛЬТАТ ВЫЗОВА AI МОДЕЛИ =====

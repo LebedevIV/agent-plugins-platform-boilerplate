@@ -1466,9 +1466,64 @@ chrome.runtime.onMessage.addListener(
 
         const pluginSettings = await getPluginSettings(msg.pluginId, manifestDefaults, customSettingsKeys);
 
-        console.log('[BACKGROUND] ✅ Настройки плагина получены из chrome.storage.local:', pluginSettings);
-        console.log('[BACKGROUND] 🔑 Значение response_language:', pluginSettings?.response_language);
-        console.log('[BACKGROUND] 📊 Все полученные настройки плагина:', JSON.stringify(pluginSettings, null, 2));
+        // Загрузка LLM настроек и API ключей для ozon-analyzer плагина
+        let enrichedPluginSettings = { ...pluginSettings };
+        if (msg.pluginId === 'ozon-analyzer') {
+          try {
+            console.log('[BACKGROUND] 🔧 Загружаем LLM настройки и API ключи для ozon-analyzer');
+
+            // Загружаем LLM настройки из специального хранилища
+            const llmSettingsResult = await chrome.storage.local.get(['plugin-ozon-analyzer-settings']);
+            const llmSettings = llmSettingsResult['plugin-ozon-analyzer-settings'];
+
+            if (llmSettings) {
+              console.log('[BACKGROUND] ✅ Найдены LLM настройки:', JSON.stringify(llmSettings, null, 2));
+
+              // Добавляем llm_settings в pluginSettings
+              enrichedPluginSettings.llm_settings = {
+                basic_analysis: llmSettings.basic_analysis,
+                deep_analysis: llmSettings.deep_analysis
+              };
+
+              // Добавляем api_keys в pluginSettings
+              enrichedPluginSettings.api_keys = llmSettings.api_keys;
+
+              console.log('[BACKGROUND] ✅ LLM настройки добавлены в pluginSettings');
+            } else {
+              console.log('[BACKGROUND] ⚠️ LLM настройки не найдены в хранилище');
+              // Используем дефолтные значения если настройки не найдены
+              enrichedPluginSettings.llm_settings = {
+                basic_analysis: {
+                  ru: { llm: '', custom_prompt: 'Проведи базовый анализ товара на Ozon. Опиши основные характеристики, преимущества и недостатки.' },
+                  en: { llm: '', custom_prompt: 'Perform basic analysis of the product on Ozon. Describe main characteristics, advantages and disadvantages.' }
+                },
+                deep_analysis: {
+                  ru: { llm: '', custom_prompt: 'Проведи глубокий анализ товара на Ozon. Включи детальное описание, сравнение с конкурентами, анализ отзывов и рекомендации по улучшению.' },
+                  en: { llm: '', custom_prompt: 'Perform deep analysis of the product on Ozon. Include detailed description, competitor comparison, review analysis and improvement recommendations.' }
+                }
+              };
+              enrichedPluginSettings.api_keys = { default: '' };
+            }
+          } catch (llmError) {
+            console.error('[BACKGROUND] ❌ Ошибка загрузки LLM настроек:', llmError);
+            // Используем дефолтные значения при ошибке
+            enrichedPluginSettings.llm_settings = {
+              basic_analysis: {
+                ru: { llm: '', custom_prompt: 'Проведи базовый анализ товара на Ozon. Опиши основные характеристики, преимущества и недостатки.' },
+                en: { llm: '', custom_prompt: 'Perform basic analysis of the product on Ozon. Describe main characteristics, advantages and disadvantages.' }
+              },
+              deep_analysis: {
+                ru: { llm: '', custom_prompt: 'Проведи глубокий анализ товара на Ozon. Включи детальное описание, сравнение с конкурентами, анализ отзывов и рекомендации по улучшению.' },
+                en: { llm: '', custom_prompt: 'Perform deep analysis of the product on Ozon. Include detailed description, competitor comparison, review analysis and improvement recommendations.' }
+              }
+            };
+            enrichedPluginSettings.api_keys = { default: '' };
+          }
+        }
+
+        console.log('[BACKGROUND] ✅ Настройки плагина получены из chrome.storage.local:', enrichedPluginSettings);
+        console.log('[BACKGROUND] 🔑 Значение response_language:', enrichedPluginSettings?.response_language);
+        console.log('[BACKGROUND] 📊 Все полученные настройки плагина:', JSON.stringify(enrichedPluginSettings, null, 2));
         if (!pluginSettings.enabled) {
           console.log('[background][RUN_WORKFLOW][INFO] Plugin disabled');
           sendResponse({ error: 'Плагин отключен' });
@@ -1583,13 +1638,16 @@ chrome.runtime.onMessage.addListener(
         const requestId = msg.requestId || `workflow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const transferId = `${requestId}_html_${Date.now()}`;
 
+        // Используем enrichedPluginSettings (с LLM настройками) вместо обычных pluginSettings
+        const settingsToSend = enrichedPluginSettings;
+
         if (htmlTransmissionMode === 'direct') {
           // ПРЯМАЯ ПЕРЕДАЧА HTML
           console.log('[background][RUN_WORKFLOW] 📨 Using DIRECT HTML transmission');
           console.log('[background][RUN_WORKFLOW] HTML size:', pageHtml.length, 'chars');
 
           try {
-            await sendHtmlDirectly(msg.pluginId, pageKey, pageHtml, requestId, transferId, pluginSettings);
+            await sendHtmlDirectly(msg.pluginId, pageKey, pageHtml, requestId, transferId, settingsToSend);
             console.log('[background][RUN_WORKFLOW] ✅ Direct transmission completed');
           } catch (directError) {
             console.log('[background][RUN_WORKFLOW] ❌ Direct transmission failed, switching to chunked mode');
@@ -1607,7 +1665,7 @@ chrome.runtime.onMessage.addListener(
 
             // Храним transfer для отслеживания
             console.log('[BACKGROUND] 📦 Создаем transfer state с настройками плагина для chunked fallback');
-            console.log('[BACKGROUND] 📋 Plugin settings в transfer metadata:', pluginSettings);
+            console.log('[BACKGROUND] 📋 Plugin settings в transfer metadata:', settingsToSend);
 
             const transferState = {
               chunks: chunkingResult.chunks,
@@ -1620,7 +1678,7 @@ chrome.runtime.onMessage.addListener(
                 totalSize: chunkingResult.totalSize,
                 timestamp: Date.now(),
                 fallbackFromDirect: true,
-                pluginSettings: pluginSettings  // Добавлено: передаем pluginSettings
+                pluginSettings: settingsToSend  // Добавлено: передаем pluginSettings
               },
               resolve: () => {
                 console.log(`[CHUNKING] Transfer ${transferId} completed successfully`);
@@ -1649,8 +1707,8 @@ chrome.runtime.onMessage.addListener(
 
           // Храним transfer для отслеживания
           console.log('[BACKGROUND] 📦 Создаем transfer state с настройками плагина для chunked передачи');
-          console.log('[BACKGROUND] 📋 Plugin settings в transfer metadata:', pluginSettings);
-          console.log('[BACKGROUND] 🔑 Response language в transfer metadata:', pluginSettings?.response_language);
+          console.log('[BACKGROUND] 📋 Plugin settings в transfer metadata:', settingsToSend);
+          console.log('[BACKGROUND] 🔑 Response language в transfer metadata:', settingsToSend?.response_language);
 
           const transferState = {
             chunks: chunkingResult.chunks,
@@ -1662,7 +1720,7 @@ chrome.runtime.onMessage.addListener(
               requestId: requestId,
               totalSize: chunkingResult.totalSize,
               timestamp: Date.now(),
-              pluginSettings: pluginSettings  // Добавлено: передаем pluginSettings
+              pluginSettings: settingsToSend  // Добавлено: передаем pluginSettings
             },
             resolve: () => {
               console.log(`[CHUNKING] Transfer ${transferId} completed successfully`);
