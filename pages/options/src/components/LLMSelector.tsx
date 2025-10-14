@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { usePluginSettings } from '../hooks/usePluginSettings';
 import { AIKey } from '../hooks/useAIKeys';
+import { APIKeyManager } from '../utils/encryption';
 
 interface LLMSelectorProps {
   promptType: 'basic_analysis' | 'deep_analysis';
@@ -19,17 +20,27 @@ const LLMSelector: React.FC<LLMSelectorProps> = ({
   hasDefaultLLM,
   onLLMChange,
 }) => {
-  const { settings, updateBasicAnalysisSettings, updateDeepAnalysisSettings, getAPIKey } = usePluginSettings();
+  const { settings, updateBasicAnalysisSettings, updateDeepAnalysisSettings } = usePluginSettings();
   const [selectedLLM, setSelectedLLM] = useState<string>(defaultLLMCurl);
   const [apiKey, setApiKey] = useState<string>('');
+  const saveTimeoutRef = useRef<NodeJS.Timeout>();
 
-  // Загружаем текущие настройки при монтировании
+  // Загружаем API-ключ при монтировании компонента
+  useEffect(() => {
+    const loadApiKey = async () => {
+      const keyId = `ozon-analyzer-${promptType}-${language}`;
+      const key = await APIKeyManager.getDecryptedKey(keyId) || '';
+      setApiKey(key);
+    };
+    loadApiKey();
+  }, [promptType, language]);
+
+  // Загружаем LLM при изменении promptType/language
   useEffect(() => {
     const currentSettings = promptType === 'basic_analysis'
       ? settings.basic_analysis[language]
       : settings.deep_analysis[language];
 
-    // Логика: если сохранённое llm есть — использовать его; иначе — если hasDefaultLLM — "Default LLM"; иначе — ""
     const savedLLM = currentSettings.llm;
     let initialLLM = savedLLM;
 
@@ -42,8 +53,7 @@ const LLMSelector: React.FC<LLMSelectorProps> = ({
     }
 
     setSelectedLLM(initialLLM);
-    setApiKey(getAPIKey());
-  }, [promptType, language, settings, getAPIKey, hasDefaultLLM]);
+  }, [promptType, language, settings, hasDefaultLLM]);
 
   // Сохраняем выбор LLM
   const handleLLMChange = async (newLLM: string) => {
@@ -61,13 +71,20 @@ const LLMSelector: React.FC<LLMSelectorProps> = ({
   };
 
   // Сохраняем API ключ
-  const handleApiKeyChange = async (newApiKey: string) => {
+  const handleApiKeyChange = (newApiKey: string) => {
     setApiKey(newApiKey);
-    await settings.saveSettings?.({
-      ...settings,
-      api_keys: { default: newApiKey },
-    });
-    onLLMChange(selectedLLM, newApiKey);
+
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        const keyId = `ozon-analyzer-${promptType}-${language}`;
+        await APIKeyManager.saveEncryptedKey(keyId, newApiKey);
+        onLLMChange(selectedLLM, newApiKey);
+      } catch (error) {
+        console.error('Failed to save API key:', error);
+      }
+    }, 500);
   };
 
   // Получаем список опций для селекта

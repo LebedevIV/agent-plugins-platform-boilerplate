@@ -84,6 +84,26 @@ export const usePluginSettings = () => {
         setSettings({
           ...DEFAULT_SETTINGS,
           ...storedSettings,
+          basic_analysis: {
+            ru: {
+              ...DEFAULT_SETTINGS.basic_analysis.ru,
+              ...storedSettings.basic_analysis?.ru,
+            },
+            en: {
+              ...DEFAULT_SETTINGS.basic_analysis.en,
+              ...storedSettings.basic_analysis?.en,
+            },
+          },
+          deep_analysis: {
+            ru: {
+              ...DEFAULT_SETTINGS.deep_analysis.ru,
+              ...storedSettings.deep_analysis?.ru,
+            },
+            en: {
+              ...DEFAULT_SETTINGS.deep_analysis.en,
+              ...storedSettings.deep_analysis?.en,
+            },
+          },
           api_keys: decryptedApiKeys,
         });
       } else {
