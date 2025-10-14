@@ -3,6 +3,9 @@ import type { Plugin } from '../hooks/usePlugins';
 import type { PluginSettings } from '@extension/storage';
 import ToggleButton from './ToggleButton';
 import LocalErrorBoundary from './LocalErrorBoundary';
+import LLMSelector from './LLMSelector';
+import { useAIKeys, AIKey } from '../hooks/useAIKeys';
+import { usePluginSettings, PluginSettings as PluginSettingsType } from '../hooks/usePluginSettings';
 import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 
@@ -49,12 +52,53 @@ interface PromptsEditorProps {
   onSave: (value: PromptsStructure) => void;
   locale: 'en' | 'ru';
   t: (key: string) => string; // функция перевода
+  globalAIKeys: AIKey[];
+  pluginSettings: PluginSettingsType;
 }
 
-const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t }: PromptsEditorProps) => {
+const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t, globalAIKeys, pluginSettings }: PromptsEditorProps) => {
   const [promptType, setPromptType] = useState<'basic_analysis' | 'deep_analysis'>('basic_analysis');
   const [language, setLanguage] = useState<'ru' | 'en'>('ru');
   const [customPrompt, setCustomPrompt] = useState<string>('');
+
+  // Получить дефолтную LLM для конкретного промпта и языка
+  const getDefaultLLMForPrompt = (type: 'basic_analysis' | 'deep_analysis', lang: 'ru' | 'en'): string => {
+    try {
+      const promptsConfig = manifest?.options?.prompts;
+      if (!promptsConfig) return 'default';
+
+      const typePrompts = promptsConfig[type] || {};
+      const langPrompts = typePrompts[lang] || {};
+      const llmConfig = langPrompts.LLM?.default;
+
+      if (!llmConfig) return 'default';
+
+      // Для basic_analysis возвращаем gemini-flash-lite, для deep_analysis - gemini-pro
+      if (type === 'basic_analysis') {
+        return 'gemini-flash-lite';
+      } else if (type === 'deep_analysis') {
+        return 'gemini-pro';
+      }
+
+      return 'default';
+    } catch {
+      return 'default';
+    }
+  };
+
+  // Проверить наличие дефолтной LLM для конкретного промпта и языка
+  const hasDefaultLLMForPrompt = (type: 'basic_analysis' | 'deep_analysis', lang: 'ru' | 'en'): boolean => {
+    try {
+      const promptsConfig = manifest?.options?.prompts;
+      if (!promptsConfig) return false;
+
+      const typePrompts = promptsConfig[type] || {};
+      const langPrompts = typePrompts[lang] || {};
+      return !!langPrompts.LLM?.default;
+    } catch {
+      return false;
+    }
+  };
 
   // Получаем оригинальный промпт из manifest
   const getOriginalPrompt = (): string => {
@@ -167,6 +211,18 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t }: Prompts
           </div>
         </div>
 
+        {/* LLM Selector для текущего промпта и языка */}
+        <LLMSelector
+          promptType={promptType}
+          language={language}
+          globalAIKeys={globalAIKeys}
+          defaultLLMCurl={getDefaultLLMForPrompt(promptType, language)}
+          hasDefaultLLM={hasDefaultLLMForPrompt(promptType, language)}
+          onLLMChange={(llm, apiKey) => {
+            console.log(`LLM changed for ${promptType} ${language}:`, llm, apiKey);
+          }}
+        />
+
         {/* Textarea */}
         <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
           <div style={{ flex: 1 }}>
@@ -259,6 +315,8 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t }: Prompts
 const PluginDetails = (props: PluginDetailsProps) => {
   const { selectedPlugin, locale = 'en', onUpdateSetting } = props;
   const { t } = useTranslations(locale);
+  const { aiKeys } = useAIKeys();
+  const { settings: pluginSettings } = usePluginSettings();
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
   const [customSettings, setCustomSettings] = useState<Record<string, boolean | string | number | PromptsStructure> | null>(null);
 
@@ -421,6 +479,8 @@ const PluginDetails = (props: PluginDetailsProps) => {
             onSave={(newValue) => handleSettingChange(key, newValue)}
             locale={locale}
             t={t}
+            globalAIKeys={aiKeys}
+            pluginSettings={pluginSettings}
           />
         </div>
       );
