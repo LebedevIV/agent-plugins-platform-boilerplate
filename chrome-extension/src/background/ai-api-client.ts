@@ -301,6 +301,24 @@ export async function getApiKeyForModel(modelAlias: string): Promise<string | nu
 }
 
 /**
+ * Универсальный selector: выдаёт правильный API-ключ для генерации — либо custom (по combo типа/promt/lang), либо платформенный.
+ */
+export async function getApiKeyForPromptOrModel(options: { isDefaultLLM: boolean, promptType: string, language: string, pluginId: string, modelAlias: string }): Promise<string|null> {
+  if (options.isDefaultLLM) {
+    // Кастомный плагиновый ключ для конкретной комбинации
+    const keyId = `${options.pluginId}-${options.promptType}-${options.language}`;
+    return await APIKeyManager.getDecryptedKey(keyId);
+  } else {
+    // Платформенный ключ
+    return await APIKeyManager.getDecryptedKey(options.modelAlias);
+  }
+}
+
+// --- Инструкция для разработчиков:
+// Для плагиновых промптов типа OzonAnalyzer всегда используйте getApiKeyForPromptOrModel для правильного выбора ключа.
+// Никогда не вызывайте getApiKeyForModel напрямую для cases типа 'default LLM'.
+
+/**
  * Выполняет запрос к AI API в зависимости от провайдера с полным мониторингом
  */
 export async function callAiModel(modelAlias: string, apiKey: string, prompt: string): Promise<string> {

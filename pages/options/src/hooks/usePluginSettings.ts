@@ -140,13 +140,13 @@ export const usePluginSettings = () => {
 
   const updateBasicAnalysisSettings = async (
     language: 'ru' | 'en',
-    settings: PluginPromptSettings
+    newPromptSettings: PluginPromptSettings
   ) => {
     const newSettings = {
       ...settings,
       basic_analysis: {
         ...settings.basic_analysis,
-        [language]: settings,
+        [language]: newPromptSettings,
       },
     };
     await saveSettings(newSettings);
@@ -154,13 +154,13 @@ export const usePluginSettings = () => {
 
   const updateDeepAnalysisSettings = async (
     language: 'ru' | 'en',
-    settings: PluginPromptSettings
+    newPromptSettings: PluginPromptSettings
   ) => {
     const newSettings = {
       ...settings,
       deep_analysis: {
         ...settings.deep_analysis,
-        [language]: settings,
+        [language]: newPromptSettings,
       },
     };
     await saveSettings(newSettings);

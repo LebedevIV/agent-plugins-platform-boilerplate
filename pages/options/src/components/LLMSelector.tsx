@@ -41,15 +41,13 @@ const LLMSelector: React.FC<LLMSelectorProps> = ({
       ? settings.basic_analysis[language]
       : settings.deep_analysis[language];
 
-    const savedLLM = currentSettings.llm;
-    let initialLLM = savedLLM;
+    let initialLLM = '';
 
-    if (!savedLLM) {
-      if (hasDefaultLLM) {
-        initialLLM = 'default';
-      } else {
-        initialLLM = '';
-      }
+    if (currentSettings) {
+      const savedLLM = currentSettings.llm;
+      initialLLM = savedLLM || (hasDefaultLLM ? 'default' : '');
+    } else {
+      initialLLM = hasDefaultLLM ? 'default' : '';
     }
 
     setSelectedLLM(initialLLM);

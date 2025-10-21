@@ -220,6 +220,20 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t, globalAIK
           hasDefaultLLM={hasDefaultLLMForPrompt(promptType, language)}
           onLLMChange={(llm, apiKey) => {
             console.log(`LLM changed for ${promptType} ${language}:`, llm, apiKey);
+            // Сохраняем выбранную LLM в pluginSettings для передачи в mcp_server.py
+            const updatedPluginSettings = { ...pluginSettings } as any;
+            if (!updatedPluginSettings.selected_llms) {
+              updatedPluginSettings.selected_llms = {};
+            }
+            if (!updatedPluginSettings.selected_llms[promptType]) {
+              updatedPluginSettings.selected_llms[promptType] = {};
+            }
+            // Сохраняем только выбранную LLM (без api_key, так как он уже сохранен через APIKeyManager)
+            updatedPluginSettings.selected_llms[promptType][language] = llm;
+            // Обновляем pluginSettings через глобальный объект
+            if (typeof window !== 'undefined' && (window as any).pyodide && (window as any).pyodide.globals) {
+              (window as any).pyodide.globals.pluginSettings = updatedPluginSettings;
+            }
           }}
         />
 
@@ -333,6 +347,32 @@ const PluginDetails = (props: PluginDetailsProps) => {
       loadCustomSettings();
     }
   }, [selectedPlugin?.id]);
+
+  // Передаем выбранные LLM в mcp_server.py через pyodide.globals
+  useEffect(() => {
+    if (pluginSettings && typeof window !== 'undefined' && (window as any).pyodide && (window as any).pyodide.globals) {
+      // Создаем структуру selected_llms из pluginSettings
+      const selected_llms = {
+        basic_analysis: {
+          ru: pluginSettings.basic_analysis?.ru?.llm || 'default',
+          en: pluginSettings.basic_analysis?.en?.llm || 'default',
+        },
+        deep_analysis: {
+          ru: pluginSettings.deep_analysis?.ru?.llm || 'default',
+          en: pluginSettings.deep_analysis?.en?.llm || 'default',
+        }
+      };
+      
+      // Обновляем pluginSettings в pyodide.globals
+      const updatedPluginSettings = {
+        ...(window as any).pyodide.globals.pluginSettings || {},
+        selected_llms: selected_llms
+      };
+      
+      (window as any).pyodide.globals.pluginSettings = updatedPluginSettings;
+      console.log('Updated pluginSettings in pyodide.globals:', updatedPluginSettings);
+    }
+  }, [pluginSettings]);
 
   if (!selectedPlugin || typeof selectedPlugin !== 'object') {
     return (

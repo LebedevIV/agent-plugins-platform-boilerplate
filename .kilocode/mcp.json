@@ -22,7 +22,8 @@
         "get_file_info",
         "list_allowed_directories",
         "edit_file"
-      ]
+      ],
+      "disabled": true
     }
   }
 }
