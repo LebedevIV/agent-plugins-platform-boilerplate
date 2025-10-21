@@ -48,7 +48,7 @@ export const zipBundle = async (
     let aborted = false;
     let totalSize = 0;
     const timer = Date.now();
-    const zip = new Zip((err, data, final) => {
+    const zip = new Zip((err: Error | null, data: Uint8Array, final: boolean) => {
       if (err) {
         pReject(err);
       } else {
