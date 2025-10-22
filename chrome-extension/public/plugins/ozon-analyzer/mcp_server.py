@@ -2577,7 +2577,6 @@ def get_api_key_for_analysis(plugin_settings: Optional[Dict[str, Any]] = None,
     
     Returns:
         ID ключа для использования в js.llm_call
-    console_log(f"OZON_ANALYZER_LLM_DEBUG: ===== НАЧАЛО get_api_key_for_analysis =======")
     """
     console_log(f"[API_KEY] Получение API-ключа для {analysis_type}.{content_language}, LLM: {selected_llm}")
     
@@ -2622,6 +2621,70 @@ def get_selected_llm_for_analysis(plugin_settings: Optional[Dict[str, Any]] = No
     else:
         console_log(f"[LLM_SELECTION] Используем default LLM")
         return 'default'
+
+
+def get_api_key_for_llm(plugin_settings: Optional[Dict[str, Any]] = None,
+                       selected_llm: str = 'default',
+                       analysis_type: str = 'basic_analysis',
+                       content_language: str = 'ru') -> str:
+    """
+    Получить API-ключ для выбранной LLM.
+    
+    Args:
+        plugin_settings: Настройки плагина
+        selected_llm: Выбранная LLM
+        analysis_type: Тип анализа ('basic_analysis' или 'deep_analysis')
+        content_language: Язык контента ('ru' или 'en')
+    
+    Returns:
+        API-ключ для выбранной LLM
+    """
+    console_log(f"[API_KEY] Получение API-ключа для {selected_llm} ({analysis_type}.{content_language})")
+    
+    if selected_llm == 'default':
+        # Используем специфичный ключ для комбинации
+        key_id = f'ozon-analyzer-{analysis_type}-{content_language}'
+        api_key = APIKeyManager.get_decrypted_key(key_id)
+        console_log(f"[API_KEY] Специфичный ключ для {key_id}: {'найден' if api_key else 'не найден'}")
+        return api_key or ''
+    else:
+        # Используем ключ платформы для данной LLM
+        platform_key = get_platform_api_key(selected_llm)
+        console_log(f"[API_KEY] Платформенный ключ для {selected_llm}: {'найден' if platform_key else 'не найден'}")
+        return platform_key or ''
+
+
+def get_platform_api_key(llm_id: str) -> str:
+    """
+    Получить API-ключ платформы для указанной LLM.
+    
+    Args:
+        llm_id: ID LLM модели
+    
+    Returns:
+        API-ключ платформы или пустая строка
+    """
+    try:
+        # Получаем глобальные AI ключи из pyodide
+        global_ai_keys = get_pyodide_var('globalAIKeys', [])
+        
+        if not isinstance(global_ai_keys, list):
+            console_log(f"[PLATFORM_API_KEY] globalAIKeys не является списком: {type(global_ai_keys)}")
+            return ''
+        
+        # Ищем ключ для указанной LLM
+        for key_info in global_ai_keys:
+            if isinstance(key_info, dict) and key_info.get('id') == llm_id:
+                api_key = key_info.get('apiKey', '')
+                console_log(f"[PLATFORM_API_KEY] Найден ключ для {llm_id}: {'есть' if api_key else 'пустой'}")
+                return api_key
+        
+        console_log(f"[PLATFORM_API_KEY] Ключ для {llm_id} не найден в глобальных ключах")
+        return ''
+        
+    except Exception as e:
+        console_log(f"[PLATFORM_API_KEY] Ошибка получения платформенного ключа: {str(e)}")
+        return ''
 
 
 def get_safe_content_language(plugin_settings: Dict[str, Any]) -> str:
@@ -2733,12 +2796,22 @@ def get_default_model_id_from_manifest(analysis_type: str = 'basic_analysis', co
         analysis_prompts = prompts.get(analysis_type, {})
         lang_prompts = analysis_prompts.get(content_language, {})
         default_llm = lang_prompts.get('LLM', {}).get('default', None)
+        
+        # Проверяем, есть ли curl_file в default LLM
+        if isinstance(default_llm, dict) and 'curl_file' in default_llm:
+            # Для Default LLM с curl_file используем fallback модели
+            if analysis_type == 'basic_analysis':
+                return 'gemini-flash-lite'
+            elif analysis_type == 'deep_analysis':
+                return 'gemini-pro'
+        
         if isinstance(default_llm, dict) and 'model' in default_llm:
             return default_llm['model']
         if isinstance(default_llm, str):
             return default_llm
     except Exception as e:
-        pass
+        console_log(f"[DEFAULT_MODEL] Ошибка получения модели из manifest: {str(e)}")
+    
     # Fallback
     if analysis_type == 'basic_analysis':
         return 'gemini-flash-lite'

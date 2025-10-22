@@ -23,7 +23,7 @@ const LLMSelector: React.FC<LLMSelectorProps> = ({
   const { settings, updateBasicAnalysisSettings, updateDeepAnalysisSettings } = usePluginSettings();
   const [selectedLLM, setSelectedLLM] = useState<string>(defaultLLMCurl);
   const [apiKey, setApiKey] = useState<string>('');
-  const saveTimeoutRef = useRef<NodeJS.Timeout>();
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Загружаем API-ключ при монтировании компонента
   useEffect(() => {
@@ -65,6 +65,8 @@ const LLMSelector: React.FC<LLMSelectorProps> = ({
         : settings.deep_analysis[language].custom_prompt,
     });
 
+
+    // API-ключ передаем только для Default LLM
     onLLMChange(newLLM, newLLM === 'default' ? apiKey : undefined);
   };
 
@@ -106,7 +108,6 @@ const LLMSelector: React.FC<LLMSelectorProps> = ({
       <select
         value={selectedLLM}
         onChange={(e) => handleLLMChange(e.target.value)}
-        placeholder="Выберите нейросеть"
         style={{
           width: '100%',
           padding: '8px',
