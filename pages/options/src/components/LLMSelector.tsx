@@ -65,9 +65,8 @@ const LLMSelector: React.FC<LLMSelectorProps> = ({
         : settings.deep_analysis[language].custom_prompt,
     });
 
-
-    // API-ключ передаем только для Default LLM
-    onLLMChange(newLLM, newLLM === 'default' ? apiKey : undefined);
+    // API-ключ передаем для всех LLM, включая кастомные
+    onLLMChange(newLLM, apiKey || undefined);
   };
 
   // Сохраняем API ключ
@@ -113,7 +112,6 @@ const LLMSelector: React.FC<LLMSelectorProps> = ({
           padding: '8px',
           border: '1px solid #ccc',
           borderRadius: '4px',
-          backgroundColor: 'white',
           fontSize: '14px',
           marginBottom: '8px'
         }}
@@ -140,7 +138,6 @@ const LLMSelector: React.FC<LLMSelectorProps> = ({
               padding: '8px',
               border: '1px solid #ccc',
               borderRadius: '4px',
-              backgroundColor: 'white',
               fontSize: '14px'
             }}
           />

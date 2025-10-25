@@ -182,7 +182,6 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t, globalAIK
                 padding: '4px 8px',
                 border: '1px solid #ccc',
                 borderRadius: '4px',
-                backgroundColor: 'white',
                 fontSize: '14px'
               }}
             >
@@ -201,7 +200,6 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t, globalAIK
                 padding: '4px 8px',
                 border: '1px solid #ccc',
                 borderRadius: '4px',
-                backgroundColor: 'white',
                 fontSize: '14px'
               }}
             >
@@ -210,32 +208,6 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t, globalAIK
             </select>
           </div>
         </div>
-
-        {/* LLM Selector для текущего промпта и языка */}
-        <LLMSelector
-          promptType={promptType}
-          language={language}
-          globalAIKeys={globalAIKeys}
-          defaultLLMCurl={getDefaultLLMForPrompt(promptType, language)}
-          hasDefaultLLM={hasDefaultLLMForPrompt(promptType, language)}
-          onLLMChange={(llm, apiKey) => {
-            console.log(`LLM changed for ${promptType} ${language}:`, llm, apiKey);
-            // Сохраняем выбранную LLM в pluginSettings для передачи в mcp_server.py
-            const updatedPluginSettings = { ...pluginSettings } as any;
-            if (!updatedPluginSettings.selected_llms) {
-              updatedPluginSettings.selected_llms = {};
-            }
-            if (!updatedPluginSettings.selected_llms[promptType]) {
-              updatedPluginSettings.selected_llms[promptType] = {};
-            }
-            // Сохраняем только выбранную LLM (без api_key, так как он уже сохранен через APIKeyManager)
-            updatedPluginSettings.selected_llms[promptType][language] = llm;
-            // Обновляем pluginSettings через глобальный объект
-            if (typeof window !== 'undefined' && (window as any).pyodide && (window as any).pyodide.globals) {
-              (window as any).pyodide.globals.pluginSettings = updatedPluginSettings;
-            }
-          }}
-        />
 
         {/* Textarea */}
         <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
@@ -293,7 +265,6 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t, globalAIK
                 padding: '8px',
                 border: '1px solid #ccc',
                 borderRadius: '4px',
-                backgroundColor: 'white',
                 fontSize: '12px',
                 fontFamily: 'monospace',
                 resize: 'vertical'
@@ -301,6 +272,42 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t, globalAIK
             />
           </div>
         </div>
+
+        {/* LLM Selector для текущего промпта и языка */}
+        <LLMSelector
+          promptType={promptType}
+          language={language}
+          globalAIKeys={globalAIKeys}
+          defaultLLMCurl={getDefaultLLMForPrompt(promptType, language)}
+          hasDefaultLLM={hasDefaultLLMForPrompt(promptType, language)}
+          onLLMChange={(llm, apiKey) => {
+            console.log(`LLM changed for ${promptType} ${language}:`, llm, apiKey);
+            // Сохраняем выбранную LLM и API ключ в pluginSettings для передачи в mcp_server.py
+            const updatedPluginSettings = { ...pluginSettings } as any;
+            if (!updatedPluginSettings.selected_llms) {
+              updatedPluginSettings.selected_llms = {};
+            }
+            if (!updatedPluginSettings.selected_llms[promptType]) {
+              updatedPluginSettings.selected_llms[promptType] = {};
+            }
+            // Сохраняем выбранную LLM
+            updatedPluginSettings.selected_llms[promptType][language] = llm;
+
+            // Сохраняем API ключ если он предоставлен
+            if (!updatedPluginSettings.api_keys) {
+              updatedPluginSettings.api_keys = {};
+            }
+            if (apiKey) {
+              const keyId = `ozon-analyzer-${promptType}-${language}`;
+              updatedPluginSettings.api_keys[keyId] = apiKey;
+            }
+
+            // Обновляем pluginSettings через глобальный объект
+            if (typeof window !== 'undefined' && (window as any).pyodide && (window as any).pyodide.globals) {
+              (window as any).pyodide.globals.pluginSettings = updatedPluginSettings;
+            }
+          }}
+        />
 
         {/* Кнопка сохранения */}
         <div style={{ marginTop: '16px', textAlign: 'center' }}>
@@ -568,7 +575,6 @@ const PluginDetails = (props: PluginDetailsProps) => {
                 padding: '4px 8px',
                 border: '1px solid #ccc',
                 borderRadius: '4px',
-                backgroundColor: 'white',
                 fontSize: '14px',
                 minWidth: '120px'
               }}>
@@ -602,7 +608,6 @@ const PluginDetails = (props: PluginDetailsProps) => {
                 padding: '4px 8px',
                 border: '1px solid #ccc',
                 borderRadius: '4px',
-                backgroundColor: 'white',
                 fontSize: '14px'
               }}
             />
@@ -649,7 +654,6 @@ const PluginDetails = (props: PluginDetailsProps) => {
                 padding: '4px 8px',
                 border: '1px solid #ccc',
                 borderRadius: '4px',
-                backgroundColor: 'white',
                 fontSize: '14px'
               }}
             />

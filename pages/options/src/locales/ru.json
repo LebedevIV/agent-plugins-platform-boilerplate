@@ -39,7 +39,7 @@
         "type": "Тип промпта:",
         "basic_analysis": "Базовый",
         "deep_analysis": "Глубокий",
-        "language": "Язык:",
+        "language": "Язык промпта:",
         "russian": "Русский",
         "english": "Английский",
         "originalPrompt": "Оригинальный промпт (только чтение)",

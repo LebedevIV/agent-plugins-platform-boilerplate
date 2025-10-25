@@ -5065,25 +5065,27 @@ def get_selected_llm_for_analysis(plugin_settings: Dict[str, Any], analysis_type
     try:
         console_log(f"🔍 get_selected_llm_for_analysis: analysis_type={analysis_type}, content_language={content_language}")
 
-        # Проверяем настройки плагина на наличие кастомных LLM настроек
+        # Проверяем настройки плагина на наличие selected_llms
         if plugin_settings and isinstance(plugin_settings, dict):
-            llm_settings = safe_dict_get(plugin_settings, 'llm_settings', {})
-            if llm_settings and isinstance(llm_settings, dict):
-                # Ищем настройку для конкретного типа анализа и языка
-                analysis_key = f"{analysis_type}_{content_language}"
-                selected_llm = safe_dict_get(llm_settings, analysis_key, None)
+            selected_llms = safe_dict_get(plugin_settings, 'selected_llms', {})
+            if selected_llms and isinstance(selected_llms, dict):
+                # Ищем настройку для конкретного типа анализа
+                analysis_settings = safe_dict_get(selected_llms, analysis_type, {})
+                if analysis_settings and isinstance(analysis_settings, dict):
+                    # Ищем настройку для конкретного языка
+                    selected_llm = safe_dict_get(analysis_settings, content_language, None)
 
-                if selected_llm:
-                    console_log(f"✅ Найдена кастомная LLM для {analysis_key}: {selected_llm}")
-                    return selected_llm
+                    if selected_llm:
+                        console_log(f"✅ Найдена выбранная LLM для {analysis_type}.{content_language}: {selected_llm}")
+                        return selected_llm
 
                 # Fallback: ищем настройку только для типа анализа
-                selected_llm = safe_dict_get(llm_settings, analysis_type, None)
-                if selected_llm:
-                    console_log(f"✅ Найдена кастомная LLM для {analysis_type}: {selected_llm}")
+                selected_llm = safe_dict_get(selected_llms, analysis_type, None)
+                if selected_llm and isinstance(selected_llm, str):
+                    console_log(f"✅ Найдена выбранная LLM для {analysis_type}: {selected_llm}")
                     return selected_llm
 
-        console_log(f"ℹ️ Кастомная LLM не найдена, используем default")
+        console_log(f"ℹ️ Выбранная LLM не найдена, используем default")
         return 'default'
 
     except Exception as e:
@@ -5125,6 +5127,27 @@ def get_api_key_for_analysis(plugin_settings: Dict[str, Any], analysis_type: str
                     if api_key and isinstance(api_key, str) and len(api_key.strip()) > 0:
                         console_log(f"✅ Найден API ключ для варианта '{key_variant}': {api_key[:10]}...")
                         return api_key.strip()
+
+        # Для default LLM пытаемся получить ключ из глобальных настроек
+        if selected_llm == 'default':
+            console_log(f"ℹ️ Для default LLM пытаемся получить API ключ из глобальных настроек")
+            # Пытаемся получить API ключ для Gemini из глобальных настроек
+            try:
+                # Проверяем наличие gemini_api_key в plugin_settings
+                gemini_key = safe_dict_get(plugin_settings, 'gemini_api_key', None)
+                if gemini_key and isinstance(gemini_key, str) and len(gemini_key.strip()) > 0:
+                    console_log(f"✅ Найден Gemini API ключ в plugin_settings: {gemini_key[:10]}...")
+                    return gemini_key.strip()
+
+                # Проверяем наличие api_keys.gemini в plugin_settings
+                api_keys = safe_dict_get(plugin_settings, 'api_keys', {})
+                if api_keys and isinstance(api_keys, dict):
+                    gemini_key = safe_dict_get(api_keys, 'gemini', None)
+                    if gemini_key and isinstance(gemini_key, str) and len(gemini_key.strip()) > 0:
+                        console_log(f"✅ Найден Gemini API ключ в api_keys.gemini: {gemini_key[:10]}...")
+                        return gemini_key.strip()
+            except Exception as e:
+                console_log(f"⚠️ Ошибка при получении Gemini API ключа: {str(e)}")
 
         console_log(f"ℹ️ API ключ не найден в plugin_settings, будет использоваться ключ по умолчанию из background")
         return None

@@ -709,6 +709,14 @@ async function initializePyodide() {
           console.log('[OFFSCREEN_DIAGNOSIS] jsOptions.apiKeyId:', jsOptions.apiKeyId);
           console.log('[OFFSCREEN_DIAGNOSIS] window.geminiApiKey exists:', typeof window.geminiApiKey);
 
+          // Check pluginSettings for API key
+          console.log('[OFFSCREEN_DIAGNOSIS] Checking pluginSettings for API key...');
+          console.log('[OFFSCREEN_DIAGNOSIS] pluginSettings exists:', !!window.pluginSettings);
+          console.log('[OFFSCREEN_DIAGNOSIS] pluginSettings.api_keys exists:', !!(window.pluginSettings && window.pluginSettings.api_keys));
+          if (window.pluginSettings && window.pluginSettings.api_keys) {
+            console.log('[OFFSCREEN_DIAGNOSIS] Available API keys:', Object.keys(window.pluginSettings.api_keys));
+          }
+
           let apiKey = jsOptions.apiKey;
 
           // Если передан apiKeyId, получаем API-ключ через запрос к background
@@ -745,6 +753,26 @@ async function initializePyodide() {
             console.log('[OFFSCREEN_DIAGNOSIS] Using window.geminiApiKey:', !!apiKey, 'value:', apiKey ? 'present' : 'empty/null');
             console.log('[OFFSCREEN_DIAGNOSIS] window.geminiApiKey type:', typeof window.geminiApiKey);
             console.log('[OFFSCREEN_DIAGNOSIS] window.geminiApiKey length:', window.geminiApiKey ? window.geminiApiKey.length : 'N/A');
+          }
+
+          // Try to get API key from pluginSettings if still not found
+          if (!apiKey && window.pluginSettings && window.pluginSettings.api_keys) {
+            console.log('[OFFSCREEN_DIAGNOSIS] Trying to get API key from pluginSettings...');
+            // Try different key patterns
+            const keyPatterns = [
+              jsOptions.apiKeyId,
+              'gemini',
+              'default',
+              'ozon-analyzer-default'
+            ];
+
+            for (const pattern of keyPatterns) {
+              if (pattern && window.pluginSettings.api_keys[pattern]) {
+                apiKey = window.pluginSettings.api_keys[pattern];
+                console.log('[OFFSCREEN_DIAGNOSIS] ✅ Found API key in pluginSettings for pattern:', pattern);
+                break;
+              }
+            }
           }
 
           console.log('[OFFSCREEN_DIAGNOSIS] Final API key available:', !!apiKey);
@@ -1923,6 +1951,9 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     currentPluginId = pluginId;
     currentPageKey = pageKey;
     window.geminiApiKey = message.geminiApiKey;
+
+    // Store pluginSettings globally for API key access
+    window.pluginSettings = pluginSettings;
 
     // ПОЛУЧАЕМ HTML ДАННЫЕ ИЗ HTML_DIRECT STORAGE ИЛИ НАПРЯМУЮ
     let workflowPayload;
