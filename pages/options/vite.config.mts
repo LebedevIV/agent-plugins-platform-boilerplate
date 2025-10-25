@@ -12,7 +12,7 @@ const pkg = JSON.parse(readFileSync(resolve(__dirname, '../../package.json'), 'u
 function versionReplacePlugin() {
   return {
     name: 'html-version-replace',
-    transformIndexHtml(html) {
+    transformIndexHtml(html: string) {
       return html.replace(/__EXT_VERSION__/g, pkg.version);
     },
   };

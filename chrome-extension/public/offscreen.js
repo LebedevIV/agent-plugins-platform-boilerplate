@@ -99,6 +99,45 @@ let currentExecutionContext = {
   messageId: null
 };
 
+// Кэш для API ключей с механизмом fallback
+let apiKeyCache = new Map();
+const API_KEY_CACHE_TTL = 300000; // 5 минут TTL для кэшированных ключей
+
+// Функция для получения кэшированного API ключа
+function getCachedApiKey(keyId) {
+   const cached = apiKeyCache.get(keyId);
+   if (cached && (Date.now() - cached.timestamp) < API_KEY_CACHE_TTL) {
+     return cached.apiKey;
+   }
+   return null;
+}
+
+// Функция для кэширования API ключа
+function cacheApiKey(keyId, apiKey) {
+   if (apiKey) {
+     apiKeyCache.set(keyId, {
+       apiKey: apiKey,
+       timestamp: Date.now()
+     });
+   }
+}
+
+// Функция очистки устаревших кэшированных ключей
+function cleanupApiKeyCache() {
+   const now = Date.now();
+   const expiredKeys = [];
+
+   for (const [keyId, data] of apiKeyCache.entries()) {
+     if (now - data.timestamp > API_KEY_CACHE_TTL) {
+       expiredKeys.push(keyId);
+     }
+   }
+
+   expiredKeys.forEach(keyId => {
+     apiKeyCache.delete(keyId);
+   });
+}
+
 // Функция для обновления контекста выполнения
 function updateExecutionContext(updates) {
   Object.assign(currentExecutionContext, updates);
@@ -192,7 +231,8 @@ const LOG_FLAGS = {
   EXECUTION: false,
   CHANNEL: false,
   SYSTEM: false,
-  HTML_DIRECT: false
+  HTML_DIRECT: false,
+  RESPONSE: false
 };
 
 // Троттлинг для повторяющихся логов
@@ -650,9 +690,9 @@ async function initializePyodide() {
         try {
           const jsOptions = options?.toJs ? options.toJs() : options;
           const jsModelAlias = modelAlias?.toJs ? modelAlias.toJs() : modelAlias;
-
+  
           // 1. Обработка modelAlias - убрать :generateContent если присутствует
-          const cleanedModelAlias = jsModelAlias.replace(':generateContent', '');
+          let cleanedModelAlias = jsModelAlias.replace(':generateContent', '');
           // logDebug('PYODIDE', `Cleaned model alias: ${cleanedModelAlias}`);
 
           // Преобразовать тип анализа в техническое имя модели
@@ -664,18 +704,59 @@ async function initializePyodide() {
           // logDebug('PYODIDE', `Model mapping: ${cleanedModelAlias} -> ${technicalModelName} -> ${finalModelName}`);
 
           // 2. Получение API ключа из параметров или глобальной переменной
+          console.log('[OFFSCREEN_DIAGNOSIS] ===== API KEY RETRIEVAL IN LLM_CALL ====');
+          console.log('[OFFSCREEN_DIAGNOSIS] jsOptions.apiKey:', jsOptions.apiKey);
+          console.log('[OFFSCREEN_DIAGNOSIS] jsOptions.apiKeyId:', jsOptions.apiKeyId);
+          console.log('[OFFSCREEN_DIAGNOSIS] window.geminiApiKey exists:', typeof window.geminiApiKey);
+
           let apiKey = jsOptions.apiKey;
+
+          // Если передан apiKeyId, получаем API-ключ через запрос к background
+          if (jsOptions.apiKeyId && !apiKey) {
+            console.log('[OFFSCREEN_DIAGNOSIS] Requesting API key from background for keyId:', jsOptions.apiKeyId);
+            try {
+              // Используем safeSendMessage для предотвращения таймаутов
+              const response = await safeSendMessage({
+                type: 'GET_API_KEY',
+                data: { keyId: jsOptions.apiKeyId }
+              }, {
+                timeout: 10000, // 10 секунд таймаут для получения API ключа
+                retries: 2,
+                silent: false
+              });
+
+              console.log('[OFFSCREEN_DIAGNOSIS] Background response for API key:', response);
+
+              if (response.success && response.response && response.response.apiKey) {
+                apiKey = response.response.apiKey;
+                console.log('[OFFSCREEN_DIAGNOSIS] ✅ API key retrieved successfully');
+                // logDebug('PYODIDE', `API key retrieved for keyId: ${jsOptions.apiKeyId}`);
+              } else {
+                console.log('[OFFSCREEN_DIAGNOSIS] ❌ No API key in background response:', response.error || 'Unknown error');
+              }
+            } catch (error) {
+              console.error('[OFFSCREEN_DIAGNOSIS] ❌ Failed to get API key:', error);
+            }
+          }
 
           // Если API ключ не передан в параметрах, пытаемся получить из глобальной переменной
           if (!apiKey) {
             apiKey = window.geminiApiKey;
+            console.log('[OFFSCREEN_DIAGNOSIS] Using window.geminiApiKey:', !!apiKey, 'value:', apiKey ? 'present' : 'empty/null');
+            console.log('[OFFSCREEN_DIAGNOSIS] window.geminiApiKey type:', typeof window.geminiApiKey);
+            console.log('[OFFSCREEN_DIAGNOSIS] window.geminiApiKey length:', window.geminiApiKey ? window.geminiApiKey.length : 'N/A');
           }
 
+          console.log('[OFFSCREEN_DIAGNOSIS] Final API key available:', !!apiKey);
+
           // Если API ключ все еще не найден, возвращаем понятное сообщение об ошибке
-          if (!apiKey) {
+          if (!apiKey || apiKey.trim() === '') {
+            console.log('[OFFSCREEN_DIAGNOSIS] ❌ No API key found - this will cause LLM call failure');
+            console.log('[OFFSCREEN_DIAGNOSIS] ❌ Available sources checked: jsOptions.apiKey, jsOptions.apiKeyId, window.geminiApiKey');
             throw new Error('Gemini API key not provided. Please ensure the API key is configured in the extension settings and passed to the LLM call.');
           }
 
+          console.log('[OFFSCREEN_DIAGNOSIS] ===== API KEY RETRIEVAL COMPLETE ====');
           // logDebug('PYODIDE', 'Gemini API key retrieved successfully');
 
           // 3. Подготовка данных для запроса к Gemini API
@@ -694,7 +775,7 @@ async function initializePyodide() {
             }
           };
 
-          // 4. HTTP запрос к Gemini API - исправление двойной подстановки :generateContent
+          // 4. HTTP запрос к Gemini API с улучшенной обработкой ошибок и таймаутами
           // Проверяем, содержит ли finalModelName уже :generateContent
           let urlModelName = finalModelName;
           if (!finalModelName.includes(':generateContent')) {
@@ -704,78 +785,212 @@ async function initializePyodide() {
 
           const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${urlModelName}?key=${apiKey}`;
 
-          // logDebug('PYODIDE', `Making request to Gemini API: ${geminiUrl}`);
+          // Making Gemini API request
 
-          const response = await fetch(geminiUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestBody)
-          });
+          // Создаем AbortController для возможности отмены запроса
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => {
+            controller.abort();
+          }, 30000); // 30 секунд таймаут для API запроса
+
+          let response;
+          try {
+            response = await fetch(geminiUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(requestBody),
+              signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+          } catch (fetchError) {
+            clearTimeout(timeoutId);
+            console.error('[LLM_ERROR_HANDLING] Fetch error:', fetchError.message);
+
+            // Проверяем тип ошибки
+            if (fetchError.name === 'AbortError') {
+              throw new Error('Gemini API request timed out after 30 seconds');
+            } else if (fetchError.name === 'TypeError' && fetchError.message.includes('fetch')) {
+              throw new Error('Network error: Unable to connect to Gemini API. Check your internet connection.');
+            } else {
+              throw new Error(`Network error during Gemini API call: ${fetchError.message}`);
+            }
+          }
 
           if (!response.ok) {
-            // ДОСТАТЬ ПОЛНЫЙ ОБЪЕКТ ОШИБКИ API ДЛЯ ПЕРЕДАЧИ В PYTHON
+            // ДОСТАТЬ ПОЛНЫЙ ОБЪЕКТ ОШИБКИ API ДЛЯ ПЕРЕДАЧИ В PYTHON с улучшенной обработкой
             let apiErrorData = null;
+            let errorText = '';
+
             try {
-              const errorText = await response.text();
+              errorText = await response.text();
+              console.log('[LLM_ERROR_HANDLING] API error response text:', errorText);
+
               // Попытаться распарсить как JSON для получения полного объекта ошибки
               try {
                 apiErrorData = JSON.parse(errorText);
+                console.log('[LLM_ERROR_HANDLING] Parsed API error:', JSON.stringify(apiErrorData, null, 2));
               } catch (parseError) {
+                console.log('[LLM_ERROR_HANDLING] Could not parse error as JSON, using as plain text');
                 // Если не JSON, сохранить как текст
-                apiErrorData = { error: { message: errorText, status: response.status } };
+                apiErrorData = {
+                  error: {
+                    message: errorText || `HTTP ${response.status} error`,
+                    status: response.status,
+                    rawText: errorText
+                  }
+                };
               }
             } catch (textError) {
-              apiErrorData = { error: { message: `HTTP ${response.status}`, status: response.status } };
+              console.error('[LLM_ERROR_HANDLING] Failed to read error response text:', textError);
+              apiErrorData = {
+                error: {
+                  message: `HTTP ${response.status}: Failed to read error details`,
+                  status: response.status,
+                  readError: textError.message
+                }
+              };
             }
 
-            // Создать объект ошибки с полными данными API
-            const errorObj = new Error(`Gemini API error (${response.status}): ${apiErrorData?.error?.message || 'Unknown error'}`);
+            // Определить тип ошибки и создать понятное сообщение
+            let errorMessage = `Gemini API error (${response.status})`;
+            let errorType = 'api_error';
+
+            if (response.status === 400) {
+              errorMessage = 'Invalid request to Gemini API (400 Bad Request)';
+              errorType = 'invalid_request';
+            } else if (response.status === 401) {
+              errorMessage = 'Invalid API key - please check your Gemini API key (401 Unauthorized)';
+              errorType = 'authentication_error';
+            } else if (response.status === 403) {
+              errorMessage = 'API key does not have permission for this operation (403 Forbidden)';
+              errorType = 'permission_error';
+            } else if (response.status === 429) {
+              errorMessage = 'Rate limit exceeded - please try again later (429 Too Many Requests)';
+              errorType = 'rate_limit_error';
+            } else if (response.status === 500) {
+              errorMessage = 'Gemini API server error - please try again later (500 Internal Server Error)';
+              errorType = 'server_error';
+            } else if (response.status >= 500) {
+              errorMessage = `Gemini API server error (${response.status}) - please try again later`;
+              errorType = 'server_error';
+            } else if (apiErrorData?.error?.message) {
+              errorMessage = `Gemini API error (${response.status}): ${apiErrorData.error.message}`;
+            }
+
+            console.error(`[LLM_ERROR_HANDLING] ${errorMessage} (type: ${errorType})`);
+
+            // Создать объект ошибки с полными данными API и дополнительной информацией
+            const errorObj = new Error(errorMessage);
             errorObj.apiError = apiErrorData;
             errorObj.status = response.status;
+            errorObj.errorType = errorType;
+            errorObj.requestDetails = {
+              model: urlModelName,
+              promptLength: (jsOptions.prompt || jsOptions.message || '').length,
+              temperature: jsOptions.temperature || 0.7,
+              maxTokens: jsOptions.maxOutputTokens || 1024
+            };
+
             throw errorObj;
           }
 
           const responseData = await response.json();
-          // logDebug('PYODIDE', 'Gemini API response received successfully');
 
-          // 5. Обработка ответа от Gemini API
-          if (!responseData.candidates || !responseData.candidates[0] || !responseData.candidates[0].content) {
-            throw new Error('Invalid response format from Gemini API');
+          // 5. Обработка ответа от Gemini API с улучшенной валидацией
+          if (!responseData) {
+            throw new Error('Empty response from Gemini API');
           }
 
-          const generatedText = responseData.candidates[0].content.parts
-            .map(part => part.text)
+          if (!responseData.candidates || !Array.isArray(responseData.candidates) || responseData.candidates.length === 0) {
+            throw new Error('Invalid response format from Gemini API: no candidates array');
+          }
+
+          const firstCandidate = responseData.candidates[0];
+          if (!firstCandidate || !firstCandidate.content) {
+            throw new Error('Invalid response format from Gemini API: no content in response');
+          }
+
+          if (!firstCandidate.content.parts || !Array.isArray(firstCandidate.content.parts) || firstCandidate.content.parts.length === 0) {
+            throw new Error('Invalid response format from Gemini API: no parts in content');
+          }
+
+          const generatedText = firstCandidate.content.parts
+            .map(part => part.text || '')
+            .filter(text => text.trim().length > 0)
             .join('');
 
-          if (!generatedText) {
-            throw new Error('No text generated by Gemini API');
+          if (!generatedText || generatedText.trim().length === 0) {
+            throw new Error('Gemini API returned empty response - no text was generated');
           }
-
-          // logDebug('PYODIDE', `LLM call completed successfully, response length: ${generatedText.length}`);
 
           // ВОЗВРАЩАЕМ РЕЗУЛЬТАТ С ДОПОЛНИТЕЛЬНОЙ ИНФОРМАЦИЕЙ ДЛЯ ДИАГНОСТИКИ
           const resultObject = {
             result: generatedText,
             model: cleanedModelAlias,
             response_length: generatedText.length,
-            raw_response: responseData
+            api_key_source: apiKey ? 'provided' : 'window.geminiApiKey',
+            raw_response: responseData,
+            request_info: {
+              model: urlModelName,
+              prompt_length: (jsOptions.prompt || jsOptions.message || '').length,
+              timestamp: Date.now()
+            }
           };
 
           return pyodide.toPy(resultObject);
 
         } catch (error) {
-          // logError('PYODIDE', 'LLM call failed:', error);
+          // ПЕРЕДАТЬ ПОЛНЫЙ ОБЪЕКТ ОШИБКИ API В PYTHON с улучшенной обработкой
+          let errorMessage = error.message;
+          let errorType = 'unknown_error';
 
-          // ПЕРЕДАТЬ ПОЛНЫЙ ОБЪЕКТ ОШИБКИ API В PYTHON
-          const errorMessage = error.message.includes('API key not found')
-            ? 'Gemini API key not configured. Please set your API key in the extension settings.'
-            : `Gemini API call failed: ${error.message}`;
+          // Определить тип ошибки для более понятных сообщений
+          if (error.message.includes('API key not available') || error.message.includes('API key not found')) {
+            errorType = 'api_key_error';
+            errorMessage = 'Gemini API key not configured. Please set your API key in the extension settings.';
+          } else if (error.message.includes('timed out') || error.message.includes('timeout')) {
+            errorType = 'timeout_error';
+            errorMessage = 'Request timed out. The Gemini API may be experiencing high load.';
+          } else if (error.message.includes('Network error') || error.message.includes('Failed to fetch')) {
+            errorType = 'network_error';
+            errorMessage = 'Network connection error. Please check your internet connection and try again.';
+          } else if (error.message.includes('Invalid API key') || error.status === 401) {
+            errorType = 'authentication_error';
+            errorMessage = 'Invalid API key provided. Please check your Gemini API key in the extension settings.';
+          } else if (error.message.includes('Rate limit') || error.status === 429) {
+            errorType = 'rate_limit_error';
+            errorMessage = 'API rate limit exceeded. Please wait a moment before trying again.';
+          } else if (error.status >= 500) {
+            errorType = 'server_error';
+            errorMessage = 'Gemini API server error. Please try again in a few moments.';
+          } else if (error.message.includes('Invalid response format')) {
+            errorType = 'response_format_error';
+            errorMessage = 'Unexpected response format from Gemini API. This may be a temporary issue.';
+          } else if (error.message.includes('Empty response')) {
+            errorType = 'empty_response_error';
+            errorMessage = 'Gemini API returned an empty response. Please try again.';
+          } else {
+            errorType = 'api_call_error';
+            errorMessage = `Gemini API call failed: ${error.message}`;
+          }
+
+          // Provide fallback values for variables that might not be defined if error occurs early
+          const safeCleanedModelAlias = (typeof cleanedModelAlias !== 'undefined' ? cleanedModelAlias : (typeof jsModelAlias !== 'undefined' ? jsModelAlias : 'unknown'));
+          const safeApiKeySource = (typeof apiKey !== 'undefined' && apiKey) ? 'provided' : 'window.geminiApiKey';
 
           const errorResult = {
             error: errorMessage,
-            api_error: error.apiError || null  // Передаем полный объект ошибки API
+            error_type: errorType,
+            api_error: error.apiError || null,  // Передаем полный объект ошибки API
+            status: error.status || null,
+            request_info: {
+              model: safeCleanedModelAlias,
+              api_key_source: safeApiKeySource,
+              timestamp: Date.now()
+            },
+            recoverable: ['timeout_error', 'network_error', 'rate_limit_error', 'server_error'].includes(errorType)
           };
 
           return pyodide.toPy(errorResult);
@@ -943,7 +1158,8 @@ function handleHtmlChunk(chunkMessage) {
       receivedChunks: 0,
       metadata,
       completed: false,
-      assembledNotified: false // Track if background acknowledged HTML_ASSEMBLED
+      assembledNotified: false, // Track if background acknowledged HTML_ASSEMBLED
+      startTime: Date.now()   // Track when transfer started for timeout handling
     });
     // logInfo('CHUNKING', `Initialized new transfer: ${transferId} (${totalChunks} chunks)`);
   }
@@ -973,6 +1189,9 @@ function handleHtmlChunk(chunkMessage) {
 
     // Automatically mark transfer as completed when all chunks are received
     transfer.completed = true;
+
+    // Очистить кэш API ключей периодически для предотвращения утечек памяти
+    cleanupApiKeyCache();
 
     // Assemble the complete HTML from all chunks
     const assembledHtml = transfer.chunks.join('');
@@ -1116,71 +1335,20 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
     // logInfo('EXECUTION', `Шаг 4: Загрузка Python скрипта - ${new Date(Date.now()).toISOString()}`);
     const pyScriptUrl = chrome.runtime.getURL(`/plugins/${pluginId}/mcp_server.py`);
 
-    console.log("[PYODIDE_LOAD] 🔗 Loading Python script from:", pyScriptUrl);
-
     const response = await fetch(pyScriptUrl);
 
-    console.log("[PYODIDE_LOAD] 📡 Fetch response status:", response.status, response.statusText);
     if (!response.ok) {
-      console.error("[PYODIDE_LOAD] ❌ Failed to fetch Python script:", response.status, response.statusText);
       throw new Error(`Failed to load Python script: ${response.status} ${response.statusText}`);
     }
 
     const pythonCode = await response.text();
 
-    console.log("[PYODIDE_LOAD] 📄 Python code loaded, length:", pythonCode.length, "characters");
-    console.log("[PYODIDE_LOAD] 📋 First 200 characters:", pythonCode.substring(0, 200));
     if (pythonCode.length === 0) {
       throw new Error("Python script is empty");
     }
 
-    // logInfo('EXECUTION', `Шаг 5: Python скрипт загружен (${pythonCode.length} символов) - ${new Date(Date.now()).toISOString()}`);
-
     // Execute the Python code
     await pyodide.runPythonAsync(pythonCode);
-
-    console.log("[PYODIDE_LOAD] ✅ Python code executed successfully");
-
-    console.log("[PYODIDE_LOAD] 🔍 Проверяем содержимое pyodide.globals после выполнения...");
-    try {
-      const globalsKeys = Array.from(pyodide.globals.keys());
-      console.log("[PYODIDE_LOAD] 📊 Всего ключей в globals:", globalsKeys.length);
-      console.log("[PYODIDE_LOAD] 🔍 Первые 20 ключей:", globalsKeys.slice(0, 20));
-
-      const functions = globalsKeys.filter(key => {
-        try {
-          const value = pyodide.globals[key];
-          return typeof value === 'function';
-        } catch (e) {
-          return false;
-        }
-      });
-
-      console.log("[PYODIDE_LOAD] 📊 Функций в globals:", functions.length);
-      console.log("[PYODIDE_LOAD] 🔧 Доступные функции:", functions.slice(0, 10));
-
-      const hasAnalyzeFunction = pyodide.globals.has('analyze_ozon_product');
-      console.log("[PYODIDE_LOAD] 🎯 analyze_ozon_product в globals:", hasAnalyzeFunction);
-
-      if (!hasAnalyzeFunction) {
-        console.log("[PYODIDE_LOAD] ⚠️ analyze_ozon_product НЕ НАЙДЕНА! Проверим возможные варианты:");
-        const similarNames = functions.filter(name => name.includes('analyze') || name.includes('ozon'));
-        console.log("[PYODIDE_LOAD] 🔍 Похожие имена функций:", similarNames);
-      }
-
-    } catch (checkError) {
-      console.error("[PYODIDE_LOAD] ❌ Ошибка проверки globals:", checkError);
-    }
-
-    console.log("[PYODIDE_LOAD] 🔍 Проверяем наличие исключений в Python...");
-    try {
-      const pyStderr = pyodide.globals.get('__stderr__');
-      if (pyStderr) {
-        console.log("[PYODIDE_LOAD] 📄 Python stderr:", pyStderr);
-      }
-    } catch (e) {
-      // Игнорируем ошибки чтения stderr
-    }
 
     // Get the main workflow function
     const workflowFunction = pyodide.globals.get('analyze_ozon_product');
@@ -1362,7 +1530,6 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
       logError('PYODIDE', '❌ Critical pre-call check failed:', criticalError);
     }
 
-    console.log("[PYODIDE_DEBUG] Starting Pyodide execution...");
     let resultProxy;
     try {
       // Передать HTML данные как параметры функции
@@ -1372,10 +1539,7 @@ async function executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, req
         workflowPayload.page_html.length, // total_length
         workflowPayload.page_html // chunk_0
       );
-
-      logInfo('PYODIDE', 'Python function called successfully with parameters');
     } catch (callError) {
-      console.error("[PYODIDE_DEBUG] Pyodide execution error:", callError);
       throw callError;
     }
 
@@ -1756,11 +1920,8 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     const useChunks = message.useChunks || false;
     const pluginSettings = message.pluginSettings;
 
-    // ОБНОВИТЬ ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ JS BRIDGE - ИСПРАВЛЕНИЕ HARDCODED PAGEKEY
     currentPluginId = pluginId;
     currentPageKey = pageKey;
-
-    // ДОБАВИТЬ ЭТУ СТРОКУ:
     window.geminiApiKey = message.geminiApiKey;
 
     // ПОЛУЧАЕМ HTML ДАННЫЕ ИЗ HTML_DIRECT STORAGE ИЛИ НАПРЯМУЮ
@@ -1895,5 +2056,190 @@ if (listenerResultValue && typeof listenerResultValue.then === 'function') {
   logInfo('SYSTEM', 'Result does not have .then() method - no Promise handling needed');
   logDebug('SYSTEM', 'Message handler setup completed (no Promise)');
 }
+
+// === API KEY DIAGNOSTICS AND TESTING FUNCTIONS ===
+
+/**
+ * Dedicated test function for API key storage and retrieval
+ * This function will help isolate the API key timeout issue
+ */
+async function testAPIKeyRetrieval() {
+  try {
+    // Test 1: Direct APIKeyManager.getDecryptedKey test (if available)
+    if (typeof APIKeyManager !== 'undefined') {
+      try {
+        // Test different key IDs that might be used
+        const testKeyIds = ['gemini-flash-lite', 'ozon-analyzer-default', 'default'];
+
+        for (const keyId of testKeyIds) {
+          const startTime = Date.now();
+          const key = await APIKeyManager.getDecryptedKey(keyId);
+          const endTime = Date.now();
+        }
+      } catch (keyError) {
+        console.error('[API_KEY_TEST] ❌ APIKeyManager.getDecryptedKey failed:', keyError);
+      }
+    }
+
+    // Test 2: Check chrome.storage.local directly
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      try {
+        const result = await chrome.storage.local.get(['encryptedApiKeys', 'encryptionKey']);
+      } catch (storageError) {
+        console.error('[API_KEY_TEST] ❌ chrome.storage.local access failed:', storageError);
+      }
+    }
+
+    // Test 3: Test message passing to background
+    const testMessage = {
+      type: 'GET_API_KEY',
+      data: { keyId: 'gemini-flash-lite' }
+    };
+
+    const response = await safeSendMessage(testMessage, {
+      timeout: 15000, // 15 second timeout for testing
+      retries: 2,
+      silent: false
+    });
+
+    // Test 4: Test cached API key mechanism
+    const cacheKeyId = 'test-cache-key';
+    const cached = getCachedApiKey(cacheKeyId);
+
+    // Cache a test key
+    cacheApiKey(cacheKeyId, 'test-api-key-12345');
+    const cachedAfterSet = getCachedApiKey(cacheKeyId);
+
+  } catch (error) {
+    console.error('[API_KEY_TEST] ❌ Test execution failed:', error);
+  }
+}
+
+// Function to check if encrypted API keys exist in chrome.storage.local
+async function checkEncryptedAPIKeys() {
+  try {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      const result = await chrome.storage.local.get(null); // Get all storage
+    } else {
+      console.error('[STORAGE_CHECK] ❌ chrome.storage.local not available');
+    }
+
+  } catch (error) {
+    console.error('[STORAGE_CHECK] ❌ Storage check failed:', error);
+  }
+}
+
+// Enhanced logging function for API key message flow
+function logAPIKeyMessageFlow(message, direction, additionalInfo = {}) {
+  const timestamp = new Date().toISOString();
+  const logEntry = {
+    timestamp,
+    direction, // 'offscreen->background' or 'background->offscreen'
+    type: message.type,
+    keyId: message.data?.keyId || message.keyId || 'unknown',
+    hasResponse: !!message.apiKey,
+    messageId: message.messageId || 'none',
+    ...additionalInfo
+  };
+
+  console.log(`[API_KEY_TRACE] ${direction}:`, logEntry);
+
+  // Store trace for analysis
+  if (!window.apiKeyTraces) {
+    window.apiKeyTraces = [];
+  }
+  window.apiKeyTraces.push(logEntry);
+}
+
+// Make test functions available globally for debugging
+window.testAPIKeyRetrieval = testAPIKeyRetrieval;
+window.checkEncryptedAPIKeys = checkEncryptedAPIKeys;
+
+// Initialize the enhanced LLM call after jsBridge is ready
+(async function() {
+  try {
+    // Wait for jsBridge to be available
+    while (!pyodide || !pyodide.globals.get('js')) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    const jsBridge = pyodide.globals.get('js');
+    const originalLLMCall = jsBridge.llm_call;
+    jsBridge.llm_call = async function(modelAlias, options) {
+      try {
+        const jsOptions = options?.toJs ? options.toJs() : options;
+        const jsModelAlias = modelAlias?.toJs ? modelAlias.toJs() : modelAlias;
+
+        // 1. Обработка modelAlias - убрать :generateContent если присутствует
+        let cleanedModelAlias;
+        if (jsModelAlias && typeof jsModelAlias === 'string') {
+          cleanedModelAlias = jsModelAlias.replace(':generateContent', '');
+        } else {
+          cleanedModelAlias = jsModelAlias || 'unknown';
+        }
+
+        // Ensure cleanedModelAlias is always defined
+        if (typeof cleanedModelAlias === 'undefined') {
+          cleanedModelAlias = 'unknown';
+        }
+
+        let apiKey = jsOptions.apiKey;
+
+        // Enhanced logging for API key retrieval
+        if (jsOptions.apiKeyId && !apiKey) {
+          console.log('[OFFSCREEN_DIAGNOSIS] Requesting API key from background:', jsOptions.apiKeyId);
+          const getApiKeyMessage = {
+            type: 'GET_API_KEY',
+            data: { keyId: jsOptions.apiKeyId }
+          };
+
+          const response = await safeSendMessage(getApiKeyMessage, {
+            timeout: 10000,
+            retries: 2,
+            silent: false
+          });
+
+          console.log('[OFFSCREEN_DIAGNOSIS] API key response:', {
+            success: response.success,
+            hasApiKey: !!(response.response && response.response.apiKey),
+            apiKeyLength: response.response && response.response.apiKey ? response.response.apiKey.length : 0
+          });
+
+          if (response.success && response.response) {
+            if (response.response.apiKey) {
+              apiKey = response.response.apiKey;
+              console.log('[OFFSCREEN_DIAGNOSIS] ✅ API key retrieved from background successfully');
+            } else {
+              console.log('[OFFSCREEN_DIAGNOSIS] ⚠️ API key response received but no apiKey field');
+            }
+          } else {
+            console.log('[OFFSCREEN_DIAGNOSIS] ❌ Failed to retrieve API key from background:', response.error);
+          }
+        }
+
+        // Modify jsOptions to include the retrieved apiKey
+        if (apiKey) {
+          jsOptions.apiKey = apiKey;
+        } else {
+          console.log('[OFFSCREEN_DIAGNOSIS] ❌ No API key available for LLM call - this will cause failure');
+        }
+
+        // Convert back to Pyodide objects
+        const modifiedOptions = pyodide.toPy(jsOptions);
+        const modifiedModelAlias = pyodide.toPy(cleanedModelAlias);
+
+        // Call original function with modified parameters
+        return await originalLLMCall.call(this, modifiedModelAlias, modifiedOptions);
+
+      } catch (error) {
+        console.error('[OFFSCREEN_DIAGNOSIS] Error in enhanced llm_call:', error);
+        throw error;
+      }
+    };
+
+  } catch (error) {
+    console.error('[OFFSCREEN_DIAGNOSIS] Failed to initialize enhanced LLM call:', error);
+  }
+})();
 
 logInfo('SYSTEM', 'Offscreen document ready, waiting for messages...');

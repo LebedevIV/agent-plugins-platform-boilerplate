@@ -866,8 +866,12 @@ class OzonAnalyzerServer:
             'total_requests': total_requests
         }
 
-    async def _call_ai_model(self, model_alias: str, prompt: str, context: Optional[str] = None) -> str:
-        console_log(f"OZON_ANALYZER_LLM_DEBUG: _call_ai_model вызван с model_alias={model_alias}, prompt_length={len(prompt)}")
+    async def _call_ai_model(self, model_alias: str, prompt: str, context: Optional[str] = None, api_key_id: Optional[str] = None) -> str:
+        console_log(f"OZON_ANALYZER_LLM_DEBUG: _call_ai_model вызван с model_alias={model_alias}, prompt_length={len(prompt)}, api_key_id={api_key_id}")
+        console_log(f"[DIAGNOSIS] ===== _CALL_AI_MODEL ENTRY =====")
+        console_log(f"[DIAGNOSIS] model_alias: {model_alias}")
+        console_log(f"[DIAGNOSIS] prompt preview: {prompt[:100]}...")
+        console_log(f"[DIAGNOSIS] api_key_id: {api_key_id}")
         """
         Асинхронный вызов AI модели с кешированием.
         Ключ кеша формируется на основе model_alias и prompt.
@@ -907,20 +911,46 @@ class OzonAnalyzerServer:
 
         try:
 
-            # Асинхронный вызов AI модели
-            response_proxy = await js.llm_call(model_alias, {"prompt": prompt, "maxOutputTokens": 4096})
-
+            # Асинхронный вызов AI модели с передачей apiKeyId
+            llm_options = {"prompt": prompt, "maxOutputTokens": 4096}
+            if api_key_id:
+                llm_options["apiKeyId"] = api_key_id
+            console_log(f"[LLM_CALL] Вызов js.llm_call с options: {llm_options}")
+            console_log(f"[DIAGNOSIS] ===== LLM CALL DIAGNOSTICS =====")
+            console_log(f"[DIAGNOSIS] model_alias: {model_alias}")
+            console_log(f"[DIAGNOSIS] api_key_id: {api_key_id}")
+            console_log(f"[DIAGNOSIS] prompt length: {len(prompt)}")
+            console_log(f"[DIAGNOSIS] llm_options keys: {list(llm_options.keys()) if isinstance(llm_options, dict) else 'not dict'}")
+    
+            # DIAGNOSTIC: Check if js.llm_call exists
+            console_log(f"[DIAGNOSIS] js object exists: {hasattr(js, 'llm_call') if 'js' in globals() else 'js not in globals'}")
+            if 'js' in globals() and hasattr(js, 'llm_call'):
+                console_log(f"[DIAGNOSIS] js.llm_call is function: {callable(getattr(js, 'llm_call', None))}")
+            else:
+                console_log(f"[DIAGNOSIS] ❌ js.llm_call not available!")
+    
+            response_proxy = await js.llm_call(model_alias, llm_options)
+    
+            console_log(f"[DIAGNOSIS] js.llm_call returned: {response_proxy is not None}")
+            console_log(f"[DIAGNOSIS] response_proxy type: {type(response_proxy)}")
+    
             if response_proxy is None:
                 console_log(f"[BRIDGE DIAGNOSTIC] ❌ js.llm_call вернул None!")
+                console_log(f"[DIAGNOSIS] ===== LLM CALL DIAGNOSTICS END (NULL RESPONSE) =====")
                 raise Exception("js.llm_call вернул None")
-
+    
             # Правильная обработка PyodideFuture
             if hasattr(response_proxy, 'to_py'):
                 # Если это PyodideFuture, конвертируем
+                console_log(f"[DIAGNOSIS] Converting PyodideFuture with to_py()")
                 result = response_proxy.to_py()
             else:
                 # Если уже готовый результат
+                console_log(f"[DIAGNOSIS] Using direct result (no to_py needed)")
                 result = response_proxy
+    
+            console_log(f"[DIAGNOSIS] Final result type: {type(result)}")
+            console_log(f"[DIAGNOSIS] ===== LLM CALL DIAGNOSTICS END =====")
 
             # ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ СЫРОГО ОТВЕТА ОТ js.llm_call
             console_log("[RAW JS RESPONSE] ===== СЫРОЙ ОТВЕТ ОТ js.llm_call =====")
@@ -1080,10 +1110,15 @@ class OzonAnalyzerServer:
                     metrics = self._get_cache_metrics()
                     # console_log(f"Кеш метрики обновлены: {metrics['cache_size']}/{metrics['max_size']} записей, {metrics['hit_rate_percent']}% hit rate")
 
+            console_log(f"[DIAGNOSIS] ===== _CALL_AI_MODEL SUCCESSFUL RETURN =====")
+            console_log(f"[DIAGNOSIS] Response length: {len(response_text)}")
             # console_log(f"AI вызов завершен (~{response_time}ms)")
             return response_text
 
         except Exception as e:
+            console_log(f"[DIAGNOSIS] ===== _CALL_AI_MODEL EXCEPTION =====")
+            console_log(f"[DIAGNOSIS] Exception type: {type(e).__name__}")
+            console_log(f"[DIAGNOSIS] Exception message: {str(e)}")
             plugin_settings = get_pyodide_var('pluginSettings', {})
             content_language = get_safe_content_language(plugin_settings)
             if content_language == "ru":
@@ -2466,16 +2501,19 @@ async def _analyze_product_async(description: str, composition: str, categories:
     if plugin_settings is None:
         plugin_settings = {}
 
-    # Запускаем анализ соответствия и поиск аналогов параллельно
-    analysis_task = _analyze_composition_vs_description(description, composition, plugin_settings, content_language)
+    # Запускаем анализ соответствия и поиск аналогов последовательно для избежания конфликтов
+    analysis_result = await _analyze_composition_vs_description(description, composition, plugin_settings, content_language)
 
-    # Проверяем настройку search_for_analogs
+    # Проверяем настройку search_for_analogs и запускаем поиск аналогов отдельно
+    analogs = []
     if plugin_settings.get('search_for_analogs', False):
-        analogs_task = _find_similar_products(categories, composition, plugin_settings, content_language)
+        try:
+            analogs = await _find_similar_products(categories, composition, plugin_settings, content_language)
+        except Exception as analog_error:
+            console_log(f"Ошибка при поиске аналогов: {analog_error}")
+            analogs = [{"name": f"Ошибка поиска аналогов: {str(analog_error)}", "error": True}]
     else:
-        analogs_task = asyncio.create_task(asyncio.sleep(0, []))
-
-    analysis_result, analogs = await asyncio.gather(analysis_task, analogs_task, return_exceptions=True)
+        analogs = []
 
     # Обрабатываем исключения
     if isinstance(analysis_result, Exception):
@@ -2562,32 +2600,61 @@ def get_selected_llm_config(plugin_settings: Optional[Dict[str, Any]] = None) ->
     console_log("[LLM_CONFIG] ===== КОНЕЦ ПОЛУЧЕНИЯ КОНФИГУРАЦИИ LLM =====")
 
     return result
-def get_api_key_for_analysis(plugin_settings: Optional[Dict[str, Any]] = None, 
-                           analysis_type: str = 'basic_analysis', 
-                           content_language: str = 'ru', 
-                           selected_llm: str = 'default') -> str:
+def get_api_key_for_analysis(plugin_settings: Optional[Dict[str, Any]] = None,
+                            analysis_type: str = 'basic_analysis',
+                            content_language: str = 'ru',
+                            selected_llm: str = 'default') -> str:
     """
     Получить правильный API-ключ для анализа.
-    
+
     Args:
         plugin_settings: Настройки плагина
         analysis_type: Тип анализа ('basic_analysis' или 'deep_analysis')
         content_language: Язык контента ('ru' или 'en')
         selected_llm: Выбранная LLM ('default' или платформенная)
-    
+
     Returns:
         ID ключа для использования в js.llm_call
     """
-    console_log(f"[API_KEY] Получение API-ключа для {analysis_type}.{content_language}, LLM: {selected_llm}")
-    
+    console_log(f"[DIAGNOSIS] ===== API KEY RETRIEVAL DIAGNOSTICS =====")
+    console_log(f"[DIAGNOSIS] Input parameters: analysis_type='{analysis_type}', content_language='{content_language}', selected_llm='{selected_llm}'")
+
+    # DIAGNOSTIC: Log plugin_settings structure
+    console_log(f"[DIAGNOSIS] plugin_settings type: {type(plugin_settings)}")
+    if plugin_settings:
+        console_log(f"[DIAGNOSIS] plugin_settings keys: {list(plugin_settings.keys()) if isinstance(plugin_settings, dict) else 'not dict'}")
+        api_keys = safe_dict_get(plugin_settings, 'api_keys', {})
+        console_log(f"[DIAGNOSIS] api_keys from plugin_settings: {api_keys}")
+    else:
+        console_log(f"[DIAGNOSIS] plugin_settings is None")
+        api_keys = {}
+
+    # DIAGNOSTIC: Check for API key availability
+    console_log(f"[DIAGNOSIS] Checking API key availability...")
+
     if selected_llm == 'default':
         # Для Default LLM используем специфичный ключ для комбинации
         key_id = f'ozon-analyzer-{analysis_type}-{content_language}'
-        console_log(f"[API_KEY] Используем специфичный ключ: {key_id}")
-        return key_id
+        console_log(f"[DIAGNOSIS] Generated key_id for default LLM: {key_id}")
+
+        # Проверяем, есть ли конкретный ключ в api_keys для этой комбинации
+        specific_key = safe_dict_get(api_keys, key_id, '')
+        console_log(f"[DIAGNOSIS] Specific key {key_id} exists: {bool(specific_key and specific_key.strip())}")
+
+        if specific_key and specific_key.strip():
+            console_log(f"[DIAGNOSIS] ✅ Using specific key: {key_id}")
+            console_log(f"[DIAGNOSIS] ===== API KEY DIAGNOSTICS COMPLETE =====")
+            return key_id
+        else:
+            # Fallback на платформенный ключ из manifest
+            model_alias = get_default_model_id_from_manifest(analysis_type, content_language, plugin_settings)
+            console_log(f"[DIAGNOSIS] ❌ Specific key {key_id} not set, falling back to platform key: {model_alias}")
+            console_log(f"[DIAGNOSIS] ===== API KEY DIAGNOSTICS COMPLETE =====")
+            return model_alias
     else:
         # Для платформенной LLM используем её ID
-        console_log(f"[API_KEY] Используем платформенный ключ: {selected_llm}")
+        console_log(f"[DIAGNOSIS] ✅ Using platform key: {selected_llm}")
+        console_log(f"[DIAGNOSIS] ===== API KEY DIAGNOSTICS COMPLETE =====")
         return selected_llm
 
 
@@ -2642,16 +2709,14 @@ def get_api_key_for_llm(plugin_settings: Optional[Dict[str, Any]] = None,
     console_log(f"[API_KEY] Получение API-ключа для {selected_llm} ({analysis_type}.{content_language})")
     
     if selected_llm == 'default':
-        # Используем специфичный ключ для комбинации
+        # Для Default LLM используем специфичный ключ для комбинации
         key_id = f'ozon-analyzer-{analysis_type}-{content_language}'
-        api_key = APIKeyManager.get_decrypted_key(key_id)
-        console_log(f"[API_KEY] Специфичный ключ для {key_id}: {'найден' if api_key else 'не найден'}")
-        return api_key or ''
+        console_log(f"[API_KEY] Используем специфичный ключ: {key_id}")
+        return key_id
     else:
-        # Используем ключ платформы для данной LLM
-        platform_key = get_platform_api_key(selected_llm)
-        console_log(f"[API_KEY] Платформенный ключ для {selected_llm}: {'найден' if platform_key else 'не найден'}")
-        return platform_key or ''
+        # Для платформенной LLM используем её ID
+        console_log(f"[API_KEY] Используем платформенный ключ: {selected_llm}")
+        return selected_llm
 
 
 def get_platform_api_key(llm_id: str) -> str:
@@ -3878,7 +3943,7 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
     try:
         # Используем выбранную LLM и API-ключ
-        result = await ozon_analyzer_server._call_ai_model(model_alias, prompt)
+        result = await ozon_analyzer_server._call_ai_model(model_alias, prompt, api_key_id=api_key_id)
 
         # Проверка типа данных от AI в perform_deep_analysis
         if not isinstance(result, str):
@@ -4296,7 +4361,7 @@ async def _analyze_composition_vs_description(description: str, composition: str
         console_log(f"[MODEL] model_alias: {model_alias}, api_key_id: {api_key_id}")
 
         # Используем выбранную LLM и API-ключ
-        result_str = await ozon_analyzer_server._call_ai_model(model_alias, prompt)
+        result_str = await ozon_analyzer_server._call_ai_model(model_alias, prompt, api_key_id=api_key_id)
         console_log("[DIAGNOSTIC] ===== КОНЕЦ ВЫЗОВА _call_ai_model() =====")
 
         # [DIAGNOSTIC] ===== РЕЗУЛЬТАТ ВЫЗОВА AI МОДЕЛИ =====
@@ -4985,6 +5050,144 @@ def _categorize_product_by_composition(composition: str) -> str:
         return "пищевые_добавки"
     else:
         return "general_cosmetics"
+def get_selected_llm_for_analysis(plugin_settings: Dict[str, Any], analysis_type: str, content_language: str) -> str:
+    """
+    Получить выбранную LLM для указанного типа анализа и языка.
+
+    Args:
+        plugin_settings: Настройки плагина
+        analysis_type: Тип анализа ('basic_analysis', 'deep_analysis', etc.)
+        content_language: Язык контента ('ru', 'en')
+
+    Returns:
+        Имя выбранной LLM или 'default' если не найдено
+    """
+    try:
+        console_log(f"🔍 get_selected_llm_for_analysis: analysis_type={analysis_type}, content_language={content_language}")
+
+        # Проверяем настройки плагина на наличие кастомных LLM настроек
+        if plugin_settings and isinstance(plugin_settings, dict):
+            llm_settings = safe_dict_get(plugin_settings, 'llm_settings', {})
+            if llm_settings and isinstance(llm_settings, dict):
+                # Ищем настройку для конкретного типа анализа и языка
+                analysis_key = f"{analysis_type}_{content_language}"
+                selected_llm = safe_dict_get(llm_settings, analysis_key, None)
+
+                if selected_llm:
+                    console_log(f"✅ Найдена кастомная LLM для {analysis_key}: {selected_llm}")
+                    return selected_llm
+
+                # Fallback: ищем настройку только для типа анализа
+                selected_llm = safe_dict_get(llm_settings, analysis_type, None)
+                if selected_llm:
+                    console_log(f"✅ Найдена кастомная LLM для {analysis_type}: {selected_llm}")
+                    return selected_llm
+
+        console_log(f"ℹ️ Кастомная LLM не найдена, используем default")
+        return 'default'
+
+    except Exception as e:
+        console_log(f"❌ Ошибка в get_selected_llm_for_analysis: {str(e)}")
+        return 'default'
+
+
+def get_api_key_for_analysis(plugin_settings: Dict[str, Any], analysis_type: str, content_language: str, selected_llm: str) -> Optional[str]:
+    """
+    Получить API ключ для указанного типа анализа, языка и выбранной LLM.
+
+    Args:
+        plugin_settings: Настройки плагина
+        analysis_type: Тип анализа ('basic_analysis', 'deep_analysis', etc.)
+        content_language: Язык контента ('ru', 'en')
+        selected_llm: Выбранная LLM ('default' или имя кастомной LLM)
+
+    Returns:
+        API ключ или None если не найден
+    """
+    try:
+        console_log(f"🔑 get_api_key_for_analysis: analysis_type={analysis_type}, content_language={content_language}, selected_llm={selected_llm}")
+
+        # Проверяем настройки плагина на наличие API ключей
+        if plugin_settings and isinstance(plugin_settings, dict):
+            api_keys = safe_dict_get(plugin_settings, 'api_keys', {})
+            if api_keys and isinstance(api_keys, dict):
+                # Формируем ключ для поиска API ключа
+                # Формат: {plugin_id}-{analysis_type}-{language} или просто имя LLM
+                key_variants = [
+                    f"ozon-analyzer-{analysis_type}-{content_language}",  # ozon-analyzer-basic_analysis-ru
+                    f"{analysis_type}_{content_language}",  # basic_analysis_ru
+                    f"{selected_llm}",  # имя выбранной LLM
+                    f"{analysis_type}",  # просто тип анализа
+                ]
+
+                for key_variant in key_variants:
+                    api_key = safe_dict_get(api_keys, key_variant, None)
+                    if api_key and isinstance(api_key, str) and len(api_key.strip()) > 0:
+                        console_log(f"✅ Найден API ключ для варианта '{key_variant}': {api_key[:10]}...")
+                        return api_key.strip()
+
+        console_log(f"ℹ️ API ключ не найден в plugin_settings, будет использоваться ключ по умолчанию из background")
+        return None
+
+    except Exception as e:
+        console_log(f"❌ Ошибка в get_api_key_for_analysis: {str(e)}")
+        return None
+
+
+def get_default_model_id_from_manifest(analysis_type: str, content_language: str, plugin_settings: Dict[str, Any]) -> str:
+    """
+    Получить ID модели по умолчанию из манифеста для указанного типа анализа.
+
+    Args:
+        analysis_type: Тип анализа ('basic_analysis', 'deep_analysis', etc.)
+        content_language: Язык контента ('ru', 'en')
+        plugin_settings: Настройки плагина (для доступа к manifest)
+
+    Returns:
+        ID модели по умолчанию или 'basic_analysis' если не найдено
+    """
+    try:
+        console_log(f"📋 get_default_model_id_from_manifest: analysis_type={analysis_type}, content_language={content_language}")
+
+        # Получаем manifest из plugin_settings
+        manifest = None
+        if plugin_settings and isinstance(plugin_settings, dict):
+            manifest = safe_dict_get(plugin_settings, 'manifest', None)
+
+        if manifest and isinstance(manifest, dict):
+            # Ищем в ai_models секции манифеста
+            ai_models = safe_dict_get(manifest, 'ai_models', {})
+            if ai_models and isinstance(ai_models, dict):
+                # Сначала ищем точное совпадение типа анализа
+                model_id = safe_dict_get(ai_models, analysis_type, None)
+                if model_id:
+                    console_log(f"✅ Найдена модель по умолчанию для {analysis_type}: {model_id}")
+                    return model_id
+
+                # Fallback: ищем похожие типы анализа
+                fallbacks = {
+                    'basic_analysis': ['compliance_check', 'scraping_fallback'],
+                    'deep_analysis': ['detailed_comparison', 'basic_analysis'],
+                    'detailed_comparison': ['deep_analysis', 'basic_analysis'],
+                    'compliance_check': ['basic_analysis', 'scraping_fallback'],
+                    'scraping_fallback': ['basic_analysis', 'compliance_check']
+                }
+
+                for fallback_type in safe_dict_get(fallbacks, analysis_type, []):
+                    model_id = safe_dict_get(ai_models, fallback_type, None)
+                    if model_id:
+                        console_log(f"✅ Найдена модель fallback для {analysis_type} -> {fallback_type}: {model_id}")
+                        return model_id
+
+        # Последний fallback - возвращаем тип анализа как имя модели
+        console_log(f"ℹ️ Модель по умолчанию не найдена в manifest, используем: {analysis_type}")
+        return analysis_type
+
+    except Exception as e:
+        console_log(f"❌ Ошибка в get_default_model_id_from_manifest: {str(e)}")
+        return analysis_type
+
+
 def _generate_fallback_analogs(categories: List[str], product_type: str, content_language: str = "ru") -> List[Dict[str, Any]]:
     """Генерация фоллбэк-аналогов на основе категорий и типа продукта с учетом языка."""
     # Таблица соответствий для быстрого поиска аналогов

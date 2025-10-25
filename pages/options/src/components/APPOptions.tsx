@@ -76,7 +76,7 @@ export const APPOptions: React.FC<{ isLight: boolean }> = ({ isLight }) => {
             onRemoveCustomKey={removeCustomKey}
             onUpdateKey={updateKey}
             onUpdateCustomKeyName={updateCustomKeyName}
-            getStatusText={status => getStatusText(status, t)}
+            getStatusText={getStatusText}
             getStatusClass={getStatusClass}
             theme={theme}
             onThemeChange={handleThemeChange}

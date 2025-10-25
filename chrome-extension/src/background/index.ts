@@ -15,6 +15,7 @@ import { getApiKeyForModel, callAiModel } from './ai-api-client';
 import { exampleThemeStorage, pluginSettingsStorage, getPluginSettings } from '@extension/storage';
 import type { PluginSettings } from '@extension/storage';
 import { ensureOffscreenDocument } from '../../../src/background/offscreen-manager';
+import { APIKeyManager } from '../../../pages/options/src/utils/encryption';
 console.log('[background] Storage modules loaded');
 
 // Глобальный счетчик для генерации уникальных messageId
@@ -1459,72 +1460,56 @@ chrome.runtime.onMessage.addListener(
         }
 
         // ШАГ 5: Проверить настройки плагина с manifest defaults и пользовательскими настройками
-        const customSettingsKeys = manifest?.options ? Object.keys(manifest.options) : [];
+        const customSettingsKeys = manifest?.options ? Object.keys(manifest.options).filter((key: string) => key !== 'prompts') : [];
         console.log('[BACKGROUND] 🔍 Начинаем получение настроек плагина:', msg.pluginId);
-        console.log('[BACKGROUND] 📋 Доступные ключи настроек:', customSettingsKeys);
+        console.log('[BACKGROUND] 📋 Доступные ключи настроек (исключая prompts):', customSettingsKeys);
         console.log('[BACKGROUND] 📋 Manifest defaults:', manifestDefaults);
 
         const pluginSettings = await getPluginSettings(msg.pluginId, manifestDefaults, customSettingsKeys);
+        console.log('[BACKGROUND] ✅ Настройки плагина получены из chrome.storage.local:', pluginSettings);
+        console.log('[BACKGROUND] 🔑 Значение response_language:', pluginSettings?.response_language);
+        console.log('[BACKGROUND] 📝 Prompts loaded from manifest:', !!pluginSettings.prompts);
+        console.log('[BACKGROUND] 📊 Все полученные настройки плагина:', JSON.stringify(pluginSettings, null, 2));
 
-        // Загрузка LLM настроек и API ключей для ozon-analyzer плагина
+        // Load prompts from manifest.json for all plugins
         let enrichedPluginSettings = { ...pluginSettings };
-        if (msg.pluginId === 'ozon-analyzer') {
-          try {
-            console.log('[BACKGROUND] 🔧 Загружаем LLM настройки и API ключи для ozon-analyzer');
 
-            // Загружаем LLM настройки из специального хранилища
-            const llmSettingsResult = await chrome.storage.local.get(['plugin-ozon-analyzer-settings']);
-            const llmSettings = llmSettingsResult['plugin-ozon-analyzer-settings'];
+        // Load prompts from manifest.json if available
+        if (manifest?.options?.prompts) {
+          console.log('[BACKGROUND] 📝 Loading prompts from manifest.json for plugin:', msg.pluginId);
 
-            if (llmSettings) {
-              console.log('[BACKGROUND] ✅ Найдены LLM настройки:', JSON.stringify(llmSettings, null, 2));
+          const manifestPrompts = manifest.options.prompts;
+          enrichedPluginSettings.prompts = {};
 
-              // Добавляем llm_settings в pluginSettings
-              enrichedPluginSettings.llm_settings = {
-                basic_analysis: llmSettings.basic_analysis,
-                deep_analysis: llmSettings.deep_analysis
-              };
+          // Process each prompt type (basic_analysis, deep_analysis, etc.)
+          for (const [promptType, promptConfig] of Object.entries(manifestPrompts)) {
+            (enrichedPluginSettings.prompts as any)[promptType] = {};
 
-              // Добавляем api_keys в pluginSettings
-              enrichedPluginSettings.api_keys = llmSettings.api_keys;
+            // Process each language (ru, en, etc.)
+            for (const [language, languageConfig] of Object.entries(promptConfig as any)) {
+              const defaultPrompt = (languageConfig as any).default;
+              const llmConfig = (languageConfig as any).LLM;
 
-              console.log('[BACKGROUND] ✅ LLM настройки добавлены в pluginSettings');
-            } else {
-              console.log('[BACKGROUND] ⚠️ LLM настройки не найдены в хранилище');
-              // Используем дефолтные значения если настройки не найдены
-              enrichedPluginSettings.llm_settings = {
-                basic_analysis: {
-                  ru: { llm: '', custom_prompt: 'Проведи базовый анализ товара на Ozon. Опиши основные характеристики, преимущества и недостатки.' },
-                  en: { llm: '', custom_prompt: 'Perform basic analysis of the product on Ozon. Describe main characteristics, advantages and disadvantages.' }
-                },
-                deep_analysis: {
-                  ru: { llm: '', custom_prompt: 'Проведи глубокий анализ товара на Ozon. Включи детальное описание, сравнение с конкурентами, анализ отзывов и рекомендации по улучшению.' },
-                  en: { llm: '', custom_prompt: 'Perform deep analysis of the product on Ozon. Include detailed description, competitor comparison, review analysis and improvement recommendations.' }
-                }
-              };
-              enrichedPluginSettings.api_keys = { default: '' };
-            }
-          } catch (llmError) {
-            console.error('[BACKGROUND] ❌ Ошибка загрузки LLM настроек:', llmError);
-            // Используем дефолтные значения при ошибке
-            enrichedPluginSettings.llm_settings = {
-              basic_analysis: {
-                ru: { llm: '', custom_prompt: 'Проведи базовый анализ товара на Ozon. Опиши основные характеристики, преимущества и недостатки.' },
-                en: { llm: '', custom_prompt: 'Perform basic analysis of the product on Ozon. Describe main characteristics, advantages and disadvantages.' }
-              },
-              deep_analysis: {
-                ru: { llm: '', custom_prompt: 'Проведи глубокий анализ товара на Ozon. Включи детальное описание, сравнение с конкурентами, анализ отзывов и рекомендации по улучшению.' },
-                en: { llm: '', custom_prompt: 'Perform deep analysis of the product on Ozon. Include detailed description, competitor comparison, review analysis and improvement recommendations.' }
+              // Check if Default LLM is defined
+              const defaultLLM = llmConfig?.default;
+              if (!defaultLLM) {
+                console.warn(`[BACKGROUND] ⚠️ WARNING: No Default LLM defined for ${promptType} in ${language} for plugin ${msg.pluginId}`);
+                console.warn(`[BACKGROUND] ⚠️ Request will be impossible without Default LLM configuration`);
               }
-            };
-            enrichedPluginSettings.api_keys = { default: '' };
+
+              (enrichedPluginSettings.prompts as any)[promptType][language] = {
+                custom_prompt: defaultPrompt,
+                llm: defaultLLM || null
+              };
+            }
           }
+
+          console.log('[BACKGROUND] ✅ Prompts loaded from manifest.json:', JSON.stringify(enrichedPluginSettings.prompts, null, 2));
+        } else {
+          console.log('[BACKGROUND] ℹ️ No prompts defined in manifest.json for plugin:', msg.pluginId);
         }
 
-        console.log('[BACKGROUND] ✅ Настройки плагина получены из chrome.storage.local:', enrichedPluginSettings);
-        console.log('[BACKGROUND] 🔑 Значение response_language:', enrichedPluginSettings?.response_language);
-        console.log('[BACKGROUND] 📊 Все полученные настройки плагина:', JSON.stringify(enrichedPluginSettings, null, 2));
-        if (!pluginSettings.enabled) {
+        if (!enrichedPluginSettings.enabled) {
           console.log('[background][RUN_WORKFLOW][INFO] Plugin disabled');
           sendResponse({ error: 'Плагин отключен' });
           return true;
@@ -1638,7 +1623,7 @@ chrome.runtime.onMessage.addListener(
         const requestId = msg.requestId || `workflow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const transferId = `${requestId}_html_${Date.now()}`;
 
-        // Используем enrichedPluginSettings (с LLM настройками) вместо обычных pluginSettings
+        // Используем enrichedPluginSettings (с prompts из manifest.json) вместо обычных pluginSettings
         const settingsToSend = enrichedPluginSettings;
 
         if (htmlTransmissionMode === 'direct') {
@@ -1665,7 +1650,7 @@ chrome.runtime.onMessage.addListener(
 
             // Храним transfer для отслеживания
             console.log('[BACKGROUND] 📦 Создаем transfer state с настройками плагина для chunked fallback');
-            console.log('[BACKGROUND] 📋 Plugin settings в transfer metadata:', settingsToSend);
+            console.log('[BACKGROUND] 📋 Plugin settings в transfer metadata:', JSON.stringify(settingsToSend, null, 2));
 
             const transferState = {
               chunks: chunkingResult.chunks,
@@ -1707,7 +1692,7 @@ chrome.runtime.onMessage.addListener(
 
           // Храним transfer для отслеживания
           console.log('[BACKGROUND] 📦 Создаем transfer state с настройками плагина для chunked передачи');
-          console.log('[BACKGROUND] 📋 Plugin settings в transfer metadata:', settingsToSend);
+          console.log('[BACKGROUND] 📋 Plugin settings в transfer metadata:', JSON.stringify(settingsToSend, null, 2));
           console.log('[BACKGROUND] 🔑 Response language в transfer metadata:', settingsToSend?.response_language);
 
           const transferState = {
@@ -2122,6 +2107,38 @@ chrome.runtime.onMessage.addListener(
       return true; // Указываем асинхронную обработку
     }
 
+    // === GET_API_KEY: Обработчик запросов API ключей ===
+    if (msg.type === 'GET_API_KEY') {
+      console.log('[background][GET_API_KEY] 📨 Received GET_API_KEY request');
+      console.log('[background][GET_API_KEY] Key ID:', msg.data?.keyId);
+
+      (async () => {
+        try {
+          if (!msg.data?.keyId) {
+            console.error('[background][GET_API_KEY] ❌ Missing keyId in request');
+            sendResponse({ apiKey: null, error: 'Missing keyId' });
+            return;
+          }
+
+          const apiKey = await APIKeyManager.getDecryptedKey(msg.data.keyId);
+          console.log('[background][GET_API_KEY] ✅ API key retrieved:', !!apiKey);
+
+          sendResponse({
+            apiKey: apiKey || null
+          });
+
+        } catch (error: unknown) {
+          console.error('[background][GET_API_KEY] ❌ Error retrieving API key:', error);
+          sendResponse({
+            apiKey: null,
+            error: (error as Error).message
+          });
+        }
+      })();
+
+      return true; // Указываем асинхронную обработку
+    }
+
     // === DEBUG: Добавляем логи для отслеживания неизвестных сообщений ===
     if (!msg.type) {
       console.log('[background][DEBUG] Получено сообщение:', msg);
@@ -2185,13 +2202,14 @@ const handleHostApiMessage = async (
       }
       case 'llm_call': {
         try {
-          const { modelAlias, options, pluginId } = message.data as {
+          const { modelAlias, options, pluginId, apiKeyId } = message.data as {
             modelAlias: string;
             options: any;
-            pluginId?: string
+            pluginId?: string;
+            apiKeyId?: string;
           };
 
-          console.log('[HOST API] LLM call requested:', { modelAlias, pluginId });
+          console.log('[HOST API] LLM call requested:', { modelAlias, pluginId, apiKeyId });
 
           const currentPlugin = pluginId || 'ozon-analyzer';
           const manifestUrl = chrome.runtime.getURL(`plugins/${currentPlugin}/manifest.json`);
@@ -2227,11 +2245,15 @@ const handleHostApiMessage = async (
 
           console.log('[HOST API] Using model:', actualModel, 'for alias:', modelAlias);
 
-          const apiKey = await getApiKeyForModel(actualModel);
+          // Получаем API-ключ: если apiKeyId указан, используем его, иначе используем model alias
+          const keyId = apiKeyId || actualModel;
+          console.log('[HOST API] Getting API key for:', keyId);
+          
+          const apiKey = await APIKeyManager.getDecryptedKey(keyId);
           if (!apiKey) {
             sendResponse({
               error: true,
-              error_message: `API ключ для модели ${actualModel} не найден`
+              error_message: `API ключ для модели ${actualModel} не найден. KeyId: ${keyId}`
             });
             return true;
           }
@@ -2253,6 +2275,24 @@ const handleHostApiMessage = async (
           sendResponse({
             error: true,
             error_message: (error as Error).message
+          });
+        }
+        break;
+      }
+      case 'GET_API_KEY': {
+        try {
+          const { keyId } = message.data as { keyId: string };
+          console.log('[HOST API] Getting API key for:', keyId);
+          
+          const apiKey = await APIKeyManager.getDecryptedKey(keyId);
+          sendResponse({
+            apiKey: apiKey || null
+          });
+        } catch (error) {
+          console.error('[HOST API] Error getting API key:', error);
+          sendResponse({
+            apiKey: null,
+            error: (error as Error).message
           });
         }
         break;
@@ -2544,11 +2584,12 @@ async function handleMessage(message: any, sender: any): Promise<any> {
       // Загрузить настройки из manifest.json для получения дефолтных значений
       const manifestUrl = chrome.runtime.getURL(`plugins/${message.pluginId}/manifest.json`);
       let manifestDefaults: Partial<PluginSettings> = {};
+      let manifest: any = null;
 
       try {
         const manifestResponse = await fetch(manifestUrl);
         if (manifestResponse.ok) {
-          const manifest = await manifestResponse.json();
+          manifest = await manifestResponse.json();
           console.log(`[background][PORT][RUN_WORKFLOW] ✅ Manifest loaded for ${message.pluginId}:`, manifest);
           const manifestSettings = manifest.options || {};
           manifestDefaults = {
@@ -2567,7 +2608,8 @@ async function handleMessage(message: any, sender: any): Promise<any> {
       console.log('[BACKGROUND][PORT][RUN_WORKFLOW] 🔍 Получаем настройки плагина из chrome.storage.local');
       console.log('[BACKGROUND][PORT][RUN_WORKFLOW] 📋 Manifest defaults:', manifestDefaults);
 
-      const settings = await getPluginSettings(message.pluginId, manifestDefaults);
+      const customSettingsKeys = manifest?.options ? Object.keys(manifest.options).filter((key: string) => key !== 'prompts') : [];
+      const settings = await getPluginSettings(message.pluginId, manifestDefaults, customSettingsKeys);
 
       console.log('[BACKGROUND][PORT][RUN_WORKFLOW] ✅ Настройки плагина получены:', settings);
       console.log('[BACKGROUND][PORT][RUN_WORKFLOW] 🔑 Response language:', settings?.response_language);

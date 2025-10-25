@@ -34,25 +34,63 @@ export interface PluginPromptSettings {
 
 const STORAGE_KEY = 'plugin-ozon-analyzer-settings';
 
+// Function to load default prompts from manifest.json
+const loadDefaultPromptsFromManifest = async (): Promise<{ basic_analysis: { ru: string; en: string }; deep_analysis: { ru: string; en: string } }> => {
+  try {
+    // Load manifest.json from the plugin directory
+    const manifestResponse = await fetch(chrome.runtime.getURL('plugins/ozon-analyzer/manifest.json'));
+    const manifest = await manifestResponse.json();
+
+    const prompts = manifest.options?.prompts;
+    if (!prompts) {
+      throw new Error('Prompts not found in manifest');
+    }
+
+    return {
+      basic_analysis: {
+        ru: prompts.basic_analysis?.ru?.default || '',
+        en: prompts.basic_analysis?.en?.default || '',
+      },
+      deep_analysis: {
+        ru: prompts.deep_analysis?.ru?.default || '',
+        en: prompts.deep_analysis?.en?.default || '',
+      },
+    };
+  } catch (error) {
+    console.error('Failed to load prompts from manifest:', error);
+    // Fallback to hardcoded defaults if manifest loading fails
+    return {
+      basic_analysis: {
+        ru: 'верни слово basic_analysis_ru_default и полное название и версию твоей LLM (например, Gemini flash lite или Gemini 2.5 Pro)',
+        en: 'верни слово basic_analysis_en_default и полное название и версию твоей LLM (например, Gemini flash lite или Gemini 2.5 Pro)',
+      },
+      deep_analysis: {
+        ru: 'верни слово deep_analysis_ru_default и полное название и версию твоей LLM (например, Gemini flash lite или Gemini 2.5 Pro)',
+        en: 'верни слово deep_analysis_en_default и полное название и версию твоей LLM (например, Gemini flash lite или Gemini 2.5 Pro)',
+      },
+    };
+  }
+};
+
 const DEFAULT_SETTINGS: PluginSettings = {
   basic_analysis: {
     ru: {
       llm: '',
-      custom_prompt: 'Проведи базовый анализ товара на Ozon. Опиши основные характеристики, преимущества и недостатки.',
+      custom_prompt: '',
     },
     en: {
       llm: '',
-      custom_prompt: 'Perform basic analysis of the product on Ozon. Describe main characteristics, advantages and disadvantages.',
+      custom_prompt: '',
     },
   },
   deep_analysis: {
     ru: {
       llm: '',
-      custom_prompt: 'Проведи глубокий анализ товара на Ozon. Включи детальное описание, сравнение с конкурентами, анализ отзывов и рекомендации по улучшению.',
+      custom_prompt: '',
     },
     en: {
       llm: '',
-      custom_prompt: 'Perform deep analysis of the product on Ozon. Include detailed description, competitor comparison, review analysis and improvement recommendations.',
+      custom_prompt: '',
     },
   },
   api_keys: {
@@ -65,10 +103,51 @@ export const usePluginSettings = () => {
   const [isLoading, setIsLoading] = React.useState(true);
 
   React.useEffect(() => {
-    loadSettings();
+    initializeSettings();
   }, []);
 
-  const loadSettings = async () => {
+  const initializeSettings = async () => {
+    try {
+      // Load default prompts from manifest first
+      const defaultPrompts = await loadDefaultPromptsFromManifest();
+
+      // Create initial settings with manifest defaults
+      const initialSettings: PluginSettings = {
+        basic_analysis: {
+          ru: {
+            llm: '',
+            custom_prompt: defaultPrompts.basic_analysis.ru,
+          },
+          en: {
+            llm: '',
+            custom_prompt: defaultPrompts.basic_analysis.en,
+          },
+        },
+        deep_analysis: {
+          ru: {
+            llm: '',
+            custom_prompt: defaultPrompts.deep_analysis.ru,
+          },
+          en: {
+            llm: '',
+            custom_prompt: defaultPrompts.deep_analysis.en,
+          },
+        },
+        api_keys: {
+          default: '',
+        },
+      };
+
+      // Then load user settings and merge with defaults
+      await loadSettings(initialSettings);
+    } catch (error) {
+      console.error('Failed to initialize settings:', error);
+      // Fallback to loading with empty defaults
+      await loadSettings(DEFAULT_SETTINGS);
+    }
+  };
+
+  const loadSettings = async (defaultSettings: PluginSettings = DEFAULT_SETTINGS) => {
     try {
       setIsLoading(true);
       const result = await chrome.storage.local.get([STORAGE_KEY]);
@@ -82,36 +161,36 @@ export const usePluginSettings = () => {
         }
 
         setSettings({
-          ...DEFAULT_SETTINGS,
+          ...defaultSettings,
           ...storedSettings,
           basic_analysis: {
             ru: {
-              ...DEFAULT_SETTINGS.basic_analysis.ru,
+              ...defaultSettings.basic_analysis.ru,
               ...storedSettings.basic_analysis?.ru,
             },
             en: {
-              ...DEFAULT_SETTINGS.basic_analysis.en,
+              ...defaultSettings.basic_analysis.en,
               ...storedSettings.basic_analysis?.en,
             },
           },
           deep_analysis: {
             ru: {
-              ...DEFAULT_SETTINGS.deep_analysis.ru,
+              ...defaultSettings.deep_analysis.ru,
               ...storedSettings.deep_analysis?.ru,
             },
             en: {
-              ...DEFAULT_SETTINGS.deep_analysis.en,
+              ...defaultSettings.deep_analysis.en,
               ...storedSettings.deep_analysis?.en,
             },
           },
           api_keys: decryptedApiKeys,
         });
       } else {
-        setSettings(DEFAULT_SETTINGS);
+        setSettings(defaultSettings);
       }
     } catch (error) {
       console.error('Failed to load plugin settings:', error);
-      setSettings(DEFAULT_SETTINGS);
+      setSettings(defaultSettings);
     } finally {
       setIsLoading(false);
     }
