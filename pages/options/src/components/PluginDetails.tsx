@@ -281,7 +281,7 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t, globalAIK
           defaultLLMCurl={getDefaultLLMForPrompt(promptType, language)}
           hasDefaultLLM={hasDefaultLLMForPrompt(promptType, language)}
           onLLMChange={(llm, apiKey) => {
-            console.log(`LLM changed for ${promptType} ${language}:`, llm, apiKey);
+            console.log(`[API_KEY_FLOW] PluginDetails: LLM changed for ${promptType}.${language}: ${llm}, apiKey length: ${apiKey?.length || 0}`);
             // Сохраняем выбранную LLM и API ключ в pluginSettings для передачи в mcp_server.py
             const updatedPluginSettings = { ...pluginSettings } as any;
             if (!updatedPluginSettings.selected_llms) {
@@ -297,14 +297,17 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t, globalAIK
             if (!updatedPluginSettings.api_keys) {
               updatedPluginSettings.api_keys = {};
             }
+            let keyId = '';
             if (apiKey) {
-              const keyId = `ozon-analyzer-${promptType}-${language}`;
+              keyId = `ozon-analyzer.${promptType}.${language}.default`;
               updatedPluginSettings.api_keys[keyId] = apiKey;
+              console.log(`[API_KEY_FLOW] PluginDetails: Saved API key for ${keyId} in updatedPluginSettings`);
             }
 
             // Обновляем pluginSettings через глобальный объект
             if (typeof window !== 'undefined' && (window as any).pyodide && (window as any).pyodide.globals) {
               (window as any).pyodide.globals.pluginSettings = updatedPluginSettings;
+              console.log(`[API_KEY_FLOW] PluginDetails: Updated pyodide.globals.pluginSettings with API key for ${keyId || 'no key'}`);
             }
           }}
         />
@@ -355,7 +358,7 @@ const PluginDetails = (props: PluginDetailsProps) => {
     }
   }, [selectedPlugin?.id]);
 
-  // Передаем выбранные LLM в mcp_server.py через pyodide.globals
+  // Передаем выбранные LLM и API ключи в mcp_server.py через pyodide.globals
   useEffect(() => {
     if (pluginSettings && typeof window !== 'undefined' && (window as any).pyodide && (window as any).pyodide.globals) {
       // Создаем структуру selected_llms из pluginSettings
@@ -369,13 +372,26 @@ const PluginDetails = (props: PluginDetailsProps) => {
           en: pluginSettings.deep_analysis?.en?.llm || 'default',
         }
       };
-      
+
+      // Создаем структуру api_keys из pluginSettings
+      const api_keys = {
+        'ozon-analyzer.basic_analysis.ru.default': (pluginSettings.api_keys as any)?.['basic_analysis.ru.default'] || '',
+        'ozon-analyzer.basic_analysis.en.default': (pluginSettings.api_keys as any)?.['basic_analysis.en.default'] || '',
+        'ozon-analyzer.deep_analysis.ru.default': (pluginSettings.api_keys as any)?.['deep_analysis.ru.default'] || '',
+        'ozon-analyzer.deep_analysis.en.default': (pluginSettings.api_keys as any)?.['deep_analysis.en.default'] || '',
+        'ozon-analyzer-basic_analysis-ru': (pluginSettings.api_keys as any)?.['ozon-analyzer-basic_analysis-ru'] || '',
+        'ozon-analyzer-basic_analysis-en': (pluginSettings.api_keys as any)?.['ozon-analyzer-basic_analysis-en'] || '',
+        'ozon-analyzer-deep_analysis-ru': (pluginSettings.api_keys as any)?.['ozon-analyzer-deep_analysis-ru'] || '',
+        'ozon-analyzer-deep_analysis-en': (pluginSettings.api_keys as any)?.['ozon-analyzer-deep_analysis-en'] || '',
+      };
+
       // Обновляем pluginSettings в pyodide.globals
       const updatedPluginSettings = {
         ...(window as any).pyodide.globals.pluginSettings || {},
-        selected_llms: selected_llms
+        selected_llms: selected_llms,
+        api_keys: api_keys
       };
-      
+
       (window as any).pyodide.globals.pluginSettings = updatedPluginSettings;
       console.log('Updated pluginSettings in pyodide.globals:', updatedPluginSettings);
     }

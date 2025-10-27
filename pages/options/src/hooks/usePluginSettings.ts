@@ -24,6 +24,10 @@ export interface PluginSettings {
   };
   api_keys: {
     default: string; // encrypted
+    'ozon-analyzer-basic_analysis-ru'?: string;
+    'ozon-analyzer-basic_analysis-en'?: string;
+    'ozon-analyzer-deep_analysis-ru'?: string;
+    'ozon-analyzer-deep_analysis-en'?: string;
   };
 }
 
@@ -156,8 +160,30 @@ export const usePluginSettings = () => {
       if (storedSettings) {
         // Расшифровываем API ключи
         const decryptedApiKeys = { ...storedSettings.api_keys };
-        if (storedSettings.api_keys?.default) {
-          decryptedApiKeys.default = await APIKeyManager.getDecryptedKey('ozon-analyzer-default') || '';
+
+        // Расшифровываем все API ключи для всех комбинаций promptType-language
+        const apiKeyIds = [
+          'ozon-analyzer-basic_analysis-ru-default',
+          'ozon-analyzer-basic_analysis-en-default',
+          'ozon-analyzer-deep_analysis-ru-default',
+          'ozon-analyzer-deep_analysis-en-default',
+          'ozon-analyzer-basic_analysis-ru',
+          'ozon-analyzer-basic_analysis-en',
+          'ozon-analyzer-deep_analysis-ru',
+          'ozon-analyzer-deep_analysis-en'
+        ];
+
+        for (const keyId of apiKeyIds) {
+          const decryptedKey = await APIKeyManager.getDecryptedKey(keyId);
+          if (decryptedKey) {
+            // Для default LLM сохраняем без префикса ozon-analyzer-
+            if (keyId.endsWith('-default')) {
+              decryptedApiKeys[keyId.replace('ozon-analyzer-', '')] = decryptedKey;
+            } else {
+              // Для других LLM сохраняем с полным именем
+              decryptedApiKeys[keyId] = decryptedKey;
+            }
+          }
         }
 
         setSettings({
@@ -200,14 +226,36 @@ export const usePluginSettings = () => {
     try {
       // Шифруем API ключи перед сохранением
       const settingsToSave = { ...newSettings };
-      if (newSettings.api_keys?.default) {
-        await APIKeyManager.saveEncryptedKey('ozon-analyzer-default', newSettings.api_keys.default);
-      } else {
-        await APIKeyManager.removeKey('ozon-analyzer-default');
+
+      // Шифруем все API ключи для всех комбинаций promptType-language
+      const apiKeyMappings = [
+        { key: 'basic_analysis-ru-default', id: 'ozon-analyzer-basic_analysis-ru-default' },
+        { key: 'basic_analysis-en-default', id: 'ozon-analyzer-basic_analysis-en-default' },
+        { key: 'deep_analysis-ru-default', id: 'ozon-analyzer-deep_analysis-ru-default' },
+        { key: 'deep_analysis-en-default', id: 'ozon-analyzer-deep_analysis-en-default' },
+        { key: 'ozon-analyzer-basic_analysis-ru', id: 'ozon-analyzer-basic_analysis-ru' },
+        { key: 'ozon-analyzer-basic_analysis-en', id: 'ozon-analyzer-basic_analysis-en' },
+        { key: 'ozon-analyzer-deep_analysis-ru', id: 'ozon-analyzer-deep_analysis-ru' },
+        { key: 'ozon-analyzer-deep_analysis-en', id: 'ozon-analyzer-deep_analysis-en' }
+      ];
+
+      for (const mapping of apiKeyMappings) {
+        const apiKeyValue = (newSettings.api_keys as any)?.[mapping.key];
+        if (apiKeyValue) {
+          await APIKeyManager.saveEncryptedKey(mapping.id, apiKeyValue);
+        } else {
+          await APIKeyManager.removeKey(mapping.id);
+        }
       }
 
       // Убираем API ключи из объекта настроек, которые сохраняются в plain JSON
-      settingsToSave.api_keys = { default: '' };
+      settingsToSave.api_keys = {
+        default: '',
+        'ozon-analyzer-basic_analysis-ru': '',
+        'ozon-analyzer-basic_analysis-en': '',
+        'ozon-analyzer-deep_analysis-ru': '',
+        'ozon-analyzer-deep_analysis-en': ''
+      };
 
       await chrome.storage.local.set({ [STORAGE_KEY]: settingsToSave });
       setSettings(newSettings);

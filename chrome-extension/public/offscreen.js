@@ -692,7 +692,12 @@ async function initializePyodide() {
           const jsModelAlias = modelAlias?.toJs ? modelAlias.toJs() : modelAlias;
   
           // 1. Обработка modelAlias - убрать :generateContent если присутствует
-          let cleanedModelAlias = jsModelAlias.replace(':generateContent', '');
+          let cleanedModelAlias;
+          if (jsModelAlias && typeof jsModelAlias === 'string') {
+            cleanedModelAlias = jsModelAlias.replace(':generateContent', '');
+          } else {
+            cleanedModelAlias = jsModelAlias || 'unknown';
+          }
           // logDebug('PYODIDE', `Cleaned model alias: ${cleanedModelAlias}`);
 
           // Преобразовать тип анализа в техническое имя модели
@@ -704,6 +709,7 @@ async function initializePyodide() {
           // logDebug('PYODIDE', `Model mapping: ${cleanedModelAlias} -> ${technicalModelName} -> ${finalModelName}`);
 
           // 2. Получение API ключа из параметров или глобальной переменной
+          console.log('[API_KEY_FLOW_PROBLEM_START] ===== BEGINNING OF API KEY FLOW PROBLEM RANGE =====');
           console.log('[OFFSCREEN_DIAGNOSIS] ===== API KEY RETRIEVAL IN LLM_CALL ====');
           console.log('[OFFSCREEN_DIAGNOSIS] jsOptions.apiKey:', jsOptions.apiKey);
           console.log('[OFFSCREEN_DIAGNOSIS] jsOptions.apiKeyId:', jsOptions.apiKeyId);
@@ -715,6 +721,18 @@ async function initializePyodide() {
           console.log('[OFFSCREEN_DIAGNOSIS] pluginSettings.api_keys exists:', !!(window.pluginSettings && window.pluginSettings.api_keys));
           if (window.pluginSettings && window.pluginSettings.api_keys) {
             console.log('[OFFSCREEN_DIAGNOSIS] Available API keys:', Object.keys(window.pluginSettings.api_keys));
+            console.log('[API_KEY_FLOW] Offscreen: Checking pluginSettings.api_keys keys:', Object.keys(window.pluginSettings.api_keys));
+            console.log('[API_KEY_FLOW] Offscreen: Looking for apiKeyId:', apiKeyId);
+            const apiKeyFromPlugin = window.pluginSettings.api_keys[apiKeyId];
+            if (apiKeyFromPlugin) {
+              console.log('[OFFSCREEN_DIAGNOSIS] Found API key in pluginSettings:', apiKeyId);
+              console.log('[API_KEY_FLOW] Offscreen: Found API key for', apiKeyId, 'length:', apiKeyFromPlugin.length);
+              return apiKeyFromPlugin;
+            } else {
+              console.log('[API_KEY_FLOW] Offscreen: API key not found for', apiKeyId, 'in pluginSettings.api_keys');
+            }
+          } else {
+            console.log('[API_KEY_FLOW] Offscreen: pluginSettings.api_keys is not available');
           }
 
           let apiKey = jsOptions.apiKey;
@@ -785,6 +803,7 @@ async function initializePyodide() {
           }
 
           console.log('[OFFSCREEN_DIAGNOSIS] ===== API KEY RETRIEVAL COMPLETE ====');
+          console.log('[API_KEY_FLOW_PROBLEM_END] ===== END OF API KEY FLOW PROBLEM RANGE =====');
           // logDebug('PYODIDE', 'Gemini API key retrieved successfully');
 
           // 3. Подготовка данных для запроса к Gemini API

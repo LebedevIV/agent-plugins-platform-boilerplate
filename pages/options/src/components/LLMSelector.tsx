@@ -20,7 +20,7 @@ const LLMSelector: React.FC<LLMSelectorProps> = ({
   hasDefaultLLM,
   onLLMChange,
 }) => {
-  const { settings, updateBasicAnalysisSettings, updateDeepAnalysisSettings } = usePluginSettings();
+  const { settings, updateBasicAnalysisSettings, updateDeepAnalysisSettings, updateAPIKey, saveSettings } = usePluginSettings();
   const [selectedLLM, setSelectedLLM] = useState<string>(defaultLLMCurl);
   const [apiKey, setApiKey] = useState<string>('');
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -28,7 +28,7 @@ const LLMSelector: React.FC<LLMSelectorProps> = ({
   // Загружаем API-ключ при монтировании компонента
   useEffect(() => {
     const loadApiKey = async () => {
-      const keyId = `ozon-analyzer-${promptType}-${language}`;
+      const keyId = `ozon-analyzer.${promptType}.${language}.default`;
       const key = await APIKeyManager.getDecryptedKey(keyId) || '';
       setApiKey(key);
     };
@@ -77,8 +77,29 @@ const LLMSelector: React.FC<LLMSelectorProps> = ({
 
     saveTimeoutRef.current = setTimeout(async () => {
       try {
-        const keyId = `ozon-analyzer-${promptType}-${language}`;
-        await APIKeyManager.saveEncryptedKey(keyId, newApiKey);
+        // Для Default LLM сохраняем ключ в encryptedApiKeys под ключом с суффиксом -default
+        if (selectedLLM === 'default') {
+          const keyId = `ozon-analyzer.${promptType}.${language}.default`;
+          console.log(`[API_KEY_FLOW] LLMSelector: Saving API key for ${keyId}`);
+          await APIKeyManager.saveEncryptedKey(keyId, newApiKey);
+
+          // Обновляем локальное состояние settings для немедленного отображения
+          const updatedSettings = { ...settings };
+          if (!updatedSettings.api_keys) {
+            updatedSettings.api_keys = { default: '' };
+          }
+          // Для default LLM сохраняем без префикса ozon-analyzer.
+          const localKey = keyId.replace('ozon-analyzer.', '');
+          (updatedSettings.api_keys as any)[localKey] = newApiKey;
+          console.log(`[API_KEY_FLOW] LLMSelector: Updated local settings with key ${localKey}`);
+
+          // Сохраняем обновленные настройки
+          await saveSettings(updatedSettings);
+          console.log(`[API_KEY_FLOW] LLMSelector: Settings saved successfully`);
+        }
+        // Для платформенных LLM API-ключи уже сохранены на уровне платформы
+
+        console.log(`[API_KEY_FLOW] LLMSelector: Calling onLLMChange with LLM=${selectedLLM}, apiKey length=${newApiKey.length}`);
         onLLMChange(selectedLLM, newApiKey);
       } catch (error) {
         console.error('Failed to save API key:', error);

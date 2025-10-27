@@ -5122,6 +5122,14 @@ def get_api_key_for_analysis(plugin_settings: Dict[str, Any], analysis_type: str
                     f"{analysis_type}",  # просто тип анализа
                 ]
 
+                # Для default LLM добавляем дополнительные варианты поиска
+                if selected_llm == 'default':
+                    key_variants.extend([
+                        f"ozon-analyzer-{analysis_type}-{content_language}-default",  # ozon-analyzer-basic_analysis-ru-default
+                        f"ozon-analyzer-default",  # ozon-analyzer-default (как сохраняется в UI)
+                        "default",  # просто default
+                    ])
+
                 for key_variant in key_variants:
                     api_key = safe_dict_get(api_keys, key_variant, None)
                     if api_key and isinstance(api_key, str) and len(api_key.strip()) > 0:
