@@ -1557,7 +1557,7 @@ function checkAiAlerts(stats) {
   }
 }
 const MODEL_CONFIGS = {
-  "gemini-flash": {
+  "gemini-flash-lite": {
     provider: "google",
     model_name: "gemini-flash-lite-latest:generateContent",
     endpoint: "https://generativelanguage.googleapis.com/v1beta/models/",

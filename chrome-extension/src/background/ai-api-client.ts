@@ -26,7 +26,7 @@ export interface AiModelResponse {
 }
 
 // Доступные модели
-export type ModelAlias = 'gemini-flash' | 'gemini-pro' | 'gpt-3.5-turbo' | 'gpt-4';
+export type ModelAlias = 'gemini-flash-lite' | 'gemini-pro' | 'gpt-3.5-turbo' | 'gpt-4';
 
 // Конфигурация модели
 interface ModelConfig {
@@ -251,7 +251,7 @@ function handleAiError(error: any, context: any): never {
 
 // Поддерживаемые модели и их конфигурации с типизированными индексами
 const MODEL_CONFIGS: Record<ModelAlias, ModelConfig> = {
-  'gemini-flash': {
+  'gemini-flash-lite': {
     provider: 'google',
     //model_name: 'gemini-2.5-flash-lite:generateContent',
     model_name: 'gemini-flash-lite-latest:generateContent',
@@ -299,6 +299,24 @@ export async function getApiKeyForModel(modelAlias: string): Promise<string | nu
     return null;
   }
 }
+
+/**
+ * Универсальный selector: выдаёт правильный API-ключ для генерации — либо custom (по combo типа/promt/lang), либо платформенный.
+ */
+export async function getApiKeyForPromptOrModel(options: { isDefaultLLM: boolean, promptType: string, language: string, pluginId: string, modelAlias: string }): Promise<string|null> {
+  if (options.isDefaultLLM) {
+    // Кастомный плагиновый ключ для конкретной комбинации
+    const keyId = `${options.pluginId}-${options.promptType}-${options.language}`;
+    return await APIKeyManager.getDecryptedKey(keyId);
+  } else {
+    // Платформенный ключ
+    return await APIKeyManager.getDecryptedKey(options.modelAlias);
+  }
+}
+
+// --- Инструкция для разработчиков:
+// Для плагиновых промптов типа OzonAnalyzer всегда используйте getApiKeyForPromptOrModel для правильного выбора ключа.
+// Никогда не вызывайте getApiKeyForModel напрямую для cases типа 'default LLM'.
 
 /**
  * Выполняет запрос к AI API в зависимости от провайдера с полным мониторингом
@@ -506,4 +524,95 @@ export async function setApiKeyForModel(modelAlias: string, apiKey: string): Pro
 export async function checkApiKeyAvailability(modelAlias: string): Promise<boolean> {
   const apiKey = await getApiKeyForModel(modelAlias);
   return apiKey !== null && apiKey.length > 0;
+}
+
+/**
+ * Получает выбранную LLM для промпта с учетом типа промпта и языка
+ * @param prompt_type - тип промпта (basic_analysis, deep_analysis, etc.)
+ * @param language - язык промпта (ru, en)
+ * @param pluginId - ID плагина для получения специфичных настроек
+ * @returns объект с моделью и API-ключом
+ */
+export async function getLLMForPrompt(
+  prompt_type: string,
+  language: string,
+  pluginId?: string
+): Promise<{ model: ModelAlias; apiKey: string; prompt: string }> {
+  try {
+    // Формируем ключ для localStorage: pluginId:prompt_type:language или просто prompt_type:language
+    const storageKey = pluginId ? `${pluginId}:${prompt_type}:${language}` : `${prompt_type}:${language}`;
+
+    // Пытаемся получить выбранную модель из localStorage
+    let selectedModel = localStorage.getItem(storageKey) as ModelAlias | null;
+
+    // Если модель не найдена в localStorage, используем дефолт из manifest
+    if (!selectedModel) {
+      // Для получения дефолтной модели нужно загрузить manifest плагина
+      const manifestData = await loadPluginManifest(pluginId);
+      selectedModel = manifestData?.ai_models?.[prompt_type] as ModelAlias;
+
+      if (!selectedModel) {
+        throw new Error(`Не найдена модель по умолчанию для промпта ${prompt_type}`);
+      }
+    }
+
+    // Проверяем, что модель поддерживается
+    if (!Object.keys(MODEL_CONFIGS).includes(selectedModel)) {
+      throw new Error(`Неподдерживаемая модель: ${selectedModel}`);
+    }
+
+    // Получаем API-ключ (глобальный или плагин-специфичный)
+    const apiKey = await getApiKeyForModel(selectedModel);
+    if (!apiKey) {
+      throw new Error(`API-ключ для модели ${selectedModel} не найден`);
+    }
+
+    // Получаем промпт из manifest с подстановкой $prompt_{type}_{language}
+    const manifestData = await loadPluginManifest(pluginId);
+    const promptKey = `$prompt_${prompt_type}_${language}`;
+    let prompt = manifestData?.options?.prompts?.[prompt_type]?.[language]?.default;
+
+    if (!prompt) {
+      throw new Error(`Промпт ${promptKey} не найден в manifest`);
+    }
+
+    return {
+      model: selectedModel,
+      apiKey,
+      prompt
+    };
+
+  } catch (error) {
+    console.error('[AI Client] Error getting LLM for prompt:', error);
+    throw error;
+  }
+}
+
+/**
+ * Загружает manifest плагина
+ */
+async function loadPluginManifest(pluginId?: string): Promise<any> {
+  if (!pluginId) {
+    // Если pluginId не указан, пытаемся найти manifest в chrome-extension/public/plugins/
+    // Для упрощения возвращаем дефолтные значения или null
+    return null;
+  }
+
+  try {
+    // Путь к manifest плагина
+    const manifestPath = `plugins/${pluginId}/manifest.json`;
+
+    // В контексте расширения manifest может быть загружен через chrome.runtime.getURL
+    const manifestUrl = chrome.runtime.getURL(manifestPath);
+    const response = await fetch(manifestUrl);
+
+    if (!response.ok) {
+      throw new Error(`Не удалось загрузить manifest: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('[AI Client] Error loading plugin manifest:', error);
+    return null;
+  }
 }

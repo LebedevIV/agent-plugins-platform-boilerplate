@@ -1,6 +1,6 @@
 {
   "name": "@extension/zipper",
-  "version": "0.5.1363",
+  "version": "0.5.1512",
   "description": "chrome extension - zipper",
   "type": "module",
   "private": true,
@@ -21,6 +21,10 @@
     "lint:fix": "pnpm lint --fix",
     "format": "prettier . --write --ignore-path ../../.prettierignore",
     "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "fast-glob": "^3.3.2",
+    "fflate": "^0.8.2"
   },
   "devDependencies": {
     "@extension/tsconfig": "workspace:*",

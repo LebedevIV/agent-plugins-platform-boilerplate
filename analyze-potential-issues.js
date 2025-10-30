@@ -58,13 +58,13 @@ console.log('📊 АНАЛИЗ СТРУКТУРЫ ПРОМПТОВ');
 console.log('===========================\n');
 
 const manifestPrompts = {
-    "optimized": {
+    "basic_analysis": {
         "ru": { "default": "Ты - токсиколог и химик-косметолог..." },
         "en": { "default": "You are a board-certified toxicologist..." }
     },
-    "deep": {
+    "deep_analysis": {
         "ru": { "default": "Длинный текст промпта глубокого анализа..." },
-        "en": { "default": "Long English deep analysis prompt..." }
+        "en": { "default": "Long English deep_analysis analysis prompt..." }
     }
 };
 

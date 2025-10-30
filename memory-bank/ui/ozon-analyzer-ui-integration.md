@@ -338,7 +338,7 @@ const getFeatureFlags = (capabilities: UICapabilities) => ({
 
 #### **Mobile Optimization**
 ```typescript
-// Touch-optimized interactions
+// Touch-basic_analysis interactions
 const mobileInteractions = {
   tapToExpand: true,                    // Expand sections on tap
   swipeToNavigate: true,               // Swipe between results
@@ -792,7 +792,7 @@ The Ozon Analyzer UI integration establishes comprehensive patterns for plugin u
 3. **Accessible Design**: WCAG 2.1 AA compliance with screen reader support
 4. **Responsive Layout**: Mobile-first design with adaptive breakpoints
 5. **Error Resilience**: User-friendly error recovery and fallback patterns
-6. **Performance Optimized**: Virtual scrolling, lazy loading, and efficient rendering
+6. **Performance basic_analysis**: Virtual scrolling, lazy loading, and efficient rendering
 7. **Consistent Branding**: Cohesive design language and component library
 
 These patterns provide a foundation for future plugin UIs and ensure excellent user experiences across devices and accessibility needs.

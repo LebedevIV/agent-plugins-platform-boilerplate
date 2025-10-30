@@ -219,7 +219,7 @@ def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> Dict[s
         plugin_settings: Настройки плагина из Pyodide globals
 
     Returns:
-        Структура промптов: {optimized: {ru: "...", en: "..."}, deep: {ru: "...", en: "..."}}
+        Структура промптов: {basic_analysis: {ru: "...", en: "..."}, deep_analysis: {ru: "...", en: "..."}}
     """
     console_log(f"🔍 ===== НАЧАЛО ЗАГРУЗКИ ПРОМПТОВ =====")
 
@@ -264,8 +264,8 @@ def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> Dict[s
         console_log(f"   custom_prompts_raw type: {type(custom_prompts_raw)}")
 
         prompts = {
-            'optimized': {'ru': '', 'en': ''},
-            'deep': {'ru': '', 'en': ''}
+            'basic_analysis': {'ru': '', 'en': ''},
+            'deep_analysis': {'ru': '', 'en': ''}
         }
 
         # Используем manifest, полученный выше (из plugin_settings или globals)
@@ -290,7 +290,7 @@ def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> Dict[s
             manifest_prompts = {}
 
         # Детальная диагностика структуры промптов
-        for prompt_type in ['optimized', 'deep']:
+        for prompt_type in ['basic_analysis', 'deep_analysis']:
             for lang in ['ru', 'en']:
                 console_log(f"🔍 Обработка {prompt_type}.{lang}:")
 
@@ -353,7 +353,7 @@ def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> Dict[s
 
         # Подробная диагностика каждого промпта
         console_log(f"🔍 ДЕТАЛЬНАЯ ДИАГНОСТИКА ПРОМПТОВ:")
-        for prompt_type in ['optimized', 'deep']:
+        for prompt_type in ['basic_analysis', 'deep_analysis']:
             for lang in ['ru', 'en']:
                 prompt_value = prompts[prompt_type][lang]
                 if prompt_value and len(prompt_value.strip()) > 0:
@@ -368,7 +368,7 @@ def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> Dict[s
 
         # ДИАГНОСТИКА ПРОБЛЕМЫ: Проверяем источник каждого промпта
         console_log(f"🔍 ДИАГНОСТИКА ИСТОЧНИКОВ ПРОМПТОВ:")
-        for prompt_type in ['optimized', 'deep']:
+        for prompt_type in ['basic_analysis', 'deep_analysis']:
             for lang in ['ru', 'en']:
                 prompt_value = prompts[prompt_type][lang]
                 if prompt_value and len(prompt_value.strip()) > 0:
@@ -402,57 +402,8 @@ def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> Dict[s
         # Критический fallback - возвращаем пустые промпты
         console_log(f"⚠️ Возвращаем критический fallback с пустыми промптами")
         return {
-            'optimized': {'ru': '', 'en': ''},
-            'deep': {'ru': '', 'en': ''}
-        }
-
-        prompts = {
-            'optimized': {'ru': '', 'en': ''},
-            'deep': {'ru': '', 'en': ''}
-        }
-
-        # Получаем manifest из plugin_settings или globals для fallback значений
-        if plugin_settings and isinstance(plugin_settings, dict):
-            manifest = safe_dict_get(plugin_settings, 'manifest', get_pyodide_var('manifest', {}))
-        else:
-            manifest = get_pyodide_var('manifest', {})
-        manifest_prompts = safe_dict_get(manifest, 'options.prompts', {})
-
-        for prompt_type in ['optimized', 'deep']:
-            for lang in ['ru', 'en']:
-                # Правильно извлекаем промпт из nested структуры plugin_settings
-                prompt_type_data = safe_dict_get(custom_prompts_raw, prompt_type, {})
-
-                custom_value = safe_dict_get(prompt_type_data, lang, '')
-
-                if custom_value and isinstance(custom_value, str) and len(custom_value.strip()) > 0:
-                    prompts[prompt_type][lang] = custom_value
-                    console_log(f"✅ Используем кастомный промпт: {prompt_type}.{lang} (длина: {len(custom_value)})")
-                else:
-                    # Fallback на manifest.json
-                    lang_data = safe_dict_get(manifest_prompts, f"{prompt_type}.{lang}", {})
-
-                    manifest_value = safe_dict_get(lang_data, "default", "")
-                    prompts[prompt_type][lang] = manifest_value
-                    console_log(f"ℹ️ Используем промпт по умолчанию: {prompt_type}.{lang}")
-
-        console_log(f"🔍 Диагностика промптов:")
-        console_log(f"   Plugin settings prompts: {custom_prompts_raw}")
-        console_log(f"   Manifest prompts: {manifest_prompts}")
-        console_log(f"   Plugin settings prompts: {custom_prompts_raw}")
-        console_log(f"   Final prompts structure: {prompts}")
-        console_log(f"📋 Загружено промптов: {len([p for pt in prompts.values() for p in pt.values() if p])} кастомных")
-        return prompts
-
-    except Exception as e:
-        console_log(f"❌ Ошибка загрузки промптов: {str(e)}")
-        console_log(f"🔍 Диагностика ошибки:")
-        console_log(f"   Plugin settings: {plugin_settings}")
-        console_log(f"   Plugin settings type: {type(plugin_settings)}")
-        # Критический fallback - возвращаем пустые промпты
-        return {
-            'optimized': {'ru': '', 'en': ''},
-            'deep': {'ru': '', 'en': ''}
+            'basic_analysis': {'ru': '', 'en': ''},
+            'deep_analysis': {'ru': '', 'en': ''}
         }
 
 
@@ -461,142 +412,23 @@ def _get_builtin_default_prompt(prompt_type: str, lang: str) -> str:
     Возвращает встроенные промпты по умолчанию для случаев когда они не найдены в manifest.json.
 
     Args:
-        prompt_type: Тип промпта ('optimized' или 'deep')
+        prompt_type: Тип промпта ('basic_analysis' или 'deep_analysis')
         lang: Язык промпта ('ru' или 'en')
 
     Returns:
         Строка с промптом по умолчанию или пустая строка если не найден
     """
     builtin_prompts = {
-        'optimized': {
+        'basic_analysis': {
             'ru': 
-#             """Ты - токсиколог и химик-косметолог с 15-летним опытом. Твоя задача: провести КРИТИЧЕСКИЙ анализ косметического продукта, разоблачая маркетинговые уловки.
-
-# ДАННЫЕ:
-# Описание: {description}
-# Состав: {composition}
-
-# ОБЯЗАТЕЛЬНАЯ МЕТОДОЛОГИЯ АНАЛИЗА:
-
-# 1. ПРОВЕРКА МАРКЕТИНГОВЫХ ЗАЯВЛЕНИЙ:
-# - Термины типа "3D/4D/5D", "революционный", "инновационный" - ТРЕБУЮТ доказательств
-# - Для каждого заявления ("лифтинг", "против морщин"):
-#     * Найди КОНКРЕТНЫЙ активный компонент
-#     * Оцени его ПОЗИЦИЮ в списке (начало = высокая концентрация, конец = маркетинг)
-#     * Укажи ЭФФЕКТИВНУЮ концентрацию из исследований vs вероятную в продукте
-
-# 2. ТОКСИКОЛОГИЧЕСКИЙ СКРИНИНГ (приоритет №1):
-# - Проверь КАЖДЫЙ компонент на:
-#     * Формальдегид-релизеры (DMDM Hydantoin, Quaternium-15, и т.д.)
-#     * Парабены (особенно butyl-, propyl-)
-#     * Устаревшие УФ-фильтры (Octinoxate, Oxybenzone)
-#     * Потенциальные эндокринные дизрапторы
-# - Если найдено ≥3 проблемных компонента → оценка НЕ МОЖЕТ быть >5/10
-
-# 3. РЕАЛИСТИЧНАЯ ОЦЕНКА ПЕПТИДОВ/АКТИВОВ:
-# - Palmitoyl Tripeptide-38: эффективен при 2-4%, если в середине списка → скорее <1% → эффект минимален
-# - Collagen/Elastin: молекулы НЕ проникают, работают только как пленка
-# - Hyaluronic acid: увлажняет ПОВЕРХНОСТНО, НЕ разглаживает глубокие морщины
-
-# 4. СРАВНЕНИЕ С СОВРЕМЕННЫМИ СТАНДАРТАМИ:
-# - Современная косметика = без парабенов, с новыми консервантами
-# - Устаревшие формулы → снижение оценки на 2-3 балла
-
-# 5. ШКАЛА ОЦЕНКИ (СТРОГАЯ):
-# - 9-10: Идеальный состав, доказанные активы в высоких концентрациях, без токсичных компонентов
-# - 7-8: Хороший состав, минимум проблемных компонентов
-# - 5-6: Средний продукт, есть проблемные компоненты ИЛИ активы в низких дозах
-# - 3-4: Устаревшая формула, много токсичных компонентов, маркетинговые заявления не подтверждены
-# - 1-2: Опасный или полностью бесполезный продукт
-
-# КРИТИЧЕСКИ ВАЖНО:
-# - Будь СКЕПТИЧЕН к маркетингу
-# - НЕ завышай оценку из вежливости
-# - Если состав устаревший (парабены + формальдегид-релизеры) → максимум 5/10
-# - Если заявления не подтверждены активами в ДОСТАТОЧНОЙ концентрации → снижай оценку
-
-# ФОРМАТ ОТВЕТА - ТОЛЬКО JSON:
-# {{
-# "score": число_от_1_до_10,
-# "reasoning": "ДЕТАЛЬНЫЙ анализ:
-#     1. Проверка маркетинга: [разбери каждое заявление]
-#     2. Токсикологический профиль: [перечисли ВСЕ проблемные компоненты]
-#     3. Реальная эффективность активов: [концентрации vs заявления]
-#     4. Сравнение с современными стандартами: [почему устарел/актуален]
-#     5. Итоговый вердикт: [честное заключение]",
-# "confidence": число_от_0_до_1,
-# "red_flags": ["список всех токсичных/проблемных компонентов"],
-# "marketing_lies": ["список не подтвержденных маркетинговых заявлений"]
-# }}
-
-# ЯЗЫК: Русский, технический стиль с примерами."""
 """
 Тестовый пример: сколько будет 1+2
 """
 ,
-            'en': """You are a board-certified toxicologist and cosmetic chemist with 15 years of experience in ingredient safety assessment. Your task: conduct a CRITICAL, evidence-based analysis of this cosmetic product, exposing marketing manipulation.
-
-DATA:
-Description: {description}
-Composition: {composition}
-
-MANDATORY ANALYSIS PROTOCOL:
-
-1. TOXICOLOGICAL SCREENING (highest priority):
-- Screen EVERY ingredient for:
-    * Formaldehyde-releasers (DMDM Hydantoin, Quaternium-15, Diazolidinyl Urea, Imidazolidinyl Urea)
-    * Parabens (particularly butylparaben, propylparaben - EU restricted)
-    * Obsolete UV filters (Octinoxate/Ethylhexyl Methoxycinnamate, Oxybenzone)
-    * Known/suspected endocrine disruptors
-- HARD RULE: ≥3 high-concern ingredients → score CAPPED at 5/10 maximum
-
-2. MARKETING CLAIMS VERIFICATION:
-- Buzzwords like "3D/4D/5D technology", "revolutionary", "clinical breakthrough" - DEMAND evidence
-- For each claim ("lifting", "anti-wrinkle", "firming"):
-    * Identify the SPECIFIC active ingredient responsible
-    * Evaluate its POSITION in INCI list (first 5 = meaningful dose, after position 10 = cosmetic dose)
-    * Compare PROVEN effective concentration from peer-reviewed studies vs. LIKELY concentration in this product
-
-3. REALISTIC EFFICACY ASSESSMENT:
-- Palmitoyl Tripeptide-38 (Matrixyl synthe'6): clinically effective at 2-4%; if listed mid-INCI → probably <1% → negligible effect
-- Collagen/Hydrolyzed Elastin: molecular weight >500 Da → CANNOT penetrate stratum corneum → function only as humectants/film-formers
-- Sodium Hyaluronate: provides surface hydration only, CANNOT affect dermal structure or deep wrinkles
-
-4. MODERN FORMULATION STANDARDS COMPARISON:
-- 2025 best practices: phenoxyethanol or modern preservative systems, NO paraben cocktails
-- Formulations using 4+ parabens + formaldehyde-releasers = outdated 2000s technology → automatic -2 to -3 point deduction
-
-5. EVIDENCE-BASED SCORING RUBRIC (strict grading):
-- 9-10: Exceptional formulation, clinically-validated actives at proven concentrations, clean safety profile
-- 7-8: Well-formulated, minor concerns only, actives present at reasonable levels
-- 5-6: Mediocre product with significant concerns (problematic preservatives OR underdosed actives OR misleading claims)
-- 3-4: Poor formulation with multiple red flags, outdated technology, unsubstantiated marketing
-- 1-2: Potentially harmful or fraudulent product
-
-CRITICAL ASSESSMENT RULES:
-- Maintain scientific skepticism toward all marketing language
-- Apply evidence-based standards, NOT brand reputation
-- Outdated preservation system (multiple parabens + formaldehyde-releaser) = AUTOMATIC cap at 5/10
-- Claims unsupported by adequate active concentrations = reduce score proportionally
-- Default to LOWER score when ingredient concentrations are ambiguous
-
-OUTPUT FORMAT - VALID JSON ONLY:
-{{
-"score": integer_1_to_10,
-"reasoning": "COMPREHENSIVE ANALYSIS:
-    1. Toxicological Profile: [enumerate ALL concerning ingredients with specific risks]
-    2. Marketing Claims Audit: [fact-check each claim against ingredient reality]
-    3. Active Ingredient Efficacy: [compare claimed benefits vs. probable concentrations vs. scientific evidence]
-    4. Formulation Modernity Assessment: [evaluate against current industry standards]
-    5. Evidence-Based Verdict: [objective conclusion with no marketing bias]",
-"confidence": float_0_to_1,
-"red_flags": ["comprehensive list of problematic/toxic/outdated ingredients"],
-"marketing_lies": ["specific unsubstantiated or misleading marketing claims"]
-}}
-
-RESPONSE LANGUAGE: English, using precise technical terminology."""
+            'en': 
+            """3+3="""
         },
-        'deep': {
+        'deep_analysis': {
             'ru': """Проведи глубокий анализ товара с медицинской и научной точки зрения.
 Описание: {description}
 Состав: {composition}
@@ -659,7 +491,6 @@ def clean_reasoning_for_chat(reasoning: str) -> str:
     reasoning = re.sub(r' +', ' ', reasoning)
 
     return reasoning.strip()
-
 # ==============================================================================
 # Оптимизированная система логирования для уменьшения повторяющихся сообщений
 # ==============================================================================
@@ -963,7 +794,6 @@ class AICache:
         """Очистить весь кеш."""
         self.cache.clear()
         self.metrics = {k: 0 for k in self.metrics.keys()}
-
 # ==============================================================================
 # Класс OzonAnalyzerServer с кешированием AI вызовов
 # ==============================================================================
@@ -1036,7 +866,12 @@ class OzonAnalyzerServer:
             'total_requests': total_requests
         }
 
-    async def _call_ai_model(self, model_alias: str, prompt: str, context: Optional[str] = None) -> str:
+    async def _call_ai_model(self, model_alias: str, prompt: str, context: Optional[str] = None, api_key_id: Optional[str] = None) -> str:
+        console_log(f"OZON_ANALYZER_LLM_DEBUG: _call_ai_model вызван с model_alias={model_alias}, prompt_length={len(prompt)}, api_key_id={api_key_id}")
+        console_log(f"[DIAGNOSIS] ===== _CALL_AI_MODEL ENTRY =====")
+        console_log(f"[DIAGNOSIS] model_alias: {model_alias}")
+        console_log(f"[DIAGNOSIS] prompt preview: {prompt[:100]}...")
+        console_log(f"[DIAGNOSIS] api_key_id: {api_key_id}")
         """
         Асинхронный вызов AI модели с кешированием.
         Ключ кеша формируется на основе model_alias и prompt.
@@ -1076,20 +911,46 @@ class OzonAnalyzerServer:
 
         try:
 
-            # Асинхронный вызов AI модели
-            response_proxy = await js.llm_call(model_alias, {"prompt": prompt, "maxOutputTokens": 4096})
-
+            # Асинхронный вызов AI модели с передачей apiKeyId
+            llm_options = {"prompt": prompt, "maxOutputTokens": 4096}
+            if api_key_id:
+                llm_options["apiKeyId"] = api_key_id
+            console_log(f"[LLM_CALL] Вызов js.llm_call с options: {llm_options}")
+            console_log(f"[DIAGNOSIS] ===== LLM CALL DIAGNOSTICS =====")
+            console_log(f"[DIAGNOSIS] model_alias: {model_alias}")
+            console_log(f"[DIAGNOSIS] api_key_id: {api_key_id}")
+            console_log(f"[DIAGNOSIS] prompt length: {len(prompt)}")
+            console_log(f"[DIAGNOSIS] llm_options keys: {list(llm_options.keys()) if isinstance(llm_options, dict) else 'not dict'}")
+    
+            # DIAGNOSTIC: Check if js.llm_call exists
+            console_log(f"[DIAGNOSIS] js object exists: {hasattr(js, 'llm_call') if 'js' in globals() else 'js not in globals'}")
+            if 'js' in globals() and hasattr(js, 'llm_call'):
+                console_log(f"[DIAGNOSIS] js.llm_call is function: {callable(getattr(js, 'llm_call', None))}")
+            else:
+                console_log(f"[DIAGNOSIS] ❌ js.llm_call not available!")
+    
+            response_proxy = await js.llm_call(model_alias, llm_options)
+    
+            console_log(f"[DIAGNOSIS] js.llm_call returned: {response_proxy is not None}")
+            console_log(f"[DIAGNOSIS] response_proxy type: {type(response_proxy)}")
+    
             if response_proxy is None:
                 console_log(f"[BRIDGE DIAGNOSTIC] ❌ js.llm_call вернул None!")
+                console_log(f"[DIAGNOSIS] ===== LLM CALL DIAGNOSTICS END (NULL RESPONSE) =====")
                 raise Exception("js.llm_call вернул None")
-
+    
             # Правильная обработка PyodideFuture
             if hasattr(response_proxy, 'to_py'):
                 # Если это PyodideFuture, конвертируем
+                console_log(f"[DIAGNOSIS] Converting PyodideFuture with to_py()")
                 result = response_proxy.to_py()
             else:
                 # Если уже готовый результат
+                console_log(f"[DIAGNOSIS] Using direct result (no to_py needed)")
                 result = response_proxy
+    
+            console_log(f"[DIAGNOSIS] Final result type: {type(result)}")
+            console_log(f"[DIAGNOSIS] ===== LLM CALL DIAGNOSTICS END =====")
 
             # ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ СЫРОГО ОТВЕТА ОТ js.llm_call
             console_log("[RAW JS RESPONSE] ===== СЫРОЙ ОТВЕТ ОТ js.llm_call =====")
@@ -1249,10 +1110,15 @@ class OzonAnalyzerServer:
                     metrics = self._get_cache_metrics()
                     # console_log(f"Кеш метрики обновлены: {metrics['cache_size']}/{metrics['max_size']} записей, {metrics['hit_rate_percent']}% hit rate")
 
+            console_log(f"[DIAGNOSIS] ===== _CALL_AI_MODEL SUCCESSFUL RETURN =====")
+            console_log(f"[DIAGNOSIS] Response length: {len(response_text)}")
             # console_log(f"AI вызов завершен (~{response_time}ms)")
             return response_text
 
         except Exception as e:
+            console_log(f"[DIAGNOSIS] ===== _CALL_AI_MODEL EXCEPTION =====")
+            console_log(f"[DIAGNOSIS] Exception type: {type(e).__name__}")
+            console_log(f"[DIAGNOSIS] Exception message: {str(e)}")
             plugin_settings = get_pyodide_var('pluginSettings', {})
             content_language = get_safe_content_language(plugin_settings)
             if content_language == "ru":
@@ -1285,7 +1151,6 @@ except ImportError:
     # В минимальной среде Python `Protocol` может отсутствовать.
     # В Pyodide это не вызовет проблем.
     pass
-
 # ==============================================================================
 # Оптимизированный DOM Parser для высокопроизводительного парсинга HTML
 # ==============================================================================
@@ -1768,7 +1633,6 @@ class FastDOMParser:
             pass
 
         return categories[:5] if categories else ["Категория не определена"]
-
     def _extract_categories_from_breadcrumbs(self) -> List[str]:
         """Извлечение ID категорий из хлебных крошек с многоуровневым fallback: lxml > html.parser > regex."""
 
@@ -2236,7 +2100,6 @@ class FastDOMParser:
             'amount': 0,
             'currency': 'unknown'
         }
-
     def _extract_rating(self) -> Dict[str, Any]:
         """Извлечение рейтинга товара с многоуровневым fallback: lxml > html.parser > regex."""
 
@@ -2638,16 +2501,19 @@ async def _analyze_product_async(description: str, composition: str, categories:
     if plugin_settings is None:
         plugin_settings = {}
 
-    # Запускаем анализ соответствия и поиск аналогов параллельно
-    analysis_task = _analyze_composition_vs_description(description, composition, plugin_settings, content_language)
+    # Запускаем анализ соответствия и поиск аналогов последовательно для избежания конфликтов
+    analysis_result = await _analyze_composition_vs_description(description, composition, plugin_settings, content_language)
 
-    # Проверяем настройку search_for_analogs
+    # Проверяем настройку search_for_analogs и запускаем поиск аналогов отдельно
+    analogs = []
     if plugin_settings.get('search_for_analogs', False):
-        analogs_task = _find_similar_products(categories, composition, plugin_settings, content_language)
+        try:
+            analogs = await _find_similar_products(categories, composition, plugin_settings, content_language)
+        except Exception as analog_error:
+            console_log(f"Ошибка при поиске аналогов: {analog_error}")
+            analogs = [{"name": f"Ошибка поиска аналогов: {str(analog_error)}", "error": True}]
     else:
-        analogs_task = asyncio.create_task(asyncio.sleep(0, []))
-
-    analysis_result, analogs = await asyncio.gather(analysis_task, analogs_task, return_exceptions=True)
+        analogs = []
 
     # Обрабатываем исключения
     if isinstance(analysis_result, Exception):
@@ -2659,6 +2525,230 @@ async def _analyze_product_async(description: str, composition: str, categories:
         analogs = [{"name": f"Ошибка поиска аналогов: {str(analogs)}", "error": True}]
 
     return analysis_result, analogs
+
+def get_selected_llm_config(plugin_settings: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+    """
+    Получает выбранные LLM модели для каждого типа анализа с учетом выбора пользователя.
+    
+    Приоритет:
+    1. Выбор пользователя из plugin_settings (если есть)
+    2. Default LLM из manifest.json
+    3. Fallback на стандартные модели
+
+    Args:
+        plugin_settings: Настройки плагина из Pyodide globals
+
+    Returns:
+        Словарь с выбранными моделями: {'basic_analysis': 'model_name', 'deep_analysis': 'model_name'}
+    """
+    console_log("[LLM_CONFIG] ===== ПОЛУЧЕНИЕ КОНФИГУРАЦИИ LLM =====")
+
+    # Получить manifest из plugin_settings или globals
+    manifest = None
+    if plugin_settings and isinstance(plugin_settings, dict):
+        manifest = safe_dict_get(plugin_settings, 'manifest', None)
+    if manifest is None:
+        manifest = get_pyodide_var('manifest', {})
+
+    console_log(f"[LLM_CONFIG] Manifest получен: {manifest is not None}")
+
+    # Получить выбор пользователя из plugin_settings
+    selected_llms = {}
+    if plugin_settings and isinstance(plugin_settings, dict):
+        selected_llms = safe_dict_get(plugin_settings, 'selected_llms', {})
+        console_log(f"[LLM_CONFIG] Выбор пользователя: {selected_llms}")
+
+    # Получить ai_models из manifest для fallback
+    ai_models = safe_dict_get(manifest, 'ai_models', {})
+    console_log(f"[LLM_CONFIG] AI models из manifest: {ai_models}")
+
+    # Определяем модели для каждого типа анализа и языка
+    result = {}
+    
+    # Для basic_analysis
+    basic_ru_llm = safe_dict_get(selected_llms, 'basic_analysis.ru')
+    basic_en_llm = safe_dict_get(selected_llms, 'basic_analysis.en')
+    
+    if basic_ru_llm and basic_ru_llm != 'default':
+        result['basic_analysis'] = basic_ru_llm
+        console_log(f"[LLM_CONFIG] Используем пользовательский выбор для basic_analysis: {basic_ru_llm}")
+    elif basic_en_llm and basic_en_llm != 'default':
+        result['basic_analysis'] = basic_en_llm
+        console_log(f"[LLM_CONFIG] Используем пользовательский выбор для basic_analysis (EN): {basic_en_llm}")
+    else:
+        # Fallback на manifest или стандартную модель
+        result['basic_analysis'] = safe_dict_get(ai_models, 'compliance_check',
+                                               safe_dict_get(ai_models, 'basic_analysis', 'gemini-flash-lite'))
+        console_log(f"[LLM_CONFIG] Используем fallback для basic_analysis: {result['basic_analysis']}")
+
+    # Для deep_analysis
+    deep_ru_llm = safe_dict_get(selected_llms, 'deep_analysis.ru')
+    deep_en_llm = safe_dict_get(selected_llms, 'deep_analysis.en')
+    
+    if deep_ru_llm and deep_ru_llm != 'default':
+        result['deep_analysis'] = deep_ru_llm
+        console_log(f"[LLM_CONFIG] Используем пользовательский выбор для deep_analysis: {deep_ru_llm}")
+    elif deep_en_llm and deep_en_llm != 'default':
+        result['deep_analysis'] = deep_en_llm
+        console_log(f"[LLM_CONFIG] Используем пользовательский выбор для deep_analysis (EN): {deep_en_llm}")
+    else:
+        # Fallback на manifest или стандартную модель
+        result['deep_analysis'] = safe_dict_get(ai_models, 'deep_analysis', 'gemini-pro')
+        console_log(f"[LLM_CONFIG] Используем fallback для deep_analysis: {result['deep_analysis']}")
+
+    console_log(f"[LLM_CONFIG] Финальная конфигурация LLM: {result}")
+    console_log("[LLM_CONFIG] ===== КОНЕЦ ПОЛУЧЕНИЯ КОНФИГУРАЦИИ LLM =====")
+
+    return result
+def get_api_key_for_analysis(plugin_settings: Optional[Dict[str, Any]] = None,
+                            analysis_type: str = 'basic_analysis',
+                            content_language: str = 'ru',
+                            selected_llm: str = 'default') -> str:
+    """
+    Получить правильный API-ключ для анализа.
+
+    Args:
+        plugin_settings: Настройки плагина
+        analysis_type: Тип анализа ('basic_analysis' или 'deep_analysis')
+        content_language: Язык контента ('ru' или 'en')
+        selected_llm: Выбранная LLM ('default' или платформенная)
+
+    Returns:
+        ID ключа для использования в js.llm_call
+    """
+    console_log(f"[DIAGNOSIS] ===== API KEY RETRIEVAL DIAGNOSTICS =====")
+    console_log(f"[DIAGNOSIS] Input parameters: analysis_type='{analysis_type}', content_language='{content_language}', selected_llm='{selected_llm}'")
+
+    # DIAGNOSTIC: Log plugin_settings structure
+    console_log(f"[DIAGNOSIS] plugin_settings type: {type(plugin_settings)}")
+    if plugin_settings:
+        console_log(f"[DIAGNOSIS] plugin_settings keys: {list(plugin_settings.keys()) if isinstance(plugin_settings, dict) else 'not dict'}")
+        api_keys = safe_dict_get(plugin_settings, 'api_keys', {})
+        console_log(f"[DIAGNOSIS] api_keys from plugin_settings: {api_keys}")
+    else:
+        console_log(f"[DIAGNOSIS] plugin_settings is None")
+        api_keys = {}
+
+    # DIAGNOSTIC: Check for API key availability
+    console_log(f"[DIAGNOSIS] Checking API key availability...")
+
+    if selected_llm == 'default':
+        # Для Default LLM используем dotted key с .default
+        key_id_dotted = f'ozon-analyzer.{analysis_type}.{content_language}.default'
+        console_log(f"[DIAGNOSIS] Generated dotted key_id for default LLM: {key_id_dotted}")
+
+        # Проверяем наличие ключа по dotted-формату
+        specific_key = safe_dict_get(api_keys, key_id_dotted, '')
+        console_log(f"[DIAGNOSIS] Specific dotted key {key_id_dotted} exists: {bool(specific_key and specific_key.strip())}")
+
+        if specific_key and specific_key.strip():
+            console_log(f"[DIAGNOSIS] ✅ Using specific key: {key_id_dotted}")
+            console_log(f"[DIAGNOSIS] ===== API KEY DIAGNOSTICS COMPLETE =====")
+            return key_id_dotted
+        else:
+            console_log(f"[DIAGNOSIS] ❌ Dotted key {key_id_dotted} not set, will rely on background default handling")
+            console_log(f"[DIAGNOSIS] ===== API KEY DIAGNOSTICS COMPLETE =====")
+            return None
+    else:
+        # Для платформенной LLM используем её ID
+        console_log(f"[DIAGNOSIS] ✅ Using platform key: {selected_llm}")
+        console_log(f"[DIAGNOSIS] ===== API KEY DIAGNOSTICS COMPLETE =====")
+        return selected_llm
+
+
+def get_selected_llm_for_analysis(plugin_settings: Optional[Dict[str, Any]] = None,
+                                analysis_type: str = 'basic_analysis',
+                                content_language: str = 'ru') -> str:
+    """
+    Получить выбранную пользователем LLM для данного типа анализа и языка.
+    
+    Args:
+        plugin_settings: Настройки плагина
+        analysis_type: Тип анализа ('basic_analysis' или 'deep_analysis')
+        content_language: Язык контента ('ru' или 'en')
+    
+    Returns:
+        Выбранная LLM или 'default' если выбор не сделан
+    """
+    console_log(f"[LLM_SELECTION] Получение LLM для {analysis_type}.{content_language}")
+    
+    # Получить выбор пользователя из plugin_settings
+    selected_llms = {}
+    if plugin_settings and isinstance(plugin_settings, dict):
+        selected_llms = safe_dict_get(plugin_settings, 'selected_llms', {})
+    
+    # Получить выбор для конкретной комбинации
+    user_choice = safe_dict_get(selected_llms, f'{analysis_type}.{content_language}')
+    
+    if user_choice and user_choice != 'default':
+        console_log(f"[LLM_SELECTION] Пользователь выбрал: {user_choice}")
+        return user_choice
+    else:
+        console_log(f"[LLM_SELECTION] Используем default LLM")
+        return 'default'
+
+
+def get_api_key_for_llm(plugin_settings: Optional[Dict[str, Any]] = None,
+                       selected_llm: str = 'default',
+                       analysis_type: str = 'basic_analysis',
+                       content_language: str = 'ru') -> str:
+    """
+    Получить API-ключ для выбранной LLM.
+    
+    Args:
+        plugin_settings: Настройки плагина
+        selected_llm: Выбранная LLM
+        analysis_type: Тип анализа ('basic_analysis' или 'deep_analysis')
+        content_language: Язык контента ('ru' или 'en')
+    
+    Returns:
+        API-ключ для выбранной LLM
+    """
+    console_log(f"[API_KEY] Получение API-ключа для {selected_llm} ({analysis_type}.{content_language})")
+    
+    if selected_llm == 'default':
+        # Для Default LLM используем dotted key с .default
+        key_id = f'ozon-analyzer.{analysis_type}.{content_language}.default'
+        console_log(f"[API_KEY] Используем специфичный dotted ключ: {key_id}")
+        return key_id
+    else:
+        # Для платформенной LLM используем её ID
+        console_log(f"[API_KEY] Используем платформенный ключ: {selected_llm}")
+        return selected_llm
+
+
+def get_platform_api_key(llm_id: str) -> str:
+    """
+    Получить API-ключ платформы для указанной LLM.
+    
+    Args:
+        llm_id: ID LLM модели
+    
+    Returns:
+        API-ключ платформы или пустая строка
+    """
+    try:
+        # Получаем глобальные AI ключи из pyodide
+        global_ai_keys = get_pyodide_var('globalAIKeys', [])
+        
+        if not isinstance(global_ai_keys, list):
+            console_log(f"[PLATFORM_API_KEY] globalAIKeys не является списком: {type(global_ai_keys)}")
+            return ''
+        
+        # Ищем ключ для указанной LLM
+        for key_info in global_ai_keys:
+            if isinstance(key_info, dict) and key_info.get('id') == llm_id:
+                api_key = key_info.get('apiKey', '')
+                console_log(f"[PLATFORM_API_KEY] Найден ключ для {llm_id}: {'есть' if api_key else 'пустой'}")
+                return api_key
+        
+        console_log(f"[PLATFORM_API_KEY] Ключ для {llm_id} не найден в глобальных ключах")
+        return ''
+        
+    except Exception as e:
+        console_log(f"[PLATFORM_API_KEY] Ошибка получения платформенного ключа: {str(e)}")
+        return ''
+
 
 def get_safe_content_language(plugin_settings: Dict[str, Any]) -> str:
     """
@@ -2754,7 +2844,56 @@ def detect_language(text: str) -> str:
     else:
         return 'en'
 
-def analyze_ozon_product(input_data: Dict[str, Any] = None,
+def get_default_model_id_from_manifest(analysis_type: str = 'basic_analysis', content_language: str = 'ru', plugin_settings: Optional[Dict[str, Any]] = None) -> str:
+    """
+    Получить id модели по умолчанию из manifest для данного analysis_type и языка.
+    """
+    console_log(f"[DEFAULT_MODEL] Получение модели для {analysis_type}.{content_language}")
+    
+    manifest = None
+    if plugin_settings and isinstance(plugin_settings, dict):
+        manifest = safe_dict_get(plugin_settings, 'manifest', None)
+        console_log(f"[DEFAULT_MODEL] Manifest из plugin_settings: {manifest is not None}")
+    
+    if manifest is None:
+        manifest = get_pyodide_var('manifest', {})
+        console_log(f"[DEFAULT_MODEL] Manifest из pyodide globals: {manifest is not None}")
+    
+    console_log(f"[DEFAULT_MODEL] Manifest keys: {list(manifest.keys()) if isinstance(manifest, dict) else 'not dict'}")
+    
+    try:
+        prompts = manifest.get('options', {}).get('prompts', {})
+        console_log(f"[DEFAULT_MODEL] Prompts keys: {list(prompts.keys()) if isinstance(prompts, dict) else 'not dict'}")
+        
+        analysis_prompts = prompts.get(analysis_type, {})
+        console_log(f"[DEFAULT_MODEL] Analysis prompts for {analysis_type}: {list(analysis_prompts.keys()) if isinstance(analysis_prompts, dict) else 'not dict'}")
+        
+        lang_prompts = analysis_prompts.get(content_language, {})
+        console_log(f"[DEFAULT_MODEL] Language prompts for {content_language}: {list(lang_prompts.keys()) if isinstance(lang_prompts, dict) else 'not dict'}")
+        
+        default_llm = lang_prompts.get('LLM', {}).get('default', None)
+        console_log(f"[DEFAULT_MODEL] Default LLM config: {default_llm}")
+        
+        # Если для Default LLM задан curl_file, не подменяем на платформенные модели
+        # Возвращаем alias по типу анализа, чтобы background сопоставил его через manifest.ai_models
+        if isinstance(default_llm, dict) and 'curl_file' in default_llm:
+            console_log(f"[DEFAULT_MODEL] ✅ Found curl_file, returning analysis_type: {analysis_type}")
+            return analysis_type
+        
+        if isinstance(default_llm, dict) and 'model' in default_llm:
+            console_log(f"[DEFAULT_MODEL] Found model in default_llm: {default_llm['model']}")
+            return default_llm['model']
+        if isinstance(default_llm, str):
+            console_log(f"[DEFAULT_MODEL] Found string default_llm: {default_llm}")
+            return default_llm
+    except Exception as e:
+        console_log(f"[DEFAULT_MODEL] Ошибка получения модели из manifest: {str(e)}")
+    
+    # Fallback: возвращаем alias типа анализа, чтобы background решил сопоставление
+    console_log(f"[DEFAULT_MODEL] Fallback: returning analysis_type {analysis_type}")
+    return analysis_type
+
+async def analyze_ozon_product(input_data: Dict[str, Any] = None,
                         page_html_chunk_count: int = None,
                         page_html_total_length: int = None,
                         page_html_chunk_0: str = None) -> Dict[str, Any]:
@@ -3045,7 +3184,6 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
             else:
                 console_log("❌ Данные не готовы - прямая передача не удалась")
                 raise ValueError("Прямая передача не удалась - HTML не получен или поврежден")
-
         else:
             # Режим чанковой передачи - нужно собрать HTML из чанков
             # console_log(f"📦 Режим CHUNKS: чтение {chunk_count} чанков из Python globals")
@@ -3543,7 +3681,6 @@ def analyze_ozon_product(input_data: Dict[str, Any] = None,
         else:
             # console_log(f"[DEBUG] Неизвестный язык '{content_language}', используем fallback (русский)")
             chat_message(f"📝 Описание: {truncated_description}\n📝 Состав: {truncated_composition} [LANG:{content_language}]")
-
         # Проверяем, что переменные корректны
         score_str = str(score) if score is not None else 'N/A'
         reasoning_str = str(reasoning) if reasoning is not None else ('Объяснение не доступно' if content_language == "ru" else 'Explanation not available')
@@ -3721,7 +3858,6 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
     if not description or not composition:
         return { "status": "error", "message": "Описание или состав не были переданы для глубокого анализа."}
-
     # Получить pluginSettings из pyodide globals
     plugin_settings = get_pyodide_var('pluginSettings', {})
 
@@ -3743,6 +3879,22 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
     # console_log(f"[LANGUAGE] Язык контента определен: '{content_language}'")
     # console_log(f"[LANGUAGE] Финальный результат get_safe_content_language: '{content_language}'")
 
+    # Получить выбранную пользователем LLM для deep_analysis
+    selected_llm = get_selected_llm_for_analysis(plugin_settings, 'deep_analysis', content_language)
+    console_log(f"[LLM_SELECTION] Выбрана LLM для deep_analysis.{content_language}: {selected_llm}")
+    
+    # Получить правильный model_alias для вызова _call_ai_model
+    if selected_llm == 'default':
+        console_log(f"[DEEP_ANALYSIS] Calling get_default_model_id_from_manifest for deep_analysis.{content_language}")
+        model_alias = get_default_model_id_from_manifest('deep_analysis', content_language, plugin_settings)
+        console_log(f"[DEEP_ANALYSIS] get_default_model_id_from_manifest returned: {model_alias}")
+    else:
+        model_alias = selected_llm
+    # Получить правильный API-ключ для выбранной LLM
+    api_key_id = get_api_key_for_analysis(plugin_settings, 'deep_analysis', content_language, selected_llm)
+    console_log(f"[API_KEY] Используем API-ключ: {api_key_id}")
+
+
 
     # Получить пользовательские промпты
     try:
@@ -3751,28 +3903,28 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         console_log(f"❌ Ошибка загрузки промптов: {str(e)}, используем fallback")
         user_prompts = {
-            'optimized': {'ru': '', 'en': ''},
-            'deep': {'ru': '', 'en': ''}
+            'basic_analysis': {'ru': '', 'en': ''},
+            'deep_analysis': {'ru': '', 'en': ''}
         }
 
     # console_log(f"Глубокий анализ: desc='{description[:100]}...', comp='{composition[:100]}...', язык={content_language}")
 
     # Получить промпт из пользовательских настроек или дефолтный
     try:
-        deep_prompt = user_prompts.get('deep', {}).get(content_language)
+        deep_prompt = user_prompts.get('deep_analysis', {}).get(content_language)
         if not deep_prompt or len(deep_prompt.strip()) < 3:
-            console_log(f"⚠️ Промпт deep.{content_language} не найден или слишком короткий, используем fallback")
+            console_log(f"⚠️ Промпт deep_analysis.{content_language} не найден или слишком короткий, используем fallback")
             deep_prompt = None
         else:
-            console_log(f"✅ Используем промпт deep.{content_language}")
+            console_log(f"✅ Используем промпт deep_analysis.{content_language}")
     except Exception as e:
-        console_log(f"❌ Ошибка получения промпта deep.{content_language}: {str(e)}, используем fallback")
+        console_log(f"❌ Ошибка получения промпта deep_analysis.{content_language}: {str(e)}, используем fallback")
         deep_prompt = None
 
-    # Оптимизированный промпт с учетом выбранного языка
+    # Базовый промпт с учетом выбранного языка
     if deep_prompt:
         prompt = deep_prompt
-        console_log(f"📋 Используем пользовательский промпт deep для языка {content_language}")
+        console_log(f"📋 Используем пользовательский промпт deep_analysis для языка {content_language}")
     elif content_language == "ru":
         # Старый хардкод промпт как fallback
         prompt = f"""
@@ -3785,11 +3937,11 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
         3. Эффективность по сравнению с аналогами.
         Верни детальный максимально подробный обоснованный анализ в структурированном виде (используй Markdown).
         """
-        console_log(f"⚠️ Используем fallback промпт deep для языка {content_language}")
+        console_log(f"⚠️ Используем fallback промпт deep_analysis для языка {content_language}")
     else:  # English
         # Старый хардкод промпт как fallback для английского
         prompt = f"""
-        Conduct a deep analysis of the product from a medical and scientific perspective.
+        Conduct a deep_analysis analysis of the product from a medical and scientific perspective.
         Description: {description}
         Composition: {composition}
         Analyze:
@@ -3798,13 +3950,11 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
         3. Effectiveness compared to analogs.
         Return a detailed, maximally comprehensive, reasoned analysis in a structured form (use Markdown).
         """
-        console_log(f"⚠️ Используем fallback промпт deep для языка {content_language}")
+        console_log(f"⚠️ Используем fallback промпт deep_analysis для языка {content_language}")
 
     try:
-        # "deep_analysis" - это псевдоним из `manifest.json` этого плагина.
-        # Платформа сама определит, какую реальную модель (например, gemini-pro)
-        # использовать, и подставит соответствующий API-ключ.
-        result = await ozon_analyzer_server._call_ai_model("deep_analysis", prompt)
+        # Используем выбранную LLM и API-ключ
+        result = await ozon_analyzer_server._call_ai_model(model_alias, prompt, api_key_id=api_key_id)
 
         # Проверка типа данных от AI в perform_deep_analysis
         if not isinstance(result, str):
@@ -3816,14 +3966,18 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
         return { "deep_analysis_report": result }
     except Exception as e:
-        # console_log(f"[ERROR] Исключение в perform_deep_analysis: {type(e).__name__}: {str(e)}")
+        console_log(f"[ERROR] Исключение в perform_deep_analysis: {type(e).__name__}: {str(e)}")
         import traceback
-        # console_log(f"[ERROR] Traceback: {traceback.format_exc()}")
+        console_log(f"[ERROR] Traceback: {traceback.format_exc()}")
         if content_language == "ru":
             chat_message(f"❌ Ошибка глубокого анализа: {str(e)[:100]}...")
         else:  # English
             chat_message(f"❌ Deep analysis error: {str(e)[:100]}...")
-        return { "status": "error", "message": f"Ошибка глубокого анализа: {str(e)}" }
+        return {
+            "status": "error",
+            "message": f"Deep analysis error: {str(e)}" if content_language != "ru"
+                       else f"Ошибка глубокого анализа: {str(e)}"
+        }
     finally:
         # [DIAGNOSTIC] ЛОГИРОВАНИЕ В КОНЦЕ perform_deep_analysis
         console_log("[DIAGNOSTIC] >>>>>> perform_deep_analysis FUNCTION ENDING <<<<<<")
@@ -4010,7 +4164,6 @@ def _check_html_integrity(html_content: str, source_name: str) -> None:
 
     except Exception as e:
         console_log(f"❌ Ошибка при проверке целостности HTML: {e}")
-
 def _reconstruct_chunked_strings(input_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Восстанавливает большие строки, которые были разделены на чанки в PyodideManager.
@@ -4161,14 +4314,9 @@ async def _analyze_composition_vs_description(description: str, composition: str
     except Exception as e:
         console_log(f"❌ Ошибка загрузки промптов: {str(e)}, используем fallback")
         user_prompts = {
-            'optimized': {'ru': '', 'en': ''},
-            'deep': {'ru': '', 'en': ''}
+            'basic_analysis': {'ru': '', 'en': ''},
+            'deep_analysis': {'ru': '', 'en': ''}
         }
-
-    # ИСПОЛЬЗУЕМ ПЕРЕДАННЫЙ content_language ИЗ analyze_ozon_product
-    # console_log(f"[LANGUAGE] Используем переданный content_language: '{content_language}'")
-    # console_log(f"Анализ соответствия: desc='{description[:100]}...', comp='{composition[:100]}...', язык={content_language}")
-    # console_log(f"[DIAGNOSTIC] Финальный content_language в _analyze_composition_vs_description: '{content_language}'")
 
     # Предварительный анализ для сокращения размера промпта
     analysis_cache_key = f"pre_analysis:{hash(description[:100] + composition[:100])}"
@@ -4184,214 +4332,64 @@ async def _analyze_composition_vs_description(description: str, composition: str
 
     # Получить промпт из пользовательских настроек или дефолтный
     try:
-        optimized_prompt = user_prompts.get('optimized', {}).get(content_language)
-        if not optimized_prompt or len(optimized_prompt.strip()) < 3:
+        basic_analysis_prompt = user_prompts.get('basic_analysis', {}).get(content_language)
+        if not basic_analysis_prompt or len(basic_analysis_prompt.strip()) < 3:
             # Fallback на старый хардкод промпт
-            console_log(f"⚠️ Промпт optimized.{content_language} не найден или слишком короткий, используем fallback")
-            optimized_prompt = None
+            console_log(f"⚠️ Промпт basic_analysis.{content_language} не найден или слишком короткий, используем fallback")
+            basic_analysis_prompt = None
         else:
-            console_log(f"✅ Используем промпт optimized.{content_language}")
+            console_log(f"✅ Используем промпт basic_analysis.{content_language}")
     except Exception as e:
-        console_log(f"❌ Ошибка получения промпта optimized.{content_language}: {str(e)}, используем fallback")
-        optimized_prompt = None
+        console_log(f"❌ Ошибка получения промпта basic_analysis.{content_language}: {str(e)}, используем fallback")
+        basic_analysis_prompt = None
 
-    # Оптимизированный промпт с учетом выбранного языка
-    if optimized_prompt:
-        prompt = optimized_prompt
-        console_log(f"📋 Используем пользовательский промпт optimized для языка {content_language}")
+    # Базовый промпт с учетом выбранного языка
+    if basic_analysis_prompt:
+        prompt = basic_analysis_prompt
+        console_log(f"📋 Используем пользовательский промпт basic_analysis для языка {content_language}")
     elif content_language == "ru":
-        # prompt = f"""
-        # Проведи глубокий анализ (reasoning) соответствия Описания и Состава товара с медицинской и научной точки зрения:
-        # Описание: {description}
-        # Состав: {composition}
-        # Проанализируй:
-        # 1. Научную обоснованность заявленных свойств.
-        # 2. Потенциальные побочные эффекты и противопоказания.
-        # 3. Эффективность по сравнению с аналогами.
-        # Отвечай честно. Общую уверенность в ответе вырази в confidence.
-        # На основании этого анализа оцени соответствие Описания и Состава по шкале 1-10 (score) и верни JSON: {{"score": число, "reasoning": "подробное_обоснование_оценки", "confidence": значение_0_1}}
-        # Требуется вернуть ТОЛЬКО валидный JSON без какого-либо дополнительного текста, объяснений или форматирования.
-        # Выведи ответ на русском языке.
-        # """
-
-        # prompt = f"""
-        # Ты - токсиколог и химик-косметолог с 15-летним опытом. Твоя задача: провести КРИТИЧЕСКИЙ анализ косметического продукта, разоблачая маркетинговые уловки.
-
-        # ДАННЫЕ:
-        # Описание: {description}
-        # Состав: {composition}
-
-        # ОБЯЗАТЕЛЬНАЯ МЕТОДОЛОГИЯ АНАЛИЗА:
-
-        # 1. ПРОВЕРКА МАРКЕТИНГОВЫХ ЗАЯВЛЕНИЙ:
-        # - Термины типа "3D/4D/5D", "революционный", "инновационный" - ТРЕБУЮТ доказательств
-        # - Для каждого заявления ("лифтинг", "против морщин"):
-        #     * Найди КОНКРЕТНЫЙ активный компонент
-        #     * Оцени его ПОЗИЦИЮ в списке (начало = высокая концентрация, конец = маркетинг)
-        #     * Укажи ЭФФЕКТИВНУЮ концентрацию из исследований vs вероятную в продукте
-
-        # 2. ТОКСИКОЛОГИЧЕСКИЙ СКРИНИНГ (приоритет №1):
-        # - Проверь КАЖДЫЙ компонент на:
-        #     * Формальдегид-релизеры (DMDM Hydantoin, Quaternium-15, и т.д.)
-        #     * Парабены (особенно butyl-, propyl-)
-        #     * Устаревшие УФ-фильтры (Octinoxate, Oxybenzone)
-        #     * Потенциальные эндокринные дизрапторы
-        # - Если найдено ≥3 проблемных компонента → оценка НЕ МОЖЕТ быть >5/10
-
-        # 3. РЕАЛИСТИЧНАЯ ОЦЕНКА ПЕПТИДОВ/АКТИВОВ:
-        # - Palmitoyl Tripeptide-38: эффективен при 2-4%, если в середине списка → скорее <1% → эффект минимален
-        # - Collagen/Elastin: молекулы НЕ проникают, работают только как пленка
-        # - Hyaluronic acid: увлажняет ПОВЕРХНОСТНО, НЕ разглаживает глубокие морщины
-
-        # 4. СРАВНЕНИЕ С СОВРЕМЕННЫМИ СТАНДАРТАМИ:
-        # - Современная косметика = без парабенов, с новыми консервантами
-        # - Устаревшие формулы → снижение оценки на 2-3 балла
-
-        # 5. ШКАЛА ОЦЕНКИ (СТРОГАЯ):
-        # - 9-10: Идеальный состав, доказанные активы в высоких концентрациях, без токсичных компонентов
-        # - 7-8: Хороший состав, минимум проблемных компонентов
-        # - 5-6: Средний продукт, есть проблемные компоненты ИЛИ активы в низких дозах
-        # - 3-4: Устаревшая формула, много токсичных компонентов, маркетинговые заявления не подтверждены
-        # - 1-2: Опасный или полностью бесполезный продукт
-
-        # КРИТИЧЕСКИ ВАЖНО:
-        # - Будь СКЕПТИЧЕН к маркетингу
-        # - НЕ завышай оценку из вежливости
-        # - Если состав устаревший (парабены + формальдегид-релизеры) → максимум 5/10
-        # - Если заявления не подтверждены активами в ДОСТАТОЧНОЙ концентрации → снижай оценку
-
-        # ФОРМАТ ОТВЕТА - ТОЛЬКО JSON:
-        # {{
-        # "score": число_от_1_до_10,
-        # "reasoning": "ДЕТАЛЬНЫЙ анализ:
-        #     1. Проверка маркетинга: [разбери каждое заявление]
-        #     2. Токсикологический профиль: [перечисли ВСЕ проблемные компоненты]
-        #     3. Реальная эффективность активов: [концентрации vs заявления]
-        #     4. Сравнение с современными стандартами: [почему устарел/актуален]
-        #     5. Итоговый вердикт: [честное заключение]",
-        # "confidence": число_от_0_до_1,
-        # "red_flags": ["список всех токсичных/проблемных компонентов"],
-        # "marketing_lies": ["список не подтвержденных маркетинговых заявлений"]
-        # }}
-
-        # ЯЗЫК: Русский, технический стиль с примерами.
-        # """
         prompt = f"""
         """        
     else:  # English
-        # prompt = f"""
-        # You are a board-certified toxicologist and cosmetic chemist with 15 years of experience in ingredient safety assessment. Your task: conduct a CRITICAL, evidence-based analysis of this cosmetic product, exposing marketing manipulation.
-
-        # DATA:
-        # Description: {description}
-        # Composition: {composition}
-
-        # MANDATORY ANALYSIS PROTOCOL:
-
-        # 1. TOXICOLOGICAL SCREENING (highest priority):
-        # - Screen EVERY ingredient for:
-        #     * Formaldehyde-releasers (DMDM Hydantoin, Quaternium-15, Diazolidinyl Urea, Imidazolidinyl Urea)
-        #     * Parabens (particularly butylparaben, propylparaben - EU restricted)
-        #     * Obsolete UV filters (Octinoxate/Ethylhexyl Methoxycinnamate, Oxybenzone)
-        #     * Known/suspected endocrine disruptors
-        # - HARD RULE: ≥3 high-concern ingredients → score CAPPED at 5/10 maximum
-
-        # 2. MARKETING CLAIMS VERIFICATION:
-        # - Buzzwords like "3D/4D/5D technology", "revolutionary", "clinical breakthrough" - DEMAND evidence
-        # - For each claim ("lifting", "anti-wrinkle", "firming"):
-        #     * Identify the SPECIFIC active ingredient responsible
-        #     * Evaluate its POSITION in INCI list (first 5 = meaningful dose, after position 10 = cosmetic dose)
-        #     * Compare PROVEN effective concentration from peer-reviewed studies vs. LIKELY concentration in this product
-
-        # 3. REALISTIC EFFICACY ASSESSMENT:
-        # - Palmitoyl Tripeptide-38 (Matrixyl synthe'6): clinically effective at 2-4%; if listed mid-INCI → probably <1% → negligible effect
-        # - Collagen/Hydrolyzed Elastin: molecular weight >500 Da → CANNOT penetrate stratum corneum → function only as humectants/film-formers
-        # - Sodium Hyaluronate: provides surface hydration only, CANNOT affect dermal structure or deep wrinkles
-
-        # 4. MODERN FORMULATION STANDARDS COMPARISON:
-        # - 2025 best practices: phenoxyethanol or modern preservative systems, NO paraben cocktails
-        # - Formulations using 4+ parabens + formaldehyde-releasers = outdated 2000s technology → automatic -2 to -3 point deduction
-
-        # 5. EVIDENCE-BASED SCORING RUBRIC (strict grading):
-        # - 9-10: Exceptional formulation, clinically-validated actives at proven concentrations, clean safety profile
-        # - 7-8: Well-formulated, minor concerns only, actives present at reasonable levels
-        # - 5-6: Mediocre product with significant concerns (problematic preservatives OR underdosed actives OR misleading claims)
-        # - 3-4: Poor formulation with multiple red flags, outdated technology, unsubstantiated marketing
-        # - 1-2: Potentially harmful or fraudulent product
-
-        # CRITICAL ASSESSMENT RULES:
-        # - Maintain scientific skepticism toward all marketing language
-        # - Apply evidence-based standards, NOT brand reputation
-        # - Outdated preservation system (multiple parabens + formaldehyde-releaser) = AUTOMATIC cap at 5/10
-        # - Claims unsupported by adequate active concentrations = reduce score proportionally
-        # - Default to LOWER score when ingredient concentrations are ambiguous
-
-        # OUTPUT FORMAT - VALID JSON ONLY:
-        # {{
-        # "score": integer_1_to_10,
-        # "reasoning": "COMPREHENSIVE ANALYSIS:
-        #     1. Toxicological Profile: [enumerate ALL concerning ingredients with specific risks]
-        #     2. Marketing Claims Audit: [fact-check each claim against ingredient reality]
-        #     3. Active Ingredient Efficacy: [compare claimed benefits vs. probable concentrations vs. scientific evidence]
-        #     4. Formulation Modernity Assessment: [evaluate against current industry standards]
-        #     5. Evidence-Based Verdict: [objective conclusion with no marketing bias]",
-        # "confidence": float_0_to_1,
-        # "red_flags": ["comprehensive list of problematic/toxic/outdated ingredients"],
-        # "marketing_lies": ["specific unsubstantiated or misleading marketing claims"]
-        # }}
-
-        # RESPONSE LANGUAGE: English, using precise technical terminology.
-        # """
         prompt = f"""
         """
-    # prompt = f"""
-    # Проведи глубокий анализ соответствия Описания и Состава товара с медицинской и научной точки зрения.
-    # Описание: {description}
-    # Состав: {composition}
-    # Проанализируй:
-    # 1. Научную обоснованность заявленных свойств.
-    # 2. Потенциальные побочные эффекты и противопоказания.
-    # 3. Эффективность по сравнению с аналогами.
-    # Этот анализ (reasoning) оформи в структурированном виде (используй Markdown).
-    # На основании этого анализа оцени соответствие Описания и Состава по шкале 1-10 (score).
-    # Отвечай честно. Общую уверенность в ответе вырази в confidence.
-
-    # Верни JSON: {{\"score\": число, \"reasoning\": \"структурированный markdown-анализ\", \"confidence\": значение_0_1}}
-    # """
-
     try:
         # Логирование запроса к Gemini API в полном формате
         console_log("[GEMINI REQUEST] ===== REQUEST TO GEMINI API =====")
         console_log("[GEMINI REQUEST] Model: compliance_check")
-        # console_log(f"[GEMINI REQUEST] Prompt: {prompt}")
-        # console_log(f"[GEMINI REQUEST] Request Body: {{")
-        # console_log(f"[GEMINI REQUEST]   \"contents\": [")
-        # console_log(f"[GEMINI REQUEST]     {{")
-        # console_log(f"[GEMINI REQUEST]       \"parts\": [")
-        # console_log(f"[GEMINI REQUEST]         {{")
-        # console_log(f"[GEMINI REQUEST]           \"text\": \"{json.dumps(prompt).strip('\"')}\"")
-        # console_log(f"[GEMINI REQUEST]         }}")
-        # console_log(f"[GEMINI REQUEST]       ]")
-        # console_log(f"[GEMINI REQUEST]     }}")
-        # console_log(f"[GEMINI REQUEST]   ]")
-        # console_log(f"[GEMINI REQUEST] }}")
         console_log("[GEMINI REQUEST] ===== END REQUEST =====")
         # [DIAGNOSTIC] ===== ВЫЗОВ AI МОДЕЛИ =====
         console_log("[DIAGNOSTIC] ===== ВЫЗОВ AI МОДЕЛИ =====")
-        # console_log("[DIAGNOSTIC] Перед вызовом compliance_check")
-        # console_log(f"[DIAGNOSTIC] Модель: compliance_check")
-        # console_log(f"[DIAGNOSTIC] Длина промпта: {safe_len(prompt)} символов")
-        # console_log(f"[DIAGNOSTIC] Промпт начинается: {prompt[:100]}...")
-        # console_log("[DIAGNOSTIC] ===== НАЧАЛО ВЫЗОВА _call_ai_model() =====")
-        # Используем псевдоним "compliance_check" для проверки соответствия описания и состава
-        result_str = await ozon_analyzer_server._call_ai_model("compliance_check", prompt)
+        
+        # Получаем выбранную пользователем LLM для данного типа анализа и языка
+        selected_llm = get_selected_llm_for_analysis(plugin_settings, 'basic_analysis', content_language)
+        console_log(f"[BASIC_ANALYSIS] selected_llm: {selected_llm}")
+        if selected_llm == 'default':
+            console_log(f"[BASIC_ANALYSIS] Calling get_default_model_id_from_manifest for basic_analysis.{content_language}")
+            model_alias = get_default_model_id_from_manifest('basic_analysis', content_language, plugin_settings)
+            console_log(f"[BASIC_ANALYSIS] get_default_model_id_from_manifest returned: {model_alias}")
+            api_key_id = get_api_key_for_analysis(plugin_settings, 'basic_analysis', content_language, selected_llm)
+            # Для Default LLM формируем правильный apiKeyId в формате ozon-analyzer.basic_analysis.ru.default
+            if api_key_id:
+                api_key_id = f"ozon-analyzer.basic_analysis.{content_language}.default"
+                console_log(f"[API_KEY_FLOW_PROBLEM_START] selected_llm: {selected_llm}")
+                console_log(f"[API_KEY_FLOW_PROBLEM_START] model_alias: {model_alias}")
+                console_log(f"[API_KEY_FLOW_PROBLEM_START] api_key_id: {api_key_id}")
+                console_log(f"[API_KEY_FLOW_PROBLEM_START] api_key_id type: {type(api_key_id)}")
+                console_log(f"[API_KEY_FLOW_PROBLEM_START] api_key_id length: {len(api_key_id) if api_key_id else 0}")
+        else:
+            model_alias = selected_llm
+            api_key_id = get_api_key_for_analysis(plugin_settings, 'basic_analysis', content_language, selected_llm)  # обычно совпадает с model_alias
+        console_log(f"[MODEL] model_alias: {model_alias}, api_key_id: {api_key_id}")
+
+        # Используем выбранную LLM и API-ключ
+        result_str = await ozon_analyzer_server._call_ai_model(model_alias, prompt, api_key_id=api_key_id)
+        console_log(f"[API_KEY_FLOW_PROBLEM_END] LLM call completed")
         console_log("[DIAGNOSTIC] ===== КОНЕЦ ВЫЗОВА _call_ai_model() =====")
 
         # [DIAGNOSTIC] ===== РЕЗУЛЬТАТ ВЫЗОВА AI МОДЕЛИ =====
         console_log("[DIAGNOSTIC] ===== РЕЗУЛЬТАТ ВЫЗОВА AI МОДЕЛИ =====")
-        # console_log(f"[DIAGNOSTIC] Результат compliance_check: {result_str}")
-        # console_log(f"[DIAGNOSTIC] Тип результата: {type(result_str)}")
-        # console_log(f"[DIAGNOSTIC] Длина результата: {safe_len(result_str)} символов")
+
         console_log("[DIAGNOSTIC] ===== ПОЛУЧЕН ОТВЕТ ОТ AI, НАЧИНАЕМ ОБРАБОТКУ =====")
 
         # Проверка типа данных от AI и конвертация при необходимости
@@ -4411,11 +4409,6 @@ async def _analyze_composition_vs_description(description: str, composition: str
             # console_log(f"🔍 Начинаем обработку ответа AI длиной {len(result_str)} символов")
 
             # Шаг 1: Улучшенная очистка markdown обёртки
-            # console_log(f"[BRIDGE DIAGNOSTIC] ===== НАЧАЛО ОБРАБОТКИ ОТВЕТА AI =====")
-            # console_log(f"[BRIDGE DIAGNOSTIC] Исходный ответ AI: {result_str}")
-            # console_log(f"[BRIDGE DIAGNOSTIC] Тип исходного ответа: {type(result_str)}")
-            # console_log(f"[BRIDGE DIAGNOSTIC] Длина исходного ответа: {len(result_str)} символов")
-        
             # Улучшенная очистка markdown обёртки с учетом пробелов и переносов строк
             original_length = len(result_str)
         
@@ -4425,11 +4418,7 @@ async def _analyze_composition_vs_description(description: str, composition: str
         
             # Дополнительная очистка на случай если остались одиночные ```
             cleaned_str = cleaned_str.replace('```', '').strip()
-        
-            # console_log(f"[BRIDGE DIAGNOSTIC] После улучшенной очистки: {len(cleaned_str)} символов")
-            # console_log(f"[BRIDGE DIAGNOSTIC] Очищенный ответ: {cleaned_str[:200]}...")
-            # console_log(f"[BRIDGE DIAGNOSTIC] Удалено символов: {original_length - len(cleaned_str)}")
-        
+
             # Логируем исправления
             if original_length != len(cleaned_str):
                 console_log(f"[BRIDGE DIAGNOSTIC] ✅ Выполнено исправление markdown обёртки")
@@ -4437,45 +4426,30 @@ async def _analyze_composition_vs_description(description: str, composition: str
                 console_log(f"[BRIDGE DIAGNOSTIC] ℹ️ Markdown обёртка не найдена, ответ уже чистый")
 
             # Шаг 1.5: Попытка парсинга очищенного ответа напрямую (без markdown)
-            # console_log(f"[BRIDGE DIAGNOSTIC] ===== ПРЯМАЯ ПОПЫТКА ПАРСИНГА ОЧИЩЕННОГО ОТВЕТА =====")
             try:
                 parsed = json.loads(cleaned_str)
-                # console_log(f"[BRIDGE DIAGNOSTIC] JSON успешно распарсен напрямую: {parsed}")
-                # console_log(f"[BRIDGE DIAGNOSTIC] Тип распарсенного объекта: {type(parsed)}")
 
                 # Валидация формата ответа
                 if isinstance(parsed, dict) and 'score' in parsed:
                     score = parsed.get('score')
                     reasoning = parsed.get('reasoning')
-                    # console_log(f"[BRIDGE DIAGNOSTIC] ✅ Прямой парсинг успешен: score={score}, reasoning_length={len(str(reasoning or ''))}")
-                    # console_log(f"[BRIDGE DIAGNOSTIC] Полные данные ответа: score={score}, reasoning='{reasoning}'")
                     desc_len = safe_len(description)
                     comp_len = safe_len(composition)
-                    # console_log(f"[BRIDGE DIAGNOSTIC] Данные анализа: description_len={desc_len}, composition_len={comp_len}")
-                    # console_log(f"[BRIDGE DIAGNOSTIC] Финальный результат: {parsed}")
                     return parsed
                 else:
                     console_log(f"[BRIDGE DIAGNOSTIC] ⚠️ Прямой парсинг вернул словарь без поля 'score': {parsed}")
                     console_log(f"[BRIDGE DIAGNOSTIC] Доступные ключи: {list(parsed.keys()) if isinstance(parsed, dict) else 'не словарь'}")
             except json.JSONDecodeError as je:
                 console_log(f"[BRIDGE DIAGNOSTIC] ❌ Прямой JSON парсинг провалился: {str(je)}")
-                # console_log(f"[BRIDGE DIAGNOSTIC] Позиция ошибки: {je.pos if hasattr(je, 'pos') else 'неизвестно'}")
-                # console_log(f"[BRIDGE DIAGNOSTIC] Необработанный ответ AI: {cleaned_str[:200]}...")
-                # console_log(f"[BRIDGE DIAGNOSTIC] Проблемный фрагмент: {cleaned_str[max(0, je.pos-50):je.pos+50] if hasattr(je, 'pos') and je.pos else 'не определено'}")
 
             # Шаг 2: Попытка парсинга исходного ответа напрямую (на случай, если это уже чистый JSON)
-            # console_log(f"[BRIDGE DIAGNOSTIC] ===== ПОПЫТКА ПАРСИНГА ИСХОДНОГО ОТВЕТА =====")
             try:
                 parsed = json.loads(result_str.strip())
-                # console_log(f"[BRIDGE DIAGNOSTIC] Исходный ответ успешно распарсен: {parsed}")
-                # console_log(f"[BRIDGE DIAGNOSTIC] Тип распарсенного объекта: {type(parsed)}")
 
                 # Валидация формата ответа
                 if isinstance(parsed, dict) and 'score' in parsed:
                     score = parsed.get('score')
                     reasoning = parsed.get('reasoning')
-                    # console_log(f"[BRIDGE DIAGNOSTIC] ✅ Парсинг исходного ответа успешен: score={score}, reasoning_length={len(str(reasoning or ''))}")
-                    # console_log(f"[BRIDGE DIAGNOSTIC] Полные данные ответа: score={score}, reasoning='{reasoning}'")
                     return parsed
                 else:
                     console_log(f"[BRIDGE DIAGNOSTIC] ⚠️ Парсинг исходного ответа вернул словарь без поля 'score': {parsed}")
@@ -4483,25 +4457,20 @@ async def _analyze_composition_vs_description(description: str, composition: str
                 console_log(f"[BRIDGE DIAGNOSTIC] ❌ Парсинг исходного ответа провалился: {str(je)}")
 
             # Шаг 3: Альтернативное извлечение JSON
-            # console_log(f"[BRIDGE DIAGNOSTIC] 🔄 ШАГ 3: Альтернативное извлечение JSON из ответа: {result_str[:100]}...")
             alternative_result = _extract_json_from_ai_response(result_str)
             if alternative_result:
-                # console_log(f"[BRIDGE DIAGNOSTIC] ✅ Альтернативное извлечение успешно: {alternative_result}")
                 return alternative_result
             else:
                 console_log(f"[BRIDGE DIAGNOSTIC] ❌ Альтернативное извлечение не удалось")
 
             # Шаг 4: Попытка ремонта JSON
-            # console_log(f"[BRIDGE DIAGNOSTIC] 🔧 ШАГ 4: Попытка ремонта JSON: {cleaned_str[:100]}...")
             repair_result = _attempt_json_repair(cleaned_str)
             if repair_result:
-                # console_log(f"[BRIDGE DIAGNOSTIC] ✅ Ремонт JSON успешен: {repair_result}")
                 return repair_result
             else:
                 console_log(f"[BRIDGE DIAGNOSTIC] ❌ Ремонт JSON не удался")
 
             # Шаг 5: Финальный fallback
-            # console_log(f"[BRIDGE DIAGNOSTIC] ❌ ШАГ 5: Все методы обработки провалились, используем fallback")
             desc_len = safe_len(description)
             comp_len = safe_len(composition)
 
@@ -4511,7 +4480,6 @@ async def _analyze_composition_vs_description(description: str, composition: str
                             f"Исходный ответ: {cleaned_str[:100]}... "
                             f"(описание: {desc_len} символов, состав: {comp_len} символов)"
             }
-            # console_log(f"[BRIDGE DIAGNOSTIC] Финальный результат (финальный fallback): {fallback_result}")
             return fallback_result
         else:
             if content_language == "ru":
@@ -4519,11 +4487,9 @@ async def _analyze_composition_vs_description(description: str, composition: str
             else:
                 chat_message(f"⚠️ AI returned empty or incorrect response: {type(result_str)}")
             error_result = {"score": 5, "reasoning": f"AI вернул некорректный тип данных: {type(result_str)}"}
-            # console_log(f"[DIAGNOSTIC] Финальный результат (некорректный ответ AI): {error_result}")
             return error_result
 
     except Exception as e:
-        # console_log(f"Критическая ошибка в _analyze_composition_vs_description: {str(e)}")
         # Отправляем ошибку AI в чат для пользователя
         if content_language == "ru":
             chat_message(f"⚠️ Произошла ошибка при анализе товара: {str(e)[:100]}...")
@@ -4534,11 +4500,10 @@ async def _analyze_composition_vs_description(description: str, composition: str
             desc_len = safe_len(description)
             comp_len = safe_len(composition)
         except Exception as len_error:
-            # console_log(f"Ошибка при подсчете длины: {str(len_error)}")
+            console_log(f"Ошибка при подсчете длины: {str(len_error)}")
             desc_len = 0
             comp_len = 0
         exception_result = { "score": 0, "reasoning": f"Ошибка анализа AI: {str(e)}. Рекомендуется проверить доступность AI модели и корректность входных данных (описание: {desc_len} символов, состав: {comp_len} символов)." }
-        # console_log(f"[DIAGNOSTIC] Финальный результат (критическая ошибка): {exception_result}")
         return exception_result
 
 def _extract_json_from_ai_response(ai_response: str) -> Optional[Dict[str, Any]]:
@@ -4638,7 +4603,6 @@ def _extract_json_from_ai_response(ai_response: str) -> Optional[Dict[str, Any]]
 
     console_log("❌ Ни одна стратегия извлечения JSON не сработала")
     return None
-
 def _attempt_json_repair(broken_json: str) -> Optional[Dict[str, Any]]:
     """
     Комплексная функция ремонта поврежденного JSON с множественными стратегиями.
@@ -4933,13 +4897,7 @@ async def _find_similar_products(categories: List[str], composition: str, plugin
     if not categories or not composition:
         return [{"name": "Недостаточно данных для поиска аналогов", "reason": "missing_categories_or_composition"}]
 
-    # console_log(f"[DIAGNOSTIC] plugin_settings в _find_similar_products: {plugin_settings}")
-    # console_log(f"[DIAGNOSTIC] Тип plugin_settings: {type(plugin_settings)}")
-
     # ИСПОЛЬЗУЕМ ПЕРЕДАННЫЙ content_language ИЗ analyze_ozon_product
-    # console_log(f"[LANGUAGE] Используем переданный content_language в _find_similar_products: '{content_language}'")
-    # console_log(f"[DIAGNOSTIC] Финальный content_language в _find_similar_products: '{content_language}'")
-    # console_log(f"[DIAGNOSTIC] Начат поиск аналогов для типа: {product_type}")
 
     # Быстрые категоризации по типу продукта
     product_type = _categorize_product_by_composition(composition)
@@ -4978,18 +4936,6 @@ async def _find_similar_products(categories: List[str], composition: str, plugin
         # Логирование запроса к Gemini API в полном формате
         console_log("[GEMINI REQUEST] ===== REQUEST TO GEMINI API =====")
         console_log("[GEMINI REQUEST] Model: basic_analysis")
-        # console_log(f"[GEMINI REQUEST] Prompt: {search_prompt}")
-        # console_log(f"[GEMINI REQUEST] Request Body: {{")
-        # console_log(f"[GEMINI REQUEST]   \"contents\": [")
-        # console_log(f"[GEMINI REQUEST]     {{")
-        # console_log(f"[GEMINI REQUEST]       \"parts\": [")
-        # console_log(f"[GEMINI REQUEST]         {{")
-        # console_log(f"[GEMINI REQUEST]           \"text\": \"{json.dumps(search_prompt).strip('\"')}\"")
-        # console_log(f"[GEMINI REQUEST]         }}")
-        # console_log(f"[GEMINI REQUEST]       ]")
-        # console_log(f"[GEMINI REQUEST]     }}")
-        # console_log(f"[GEMINI REQUEST]   ]")
-        # console_log(f"[GEMINI REQUEST] }}")
         console_log("[GEMINI REQUEST] ===== END REQUEST =====")
         # Используем асинхронный вызов AI модели
         response = await ozon_analyzer_server._call_ai_model("basic_analysis", search_prompt)
@@ -5005,9 +4951,6 @@ async def _find_similar_products(categories: List[str], composition: str, plugin
 
         # Проверка типа данных от AI
         if not isinstance(response, str):
-            # console_log(f"[BRIDGE DIAGNOSTIC] AI вернул {type(response)} вместо строки, конвертируем")
-            # console_log(f"[BRIDGE DIAGNOSTIC] Исходный ответ AI: {response}")
-            # console_log(f"[BRIDGE DIAGNOSTIC] Тип исходного ответа: {type(response)}")
             if hasattr(response, '__dict__'):
                 console_log(f"[BRIDGE DIAGNOSTIC] Атрибуты ответа: {response.__dict__}")
             response = str(response)
@@ -5023,10 +4966,6 @@ async def _find_similar_products(categories: List[str], composition: str, plugin
 
         # ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ ОТВЕТА ОТ AI В _find_similar_products
         console_log("[FIND_SIMILAR] ===== НАЧАЛО ОБРАБОТКИ ОТВЕТА AI =====")
-        # console_log(f"[FIND_SIMILAR] Длина ответа: {len(response)}")
-        # console_log(f"[FIND_SIMILAR] Первые 200 символов: {response[:200]}...")
-        # console_log(f"[FIND_SIMILAR] Последние 200 символов: ...{response[-200:] if len(response) > 200 else response}")
-        # console_log(f"[FIND_SIMILAR] Полный ответ: {response}")
         console_log("[FIND_SIMILAR] ===== КОНЕЦ ЛОГИРОВАНИЯ ОТВЕТА =====")
 
         # Парсим ответ
@@ -5046,7 +4985,6 @@ async def _find_similar_products(categories: List[str], composition: str, plugin
                 analogs = parsed.get('analogs', [])
 
                 if analogs:
-                    # console_log(f"Успешно распарсено {len(analogs)} аналогов от AI")
                     return analogs[:5]  # Ограничение до 5 результатов
                 else:
                     # Fallback - генерируем на основе состава
@@ -5135,6 +5073,122 @@ def _categorize_product_by_composition(composition: str) -> str:
         return "пищевые_добавки"
     else:
         return "general_cosmetics"
+def get_selected_llm_for_analysis(plugin_settings: Dict[str, Any], analysis_type: str, content_language: str) -> str:
+    """
+    Получить выбранную LLM для указанного типа анализа и языка.
+
+    Args:
+        plugin_settings: Настройки плагина
+        analysis_type: Тип анализа ('basic_analysis', 'deep_analysis', etc.)
+        content_language: Язык контента ('ru', 'en')
+
+    Returns:
+        Имя выбранной LLM или 'default' если не найдено
+    """
+    try:
+        console_log(f"🔍 get_selected_llm_for_analysis: analysis_type={analysis_type}, content_language={content_language}")
+
+        # Проверяем настройки плагина на наличие selected_llms
+        if plugin_settings and isinstance(plugin_settings, dict):
+            selected_llms = safe_dict_get(plugin_settings, 'selected_llms', {})
+            if selected_llms and isinstance(selected_llms, dict):
+                # Ищем настройку для конкретного типа анализа
+                analysis_settings = safe_dict_get(selected_llms, analysis_type, {})
+                if analysis_settings and isinstance(analysis_settings, dict):
+                    # Ищем настройку для конкретного языка
+                    selected_llm = safe_dict_get(analysis_settings, content_language, None)
+
+                    if selected_llm:
+                        console_log(f"✅ Найдена выбранная LLM для {analysis_type}.{content_language}: {selected_llm}")
+                        return selected_llm
+
+                # Fallback: ищем настройку только для типа анализа
+                selected_llm = safe_dict_get(selected_llms, analysis_type, None)
+                if selected_llm and isinstance(selected_llm, str):
+                    console_log(f"✅ Найдена выбранная LLM для {analysis_type}: {selected_llm}")
+                    return selected_llm
+
+        console_log(f"ℹ️ Выбранная LLM не найдена, используем default")
+        return 'default'
+
+    except Exception as e:
+        console_log(f"❌ Ошибка в get_selected_llm_for_analysis: {str(e)}")
+        return 'default'
+
+
+def get_api_key_for_analysis(plugin_settings: Dict[str, Any], analysis_type: str, content_language: str, selected_llm: str) -> Optional[str]:
+    """
+    Получить API ключ для указанного типа анализа, языка и выбранной LLM.
+
+    Args:
+        plugin_settings: Настройки плагина
+        analysis_type: Тип анализа ('basic_analysis', 'deep_analysis', etc.)
+        content_language: Язык контента ('ru', 'en')
+        selected_llm: Выбранная LLM ('default' или имя кастомной LLM)
+
+    Returns:
+        API ключ или None если не найден
+    """
+    try:
+        console_log(f"🔑 get_api_key_for_analysis: analysis_type={analysis_type}, content_language={content_language}, selected_llm={selected_llm}")
+
+        # Проверяем настройки плагина на наличие API ключей
+        if plugin_settings and isinstance(plugin_settings, dict):
+            api_keys = safe_dict_get(plugin_settings, 'api_keys', {})
+            if api_keys and isinstance(api_keys, dict):
+                # Формируем ключ для поиска API ключа
+                # Формат: {plugin_id}.{analysis_type}.{language} или просто имя LLM (используем точки как в UI)
+                key_variants = [
+                    f"ozon-analyzer.{analysis_type}.{content_language}",  # ozon-analyzer.basic_analysis.ru
+                    f"{analysis_type}_{content_language}",  # basic_analysis_ru
+                    f"{selected_llm}",  # имя выбранной LLM
+                    f"{analysis_type}",  # просто тип анализа
+                ]
+
+                # Для default LLM добавляем дополнительные варианты поиска
+                if selected_llm == 'default':
+                    key_variants.extend([
+                        f"ozon-analyzer.{analysis_type}.{content_language}.default",  # ozon-analyzer.basic_analysis.ru.default
+                        f"ozon-analyzer.default",  # ozon-analyzer.default (как сохраняется в UI)
+                        "default",  # просто default
+                    ])
+
+                for key_variant in key_variants:
+                    api_key = safe_dict_get(api_keys, key_variant, None)
+                    if api_key and isinstance(api_key, str) and len(api_key.strip()) > 0:
+                        console_log(f"✅ Найден API ключ для варианта '{key_variant}': {api_key[:10]}...")
+                        return api_key.strip()
+
+        # Для default LLM пытаемся получить ключ из глобальных настроек
+        if selected_llm == 'default':
+            console_log(f"ℹ️ Для default LLM пытаемся получить API ключ из глобальных настроек")
+            # Пытаемся получить API ключ для Gemini из глобальных настроек
+            try:
+                # Проверяем наличие gemini_api_key в plugin_settings
+                gemini_key = safe_dict_get(plugin_settings, 'gemini_api_key', None)
+                if gemini_key and isinstance(gemini_key, str) and len(gemini_key.strip()) > 0:
+                    console_log(f"✅ Найден Gemini API ключ в plugin_settings: {gemini_key[:10]}...")
+                    return gemini_key.strip()
+
+                # Проверяем наличие api_keys.gemini в plugin_settings
+                api_keys = safe_dict_get(plugin_settings, 'api_keys', {})
+                if api_keys and isinstance(api_keys, dict):
+                    gemini_key = safe_dict_get(api_keys, 'gemini', None)
+                    if gemini_key and isinstance(gemini_key, str) and len(gemini_key.strip()) > 0:
+                        console_log(f"✅ Найден Gemini API ключ в api_keys.gemini: {gemini_key[:10]}...")
+                        return gemini_key.strip()
+            except Exception as e:
+                console_log(f"⚠️ Ошибка при получении Gemini API ключа: {str(e)}")
+
+        console_log(f"ℹ️ API ключ не найден в plugin_settings, будет использоваться ключ по умолчанию из background")
+        return None
+
+    except Exception as e:
+        console_log(f"❌ Ошибка в get_api_key_for_analysis: {str(e)}")
+        return None
+
+
+
 
 def _generate_fallback_analogs(categories: List[str], product_type: str, content_language: str = "ru") -> List[Dict[str, Any]]:
     """Генерация фоллбэк-аналогов на основе категорий и типа продукта с учетом языка."""

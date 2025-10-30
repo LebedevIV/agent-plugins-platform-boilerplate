@@ -3,6 +3,9 @@ import type { Plugin } from '../hooks/usePlugins';
 import type { PluginSettings } from '@extension/storage';
 import ToggleButton from './ToggleButton';
 import LocalErrorBoundary from './LocalErrorBoundary';
+import LLMSelector from './LLMSelector';
+import { useAIKeys, AIKey } from '../hooks/useAIKeys';
+import { usePluginSettings, PluginSettings as PluginSettingsType } from '../hooks/usePluginSettings';
 import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 
@@ -17,8 +20,8 @@ interface LanguagePrompts {
 }
 
 interface PromptsStructure {
-  optimized: LanguagePrompts;
-  deep: LanguagePrompts;
+  basic_analysis: LanguagePrompts;
+  deep_analysis: LanguagePrompts;
 }
 
 const cn = (...args: (string | undefined | false)[]) => args.filter(Boolean).join(' ');
@@ -49,12 +52,53 @@ interface PromptsEditorProps {
   onSave: (value: PromptsStructure) => void;
   locale: 'en' | 'ru';
   t: (key: string) => string; // функция перевода
+  globalAIKeys: AIKey[];
+  pluginSettings: PluginSettingsType;
 }
 
-const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t }: PromptsEditorProps) => {
-  const [promptType, setPromptType] = useState<'optimized' | 'deep'>('optimized');
+const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t, globalAIKeys, pluginSettings }: PromptsEditorProps) => {
+  const [promptType, setPromptType] = useState<'basic_analysis' | 'deep_analysis'>('basic_analysis');
   const [language, setLanguage] = useState<'ru' | 'en'>('ru');
   const [customPrompt, setCustomPrompt] = useState<string>('');
+
+  // Получить дефолтную LLM для конкретного промпта и языка
+  const getDefaultLLMForPrompt = (type: 'basic_analysis' | 'deep_analysis', lang: 'ru' | 'en'): string => {
+    try {
+      const promptsConfig = manifest?.options?.prompts;
+      if (!promptsConfig) return 'default';
+
+      const typePrompts = promptsConfig[type] || {};
+      const langPrompts = typePrompts[lang] || {};
+      const llmConfig = langPrompts.LLM?.default;
+
+      if (!llmConfig) return 'default';
+
+      // Для basic_analysis возвращаем gemini-flash-lite, для deep_analysis - gemini-pro
+      if (type === 'basic_analysis') {
+        return 'gemini-flash-lite';
+      } else if (type === 'deep_analysis') {
+        return 'gemini-pro';
+      }
+
+      return 'default';
+    } catch {
+      return 'default';
+    }
+  };
+
+  // Проверить наличие дефолтной LLM для конкретного промпта и языка
+  const hasDefaultLLMForPrompt = (type: 'basic_analysis' | 'deep_analysis', lang: 'ru' | 'en'): boolean => {
+    try {
+      const promptsConfig = manifest?.options?.prompts;
+      if (!promptsConfig) return false;
+
+      const typePrompts = promptsConfig[type] || {};
+      const langPrompts = typePrompts[lang] || {};
+      return !!langPrompts.LLM?.default;
+    } catch {
+      return false;
+    }
+  };
 
   // Получаем оригинальный промпт из manifest
   const getOriginalPrompt = (): string => {
@@ -132,18 +176,17 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t }: Prompts
             <label style={{ fontSize: '14px', marginRight: '8px' }}>{t('options.plugins.prompts.type')}</label>
             <select
               value={promptType}
-              onChange={(e) => setPromptType(e.target.value as 'optimized' | 'deep')}
+              onChange={(e) => setPromptType(e.target.value as 'basic_analysis' | 'deep_analysis')}
               disabled={disabled}
               style={{
                 padding: '4px 8px',
                 border: '1px solid #ccc',
                 borderRadius: '4px',
-                backgroundColor: 'white',
                 fontSize: '14px'
               }}
             >
-              <option value="optimized">{t('options.plugins.prompts.optimized')}</option>
-              <option value="deep">{t('options.plugins.prompts.deep')}</option>
+              <option value="basic_analysis">{t('options.plugins.prompts.basic_analysis')}</option>
+              <option value="deep_analysis">{t('options.plugins.prompts.deep_analysis')}</option>
             </select>
           </div>
 
@@ -157,7 +200,6 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t }: Prompts
                 padding: '4px 8px',
                 border: '1px solid #ccc',
                 borderRadius: '4px',
-                backgroundColor: 'white',
                 fontSize: '14px'
               }}
             >
@@ -223,7 +265,6 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t }: Prompts
                 padding: '8px',
                 border: '1px solid #ccc',
                 borderRadius: '4px',
-                backgroundColor: 'white',
                 fontSize: '12px',
                 fontFamily: 'monospace',
                 resize: 'vertical'
@@ -231,6 +272,45 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t }: Prompts
             />
           </div>
         </div>
+
+        {/* LLM Selector для текущего промпта и языка */}
+        <LLMSelector
+          promptType={promptType}
+          language={language}
+          globalAIKeys={globalAIKeys}
+          defaultLLMCurl={getDefaultLLMForPrompt(promptType, language)}
+          hasDefaultLLM={hasDefaultLLMForPrompt(promptType, language)}
+          onLLMChange={(llm, apiKey) => {
+            console.log(`[API_KEY_FLOW] PluginDetails: LLM changed for ${promptType}.${language}: ${llm}, apiKey length: ${apiKey?.length || 0}`);
+            // Сохраняем выбранную LLM и API ключ в pluginSettings для передачи в mcp_server.py
+            const updatedPluginSettings = { ...pluginSettings } as any;
+            if (!updatedPluginSettings.selected_llms) {
+              updatedPluginSettings.selected_llms = {};
+            }
+            if (!updatedPluginSettings.selected_llms[promptType]) {
+              updatedPluginSettings.selected_llms[promptType] = {};
+            }
+            // Сохраняем выбранную LLM
+            updatedPluginSettings.selected_llms[promptType][language] = llm;
+
+            // Сохраняем API ключ если он предоставлен
+            if (!updatedPluginSettings.api_keys) {
+              updatedPluginSettings.api_keys = {};
+            }
+            let keyId = '';
+            if (apiKey) {
+              keyId = `ozon-analyzer.${promptType}.${language}.default`;
+              updatedPluginSettings.api_keys[keyId] = apiKey;
+              console.log(`[API_KEY_FLOW] PluginDetails: Saved API key for ${keyId} in updatedPluginSettings`);
+            }
+
+            // Обновляем pluginSettings через глобальный объект
+            if (typeof window !== 'undefined' && (window as any).pyodide && (window as any).pyodide.globals) {
+              (window as any).pyodide.globals.pluginSettings = updatedPluginSettings;
+              console.log(`[API_KEY_FLOW] PluginDetails: Updated pyodide.globals.pluginSettings with API key for ${keyId || 'no key'}`);
+            }
+          }}
+        />
 
         {/* Кнопка сохранения */}
         <div style={{ marginTop: '16px', textAlign: 'center' }}>
@@ -259,6 +339,8 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t }: Prompts
 const PluginDetails = (props: PluginDetailsProps) => {
   const { selectedPlugin, locale = 'en', onUpdateSetting } = props;
   const { t } = useTranslations(locale);
+  const { aiKeys } = useAIKeys();
+  const { settings: pluginSettings } = usePluginSettings();
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
   const [customSettings, setCustomSettings] = useState<Record<string, boolean | string | number | PromptsStructure> | null>(null);
 
@@ -275,6 +357,45 @@ const PluginDetails = (props: PluginDetailsProps) => {
       loadCustomSettings();
     }
   }, [selectedPlugin?.id]);
+
+  // Передаем выбранные LLM и API ключи в mcp_server.py через pyodide.globals
+  useEffect(() => {
+    if (pluginSettings && typeof window !== 'undefined' && (window as any).pyodide && (window as any).pyodide.globals) {
+      // Создаем структуру selected_llms из pluginSettings
+      const selected_llms = {
+        basic_analysis: {
+          ru: pluginSettings.basic_analysis?.ru?.llm || 'default',
+          en: pluginSettings.basic_analysis?.en?.llm || 'default',
+        },
+        deep_analysis: {
+          ru: pluginSettings.deep_analysis?.ru?.llm || 'default',
+          en: pluginSettings.deep_analysis?.en?.llm || 'default',
+        }
+      };
+
+      // Создаем структуру api_keys из pluginSettings
+      const api_keys = {
+        'ozon-analyzer.basic_analysis.ru.default': (pluginSettings.api_keys as any)?.['basic_analysis.ru.default'] || '',
+        'ozon-analyzer.basic_analysis.en.default': (pluginSettings.api_keys as any)?.['basic_analysis.en.default'] || '',
+        'ozon-analyzer.deep_analysis.ru.default': (pluginSettings.api_keys as any)?.['deep_analysis.ru.default'] || '',
+        'ozon-analyzer.deep_analysis.en.default': (pluginSettings.api_keys as any)?.['deep_analysis.en.default'] || '',
+        'ozon-analyzer-basic_analysis-ru': (pluginSettings.api_keys as any)?.['ozon-analyzer-basic_analysis-ru'] || '',
+        'ozon-analyzer-basic_analysis-en': (pluginSettings.api_keys as any)?.['ozon-analyzer-basic_analysis-en'] || '',
+        'ozon-analyzer-deep_analysis-ru': (pluginSettings.api_keys as any)?.['ozon-analyzer-deep_analysis-ru'] || '',
+        'ozon-analyzer-deep_analysis-en': (pluginSettings.api_keys as any)?.['ozon-analyzer-deep_analysis-en'] || '',
+      };
+
+      // Обновляем pluginSettings в pyodide.globals
+      const updatedPluginSettings = {
+        ...(window as any).pyodide.globals.pluginSettings || {},
+        selected_llms: selected_llms,
+        api_keys: api_keys
+      };
+
+      (window as any).pyodide.globals.pluginSettings = updatedPluginSettings;
+      console.log('Updated pluginSettings in pyodide.globals:', updatedPluginSettings);
+    }
+  }, [pluginSettings]);
 
   if (!selectedPlugin || typeof selectedPlugin !== 'object') {
     return (
@@ -359,10 +480,10 @@ const PluginDetails = (props: PluginDetailsProps) => {
       if (stored[key]) {
         const prompts = stored[key] as PromptsStructure;
         console.log('   Структура промптов:');
-        console.log(`     - optimized.ru: ${prompts.optimized?.ru ? '✓' : '✗'} (${prompts.optimized?.ru?.length || 0} символов)`);
-        console.log(`     - optimized.en: ${prompts.optimized?.en ? '✓' : '✗'} (${prompts.optimized?.en?.length || 0} символов)`);
-        console.log(`     - deep.ru: ${prompts.deep?.ru ? '✓' : '✗'} (${prompts.deep?.ru?.length || 0} символов)`);
-        console.log(`     - deep.en: ${prompts.deep?.en ? '✓' : '✗'} (${prompts.deep?.en?.length || 0} символов)`);
+        console.log(`     - basic_analysis.ru: ${prompts.basic_analysis?.ru ? '✓' : '✗'} (${prompts.basic_analysis?.ru?.length || 0} символов)`);
+        console.log(`     - basic_analysis.en: ${prompts.basic_analysis?.en ? '✓' : '✗'} (${prompts.basic_analysis?.en?.length || 0} символов)`);
+        console.log(`     - deep_analysis.ru: ${prompts.deep_analysis?.ru ? '✓' : '✗'} (${prompts.deep_analysis?.ru?.length || 0} символов)`);
+        console.log(`     - deep_analysis.en: ${prompts.deep_analysis?.en ? '✓' : '✗'} (${prompts.deep_analysis?.en?.length || 0} символов)`);
       }
     } catch (error) {
       console.error('Ошибка диагностики промптов:', error);
@@ -380,22 +501,22 @@ const PluginDetails = (props: PluginDetailsProps) => {
     if (settingName === 'prompts' && typeof defaultValue === 'object' && defaultValue !== null) {
       const promptsConfig = defaultValue as any;
       const result: PromptsStructure = {
-        optimized: { ru: {}, en: {} },
-        deep: { ru: {}, en: {} }
+        basic_analysis: { ru: {}, en: {} },
+        deep_analysis: { ru: {}, en: {} }
       };
 
       // Извлекаем default значения из структуры manifest
-      if (promptsConfig.optimized?.ru?.default) {
-        result.optimized.ru = promptsConfig.optimized.ru.default;
+      if (promptsConfig.basic_analysis?.ru?.default) {
+        result.basic_analysis.ru = promptsConfig.basic_analysis.ru.default;
       }
-      if (promptsConfig.optimized?.en?.default) {
-        result.optimized.en = promptsConfig.optimized.en.default;
+      if (promptsConfig.basic_analysis?.en?.default) {
+        result.basic_analysis.en = promptsConfig.basic_analysis.en.default;
       }
-      if (promptsConfig.deep?.ru?.default) {
-        result.deep.ru = promptsConfig.deep.ru.default;
+      if (promptsConfig.deep_analysis?.ru?.default) {
+        result.deep_analysis.ru = promptsConfig.deep_analysis.ru.default;
       }
-      if (promptsConfig.deep?.en?.default) {
-        result.deep.en = promptsConfig.deep.en.default;
+      if (promptsConfig.deep_analysis?.en?.default) {
+        result.deep_analysis.en = promptsConfig.deep_analysis.en.default;
       }
 
       return result;
@@ -421,6 +542,8 @@ const PluginDetails = (props: PluginDetailsProps) => {
             onSave={(newValue) => handleSettingChange(key, newValue)}
             locale={locale}
             t={t}
+            globalAIKeys={aiKeys}
+            pluginSettings={pluginSettings}
           />
         </div>
       );
@@ -468,7 +591,6 @@ const PluginDetails = (props: PluginDetailsProps) => {
                 padding: '4px 8px',
                 border: '1px solid #ccc',
                 borderRadius: '4px',
-                backgroundColor: 'white',
                 fontSize: '14px',
                 minWidth: '120px'
               }}>
@@ -502,7 +624,6 @@ const PluginDetails = (props: PluginDetailsProps) => {
                 padding: '4px 8px',
                 border: '1px solid #ccc',
                 borderRadius: '4px',
-                backgroundColor: 'white',
                 fontSize: '14px'
               }}
             />
@@ -549,7 +670,6 @@ const PluginDetails = (props: PluginDetailsProps) => {
                 padding: '4px 8px',
                 border: '1px solid #ccc',
                 borderRadius: '4px',
-                backgroundColor: 'white',
                 fontSize: '14px'
               }}
             />

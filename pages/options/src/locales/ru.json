@@ -37,9 +37,9 @@
       "prompts": {
         "settings": "Настройки промптов",
         "type": "Тип промпта:",
-        "optimized": "Оптимизированный",
-        "deep": "Глубокий",
-        "language": "Язык:",
+        "basic_analysis": "Базовый",
+        "deep_analysis": "Глубокий",
+        "language": "Язык промпта:",
         "russian": "Русский",
         "english": "Английский",
         "originalPrompt": "Оригинальный промпт (только чтение)",

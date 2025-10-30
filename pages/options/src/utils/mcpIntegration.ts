@@ -97,9 +97,9 @@ export class MCPService {
    */
   private static getDefaultKeyForService(service: string): string | null {
     const serviceKeyMap: Record<string, string> = {
-      'gemini-flash': 'gemini-flash',
+      'gemini-flash-lite': 'gemini-flash-lite',
       'gemini-pro': 'gemini-pro',
-      'google-gemini': 'gemini-flash',
+      'google-gemini': 'gemini-flash-lite',
       'anthropic': 'claude', // Для будущих реализаций
       'openai': 'gpt', // Для будущих реализаций
     };
@@ -185,8 +185,8 @@ export class AIServiceManager {
    * Выполняет запрос к Google Gemini через MCP
    */
   static async queryGemini(prompt: string, useFlash: boolean = true): Promise<MCPResponse> {
-    const service = useFlash ? 'gemini-flash' : 'gemini-pro';
-    const keyId = useFlash ? 'gemini-flash' : 'gemini-pro';
+    const service = useFlash ? 'gemini-flash-lite' : 'gemini-pro';
+    const keyId = useFlash ? 'gemini-flash-lite' : 'gemini-pro';
 
     return await MCPService.executeRequest({
       service,
@@ -228,7 +228,7 @@ export class AIServiceManager {
     const models: string[] = [];
 
     if (services.includes('google-gemini')) {
-      models.push('gemini-pro', 'gemini-flash');
+      models.push('gemini-pro', 'gemini-flash-lite');
     }
     if (services.includes('anthropic')) {
       models.push('claude-3-opus', 'claude-3-sonnet', 'claude-3-haiku');

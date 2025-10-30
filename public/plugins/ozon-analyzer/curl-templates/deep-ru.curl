@@ -1,0 +1,13 @@
+curl -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=$GEMINI_API_KEY" \
+-H "Content-Type: application/json" \
+-d '{
+  "contents": [
+    {
+      "parts": [
+        {
+          "text": "$prompt_deep_analysis_ru"
+        }
+      ]
+    }
+  ]
+}'

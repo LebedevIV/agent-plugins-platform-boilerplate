@@ -24,8 +24,8 @@
     "prompts": {
       "settings": "Prompt Settings",
       "type": "Prompt Type:",
-      "optimized": "Optimized",
-      "deep": "Deep",
+      "basic_analysis": "Basic analysis",
+      "deep_analysis": "Deep analysis",
       "language": "Language:",
       "russian": "Russian",
       "english": "English",

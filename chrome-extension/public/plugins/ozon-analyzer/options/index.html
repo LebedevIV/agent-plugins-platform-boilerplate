@@ -290,8 +290,8 @@
 
                 <!-- Tabs для типов промптов -->
                 <div class="prompt-type-tabs">
-                    <button class="prompt-tab active" data-type="optimized">Оптимизированный анализ</button>
-                    <button class="prompt-tab" data-type="deep">Глубокий анализ</button>
+                    <button class="prompt-tab active" data-type="basic_analysis">Базовый анализ</button>
+                    <button class="prompt-tab" data-type="deep_analysis">Глубокий анализ</button>
                 </div>
 
                 <!-- Tabs для языков -->
@@ -326,7 +326,7 @@
         // Глобальные переменные
         let currentSettings = {};
         let originalPrompts = {};
-        let currentType = 'optimized';
+        let currentType = 'basic_analysis';
         let currentLang = 'ru';
 
         // Показ уведомления

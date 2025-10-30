@@ -355,7 +355,7 @@ class FastDOMParser:
 ```javascript
 const aiProviders = {
     google: {
-        fallbackChain: ["gemini-flash", "gemini-pro"],
+        fallbackChain: ["gemini-flash-lite", "gemini-pro"],
         rateLimits: { requestsPerMinute: 60, burstLimit: 20 }
     },
     openai: {
@@ -367,7 +367,7 @@ const aiProviders = {
 
 **Fallback стратегия**:
 1. Основная модель текущего провайдера
-2. Быстрая модель провайдера (gemini-flash, gpt-3.5-turbo)
+2. Быстрая модель провайдера (gemini-flash-lite, gpt-3.5-turbo)
 3. Продвинутая модель провайдера (gemini-pro, gpt-4)
 4. Оффлайн режим с кешем
 
