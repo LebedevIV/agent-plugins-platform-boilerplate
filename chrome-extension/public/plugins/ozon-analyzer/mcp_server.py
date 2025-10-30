@@ -2633,24 +2633,22 @@ def get_api_key_for_analysis(plugin_settings: Optional[Dict[str, Any]] = None,
     console_log(f"[DIAGNOSIS] Checking API key availability...")
 
     if selected_llm == 'default':
-        # Для Default LLM используем специфичный ключ для комбинации
-        key_id = f'ozon-analyzer-{analysis_type}-{content_language}'
-        console_log(f"[DIAGNOSIS] Generated key_id for default LLM: {key_id}")
+        # Для Default LLM используем dotted key с .default
+        key_id_dotted = f'ozon-analyzer.{analysis_type}.{content_language}.default'
+        console_log(f"[DIAGNOSIS] Generated dotted key_id for default LLM: {key_id_dotted}")
 
-        # Проверяем, есть ли конкретный ключ в api_keys для этой комбинации
-        specific_key = safe_dict_get(api_keys, key_id, '')
-        console_log(f"[DIAGNOSIS] Specific key {key_id} exists: {bool(specific_key and specific_key.strip())}")
+        # Проверяем наличие ключа по dotted-формату
+        specific_key = safe_dict_get(api_keys, key_id_dotted, '')
+        console_log(f"[DIAGNOSIS] Specific dotted key {key_id_dotted} exists: {bool(specific_key and specific_key.strip())}")
 
         if specific_key and specific_key.strip():
-            console_log(f"[DIAGNOSIS] ✅ Using specific key: {key_id}")
+            console_log(f"[DIAGNOSIS] ✅ Using specific key: {key_id_dotted}")
             console_log(f"[DIAGNOSIS] ===== API KEY DIAGNOSTICS COMPLETE =====")
-            return key_id
+            return key_id_dotted
         else:
-            # Fallback на платформенный ключ из manifest
-            model_alias = get_default_model_id_from_manifest(analysis_type, content_language, plugin_settings)
-            console_log(f"[DIAGNOSIS] ❌ Specific key {key_id} not set, falling back to platform key: {model_alias}")
+            console_log(f"[DIAGNOSIS] ❌ Dotted key {key_id_dotted} not set, will rely on background default handling")
             console_log(f"[DIAGNOSIS] ===== API KEY DIAGNOSTICS COMPLETE =====")
-            return model_alias
+            return None
     else:
         # Для платформенной LLM используем её ID
         console_log(f"[DIAGNOSIS] ✅ Using platform key: {selected_llm}")
@@ -2709,9 +2707,9 @@ def get_api_key_for_llm(plugin_settings: Optional[Dict[str, Any]] = None,
     console_log(f"[API_KEY] Получение API-ключа для {selected_llm} ({analysis_type}.{content_language})")
     
     if selected_llm == 'default':
-        # Для Default LLM используем специфичный ключ для комбинации
-        key_id = f'ozon-analyzer-{analysis_type}-{content_language}'
-        console_log(f"[API_KEY] Используем специфичный ключ: {key_id}")
+        # Для Default LLM используем dotted key с .default
+        key_id = f'ozon-analyzer.{analysis_type}.{content_language}.default'
+        console_log(f"[API_KEY] Используем специфичный dotted ключ: {key_id}")
         return key_id
     else:
         # Для платформенной LLM используем её ID
@@ -2850,39 +2848,50 @@ def get_default_model_id_from_manifest(analysis_type: str = 'basic_analysis', co
     """
     Получить id модели по умолчанию из manifest для данного analysis_type и языка.
     """
+    console_log(f"[DEFAULT_MODEL] Получение модели для {analysis_type}.{content_language}")
+    
     manifest = None
     if plugin_settings and isinstance(plugin_settings, dict):
         manifest = safe_dict_get(plugin_settings, 'manifest', None)
+        console_log(f"[DEFAULT_MODEL] Manifest из plugin_settings: {manifest is not None}")
+    
     if manifest is None:
         manifest = get_pyodide_var('manifest', {})
+        console_log(f"[DEFAULT_MODEL] Manifest из pyodide globals: {manifest is not None}")
+    
+    console_log(f"[DEFAULT_MODEL] Manifest keys: {list(manifest.keys()) if isinstance(manifest, dict) else 'not dict'}")
     
     try:
         prompts = manifest.get('options', {}).get('prompts', {})
-        analysis_prompts = prompts.get(analysis_type, {})
-        lang_prompts = analysis_prompts.get(content_language, {})
-        default_llm = lang_prompts.get('LLM', {}).get('default', None)
+        console_log(f"[DEFAULT_MODEL] Prompts keys: {list(prompts.keys()) if isinstance(prompts, dict) else 'not dict'}")
         
-        # Проверяем, есть ли curl_file в default LLM
+        analysis_prompts = prompts.get(analysis_type, {})
+        console_log(f"[DEFAULT_MODEL] Analysis prompts for {analysis_type}: {list(analysis_prompts.keys()) if isinstance(analysis_prompts, dict) else 'not dict'}")
+        
+        lang_prompts = analysis_prompts.get(content_language, {})
+        console_log(f"[DEFAULT_MODEL] Language prompts for {content_language}: {list(lang_prompts.keys()) if isinstance(lang_prompts, dict) else 'not dict'}")
+        
+        default_llm = lang_prompts.get('LLM', {}).get('default', None)
+        console_log(f"[DEFAULT_MODEL] Default LLM config: {default_llm}")
+        
+        # Если для Default LLM задан curl_file, не подменяем на платформенные модели
+        # Возвращаем alias по типу анализа, чтобы background сопоставил его через manifest.ai_models
         if isinstance(default_llm, dict) and 'curl_file' in default_llm:
-            # Для Default LLM с curl_file используем fallback модели
-            if analysis_type == 'basic_analysis':
-                return 'gemini-flash-lite'
-            elif analysis_type == 'deep_analysis':
-                return 'gemini-pro'
+            console_log(f"[DEFAULT_MODEL] ✅ Found curl_file, returning analysis_type: {analysis_type}")
+            return analysis_type
         
         if isinstance(default_llm, dict) and 'model' in default_llm:
+            console_log(f"[DEFAULT_MODEL] Found model in default_llm: {default_llm['model']}")
             return default_llm['model']
         if isinstance(default_llm, str):
+            console_log(f"[DEFAULT_MODEL] Found string default_llm: {default_llm}")
             return default_llm
     except Exception as e:
         console_log(f"[DEFAULT_MODEL] Ошибка получения модели из manifest: {str(e)}")
     
-    # Fallback
-    if analysis_type == 'basic_analysis':
-        return 'gemini-flash-lite'
-    if analysis_type == 'deep_analysis':
-        return 'gemini-pro'
-    return 'gemini-flash-lite'
+    # Fallback: возвращаем alias типа анализа, чтобы background решил сопоставление
+    console_log(f"[DEFAULT_MODEL] Fallback: returning analysis_type {analysis_type}")
+    return analysis_type
 
 async def analyze_ozon_product(input_data: Dict[str, Any] = None,
                         page_html_chunk_count: int = None,
@@ -3876,7 +3885,9 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
     
     # Получить правильный model_alias для вызова _call_ai_model
     if selected_llm == 'default':
+        console_log(f"[DEEP_ANALYSIS] Calling get_default_model_id_from_manifest for deep_analysis.{content_language}")
         model_alias = get_default_model_id_from_manifest('deep_analysis', content_language, plugin_settings)
+        console_log(f"[DEEP_ANALYSIS] get_default_model_id_from_manifest returned: {model_alias}")
     else:
         model_alias = selected_llm
     # Получить правильный API-ключ для выбранной LLM
@@ -4352,9 +4363,20 @@ async def _analyze_composition_vs_description(description: str, composition: str
         
         # Получаем выбранную пользователем LLM для данного типа анализа и языка
         selected_llm = get_selected_llm_for_analysis(plugin_settings, 'basic_analysis', content_language)
+        console_log(f"[BASIC_ANALYSIS] selected_llm: {selected_llm}")
         if selected_llm == 'default':
+            console_log(f"[BASIC_ANALYSIS] Calling get_default_model_id_from_manifest for basic_analysis.{content_language}")
             model_alias = get_default_model_id_from_manifest('basic_analysis', content_language, plugin_settings)
+            console_log(f"[BASIC_ANALYSIS] get_default_model_id_from_manifest returned: {model_alias}")
             api_key_id = get_api_key_for_analysis(plugin_settings, 'basic_analysis', content_language, selected_llm)
+            # Для Default LLM формируем правильный apiKeyId в формате ozon-analyzer.basic_analysis.ru.default
+            if api_key_id:
+                api_key_id = f"ozon-analyzer.basic_analysis.{content_language}.default"
+                console_log(f"[API_KEY_FLOW_PROBLEM_START] selected_llm: {selected_llm}")
+                console_log(f"[API_KEY_FLOW_PROBLEM_START] model_alias: {model_alias}")
+                console_log(f"[API_KEY_FLOW_PROBLEM_START] api_key_id: {api_key_id}")
+                console_log(f"[API_KEY_FLOW_PROBLEM_START] api_key_id type: {type(api_key_id)}")
+                console_log(f"[API_KEY_FLOW_PROBLEM_START] api_key_id length: {len(api_key_id) if api_key_id else 0}")
         else:
             model_alias = selected_llm
             api_key_id = get_api_key_for_analysis(plugin_settings, 'basic_analysis', content_language, selected_llm)  # обычно совпадает с model_alias
@@ -4362,6 +4384,7 @@ async def _analyze_composition_vs_description(description: str, composition: str
 
         # Используем выбранную LLM и API-ключ
         result_str = await ozon_analyzer_server._call_ai_model(model_alias, prompt, api_key_id=api_key_id)
+        console_log(f"[API_KEY_FLOW_PROBLEM_END] LLM call completed")
         console_log("[DIAGNOSTIC] ===== КОНЕЦ ВЫЗОВА _call_ai_model() =====")
 
         # [DIAGNOSTIC] ===== РЕЗУЛЬТАТ ВЫЗОВА AI МОДЕЛИ =====
@@ -5114,9 +5137,9 @@ def get_api_key_for_analysis(plugin_settings: Dict[str, Any], analysis_type: str
             api_keys = safe_dict_get(plugin_settings, 'api_keys', {})
             if api_keys and isinstance(api_keys, dict):
                 # Формируем ключ для поиска API ключа
-                # Формат: {plugin_id}-{analysis_type}-{language} или просто имя LLM
+                # Формат: {plugin_id}.{analysis_type}.{language} или просто имя LLM (используем точки как в UI)
                 key_variants = [
-                    f"ozon-analyzer-{analysis_type}-{content_language}",  # ozon-analyzer-basic_analysis-ru
+                    f"ozon-analyzer.{analysis_type}.{content_language}",  # ozon-analyzer.basic_analysis.ru
                     f"{analysis_type}_{content_language}",  # basic_analysis_ru
                     f"{selected_llm}",  # имя выбранной LLM
                     f"{analysis_type}",  # просто тип анализа
@@ -5125,8 +5148,8 @@ def get_api_key_for_analysis(plugin_settings: Dict[str, Any], analysis_type: str
                 # Для default LLM добавляем дополнительные варианты поиска
                 if selected_llm == 'default':
                     key_variants.extend([
-                        f"ozon-analyzer-{analysis_type}-{content_language}-default",  # ozon-analyzer-basic_analysis-ru-default
-                        f"ozon-analyzer-default",  # ozon-analyzer-default (как сохраняется в UI)
+                        f"ozon-analyzer.{analysis_type}.{content_language}.default",  # ozon-analyzer.basic_analysis.ru.default
+                        f"ozon-analyzer.default",  # ozon-analyzer.default (как сохраняется в UI)
                         "default",  # просто default
                     ])
 
@@ -5165,58 +5188,6 @@ def get_api_key_for_analysis(plugin_settings: Dict[str, Any], analysis_type: str
         return None
 
 
-def get_default_model_id_from_manifest(analysis_type: str, content_language: str, plugin_settings: Dict[str, Any]) -> str:
-    """
-    Получить ID модели по умолчанию из манифеста для указанного типа анализа.
-
-    Args:
-        analysis_type: Тип анализа ('basic_analysis', 'deep_analysis', etc.)
-        content_language: Язык контента ('ru', 'en')
-        plugin_settings: Настройки плагина (для доступа к manifest)
-
-    Returns:
-        ID модели по умолчанию или 'basic_analysis' если не найдено
-    """
-    try:
-        console_log(f"📋 get_default_model_id_from_manifest: analysis_type={analysis_type}, content_language={content_language}")
-
-        # Получаем manifest из plugin_settings
-        manifest = None
-        if plugin_settings and isinstance(plugin_settings, dict):
-            manifest = safe_dict_get(plugin_settings, 'manifest', None)
-
-        if manifest and isinstance(manifest, dict):
-            # Ищем в ai_models секции манифеста
-            ai_models = safe_dict_get(manifest, 'ai_models', {})
-            if ai_models and isinstance(ai_models, dict):
-                # Сначала ищем точное совпадение типа анализа
-                model_id = safe_dict_get(ai_models, analysis_type, None)
-                if model_id:
-                    console_log(f"✅ Найдена модель по умолчанию для {analysis_type}: {model_id}")
-                    return model_id
-
-                # Fallback: ищем похожие типы анализа
-                fallbacks = {
-                    'basic_analysis': ['compliance_check', 'scraping_fallback'],
-                    'deep_analysis': ['detailed_comparison', 'basic_analysis'],
-                    'detailed_comparison': ['deep_analysis', 'basic_analysis'],
-                    'compliance_check': ['basic_analysis', 'scraping_fallback'],
-                    'scraping_fallback': ['basic_analysis', 'compliance_check']
-                }
-
-                for fallback_type in safe_dict_get(fallbacks, analysis_type, []):
-                    model_id = safe_dict_get(ai_models, fallback_type, None)
-                    if model_id:
-                        console_log(f"✅ Найдена модель fallback для {analysis_type} -> {fallback_type}: {model_id}")
-                        return model_id
-
-        # Последний fallback - возвращаем тип анализа как имя модели
-        console_log(f"ℹ️ Модель по умолчанию не найдена в manifest, используем: {analysis_type}")
-        return analysis_type
-
-    except Exception as e:
-        console_log(f"❌ Ошибка в get_default_model_id_from_manifest: {str(e)}")
-        return analysis_type
 
 
 def _generate_fallback_analogs(categories: List[str], product_type: str, content_language: str = "ru") -> List[Dict[str, Any]]:

@@ -211,6 +211,9 @@ async function trackSendResponse(response, options = {}) {
 // === WORKFLOW EXECUTION SYSTEM ===
 // Убрана логика предотвращения дублирования для гарантированного выполнения каждого workflow
 
+// [API_KEY_FLOW] MARKER: OFFSCREEN_WORKFLOW_EXECUTION_START
+console.log('[API_KEY_FLOW] MARKER: OFFSCREEN_WORKFLOW_EXECUTION_START');
+
 // === LOGGING SYSTEM ===
 
 // Логирование уровни
@@ -722,14 +725,14 @@ async function initializePyodide() {
           if (window.pluginSettings && window.pluginSettings.api_keys) {
             console.log('[OFFSCREEN_DIAGNOSIS] Available API keys:', Object.keys(window.pluginSettings.api_keys));
             console.log('[API_KEY_FLOW] Offscreen: Checking pluginSettings.api_keys keys:', Object.keys(window.pluginSettings.api_keys));
-            console.log('[API_KEY_FLOW] Offscreen: Looking for apiKeyId:', apiKeyId);
-            const apiKeyFromPlugin = window.pluginSettings.api_keys[apiKeyId];
+            console.log('[API_KEY_FLOW] Offscreen: Looking for apiKeyId:', jsOptions.apiKeyId);
+            const apiKeyFromPlugin = window.pluginSettings.api_keys[jsOptions.apiKeyId];
             if (apiKeyFromPlugin) {
-              console.log('[OFFSCREEN_DIAGNOSIS] Found API key in pluginSettings:', apiKeyId);
-              console.log('[API_KEY_FLOW] Offscreen: Found API key for', apiKeyId, 'length:', apiKeyFromPlugin.length);
-              return apiKeyFromPlugin;
+              console.log('[OFFSCREEN_DIAGNOSIS] Found API key in pluginSettings:', jsOptions.apiKeyId);
+              console.log('[API_KEY_FLOW] Offscreen: Found API key for', jsOptions.apiKeyId, 'length:', apiKeyFromPlugin.length);
+              jsOptions.apiKey = apiKeyFromPlugin;
             } else {
-              console.log('[API_KEY_FLOW] Offscreen: API key not found for', apiKeyId, 'in pluginSettings.api_keys');
+              console.log('[API_KEY_FLOW] Offscreen: API key not found for', jsOptions.apiKeyId, 'in pluginSettings.api_keys');
             }
           } else {
             console.log('[API_KEY_FLOW] Offscreen: pluginSettings.api_keys is not available');
@@ -806,7 +809,41 @@ async function initializePyodide() {
           console.log('[API_KEY_FLOW_PROBLEM_END] ===== END OF API KEY FLOW PROBLEM RANGE =====');
           // logDebug('PYODIDE', 'Gemini API key retrieved successfully');
 
-          // 3. Подготовка данных для запроса к Gemini API
+          // 3. Проверяем, нужно ли использовать background для platform LLM (НЕ Default LLM)
+          // Default LLM (basic_analysis, deep_analysis) должны использовать curl_file из manifest.json
+          // и API ключ из encryptedApiKeys, а не отправлять запрос в background
+          if (cleanedModelAlias !== 'basic_analysis' && cleanedModelAlias !== 'deep_analysis') {
+            console.log('[OFFSCREEN_DIAGNOSIS] Using background for platform LLM:', cleanedModelAlias);
+            console.log('[API_KEY_FLOW] Sending request to background for modelAlias:', cleanedModelAlias);
+
+            try {
+              const response = await safeSendMessage({
+                type: 'llm_call',
+                data: {
+                  modelAlias: cleanedModelAlias,
+                  options: jsOptions,
+                  pluginId: 'ozon-analyzer'
+                }
+              }, {
+                timeout: 30000,
+                retries: 2,
+                silent: false
+              });
+
+              console.log('[API_KEY_FLOW] Background response:', response);
+
+              if (response.error) {
+                throw new Error(response.error_message || 'Background LLM call failed');
+              }
+
+              return response.response || response.result;
+            } catch (error) {
+              console.error('[API_KEY_FLOW] Background LLM call failed:', error);
+              throw error;
+            }
+          }
+
+          // 4. Подготовка данных для прямого запроса к Gemini API (для платформенных LLM)
           const requestBody = {
             contents: [{
               parts: [{
@@ -822,7 +859,7 @@ async function initializePyodide() {
             }
           };
 
-          // 4. HTTP запрос к Gemini API с улучшенной обработкой ошибок и таймаутами
+          // 5. HTTP запрос к Gemini API с улучшенной обработкой ошибок и таймаутами
           // Проверяем, содержит ли finalModelName уже :generateContent
           let urlModelName = finalModelName;
           if (!finalModelName.includes(':generateContent')) {
@@ -2049,11 +2086,24 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
        }
      }
 
+     // [API_KEY_FLOW] MARKER: OFFSCREEN_EXECUTE_WORKFLOW_START
+     console.log('[API_KEY_FLOW] MARKER: OFFSCREEN_EXECUTE_WORKFLOW_START');
+     console.log('[API_KEY_FLOW] executeWorkflowWithChunks called with pluginId:', pluginId);
+     console.log('[API_KEY_FLOW] Plugin settings received in offscreen:', {
+       hasApiKeys: !!pluginSettings.api_keys,
+       hasPrompts: !!pluginSettings.prompts,
+       settingsKeys: Object.keys(pluginSettings),
+       apiKeysCount: pluginSettings.api_keys ? Object.keys(pluginSettings.api_keys).length : 0,
+       promptsCount: pluginSettings.prompts ? Object.keys(pluginSettings.prompts).length : 0
+     });
+   
      // Execute workflow with chunks
      // logInfo('EXECUTION', `Шаг 8: Запуск executeWorkflowWithChunks - ${new Date(Date.now()).toISOString()}`);
      const result = await executeWorkflowWithChunks(pluginId, pageKey, workflowPayload, requestId, pluginSettings, sendWorkflowResponse);
      // logInfo('EXECUTION', `Шаг 9: executeWorkflowWithChunks завершен - ${new Date(Date.now()).toISOString()}`);
      // logInfo('EXECUTION', 'Workflow execution completed');
+   
+     console.log('[API_KEY_FLOW] MARKER: OFFSCREEN_EXECUTE_WORKFLOW_END');
 
    } catch (error) {
     // logError('EXECUTION', 'CRITICAL ERROR:', error);
@@ -2205,6 +2255,9 @@ function logAPIKeyMessageFlow(message, direction, additionalInfo = {}) {
 window.testAPIKeyRetrieval = testAPIKeyRetrieval;
 window.checkEncryptedAPIKeys = checkEncryptedAPIKeys;
 
+// [API_KEY_FLOW] MARKER: OFFSCREEN_ENHANCED_LLM_CALL_INIT_START
+console.log('[API_KEY_FLOW] MARKER: OFFSCREEN_ENHANCED_LLM_CALL_INIT_START');
+
 // Initialize the enhanced LLM call after jsBridge is ready
 (async function() {
   try {
@@ -2235,6 +2288,45 @@ window.checkEncryptedAPIKeys = checkEncryptedAPIKeys;
 
         let apiKey = jsOptions.apiKey;
 
+        // [API_KEY_FLOW] MARKER: OFFSCREEN_LLM_CALL_API_KEY_CHECK_START
+        console.log('[API_KEY_FLOW] MARKER: OFFSCREEN_LLM_CALL_API_KEY_CHECK_START');
+        console.log('[API_KEY_FLOW] LLM call with modelAlias:', cleanedModelAlias);
+        console.log('[API_KEY_FLOW] jsOptions has apiKey:', !!jsOptions.apiKey);
+        console.log('[API_KEY_FLOW] jsOptions has apiKeyId:', !!jsOptions.apiKeyId);
+        if (jsOptions.apiKeyId) {
+          console.log('[API_KEY_FLOW] apiKeyId:', jsOptions.apiKeyId);
+        }
+
+        // [API_KEY_FLOW_PROBLEM_START] ===== BEGINNING OF API KEY FLOW PROBLEM RANGE =====
+        console.log('[API_KEY_FLOW_PROBLEM_START] ===== BEGINNING OF API KEY FLOW PROBLEM RANGE =====');
+
+        // Check if we have pluginSettings with api_keys available
+        console.log('[API_KEY_FLOW] Checking for pluginSettings.api_keys...');
+        console.log('[API_KEY_FLOW] window.pluginSettings exists:', !!window.pluginSettings);
+        if (window.pluginSettings) {
+          console.log('[API_KEY_FLOW] window.pluginSettings has api_keys:', !!window.pluginSettings.api_keys);
+          if (window.pluginSettings.api_keys) {
+            console.log('[API_KEY_FLOW] Available API key IDs in pluginSettings:', Object.keys(window.pluginSettings.api_keys));
+            console.log('[API_KEY_FLOW] API keys structure:', Object.keys(window.pluginSettings.api_keys).map(key => ({
+              keyId: key,
+              hasValue: !!window.pluginSettings.api_keys[key],
+              valueLength: window.pluginSettings.api_keys[key] ? window.pluginSettings.api_keys[key].length : 0
+            })));
+          }
+        }
+
+        // Try to get API key from pluginSettings first
+        if (jsOptions.apiKeyId && !apiKey && window.pluginSettings && window.pluginSettings.api_keys) {
+          const pluginApiKey = window.pluginSettings.api_keys[jsOptions.apiKeyId];
+          if (pluginApiKey) {
+            apiKey = pluginApiKey;
+            console.log('[API_KEY_FLOW] ✅ API key found in pluginSettings for keyId:', jsOptions.apiKeyId);
+            console.log('[API_KEY_FLOW] API key length:', apiKey.length);
+          } else {
+            console.log('[API_KEY_FLOW] ❌ API key not found in pluginSettings for keyId:', jsOptions.apiKeyId);
+          }
+        }
+
         // Enhanced logging for API key retrieval
         if (jsOptions.apiKeyId && !apiKey) {
           console.log('[OFFSCREEN_DIAGNOSIS] Requesting API key from background:', jsOptions.apiKeyId);
@@ -2243,10 +2335,18 @@ window.checkEncryptedAPIKeys = checkEncryptedAPIKeys;
             data: { keyId: jsOptions.apiKeyId }
           };
 
+          console.log('[API_KEY_FLOW] Sending GET_API_KEY message to background for keyId:', jsOptions.apiKeyId);
           const response = await safeSendMessage(getApiKeyMessage, {
             timeout: 10000,
             retries: 2,
             silent: false
+          });
+
+          console.log('[API_KEY_FLOW] GET_API_KEY response received:', {
+            success: response.success,
+            hasResponse: !!response.response,
+            hasApiKey: !!(response.response && response.response.apiKey),
+            apiKeyLength: response.response && response.response.apiKey ? response.response.apiKey.length : 0
           });
 
           console.log('[OFFSCREEN_DIAGNOSIS] API key response:', {
@@ -2259,37 +2359,60 @@ window.checkEncryptedAPIKeys = checkEncryptedAPIKeys;
             if (response.response.apiKey) {
               apiKey = response.response.apiKey;
               console.log('[OFFSCREEN_DIAGNOSIS] ✅ API key retrieved from background successfully');
+              console.log('[API_KEY_FLOW] ✅ API key successfully retrieved and assigned');
             } else {
               console.log('[OFFSCREEN_DIAGNOSIS] ⚠️ API key response received but no apiKey field');
+              console.log('[API_KEY_FLOW] ⚠️ API key response received but no apiKey field');
             }
           } else {
             console.log('[OFFSCREEN_DIAGNOSIS] ❌ Failed to retrieve API key from background:', response.error);
+            console.log('[API_KEY_FLOW] ❌ Failed to retrieve API key from background:', response.error);
           }
+        } else if (apiKey) {
+          console.log('[API_KEY_FLOW] API key already present in jsOptions or retrieved from pluginSettings');
+        } else {
+          console.log('[API_KEY_FLOW] No apiKeyId provided and no apiKey in jsOptions');
         }
+
+        console.log('[API_KEY_FLOW] MARKER: OFFSCREEN_LLM_CALL_API_KEY_CHECK_END');
 
         // Modify jsOptions to include the retrieved apiKey
         if (apiKey) {
           jsOptions.apiKey = apiKey;
+          console.log('[API_KEY_FLOW] API key assigned to jsOptions.apiKey');
         } else {
           console.log('[OFFSCREEN_DIAGNOSIS] ❌ No API key available for LLM call - this will cause failure');
+          console.log('[API_KEY_FLOW] ❌ No API key available for LLM call - this will cause failure');
         }
+
+        // [API_KEY_FLOW_PROBLEM_END] ===== END OF API KEY FLOW PROBLEM RANGE =====
+        console.log('[API_KEY_FLOW_PROBLEM_END] ===== END OF API KEY FLOW PROBLEM RANGE =====');
 
         // Convert back to Pyodide objects
         const modifiedOptions = pyodide.toPy(jsOptions);
         const modifiedModelAlias = pyodide.toPy(cleanedModelAlias);
 
+        console.log('[API_KEY_FLOW] MARKER: OFFSCREEN_LLM_CALL_EXECUTE_START');
         // Call original function with modified parameters
-        return await originalLLMCall.call(this, modifiedModelAlias, modifiedOptions);
+        const result = await originalLLMCall.call(this, modifiedModelAlias, modifiedOptions);
+        console.log('[API_KEY_FLOW] MARKER: OFFSCREEN_LLM_CALL_EXECUTE_END');
+
+        return result;
 
       } catch (error) {
         console.error('[OFFSCREEN_DIAGNOSIS] Error in enhanced llm_call:', error);
+        console.error('[API_KEY_FLOW] Error in enhanced llm_call:', error);
         throw error;
       }
     };
 
   } catch (error) {
     console.error('[OFFSCREEN_DIAGNOSIS] Failed to initialize enhanced LLM call:', error);
+    console.error('[API_KEY_FLOW] Failed to initialize enhanced LLM call:', error);
   }
 })();
+
+console.log('[API_KEY_FLOW] MARKER: OFFSCREEN_ENHANCED_LLM_CALL_INIT_END');
+console.log('[API_KEY_FLOW] MARKER: OFFSCREEN_WORKFLOW_EXECUTION_END');
 
 logInfo('SYSTEM', 'Offscreen document ready, waiting for messages...');

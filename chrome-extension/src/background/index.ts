@@ -1319,6 +1319,17 @@ async function executeWorkflowInOffscreen(
   console.log(`[WORKFLOW_EXECUTION] HTML data length: ${htmlData?.length || 0}`);
   console.log(`[WORKFLOW_EXECUTION] Plugin settings:`, pluginSettings);
 
+  // [API_KEY_FLOW] MARKER: BACKGROUND_EXECUTE_WORKFLOW_IN_OFFSCREEN_START
+  console.log('[API_KEY_FLOW] MARKER: BACKGROUND_EXECUTE_WORKFLOW_IN_OFFSCREEN_START');
+  console.log('[API_KEY_FLOW] executeWorkflowInOffscreen called with pluginId:', pluginId);
+  console.log('[API_KEY_FLOW] Plugin settings received:', {
+    hasApiKeys: !!pluginSettings.api_keys,
+    hasPrompts: !!pluginSettings.prompts,
+    settingsKeys: Object.keys(pluginSettings),
+    apiKeysCount: pluginSettings.api_keys ? Object.keys(pluginSettings.api_keys).length : 0,
+    promptsCount: pluginSettings.prompts ? Object.keys(pluginSettings.prompts).length : 0
+  });
+
   // Получить API ключ для Gemini
   let geminiApiKey: string | null | undefined = apiKey;
   if (!geminiApiKey) {
@@ -1351,8 +1362,20 @@ async function executeWorkflowInOffscreen(
   console.log('[BACKGROUND] 🔑 Response language в настройках:', pluginSettings?.response_language);
   console.log('[BACKGROUND] 📊 Все настройки для передачи в worker:', pluginSettings);
 
+  console.log('[API_KEY_FLOW] Workflow payload being sent to offscreen:', {
+    type: workflowPayload.type,
+    pluginId: workflowPayload.pluginId,
+    hasPluginSettings: !!workflowPayload.pluginSettings,
+    pluginSettingsKeys: Object.keys(workflowPayload.pluginSettings),
+    hasApiKeys: !!(workflowPayload.pluginSettings as any).api_keys,
+    hasPrompts: !!(workflowPayload.pluginSettings as any).prompts,
+    hasGeminiApiKey: !!workflowPayload.geminiApiKey
+  });
+
   try {
+    console.log('[API_KEY_FLOW] MARKER: BACKGROUND_SEND_MESSAGE_TO_OFFSCREEN_START');
     const result = await chrome.runtime.sendMessage(workflowPayload);
+    console.log('[API_KEY_FLOW] MARKER: BACKGROUND_SEND_MESSAGE_TO_OFFSCREEN_END');
     if (chrome.runtime.lastError) {
       throw new Error(chrome.runtime.lastError.message);
     }
@@ -1367,6 +1390,8 @@ async function executeWorkflowInOffscreen(
     console.error(`[WORKFLOW_EXECUTION] ❌ Workflow execution error:`, error);
     throw error;
   }
+
+  console.log('[API_KEY_FLOW] MARKER: BACKGROUND_EXECUTE_WORKFLOW_IN_OFFSCREEN_END');
 }
 
 // === MAIN MESSAGE HANDLERS ===
@@ -1473,6 +1498,43 @@ chrome.runtime.onMessage.addListener(
 
         // Load prompts from manifest.json for all plugins
         let enrichedPluginSettings = { ...pluginSettings };
+        
+        // Добавляем manifest в настройки для доступа в Python
+        if (manifest) {
+          (enrichedPluginSettings as any).manifest = manifest;
+        }
+
+        // Попытаемся дополнить настройками api_keys для Default LLM (по комбинациям promptType/language)
+        try {
+          const defaultCombos = [
+            { type: 'basic_analysis', lang: 'ru' },
+            { type: 'basic_analysis', lang: 'en' },
+            { type: 'deep_analysis', lang: 'ru' },
+            { type: 'deep_analysis', lang: 'en' },
+          ];
+
+          const apiKeys: Record<string, string> = {};
+          for (const combo of defaultCombos) {
+            const keyId = `ozon-analyzer.${combo.type}.${combo.lang}.default`;
+            try {
+              const key = await APIKeyManager.getDecryptedKey(keyId);
+              if (key && typeof key === 'string' && key.length > 0) {
+                apiKeys[keyId] = key;
+              }
+            } catch (e) {
+              // пропускаем отсутствие ключа
+            }
+          }
+
+          if (Object.keys(apiKeys).length > 0) {
+            (enrichedPluginSettings as any).api_keys = {
+              ...(enrichedPluginSettings as any).api_keys,
+              ...apiKeys,
+            };
+          }
+        } catch (e) {
+          console.warn('[BACKGROUND] Failed to enrich api_keys for plugin', msg.pluginId, e);
+        }
 
         // Load prompts from manifest.json if available
         if (manifest?.options?.prompts) {
@@ -1626,13 +1688,45 @@ chrome.runtime.onMessage.addListener(
         // Используем enrichedPluginSettings (с prompts из manifest.json) вместо обычных pluginSettings
         const settingsToSend = enrichedPluginSettings;
 
+        // [API_KEY_FLOW] MARKER: BACKGROUND_PLUGIN_SETTINGS_PREPARATION_START
+        console.log('[API_KEY_FLOW] MARKER: BACKGROUND_PLUGIN_SETTINGS_PREPARATION_START');
+        console.log('[API_KEY_FLOW] Plugin ID:', msg.pluginId);
+        console.log('[API_KEY_FLOW] Settings to send keys:', Object.keys(settingsToSend));
+        console.log('[API_KEY_FLOW] Settings to send has api_keys:', !!settingsToSend.api_keys);
+        if (settingsToSend.api_keys) {
+          console.log('[API_KEY_FLOW] Available API key IDs:', Object.keys(settingsToSend.api_keys));
+          console.log('[API_KEY_FLOW] API keys structure:', Object.keys(settingsToSend.api_keys).map(key => ({
+            keyId: key,
+            hasValue: !!(settingsToSend.api_keys as any)[key],
+            valueLength: (settingsToSend.api_keys as any)[key] ? (settingsToSend.api_keys as any)[key].length : 0
+          })));
+        }
+        console.log('[API_KEY_FLOW] Settings to send has prompts:', !!settingsToSend.prompts);
+        if (settingsToSend.prompts) {
+          console.log('[API_KEY_FLOW] Prompts structure:', Object.keys(settingsToSend.prompts));
+        }
+        console.log('[API_KEY_FLOW] MARKER: BACKGROUND_PLUGIN_SETTINGS_PREPARATION_END');
+
+        // [API_KEY_FLOW] MARKER: BACKGROUND_HTML_TRANSMISSION_START
+        console.log('[API_KEY_FLOW] MARKER: BACKGROUND_HTML_TRANSMISSION_START');
+        console.log('[API_KEY_FLOW] Transmission mode:', htmlTransmissionMode);
+        console.log('[API_KEY_FLOW] HTML size:', pageHtml.length, 'chars');
+
         if (htmlTransmissionMode === 'direct') {
           // ПРЯМАЯ ПЕРЕДАЧА HTML
           console.log('[background][RUN_WORKFLOW] 📨 Using DIRECT HTML transmission');
           console.log('[background][RUN_WORKFLOW] HTML size:', pageHtml.length, 'chars');
 
           try {
+            console.log('[API_KEY_FLOW] MARKER: BACKGROUND_SEND_HTML_DIRECTLY_START');
+            console.log('[API_KEY_FLOW] Calling sendHtmlDirectly with pluginId:', msg.pluginId);
+            console.log('[API_KEY_FLOW] Settings being passed to sendHtmlDirectly:', {
+              hasApiKeys: !!settingsToSend.api_keys,
+              hasPrompts: !!settingsToSend.prompts,
+              settingsKeys: Object.keys(settingsToSend)
+            });
             await sendHtmlDirectly(msg.pluginId, pageKey, pageHtml, requestId, transferId, settingsToSend);
+            console.log('[API_KEY_FLOW] MARKER: BACKGROUND_SEND_HTML_DIRECTLY_END');
             console.log('[background][RUN_WORKFLOW] ✅ Direct transmission completed');
           } catch (directError) {
             console.log('[background][RUN_WORKFLOW] ❌ Direct transmission failed, switching to chunked mode');
@@ -1723,9 +1817,20 @@ chrome.runtime.onMessage.addListener(
           activeTransfers.set(transferId, transferState);
 
           // Отправляем chunks
+          console.log('[API_KEY_FLOW] MARKER: BACKGROUND_SEND_CHUNKS_TO_OFFSCREEN_START');
+          console.log('[API_KEY_FLOW] Calling sendChunksToOffscreen with transferId:', transferId);
+          console.log('[API_KEY_FLOW] Metadata being passed to sendChunksToOffscreen:', {
+            hasPluginSettings: !!transferState.metadata.pluginSettings,
+            pluginSettingsKeys: transferState.metadata.pluginSettings ? Object.keys(transferState.metadata.pluginSettings) : [],
+            hasApiKeys: !!(transferState.metadata.pluginSettings as any)?.api_keys,
+            hasPrompts: !!(transferState.metadata.pluginSettings as any)?.prompts
+          });
           await sendChunksToOffscreen(transferId, chunkingResult.chunks, transferState.metadata);
+          console.log('[API_KEY_FLOW] MARKER: BACKGROUND_SEND_CHUNKS_TO_OFFSCREEN_END');
           console.log('[background][RUN_WORKFLOW] ✅ Chunked transmission completed');
         }
+
+        console.log('[API_KEY_FLOW] MARKER: BACKGROUND_HTML_TRANSMISSION_END');
 
         console.log('[background][RUN_WORKFLOW] ===== RUN_WORKFLOW HANDLER COMPLETED =====');
         sendResponse({ success: true });
@@ -2201,6 +2306,9 @@ const handleHostApiMessage = async (
         break;
       }
       case 'llm_call': {
+        console.log('[HOST API] ===== LLM_CALL HANDLER START =====');
+        console.log('[HOST API] Message received:', message);
+        console.log('[HOST API] Message data:', message.data);
         try {
           const { modelAlias, options, pluginId, apiKeyId } = message.data as {
             modelAlias: string;
@@ -2234,8 +2342,31 @@ const handleHostApiMessage = async (
           console.log(`[DEBUG] manifestResponse status:`, manifestResponse.status);
           const aiModels = manifest.ai_models || {};
 
+          // Проверяем, является ли это Default LLM с curl_file
+          const prompts = manifest.options?.prompts;
+          let isDefaultLLMWithCurl = false;
+          let curlFile = null;
+          
+          if (prompts && modelAlias) {
+            // Ищем в prompts для всех комбинаций тип/язык
+            for (const [promptType, promptConfig] of Object.entries(prompts)) {
+              if (promptType === modelAlias) {
+                for (const [language, langConfig] of Object.entries(promptConfig as any)) {
+                  const llmConfig = (langConfig as any).LLM;
+                  if (llmConfig?.default?.curl_file) {
+                    isDefaultLLMWithCurl = true;
+                    curlFile = llmConfig.default.curl_file;
+                    console.log(`[HOST API] Found Default LLM with curl_file for ${modelAlias}.${language}: ${curlFile}`);
+                    break;
+                  }
+                }
+                if (isDefaultLLMWithCurl) break;
+              }
+            }
+          }
+
           const actualModel = aiModels[modelAlias];
-          if (!actualModel) {
+          if (!actualModel && !isDefaultLLMWithCurl) {
             sendResponse({
               error: true,
               error_message: `Модель с алиасом '${modelAlias}' не найдена в манифесте плагина`
@@ -2243,26 +2374,49 @@ const handleHostApiMessage = async (
             return true;
           }
 
-          console.log('[HOST API] Using model:', actualModel, 'for alias:', modelAlias);
+          // Выбираем модель для вызова
+          let modelToUse;
+          if (isDefaultLLMWithCurl) {
+            // Для Default LLM с curl_file используем специальный обработчик
+            modelToUse = 'default-curl';
+            console.log('[HOST API] Using Default LLM with curl_file:', curlFile);
+          } else {
+            modelToUse = actualModel;
+            console.log('[HOST API] Using model:', actualModel, 'for alias:', modelAlias);
+          }
 
           // Получаем API-ключ: если apiKeyId указан, используем его, иначе используем model alias
-          const keyId = apiKeyId || actualModel;
+          // Учитываем вариант, когда apiKeyId передается внутри options (из Python/pyodide)
+          const keyId = apiKeyId || (options && options.apiKeyId) || actualModel;
           console.log('[HOST API] Getting API key for:', keyId);
           
           const apiKey = await APIKeyManager.getDecryptedKey(keyId);
           if (!apiKey) {
             sendResponse({
               error: true,
-              error_message: `API ключ для модели ${actualModel} не найден. KeyId: ${keyId}`
+              error_message: `API ключ для модели ${modelToUse} не найден. KeyId: ${keyId}`
             });
             return true;
           }
 
           try {
-            const aiResponse = await callAiModel(actualModel, apiKey, options.prompt || '');
-            sendResponse({
-              response: aiResponse
-            });
+            if (isDefaultLLMWithCurl) {
+              // Для Default LLM с curl_file используем специальную обработку
+              console.log('[HOST API] Processing Default LLM with curl_file:', curlFile);
+              // TODO: Реализовать обработку curl_file
+              // Пока используем fallback на обычную модель
+              const fallbackModel = actualModel || 'gemini-flash-lite';
+              console.log('[HOST API] Using fallback model:', fallbackModel);
+              const aiResponse = await callAiModel(fallbackModel, apiKey, options.prompt || '');
+              sendResponse({
+                response: aiResponse
+              });
+            } else {
+              const aiResponse = await callAiModel(modelToUse, apiKey, options.prompt || '');
+              sendResponse({
+                response: aiResponse
+              });
+            }
           } catch (aiError) {
             console.error('[HOST API] AI API error:', aiError);
             sendResponse({
@@ -2277,6 +2431,7 @@ const handleHostApiMessage = async (
             error_message: (error as Error).message
           });
         }
+        console.log('[HOST API] ===== LLM_CALL HANDLER END =====');
         break;
       }
       case 'GET_API_KEY': {
