@@ -50,14 +50,25 @@ const loadDefaultPromptsFromManifest = async (): Promise<{ basic_analysis: { ru:
       throw new Error('Prompts not found in manifest');
     }
 
+    // Read prompts from files instead of manifest.json
+    const loadPromptFromFile = async (filePath: string): Promise<string> => {
+      try {
+        const response = await fetch(chrome.runtime.getURL(`plugins/ozon-analyzer/${filePath}`));
+        return await response.text();
+      } catch (error) {
+        console.error(`Failed to load prompt from ${filePath}:`, error);
+        return '';
+      }
+    };
+
     return {
       basic_analysis: {
-        ru: prompts.basic_analysis?.ru?.default || '',
-        en: prompts.basic_analysis?.en?.default || '',
+        ru: await loadPromptFromFile(prompts.basic_analysis?.ru?.default || ''),
+        en: await loadPromptFromFile(prompts.basic_analysis?.en?.default || ''),
       },
       deep_analysis: {
-        ru: prompts.deep_analysis?.ru?.default || '',
-        en: prompts.deep_analysis?.en?.default || '',
+        ru: await loadPromptFromFile(prompts.deep_analysis?.ru?.default || ''),
+        en: await loadPromptFromFile(prompts.deep_analysis?.en?.default || ''),
       },
     };
   } catch (error) {

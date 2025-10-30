@@ -60,6 +60,7 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t, globalAIK
   const [promptType, setPromptType] = useState<'basic_analysis' | 'deep_analysis'>('basic_analysis');
   const [language, setLanguage] = useState<'ru' | 'en'>('ru');
   const [customPrompt, setCustomPrompt] = useState<string>('');
+  const [originalPrompt, setOriginalPrompt] = useState<string>('');
 
   // Получить дефолтную LLM для конкретного промпта и языка
   const getDefaultLLMForPrompt = (type: 'basic_analysis' | 'deep_analysis', lang: 'ru' | 'en'): string => {
@@ -100,24 +101,37 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t, globalAIK
     }
   };
 
-  // Получаем оригинальный промпт из manifest
-  const getOriginalPrompt = (): string => {
+  // Получаем оригинальный промпт из файла
+  const loadOriginalPrompt = async (): Promise<void> => {
     try {
       const promptsConfig = manifest?.options?.prompts;
-      if (!promptsConfig) return '';
+      if (!promptsConfig) {
+        setOriginalPrompt('');
+        return;
+      }
 
       const typePrompts = promptsConfig[promptType] || {};
       const langPrompts = typePrompts[language] || {};
-      const defaultPrompt = langPrompts.default || '';
+      const filePath = langPrompts.default || '';
 
-      // Если defaultPrompt - это объект, преобразуем его
-      if (typeof defaultPrompt === 'object') {
-        return JSON.stringify(defaultPrompt, null, 2);
+      if (!filePath) {
+        setOriginalPrompt('');
+        return;
       }
 
-      return defaultPrompt;
-    } catch {
-      return '';
+      // Читаем содержимое файла промпта
+      const response = await fetch(chrome.runtime.getURL(`plugins/ozon-analyzer/${filePath}`));
+      if (!response.ok) {
+        console.error(`Failed to load prompt file: ${filePath}`);
+        setOriginalPrompt('');
+        return;
+      }
+
+      const promptText = await response.text();
+      setOriginalPrompt(promptText);
+    } catch (error) {
+      console.error('Failed to load original prompt:', error);
+      setOriginalPrompt('');
     }
   };
 
@@ -137,13 +151,14 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t, globalAIK
     }
   };
 
-  // Загружаем кастомный промпт при изменении типа или языка
+  // Загружаем промпты при изменении типа или языка
   useEffect(() => {
+    loadOriginalPrompt();
     setCustomPrompt(getCustomPrompt());
-  }, [promptType, language, value]);
+  }, [promptType, language, manifest]);
 
   const handleCopyToCustom = () => {
-    setCustomPrompt(getOriginalPrompt());
+    setCustomPrompt(originalPrompt);
   };
 
   const handleSave = () => {
@@ -216,7 +231,7 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t, globalAIK
               {t('options.plugins.prompts.originalPrompt')}
             </label>
             <textarea
-              value={getOriginalPrompt()}
+              value={originalPrompt}
               readOnly
               style={{
                 width: '100%',
