@@ -1134,6 +1134,25 @@ async function initializePyodide() {
       consoleLog: (message) => {
         console.log(`[PYTHON_LOG] ${message}`);
         return true;
+      },
+
+      // Функция для получения сохраненных промптов из localStorage
+      getStoredPrompts: () => {
+        try {
+          const storageKey = 'plugin-ozon-analyzer-settings';
+          const stored = localStorage.getItem(storageKey);
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            console.log('[JS_BRIDGE] Retrieved prompts from localStorage:', parsed);
+            return pyodide.toPy(parsed);
+          } else {
+            console.log('[JS_BRIDGE] No prompts found in localStorage');
+            return pyodide.toPy({});
+          }
+        } catch (error) {
+          console.error('[JS_BRIDGE] Error retrieving prompts from localStorage:', error);
+          return pyodide.toPy({});
+        }
       }
     };
 

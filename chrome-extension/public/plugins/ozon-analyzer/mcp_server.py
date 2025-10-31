@@ -327,11 +327,6 @@ async def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> 
         console_log(f"LLM_PROMPT_DEBUG:   plugin_settings is None: {plugin_settings is None}")
         console_log(f"LLM_PROMPT_DEBUG:   plugin_settings keys: {list(plugin_settings.keys()) if isinstance(plugin_settings, dict) else 'не словарь'}")
 
-        # Исправлено: промпты уже доступны в plugin_settings
-        custom_prompts_raw = safe_dict_get(plugin_settings, 'prompts', {})
-        console_log(f"LLM_PROMPT_DEBUG:   custom_prompts_raw: {custom_prompts_raw}")
-        console_log(f"LLM_PROMPT_DEBUG:   custom_prompts_raw type: {type(custom_prompts_raw)}")
-
         prompts = {
             'basic_analysis': {'ru': '', 'en': ''},
             'deep_analysis': {'ru': '', 'en': ''}
@@ -367,14 +362,43 @@ async def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> 
             for lang in ['ru', 'en']:
                 console_log(f"LLM_PROMPT_DEBUG: 🔍 Обработка {prompt_type}.{lang}:")
 
-                # Правильно извлекаем промпт из nested структуры plugin_settings
-                prompt_type_data = safe_dict_get(custom_prompts_raw, prompt_type, {})
+                # Правильно извлекаем промпт из nested структуры plugin_settings (UI сохраняет в basic_analysis.ru.custom_prompt)
+                prompt_type_data = safe_dict_get(plugin_settings, prompt_type, {})
                 console_log(f"LLM_PROMPT_DEBUG:   prompt_type_data ({prompt_type}): {prompt_type_data}")
-
-                custom_value = safe_dict_get(prompt_type_data, lang, '')
+        
+                lang_data = safe_dict_get(prompt_type_data, lang, {})
+                console_log(f"LLM_PROMPT_DEBUG:   lang_data для {lang}: {lang_data}")
+        
+                custom_value = safe_dict_get(lang_data, 'custom_prompt', '')
                 console_log(f"LLM_PROMPT_DEBUG:   custom_value для {lang}: {repr(custom_value)}")
                 console_log(f"LLM_PROMPT_DEBUG:   custom_value type: {type(custom_value)}")
                 console_log(f"LLM_PROMPT_DEBUG:   custom_value length: {len(custom_value) if custom_value else 0}")
+        
+                # ДОПОЛНИТЕЛЬНАЯ ДИАГНОСТИКА: проверяем все возможные пути к кастомному промпту
+                console_log(f"LLM_PROMPT_DEBUG: 🔍 ДОПОЛНИТЕЛЬНАЯ ДИАГНОСТИКА ДОСТУПА К КАСТОМНОМУ ПРОМПТУ:")
+                console_log(f"LLM_PROMPT_DEBUG:   plugin_settings keys: {list(plugin_settings.keys()) if isinstance(plugin_settings, dict) else 'not dict'}")
+        
+                # Проверяем альтернативные структуры хранения
+                alt_custom_value = None
+                if isinstance(plugin_settings, dict):
+                    # Проверяем плоскую структуру: basic_analysis.ru.custom_prompt
+                    flat_key = f"{prompt_type}.{lang}.custom_prompt"
+                    alt_custom_value = safe_dict_get(plugin_settings, flat_key, None)
+                    console_log(f"LLM_PROMPT_DEBUG:   Проверка плоской структуры '{flat_key}': {repr(alt_custom_value)}")
+        
+                    # Проверяем структуру prompts[flat_key]
+                    prompts_section = safe_dict_get(plugin_settings, 'prompts', {})
+                    if isinstance(prompts_section, dict):
+                        alt_custom_value_2 = safe_dict_get(prompts_section, flat_key, None)
+                        console_log(f"LLM_PROMPT_DEBUG:   Проверка prompts['{flat_key}']: {repr(alt_custom_value_2)}")
+                        if alt_custom_value_2:
+                            alt_custom_value = alt_custom_value_2
+        
+                if alt_custom_value and isinstance(alt_custom_value, str) and len(alt_custom_value.strip()) > 0:
+                    console_log(f"LLM_PROMPT_DEBUG: ✅ Найден кастомный промпт в альтернативной структуре: {repr(alt_custom_value[:50])}...")
+                    custom_value = alt_custom_value
+                else:
+                    console_log(f"LLM_PROMPT_DEBUG: ℹ️ Альтернативные структуры не содержат кастомный промпт")
 
                 if custom_value and isinstance(custom_value, str) and len(custom_value.strip()) > 0:
                     prompts[prompt_type][lang] = custom_value
@@ -436,6 +460,9 @@ async def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> 
                         else:
                             console_log(f"LLM_PROMPT_DEBUG: ⚠️ Встроенный промпт по умолчанию не найден для {prompt_type}.{lang}")
                             console_log(f"LLM_PROMPT_DEBUG: ℹ️ Оставляем пустой промпт для {prompt_type}.{lang}")
+
+        # Инициализируем custom_prompts_raw из plugin_settings
+        custom_prompts_raw = plugin_settings if plugin_settings else {}
 
         # Итоговая диагностика
         console_log(f"LLM_PROMPT_DEBUG: 🔍 Итоговая диагностика промптов:")
@@ -4432,26 +4459,39 @@ async def _analyze_composition_vs_description(description: str, composition: str
     # Получить промпт из пользовательских настроек или дефолтный
     try:
         basic_analysis_prompt = user_prompts.get('basic_analysis', {}).get(content_language)
+        console_log(f"LLM_PROMPT_DEBUG: 🔍 ПОЛУЧЕНИЕ ПРОМПТА ДЛЯ basic_analysis.{content_language}:")
+        console_log(f"LLM_PROMPT_DEBUG:   user_prompts: {user_prompts}")
+        console_log(f"LLM_PROMPT_DEBUG:   user_prompts.get('basic_analysis', {{}}): {user_prompts.get('basic_analysis', {})}")
+        console_log(f"LLM_PROMPT_DEBUG:   basic_analysis_prompt: {repr(basic_analysis_prompt)}")
+        console_log(f"LLM_PROMPT_DEBUG:   basic_analysis_prompt length: {len(basic_analysis_prompt) if basic_analysis_prompt else 0}")
+
         if not basic_analysis_prompt or len(basic_analysis_prompt.strip()) < 3:
             # Fallback на старый хардкод промпт
-            console_log(f"⚠️ Промпт basic_analysis.{content_language} не найден или слишком короткий, используем fallback")
+            console_log(f"⚠️ LLM_PROMPT_DEBUG: Промпт basic_analysis.{content_language} не найден или слишком короткий, используем fallback")
             basic_analysis_prompt = None
         else:
-            console_log(f"✅ Используем промпт basic_analysis.{content_language}")
+            console_log(f"✅ LLM_PROMPT_DEBUG: Используем промпт basic_analysis.{content_language} (длина: {len(basic_analysis_prompt)})")
+            console_log(f"LLM_PROMPT_DEBUG: 📝 Содержимое промпта: {repr(basic_analysis_prompt[:100])}...")
     except Exception as e:
-        console_log(f"❌ Ошибка получения промпта basic_analysis.{content_language}: {str(e)}, используем fallback")
+        console_log(f"❌ LLM_PROMPT_DEBUG: Ошибка получения промпта basic_analysis.{content_language}: {str(e)}, используем fallback")
         basic_analysis_prompt = None
 
     # Базовый промпт с учетом выбранного языка
+    console_log(f"LLM_PROMPT_DEBUG: 🔍 ВЫБОР ИТОГОВОГО ПРОМПТА:")
     if basic_analysis_prompt:
         prompt = basic_analysis_prompt
-        console_log(f"📋 Используем пользовательский промпт basic_analysis для языка {content_language}")
+        console_log(f"📋 LLM_PROMPT_DEBUG: Используем пользовательский промпт basic_analysis для языка {content_language}")
+        console_log(f"LLM_PROMPT_DEBUG: 📝 Итоговый промпт (первые 200 символов): {repr(prompt[:200])}...")
     elif content_language == "ru":
         prompt = f"""
-        """        
+        """
+        console_log(f"📋 LLM_PROMPT_DEBUG: Используем fallback промпт для русского языка")
     else:  # English
         prompt = f"""
         """
+        console_log(f"📋 LLM_PROMPT_DEBUG: Используем fallback промпт для английского языка")
+
+    console_log(f"LLM_PROMPT_DEBUG: 📊 СТАТИСТИКА ПРОМПТА: длина={len(prompt)}, содержит '10+10'={('10+10' in prompt)}")
     try:
         # Логирование запроса к Gemini API в полном формате
         console_log("[GEMINI REQUEST] ===== REQUEST TO GEMINI API =====")
