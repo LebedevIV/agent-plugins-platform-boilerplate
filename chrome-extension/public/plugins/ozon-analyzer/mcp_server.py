@@ -19,8 +19,12 @@ from datetime import datetime
 from typing import Any, Dict, List, Protocol, runtime_checkable, Optional
 from re import Match
 
-# Импорт для доступа к Pyodide globals
-import pyodide
+# Импорт для доступа к Pyodide globals (опционально)
+try:
+    import pyodide
+    pyodide_available = True
+except ImportError:
+    pyodide_available = False
 
 # Импорт для получения стека вызовов
 import traceback
@@ -211,9 +215,64 @@ def get_pyodide_var(name: str, default: Any = None) -> Any:
     except Exception as e:
         return default
 
-def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+async def read_prompt_file(plugin_dir: str, file_path: str) -> str:
+    """
+    Читает содержимое файла промпта из директории плагина.
+
+    Args:
+        plugin_dir: Путь к директории плагина
+        file_path: Относительный путь к файлу промпта
+
+    Returns:
+        Содержимое файла или пустая строка при ошибке
+    """
+    console_log(f"LLM_PROMPT_DEBUG: ===== НАЧАЛО read_prompt_file =====")
+    console_log(f"LLM_PROMPT_DEBUG: plugin_dir='{plugin_dir}', file_path='{file_path}'")
+
+    try:
+        # Формируем полный путь к файлу промпта: plugin_dir + file_path
+        full_path = f"{plugin_dir}/{file_path}"
+        console_log(f"LLM_PROMPT_DEBUG: 📁 Читаем файл промпта через js.readExtensionFile: {full_path}")
+
+        # Используем новый bridge function js.readExtensionFile
+        console_log(f"LLM_PROMPT_DEBUG: Вызываем js.readExtensionFile с путем: {full_path}")
+        response_proxy = await js.readExtensionFile(full_path)
+        console_log(f"LLM_PROMPT_DEBUG: js.readExtensionFile вернул response: {response_proxy is not None}")
+        console_log(f"LLM_PROMPT_DEBUG: response_proxy type: {type(response_proxy)}")
+
+        # Правильная обработка Pyodide объекта
+        if hasattr(response_proxy, 'to_py'):
+            # Если это PyodideFuture, конвертируем
+            console_log(f"LLM_PROMPT_DEBUG: Converting PyodideFuture with to_py()")
+            content = response_proxy.to_py()
+        else:
+            # Если уже готовый результат
+            console_log(f"LLM_PROMPT_DEBUG: Using direct result (no to_py needed)")
+            content = response_proxy
+
+        # Проверяем тип и конвертируем в строку при необходимости
+        if not isinstance(content, str):
+            console_log(f"LLM_PROMPT_DEBUG: Конвертация содержимого в строку из типа {type(content)}")
+            content = str(content)
+
+        console_log(f"LLM_PROMPT_DEBUG: ✅ Файл промпта прочитан успешно через js.readExtensionFile, длина: {len(content)} символов")
+        console_log(f"LLM_PROMPT_DEBUG: Содержимое файла (первые 100 символов): '{content[:100]}'")
+        console_log(f"LLM_PROMPT_DEBUG: Содержимое файла (последние 100 символов): '{content[-100:]}'")
+        console_log(f"LLM_PROMPT_DEBUG: ===== УСПЕШНЫЙ КОНЕЦ read_prompt_file =====")
+        return content.strip()
+    except Exception as e:
+        console_log(f"LLM_PROMPT_DEBUG: ❌ Ошибка чтения файла промпта {full_path if 'full_path' in locals() else file_path}: {str(e)}")
+        console_log(f"LLM_PROMPT_DEBUG: Тип ошибки: {type(e).__name__}")
+        console_log(f"LLM_PROMPT_DEBUG: Детали ошибки: {str(e)}")
+        import traceback
+        console_log(f"LLM_PROMPT_DEBUG: Stack trace: {traceback.format_exc()}")
+        console_log(f"LLM_PROMPT_DEBUG: ===== ОШИБОЧНЫЙ КОНЕЦ read_prompt_file =====")
+        return ""
+
+async def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     Загружает промпты из настроек пользователя или использует значения по умолчанию из manifest.json.
+    Поддерживает загрузку промптов из файлов, указанных в manifest.json.
 
     Args:
         plugin_settings: Настройки плагина из Pyodide globals
@@ -221,47 +280,57 @@ def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> Dict[s
     Returns:
         Структура промптов: {basic_analysis: {ru: "...", en: "..."}, deep_analysis: {ru: "...", en: "..."}}
     """
-    console_log(f"🔍 ===== НАЧАЛО ЗАГРУЗКИ ПРОМПТОВ =====")
+    console_log(f"LLM_PROMPT_DEBUG: ===== НАЧАЛО ЗАГРУЗКИ ПРОМПТОВ =====")
+    console_log(f"LLM_PROMPT_DEBUG: plugin_settings type: {type(plugin_settings)}")
+    console_log(f"LLM_PROMPT_DEBUG: plugin_settings is None: {plugin_settings is None}")
+    if plugin_settings:
+        console_log(f"LLM_PROMPT_DEBUG: plugin_settings keys: {list(plugin_settings.keys()) if isinstance(plugin_settings, dict) else 'not dict'}")
 
     try:
         # ДИАГНОСТИКА: Проверяем получение manifest из plugin_settings или globals для обратной совместимости
-        console_log(f"🔍 ДИАГНОСТИКА ДОСТУПА К MANIFEST:")
+        console_log(f"LLM_PROMPT_DEBUG: 🔍 ДИАГНОСТИКА ДОСТУПА К MANIFEST:")
+        console_log(f"LLM_PROMPT_DEBUG: plugin_settings type: {type(plugin_settings)}")
+        console_log(f"LLM_PROMPT_DEBUG: plugin_settings is dict: {isinstance(plugin_settings, dict)}")
         manifest = None
 
         # Сначала пытаемся получить manifest из plugin_settings для обратной совместимости
         if plugin_settings and isinstance(plugin_settings, dict):
             manifest_from_settings = safe_dict_get(plugin_settings, 'manifest', None)
+            console_log(f"LLM_PROMPT_DEBUG: manifest_from_settings: {manifest_from_settings is not None}")
+            console_log(f"LLM_PROMPT_DEBUG: manifest_from_settings type: {type(manifest_from_settings)}")
             if manifest_from_settings and isinstance(manifest_from_settings, dict):
-                console_log(f"   ✅ manifest найден в plugin_settings")
+                console_log(f"LLM_PROMPT_DEBUG:   ✅ manifest найден в plugin_settings")
                 manifest = manifest_from_settings
             else:
-                console_log(f"   ℹ️ manifest не найден в plugin_settings, проверяем globals")
+                console_log(f"LLM_PROMPT_DEBUG:   ℹ️ manifest не найден в plugin_settings, проверяем globals")
 
         # Если не нашли в plugin_settings, fallback на globals
         if manifest is None:
             manifest = get_pyodide_var('manifest', {})
+            console_log(f"LLM_PROMPT_DEBUG: manifest from globals: {manifest is not None}")
+            console_log(f"LLM_PROMPT_DEBUG: manifest from globals type: {type(manifest)}")
             if manifest:
-                console_log(f"   ✅ manifest найден в globals")
+                console_log(f"LLM_PROMPT_DEBUG:   ✅ manifest найден в globals")
             else:
-                console_log(f"   ❌ manifest НЕ НАЙДЕН ни в plugin_settings, ни в globals")
+                console_log(f"LLM_PROMPT_DEBUG:   ❌ manifest НЕ НАЙДЕН ни в plugin_settings, ни в globals")
 
-        console_log(f"   manifest type: {type(manifest)}")
+        console_log(f"LLM_PROMPT_DEBUG:   manifest type: {type(manifest)}")
         if manifest:
-            console_log(f"   manifest ключи: {list(manifest.keys())}")
-            console_log(f"   manifest.options: {manifest.get('options') is not None}")
+            console_log(f"LLM_PROMPT_DEBUG:   manifest ключи: {list(manifest.keys())}")
+            console_log(f"LLM_PROMPT_DEBUG:   manifest.options: {manifest.get('options') is not None}")
             if manifest.get('options'):
-                console_log(f"   manifest.options.prompts: {manifest.get('options', {}).get('prompts') is not None}")
+                console_log(f"LLM_PROMPT_DEBUG:   manifest.options.prompts: {manifest.get('options', {}).get('prompts') is not None}")
 
         # Диагностика входных данных
-        console_log(f"🔍 Диагностика входных данных:")
-        console_log(f"   plugin_settings type: {type(plugin_settings)}")
-        console_log(f"   plugin_settings is None: {plugin_settings is None}")
-        console_log(f"   plugin_settings keys: {list(plugin_settings.keys()) if isinstance(plugin_settings, dict) else 'не словарь'}")
+        console_log(f"LLM_PROMPT_DEBUG: 🔍 Диагностика входных данных:")
+        console_log(f"LLM_PROMPT_DEBUG:   plugin_settings type: {type(plugin_settings)}")
+        console_log(f"LLM_PROMPT_DEBUG:   plugin_settings is None: {plugin_settings is None}")
+        console_log(f"LLM_PROMPT_DEBUG:   plugin_settings keys: {list(plugin_settings.keys()) if isinstance(plugin_settings, dict) else 'не словарь'}")
 
         # Исправлено: промпты уже доступны в plugin_settings
         custom_prompts_raw = safe_dict_get(plugin_settings, 'prompts', {})
-        console_log(f"   custom_prompts_raw: {custom_prompts_raw}")
-        console_log(f"   custom_prompts_raw type: {type(custom_prompts_raw)}")
+        console_log(f"LLM_PROMPT_DEBUG:   custom_prompts_raw: {custom_prompts_raw}")
+        console_log(f"LLM_PROMPT_DEBUG:   custom_prompts_raw type: {type(custom_prompts_raw)}")
 
         prompts = {
             'basic_analysis': {'ru': '', 'en': ''},
@@ -289,85 +358,109 @@ def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> Dict[s
             console_log(f"   ❌ manifest не найден в globals - ЭТО ОСНОВНАЯ ПРОБЛЕМА!")
             manifest_prompts = {}
 
+        # Получить путь к директории плагина для чтения файлов промптов
+        plugin_dir = "plugins/ozon-analyzer"  # Директория плагина в Chrome extension
+        console_log(f"LLM_PROMPT_DEBUG: 📁 Путь к директории плагина: {plugin_dir}")
+
         # Детальная диагностика структуры промптов
         for prompt_type in ['basic_analysis', 'deep_analysis']:
             for lang in ['ru', 'en']:
-                console_log(f"🔍 Обработка {prompt_type}.{lang}:")
+                console_log(f"LLM_PROMPT_DEBUG: 🔍 Обработка {prompt_type}.{lang}:")
 
                 # Правильно извлекаем промпт из nested структуры plugin_settings
                 prompt_type_data = safe_dict_get(custom_prompts_raw, prompt_type, {})
-                console_log(f"   prompt_type_data ({prompt_type}): {prompt_type_data}")
+                console_log(f"LLM_PROMPT_DEBUG:   prompt_type_data ({prompt_type}): {prompt_type_data}")
 
                 custom_value = safe_dict_get(prompt_type_data, lang, '')
-                console_log(f"   custom_value для {lang}: {repr(custom_value)}")
-                console_log(f"   custom_value type: {type(custom_value)}")
-                console_log(f"   custom_value length: {len(custom_value) if custom_value else 0}")
+                console_log(f"LLM_PROMPT_DEBUG:   custom_value для {lang}: {repr(custom_value)}")
+                console_log(f"LLM_PROMPT_DEBUG:   custom_value type: {type(custom_value)}")
+                console_log(f"LLM_PROMPT_DEBUG:   custom_value length: {len(custom_value) if custom_value else 0}")
 
                 if custom_value and isinstance(custom_value, str) and len(custom_value.strip()) > 0:
                     prompts[prompt_type][lang] = custom_value
-                    console_log(f"✅ Используем кастомный промпт: {prompt_type}.{lang} (длина: {len(custom_value)})")
+                    console_log(f"LLM_PROMPT_DEBUG: ✅ Используем кастомный промпт: {prompt_type}.{lang} (длина: {len(custom_value)})")
                 else:
-                    console_log(f"ℹ️ Кастомный промпт не найден или пустой для {prompt_type}.{lang}")
+                    console_log(f"LLM_PROMPT_DEBUG: ℹ️ Кастомный промпт не найден или пустой для {prompt_type}.{lang}")
 
-                    # Fallback 1: manifest.json - исправленная логика извлечения
+                    # Fallback 1: manifest.json - проверяем на наличие file path
                     type_prompts = safe_dict_get(manifest_prompts, prompt_type, {})
-                    console_log(f"   type_prompts из manifest ({prompt_type}): {type_prompts}")
+                    console_log(f"LLM_PROMPT_DEBUG:   type_prompts из manifest ({prompt_type}): {type_prompts}")
 
                     if type_prompts:
                         lang_data = safe_dict_get(type_prompts, lang, {})
-                        console_log(f"   lang_data для {lang}: {lang_data}")
+                        console_log(f"LLM_PROMPT_DEBUG:   lang_data для {lang}: {lang_data}")
 
-                        manifest_value = safe_dict_get(lang_data, 'default', '')
-                        console_log(f"   manifest_value для {prompt_type}.{lang}: {repr(manifest_value)}")
-                        console_log(f"   manifest_value length: {len(manifest_value) if manifest_value else 0}")
+                        # Проверяем, есть ли путь к файлу
+                        file_path = safe_dict_get(lang_data, 'default', '')
+                        console_log(f"LLM_PROMPT_DEBUG:   file_path/manifest_value для {prompt_type}.{lang}: {repr(file_path)}")
 
-                        if manifest_value and len(manifest_value.strip()) > 0:
-                            prompts[prompt_type][lang] = manifest_value
-                            console_log(f"✅ Используем промпт по умолчанию из manifest: {prompt_type}.{lang}")
+                        if file_path and isinstance(file_path, str) and len(file_path.strip()) > 0:
+                            # Если путь выглядит как путь к файлу (содержит слеши или расширения), пытаемся прочитать файл
+                            if '/' in file_path or '.' in file_path:
+                                console_log(f"LLM_PROMPT_DEBUG: 📁 Обнаружен путь к файлу: {file_path}, пытаемся прочитать...")
+                                console_log(f"LLM_PROMPT_DEBUG: Вызываем read_prompt_file с plugin_dir='{plugin_dir}', file_path='{file_path}'")
+                                file_content = await read_prompt_file(plugin_dir, file_path)
+                                console_log(f"LLM_PROMPT_DEBUG: read_prompt_file вернул: длина={len(file_content)}, content='{file_content}'")
+                                if file_content and len(file_content.strip()) > 0:
+                                    prompts[prompt_type][lang] = file_content
+                                    console_log(f"LLM_PROMPT_DEBUG: ✅ Загружен промпт из файла: {prompt_type}.{lang} (длина: {len(file_content)})")
+                                    console_log(f"LLM_PROMPT_DEBUG: Содержимое промпта: '{file_content}'")
+                                else:
+                                    console_log(f"LLM_PROMPT_DEBUG: ⚠️ Не удалось прочитать файл промпта: {file_path}")
+                                    # Fallback к встроенным промптам
+                                    default_value = _get_builtin_default_prompt(prompt_type, lang)
+                                    if default_value:
+                                        prompts[prompt_type][lang] = default_value
+                                        console_log(f"LLM_PROMPT_DEBUG: ✅ Используем встроенный промпт по умолчанию: {prompt_type}.{lang}")
+                            else:
+                                # Это обычный текстовый промпт из manifest
+                                prompts[prompt_type][lang] = file_path
+                                console_log(f"LLM_PROMPT_DEBUG: ✅ Используем промпт по умолчанию из manifest: {prompt_type}.{lang}")
                         else:
-                            console_log(f"⚠️ Промпт по умолчанию не найден или пустой для {prompt_type}.{lang}")
+                            console_log(f"LLM_PROMPT_DEBUG: ⚠️ Промпт по умолчанию не найден или пустой для {prompt_type}.{lang}")
                             # Fallback 2: встроенные промпты по умолчанию
                             default_value = _get_builtin_default_prompt(prompt_type, lang)
                             if default_value:
                                 prompts[prompt_type][lang] = default_value
-                                console_log(f"✅ Используем встроенный промпт по умолчанию: {prompt_type}.{lang}")
+                                console_log(f"LLM_PROMPT_DEBUG: ✅ Используем встроенный промпт по умолчанию: {prompt_type}.{lang}")
                             else:
-                                console_log(f"⚠️ Встроенный промпт по умолчанию не найден для {prompt_type}.{lang}")
-                                console_log(f"ℹ️ Оставляем пустой промпт для {prompt_type}.{lang}")
+                                console_log(f"LLM_PROMPT_DEBUG: ⚠️ Встроенный промпт по умолчанию не найден для {prompt_type}.{lang}")
+                                console_log(f"LLM_PROMPT_DEBUG: ℹ️ Оставляем пустой промпт для {prompt_type}.{lang}")
                     else:
-                        console_log(f"⚠️ Тип промпта {prompt_type} не найден в manifest")
+                        console_log(f"LLM_PROMPT_DEBUG: ⚠️ Тип промпта {prompt_type} не найден в manifest")
                         # Fallback 2: встроенные промпты по умолчанию
                         default_value = _get_builtin_default_prompt(prompt_type, lang)
                         if default_value:
                             prompts[prompt_type][lang] = default_value
-                            console_log(f"✅ Используем встроенный промпт по умолчанию: {prompt_type}.{lang}")
+                            console_log(f"LLM_PROMPT_DEBUG: ✅ Используем встроенный промпт по умолчанию: {prompt_type}.{lang}")
                         else:
-                            console_log(f"⚠️ Встроенный промпт по умолчанию не найден для {prompt_type}.{lang}")
-                            console_log(f"ℹ️ Оставляем пустой промпт для {prompt_type}.{lang}")
+                            console_log(f"LLM_PROMPT_DEBUG: ⚠️ Встроенный промпт по умолчанию не найден для {prompt_type}.{lang}")
+                            console_log(f"LLM_PROMPT_DEBUG: ℹ️ Оставляем пустой промпт для {prompt_type}.{lang}")
 
         # Итоговая диагностика
-        console_log(f"🔍 Итоговая диагностика промптов:")
-        console_log(f"   Plugin settings prompts: {custom_prompts_raw}")
-        console_log(f"   Manifest prompts: {manifest_prompts}")
-        console_log(f"   Final prompts structure: {prompts}")
+        console_log(f"LLM_PROMPT_DEBUG: 🔍 Итоговая диагностика промптов:")
+        console_log(f"LLM_PROMPT_DEBUG:   Plugin settings prompts: {custom_prompts_raw}")
+        console_log(f"LLM_PROMPT_DEBUG:   Manifest prompts: {manifest_prompts}")
+        console_log(f"LLM_PROMPT_DEBUG:   Final prompts structure: {prompts}")
 
         # Подробная диагностика каждого промпта
-        console_log(f"🔍 ДЕТАЛЬНАЯ ДИАГНОСТИКА ПРОМПТОВ:")
+        console_log(f"LLM_PROMPT_DEBUG: 🔍 ДЕТАЛЬНАЯ ДИАГНОСТИКА ПРОМПТОВ:")
         for prompt_type in ['basic_analysis', 'deep_analysis']:
             for lang in ['ru', 'en']:
                 prompt_value = prompts[prompt_type][lang]
                 if prompt_value and len(prompt_value.strip()) > 0:
-                    console_log(f"   ✅ {prompt_type}.{lang}: загружен ({len(prompt_value)} символов)")
+                    console_log(f"LLM_PROMPT_DEBUG:   ✅ {prompt_type}.{lang}: загружен ({len(prompt_value)} символов)")
+                    console_log(f"LLM_PROMPT_DEBUG:   📝 Содержимое: '{prompt_value}'")
                 else:
-                    console_log(f"   ❌ {prompt_type}.{lang}: НЕ загружен (пустой)")
+                    console_log(f"LLM_PROMPT_DEBUG:   ❌ {prompt_type}.{lang}: НЕ загружен (пустой)")
 
         # Подсчет загруженных промптов
         loaded_prompts = len([p for pt in prompts.values() for p in pt.values() if p and len(p.strip()) > 0])
         total_prompts = len([p for pt in prompts.values() for p in pt.values()])
-        console_log(f"📋 Загружено промптов: {loaded_prompts}/{total_prompts} (кастомных: {loaded_prompts})")
+        console_log(f"LLM_PROMPT_DEBUG: 📋 Загружено промптов: {loaded_prompts}/{total_prompts} (кастомных: {loaded_prompts})")
 
         # ДИАГНОСТИКА ПРОБЛЕМЫ: Проверяем источник каждого промпта
-        console_log(f"🔍 ДИАГНОСТИКА ИСТОЧНИКОВ ПРОМПТОВ:")
+        console_log(f"LLM_PROMPT_DEBUG: 🔍 ДИАГНОСТИКА ИСТОЧНИКОВ ПРОМПТОВ:")
         for prompt_type in ['basic_analysis', 'deep_analysis']:
             for lang in ['ru', 'en']:
                 prompt_value = prompts[prompt_type][lang]
@@ -377,13 +470,17 @@ def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> Dict[s
                         source = "кастомный"
                     elif manifest_prompts and manifest_prompts.get(prompt_type, {}).get(lang, {}).get('default') == prompt_value:
                         source = "manifest default"
+                    elif prompt_value == "сколько будет 10+10":
+                        source = "файл basic_analysis.ru.default.txt"
                     else:
                         source = "встроенный fallback"
-                    console_log(f"   📍 {prompt_type}.{lang}: источник = {source}")
+                    console_log(f"LLM_PROMPT_DEBUG:   📍 {prompt_type}.{lang}: источник = {source} (длина: {len(prompt_value)})")
+                    # Логируем первые 50 символов для проверки содержимого
+                    console_log(f"LLM_PROMPT_DEBUG:   📝 Содержимое: {repr(prompt_value[:50])}...")
                 else:
-                    console_log(f"   ❌ {prompt_type}.{lang}: источник = отсутствует")
+                    console_log(f"LLM_PROMPT_DEBUG:   ❌ {prompt_type}.{lang}: источник = отсутствует")
 
-        console_log(f"🔍 ===== УСПЕШНО ЗАВЕРШЕНА ЗАГРУЗКА ПРОМПТОВ =====")
+        console_log(f"LLM_PROMPT_DEBUG: 🔍 ===== УСПЕШНО ЗАВЕРШЕНА ЗАГРУЗКА ПРОМПТОВ =====")
         return prompts
 
     except Exception as e:
@@ -872,6 +969,8 @@ class OzonAnalyzerServer:
         console_log(f"[DIAGNOSIS] model_alias: {model_alias}")
         console_log(f"[DIAGNOSIS] prompt preview: {prompt[:100]}...")
         console_log(f"[DIAGNOSIS] api_key_id: {api_key_id}")
+        console_log(f"[DIAGNOSIS] prompt length: {len(prompt)}")
+        console_log(f"[DIAGNOSIS] prompt contains '10+10': {'10+10' in prompt}")
         """
         Асинхронный вызов AI модели с кешированием.
         Ключ кеша формируется на основе model_alias и prompt.
@@ -3898,7 +3997,7 @@ async def perform_deep_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
     # Получить пользовательские промпты
     try:
-        user_prompts = get_user_prompts(plugin_settings)
+        user_prompts = await get_user_prompts(plugin_settings)
         console_log(f"ℹ️ Используем {'пользовательские' if 'custom' in str(user_prompts) else 'стандартные'} промпты для глубокого анализа")
     except Exception as e:
         console_log(f"❌ Ошибка загрузки промптов: {str(e)}, используем fallback")
@@ -4309,7 +4408,7 @@ async def _analyze_composition_vs_description(description: str, composition: str
 
     # Получить пользовательские промпты
     try:
-        user_prompts = get_user_prompts(plugin_settings)
+        user_prompts = await get_user_prompts(plugin_settings)
         console_log(f"ℹ️ Используем {'пользовательские' if 'custom' in str(user_prompts) else 'стандартные'} промпты для анализа соответствия")
     except Exception as e:
         console_log(f"❌ Ошибка загрузки промптов: {str(e)}, используем fallback")

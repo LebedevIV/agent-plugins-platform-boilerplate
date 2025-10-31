@@ -224,13 +224,13 @@ const LOG_LEVELS = {
   DEBUG: 3
 };
 
-// Текущий уровень логирования (ОТКЛЮЧЕНО для максимальной экономии токенов)
-let currentLogLevel = 999; // Уровень выше всех возможных, полностью отключает логирование
+// Текущий уровень логирования (ВКЛЮЧЕНО для диагностики промптов LLM)
+let currentLogLevel = 3; // DEBUG уровень для вывода текста промптов
 
-// Флаги для разных типов логирования (все отключены для экономии токенов)
+// Флаги для разных типов логирования (PYODIDE включен для диагностики промптов)
 const LOG_FLAGS = {
   CHUNKING: false,
-  PYODIDE: false,
+  PYODIDE: true,
   EXECUTION: false,
   CHANNEL: false,
   SYSTEM: false,
@@ -687,6 +687,26 @@ async function initializePyodide() {
           .then(response => response.text())
           .then(data => pyodide.toPy(data));
       },
+
+      readExtensionFile: async (filePath) => {
+        try {
+          const jsFilePath = filePath.toJs ? filePath.toJs() : filePath;
+          const fullUrl = chrome.runtime.getURL(jsFilePath);
+          const response = await fetch(fullUrl);
+
+          if (!response.ok) {
+            throw new Error(`Failed to load file: ${response.status} ${response.statusText}`);
+          }
+
+          const content = await response.text();
+          return pyodide.toPy(content);
+        } catch (error) {
+          console.error('Error reading extension file:', error);
+          // Return error as Pyodide object
+          return pyodide.toPy({ error: error.message });
+        }
+      },
+
       llm_call: async (modelAlias, options) => {
         // logDebug('PYODIDE', 'llm_call called:', { modelAlias, options: options?.toJs ? options.toJs() : options });
 
@@ -844,10 +864,17 @@ async function initializePyodide() {
           }
 
           // 4. Подготовка данных для прямого запроса к Gemini API (для платформенных LLM)
+          const promptText = jsOptions.prompt || jsOptions.message || JSON.stringify(jsOptions);
+          console.log('[LLM_PROMPT_DEBUG] ===== PROMPT TEXT FOR GEMINI API =====');
+          console.log('[LLM_PROMPT_DEBUG] Full prompt text:', promptText);
+          console.log('[LLM_PROMPT_DEBUG] Prompt length:', promptText.length);
+          console.log('[LLM_PROMPT_DEBUG] Prompt source: jsOptions.prompt:', !!jsOptions.prompt, 'jsOptions.message:', !!jsOptions.message);
+          console.log('[LLM_PROMPT_DEBUG] ===== END PROMPT TEXT =====');
+
           const requestBody = {
             contents: [{
               parts: [{
-                text: jsOptions.prompt || jsOptions.message || JSON.stringify(jsOptions)
+                text: promptText
               }]
             }],
             generationConfig: {
