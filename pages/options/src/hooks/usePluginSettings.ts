@@ -131,21 +131,21 @@ export const usePluginSettings = () => {
         basic_analysis: {
           ru: {
             llm: '',
-            custom_prompt: defaultPrompts.basic_analysis.ru,
+            custom_prompt: '',
           },
           en: {
             llm: '',
-            custom_prompt: defaultPrompts.basic_analysis.en,
+            custom_prompt: '',
           },
         },
         deep_analysis: {
           ru: {
             llm: '',
-            custom_prompt: defaultPrompts.deep_analysis.ru,
+            custom_prompt: '',
           },
           en: {
             llm: '',
-            custom_prompt: defaultPrompts.deep_analysis.en,
+            custom_prompt: '',
           },
         },
         api_keys: {

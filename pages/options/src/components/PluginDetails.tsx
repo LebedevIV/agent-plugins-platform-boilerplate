@@ -10,13 +10,9 @@ import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 
 // Типы для структуры промптов
-interface PromptData {
-  [key: string]: any;
-}
-
 interface LanguagePrompts {
-  ru: PromptData;
-  en: PromptData;
+  ru: string;
+  en: string;
 }
 
 interface PromptsStructure {
@@ -42,6 +38,16 @@ interface CustomSetting {
   min?: number;
   max?: number;
   step?: number;
+  prompts?: {
+    basic_analysis: {
+      ru: { default: string };
+      en: { default: string };
+    };
+    deep_analysis: {
+      ru: { default: string };
+      en: { default: string };
+    };
+  };
 }
 
 // Компонент для редактирования промптов
@@ -105,47 +111,33 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t, globalAIK
   const loadOriginalPrompt = async (): Promise<void> => {
     try {
       const promptsConfig = manifest?.options?.prompts;
-      if (!promptsConfig) {
-        setOriginalPrompt('');
-        return;
+      if (promptsConfig) {
+        const typePrompts = promptsConfig[promptType] || {};
+        const langPrompts = typePrompts[language] || {};
+        const filePath = langPrompts.default || '';
+
+        if (filePath) {
+          const response = await fetch(chrome.runtime.getURL(`plugins/ozon-analyzer/${filePath}`));
+          if (response.ok) {
+            const promptText = await response.text();
+            setOriginalPrompt(promptText);
+            return;
+          }
+        }
       }
-
-      const typePrompts = promptsConfig[promptType] || {};
-      const langPrompts = typePrompts[language] || {};
-      const filePath = langPrompts.default || '';
-
-      if (!filePath) {
-        setOriginalPrompt('');
-        return;
-      }
-
-      // Читаем содержимое файла промпта
-      const response = await fetch(chrome.runtime.getURL(`plugins/ozon-analyzer/${filePath}`));
-      if (!response.ok) {
-        console.error(`Failed to load prompt file: ${filePath}`);
-        setOriginalPrompt('');
-        return;
-      }
-
-      const promptText = await response.text();
-      setOriginalPrompt(promptText);
+      setOriginalPrompt('');
     } catch (error) {
       console.error('Failed to load original prompt:', error);
       setOriginalPrompt('');
     }
   };
 
-  // Получаем кастомный промпт
+  // Получаем кастомный промпт из pluginSettings
   const getCustomPrompt = (): string => {
     try {
-      const prompts = value || {};
-      const typePrompts = (prompts as any)[promptType] || {};
-      const langPrompts = (typePrompts as any)[language];
-
-      // If stored as plain text, show as-is. Only stringify objects.
-      if (typeof langPrompts === 'string') return langPrompts;
-      if (langPrompts == null) return '';
-      return JSON.stringify(langPrompts, null, 2);
+      const typeSettings = pluginSettings[promptType] || {};
+      const langSettings = typeSettings[language] || {};
+      return langSettings.custom_prompt || '';
     } catch {
       return '';
     }
@@ -163,15 +155,21 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t, globalAIK
 
   const handleSave = () => {
     try {
-      const newValue: any = { ...value };
+      // Create the updated prompts structure to pass to onSave
+      const updatedPrompts: PromptsStructure = {
+        basic_analysis: {
+          ru: promptType === 'basic_analysis' && language === 'ru' ? customPrompt : (pluginSettings.basic_analysis?.ru?.custom_prompt || ''),
+          en: promptType === 'basic_analysis' && language === 'en' ? customPrompt : (pluginSettings.basic_analysis?.en?.custom_prompt || ''),
+        },
+        deep_analysis: {
+          ru: promptType === 'deep_analysis' && language === 'ru' ? customPrompt : (pluginSettings.deep_analysis?.ru?.custom_prompt || ''),
+          en: promptType === 'deep_analysis' && language === 'en' ? customPrompt : (pluginSettings.deep_analysis?.en?.custom_prompt || ''),
+        },
+      };
 
-      // Ensure container objects exist
-      if (!newValue[promptType]) newValue[promptType] = { ru: '', en: '' };
-
-      // Store verbatim text (plain string), no JSON requirement
-      newValue[promptType][language] = customPrompt;
-
-      onSave(newValue);
+      // Call onSave to persist the changes through the hook
+      onSave(updatedPrompts);
+      console.log('Custom prompt saved:', customPrompt);
     } catch (error) {
       console.error('Failed to save custom prompt:', error);
       // Можно добавить уведомление об ошибке
@@ -355,9 +353,8 @@ const PluginDetails = (props: PluginDetailsProps) => {
   const { selectedPlugin, locale = 'en', onUpdateSetting } = props;
   const { t } = useTranslations(locale);
   const { aiKeys } = useAIKeys();
-  const { settings: pluginSettings } = usePluginSettings();
+  const { settings: pluginSettings, saveSettings } = usePluginSettings();
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
-  const [customSettings, setCustomSettings] = useState<Record<string, boolean | string | number | PromptsStructure> | null>(null);
 
   // Хелперы для работы с локализацией
   const getLocalizedText = (text: string | { ru: string; en: string } | undefined): string => {
@@ -366,12 +363,7 @@ const PluginDetails = (props: PluginDetailsProps) => {
     return text[locale] || text.ru || text.en || '';
   };
 
-  // Загружаем пользовательские настройки при выборе плагина
-  useEffect(() => {
-    if (selectedPlugin?.manifest?.options) {
-      loadCustomSettings();
-    }
-  }, [selectedPlugin?.id]);
+  // PluginDetails now uses usePluginSettings hook instead of custom storage logic
 
   // Передаем выбранные LLM и API ключи в mcp_server.py через pyodide.globals
   useEffect(() => {
@@ -424,117 +416,23 @@ const PluginDetails = (props: PluginDetailsProps) => {
   const settings = selectedPlugin.settings || { enabled: true, autorun: false };
   const hostPermissions = selectedPlugin.manifest?.host_permissions || [];
 
-  // Функции для работы с chrome.storage.local
-  const loadCustomSettings = async () => {
-    if (!selectedPlugin || !selectedPlugin.manifest?.options || customSettings !== null) return;
-
-    try {
-      // Проверяем доступность chrome.storage
-      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        const optionKeys = Object.keys(selectedPlugin.manifest.options);
-        const keys = optionKeys.map(key => `${selectedPlugin.id}_${key}`);
-
-        const result = await chrome.storage.local.get(keys);
-        const loadedSettings: Record<string, boolean | string | number | PromptsStructure> = {};
-
-        // Преобразуем ключи обратно и применяем значения
-        Object.entries(result).forEach(([key, value]) => {
-          const settingName = key.replace(`${selectedPlugin.id}_`, '');
-          if (value !== undefined) {
-            loadedSettings[settingName] = value;
-          }
-        });
-
-        setCustomSettings(loadedSettings);
-      }
-    } catch (error) {
-      console.warn('Failed to load custom settings from chrome.storage.local:', error);
-      // Fallback: используем дефолтные значения из manifest
-    }
-  };
-
-  const saveCustomSetting = async (setting: string, value: boolean | string | number | PromptsStructure) => {
-    if (!selectedPlugin) return;
-
-    try {
-      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        const key = `${selectedPlugin.id}_${setting}`;
-        await chrome.storage.local.set({ [key]: value });
-
-        // Обновляем локальное состояние
-        setCustomSettings(prev => ({
-          ...prev,
-          [setting]: value
-        }));
-
-        // Диагностика: проверяем правильность сохранения промптов
-        if (setting === 'prompts') {
-          await verifyPromptStorage();
-        }
-      } else {
-        console.warn('chrome.storage.local is not available');
-      }
-    } catch (error) {
-      console.error(`Failed to save setting ${setting} to chrome.storage.local:`, error);
-      throw error; // Пробрасываем ошибку для обработки в handleSettingChange
-    }
-  };
-
-  // Диагностическая функция для проверки сохранения промптов
-  const verifyPromptStorage = async () => {
-    if (!selectedPlugin) return;
-
-    try {
-      const key = `${selectedPlugin.id}_prompts`;
-      const stored = await chrome.storage.local.get([key]);
-      console.log('🔍 Диагностика промптов:');
-      console.log(`   Plugin ID: ${selectedPlugin.id}`);
-      console.log(`   Storage key: ${key}`);
-      console.log('   Сохраненные промпты:', stored[key]);
-
-      if (stored[key]) {
-        const prompts = stored[key] as PromptsStructure;
-        console.log('   Структура промптов:');
-        console.log(`     - basic_analysis.ru: ${prompts.basic_analysis?.ru ? '✓' : '✗'} (${prompts.basic_analysis?.ru?.length || 0} символов)`);
-        console.log(`     - basic_analysis.en: ${prompts.basic_analysis?.en ? '✓' : '✗'} (${prompts.basic_analysis?.en?.length || 0} символов)`);
-        console.log(`     - deep_analysis.ru: ${prompts.deep_analysis?.ru ? '✓' : '✗'} (${prompts.deep_analysis?.ru?.length || 0} символов)`);
-        console.log(`     - deep_analysis.en: ${prompts.deep_analysis?.en ? '✓' : '✗'} (${prompts.deep_analysis?.en?.length || 0} символов)`);
-      }
-    } catch (error) {
-      console.error('Ошибка диагностики промптов:', error);
-    }
-  };
+  // Custom storage logic removed - now using usePluginSettings hook
 
 
-  // Хелпер для получения значения настройки с приоритетом: chrome.storage -> manifest
+  // Get custom setting value from usePluginSettings hook
   const getCustomSettingValue = (settingName: string, defaultValue: boolean | string | number | PromptsStructure): boolean | string | number | PromptsStructure => {
-    if (customSettings && customSettings[settingName] !== undefined) {
-      return customSettings[settingName];
-    }
-
-    // Специальная обработка для промптов: преобразуем структуру из manifest в PromptsStructure
-    if (settingName === 'prompts' && typeof defaultValue === 'object' && defaultValue !== null) {
-      const promptsConfig = defaultValue as any;
-      const result: PromptsStructure = {
-        basic_analysis: { ru: {}, en: {} },
-        deep_analysis: { ru: {}, en: {} }
+    // For prompts, return the current prompts structure (but this is not used for display anymore)
+    if (settingName === 'prompts') {
+      return {
+        basic_analysis: {
+          ru: pluginSettings.basic_analysis?.ru?.custom_prompt || '' as any,
+          en: pluginSettings.basic_analysis?.en?.custom_prompt || '' as any,
+        },
+        deep_analysis: {
+          ru: pluginSettings.deep_analysis?.ru?.custom_prompt || '' as any,
+          en: pluginSettings.deep_analysis?.en?.custom_prompt || '' as any,
+        },
       };
-
-      // Извлекаем default значения из структуры manifest
-      if (promptsConfig.basic_analysis?.ru?.default) {
-        result.basic_analysis.ru = promptsConfig.basic_analysis.ru.default;
-      }
-      if (promptsConfig.basic_analysis?.en?.default) {
-        result.basic_analysis.en = promptsConfig.basic_analysis.en.default;
-      }
-      if (promptsConfig.deep_analysis?.ru?.default) {
-        result.deep_analysis.ru = promptsConfig.deep_analysis.ru.default;
-      }
-      if (promptsConfig.deep_analysis?.en?.default) {
-        result.deep_analysis.en = promptsConfig.deep_analysis.en.default;
-      }
-
-      return result;
     }
 
     return defaultValue;
@@ -702,18 +600,25 @@ const PluginDetails = (props: PluginDetailsProps) => {
     // Проверяем, является ли настройка пользовательской
     const options = selectedPlugin.manifest?.options;
     if (options && options[setting as keyof typeof options]) {
-      // Ленивая загрузка: загружаем настройки только при первом взаимодействии
-      if (customSettings === null) {
-        await loadCustomSettings();
-      }
+      // For prompts, use usePluginSettings hook
+      if (setting === 'prompts') {
+        try {
+          setIsUpdating(setting);
+          const promptsValue = value as PromptsStructure;
 
-      try {
-        setIsUpdating(setting);
-        await saveCustomSetting(setting, value);
-      } catch (error) {
-        console.error(`Failed to update custom setting ${setting}:`, error);
-      } finally {
-        setIsUpdating(null);
+          // Update pluginSettings using the hook's saveSettings method
+          const updatedSettings = { ...pluginSettings };
+          updatedSettings.basic_analysis.ru.custom_prompt = promptsValue.basic_analysis.ru as unknown as string;
+          updatedSettings.basic_analysis.en.custom_prompt = promptsValue.basic_analysis.en as unknown as string;
+          updatedSettings.deep_analysis.ru.custom_prompt = promptsValue.deep_analysis.ru as unknown as string;
+          updatedSettings.deep_analysis.en.custom_prompt = promptsValue.deep_analysis.en as unknown as string;
+
+          await saveSettings(updatedSettings);
+        } catch (error) {
+          console.error(`Failed to update prompts setting:`, error);
+        } finally {
+          setIsUpdating(null);
+        }
       }
     } else {
       // Стандартные настройки (enabled/autorun) используем через callback
