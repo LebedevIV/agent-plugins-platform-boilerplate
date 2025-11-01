@@ -362,47 +362,68 @@ async def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> 
             for lang in ['ru', 'en']:
                 console_log(f"LLM_PROMPT_DEBUG: 🔍 Обработка {prompt_type}.{lang}:")
 
-                # Правильно извлекаем промпт из nested структуры plugin_settings (UI сохраняет в basic_analysis.ru.custom_prompt)
-                prompt_type_data = safe_dict_get(plugin_settings, prompt_type, {})
-                console_log(f"LLM_PROMPT_DEBUG:   prompt_type_data ({prompt_type}): {prompt_type_data}")
-        
-                lang_data = safe_dict_get(prompt_type_data, lang, {})
-                console_log(f"LLM_PROMPT_DEBUG:   lang_data для {lang}: {lang_data}")
-        
-                custom_value = safe_dict_get(lang_data, 'custom_prompt', '')
-                console_log(f"LLM_PROMPT_DEBUG:   custom_value для {lang}: {repr(custom_value)}")
-                console_log(f"LLM_PROMPT_DEBUG:   custom_value type: {type(custom_value)}")
-                console_log(f"LLM_PROMPT_DEBUG:   custom_value length: {len(custom_value) if custom_value else 0}")
-        
-                # ДОПОЛНИТЕЛЬНАЯ ДИАГНОСТИКА: проверяем все возможные пути к кастомному промпту
-                console_log(f"LLM_PROMPT_DEBUG: 🔍 ДОПОЛНИТЕЛЬНАЯ ДИАГНОСТИКА ДОСТУПА К КАСТОМНОМУ ПРОМПТУ:")
+                # Правильно извлекаем промпт из nested структуры plugin_settings (UI сохраняет в prompts.basic_analysis.ru.custom_prompt)
+                console_log(f"LLM_PROMPT_DEBUG: 🔍 ДОСТУП К КАСТОМНЫМ ПРОМПТАМ:")
                 console_log(f"LLM_PROMPT_DEBUG:   plugin_settings keys: {list(plugin_settings.keys()) if isinstance(plugin_settings, dict) else 'not dict'}")
-        
-                # Проверяем альтернативные структуры хранения
-                alt_custom_value = None
-                if isinstance(plugin_settings, dict):
-                    # Проверяем плоскую структуру: basic_analysis.ru.custom_prompt
+
+                custom_value = ''
+
+                # ИСПРАВЛЕННАЯ СТРУКТУРА: plugin_settings[prompt_type][lang]['custom_prompt']
+                # Кастомные промпты хранятся напрямую в plugin_settings, а не в prompts секции
+                prompt_type_section = safe_dict_get(plugin_settings, prompt_type, {})
+                console_log(f"LLM_PROMPT_DEBUG:   prompt_type_section ({prompt_type}): {prompt_type_section is not None}")
+                if isinstance(prompt_type_section, dict):
+                    console_log(f"LLM_PROMPT_DEBUG:   prompt_type_section keys: {list(prompt_type_section.keys())}")
+                    lang_section = safe_dict_get(prompt_type_section, lang, {})
+                    console_log(f"LLM_PROMPT_DEBUG:   lang_section ({lang}): {lang_section is not None}")
+                    if isinstance(lang_section, dict):
+                        console_log(f"LLM_PROMPT_DEBUG:   lang_section keys: {list(lang_section.keys())}")
+                        custom_value = safe_dict_get(lang_section, 'custom_prompt', '')
+                        console_log(f"LLM_PROMPT_DEBUG:   ✅ Найден custom_prompt в исправленной структуре: {repr(custom_value[:50])}...")
+
+                # ДОПОЛНИТЕЛЬНЫЕ СТРУКТУРЫ (для обратной совместимости)
+                if not custom_value or len(custom_value.strip()) == 0:
+                    console_log(f"LLM_PROMPT_DEBUG: 🔍 ПРОВЕРКА АЛЬТЕРНАТИВНЫХ СТРУКТУР:")
+
+                    # Проверяем старую структуру: basic_analysis.ru.custom_prompt
                     flat_key = f"{prompt_type}.{lang}.custom_prompt"
                     alt_custom_value = safe_dict_get(plugin_settings, flat_key, None)
                     console_log(f"LLM_PROMPT_DEBUG:   Проверка плоской структуры '{flat_key}': {repr(alt_custom_value)}")
-        
-                    # Проверяем структуру prompts[flat_key]
-                    prompts_section = safe_dict_get(plugin_settings, 'prompts', {})
-                    if isinstance(prompts_section, dict):
-                        alt_custom_value_2 = safe_dict_get(prompts_section, flat_key, None)
-                        console_log(f"LLM_PROMPT_DEBUG:   Проверка prompts['{flat_key}']: {repr(alt_custom_value_2)}")
-                        if alt_custom_value_2:
-                            alt_custom_value = alt_custom_value_2
-        
-                if alt_custom_value and isinstance(alt_custom_value, str) and len(alt_custom_value.strip()) > 0:
-                    console_log(f"LLM_PROMPT_DEBUG: ✅ Найден кастомный промпт в альтернативной структуре: {repr(alt_custom_value[:50])}...")
-                    custom_value = alt_custom_value
-                else:
-                    console_log(f"LLM_PROMPT_DEBUG: ℹ️ Альтернативные структуры не содержат кастомный промпт")
+                    if alt_custom_value and isinstance(alt_custom_value, str) and len(alt_custom_value.strip()) > 0:
+                        custom_value = alt_custom_value
+                        console_log(f"LLM_PROMPT_DEBUG:   ✅ Используем кастомный промпт из плоской структуры")
+
+                    # Проверяем старую структуру: plugin_settings['prompts'][flat_key] (для обратной совместимости)
+                    if not custom_value or len(custom_value.strip()) == 0:
+                        prompts_section = safe_dict_get(plugin_settings, 'prompts', {})
+                        if isinstance(prompts_section, dict):
+                            alt_custom_value = safe_dict_get(prompts_section, flat_key, None)
+                            console_log(f"LLM_PROMPT_DEBUG:   Проверка старой структуры prompts['{flat_key}']: {repr(alt_custom_value)}")
+                            if alt_custom_value and isinstance(alt_custom_value, str) and len(alt_custom_value.strip()) > 0:
+                                custom_value = alt_custom_value
+                                console_log(f"LLM_PROMPT_DEBUG:   ✅ Используем кастомный промпт из старой структуры prompts[flat_key]")
+
+                console_log(f"LLM_PROMPT_DEBUG:   custom_value для {lang}: {repr(custom_value)}")
+                console_log(f"LLM_PROMPT_DEBUG:   custom_value type: {type(custom_value)}")
+                console_log(f"LLM_PROMPT_DEBUG:   custom_value length: {len(custom_value) if custom_value else 0}")
 
                 if custom_value and isinstance(custom_value, str) and len(custom_value.strip()) > 0:
-                    prompts[prompt_type][lang] = custom_value
-                    console_log(f"LLM_PROMPT_DEBUG: ✅ Используем кастомный промпт: {prompt_type}.{lang} (длина: {len(custom_value)})")
+                    custom_value_stripped = custom_value.strip()
+
+                    # Проверяем, является ли значение путем к файлу по умолчанию (из manifest.json)
+                    # Если это путь к файлу по умолчанию, значит кастомный промпт не задан
+                    is_default_file_path = (
+                        custom_value_stripped == f"prompts/{prompt_type}.{lang}.default.txt" or
+                        custom_value_stripped == lang_data.get('default', '') if 'lang_data' in locals() else False
+                    )
+
+                    if is_default_file_path:
+                        console_log(f"LLM_PROMPT_DEBUG: ℹ️ Найден путь к файлу по умолчанию, кастомный промпт не задан: {prompt_type}.{lang}")
+                        # Не используем этот "кастомный" промпт, он является путем к файлу по умолчанию
+                    else:
+                        # Это настоящий кастомный промпт
+                        prompts[prompt_type][lang] = custom_value_stripped
+                        console_log(f"LLM_PROMPT_DEBUG: ✅ Используем настоящий кастомный промпт: {prompt_type}.{lang} (длина: {len(custom_value_stripped)})")
                 else:
                     console_log(f"LLM_PROMPT_DEBUG: ℹ️ Кастомный промпт не найден или пустой для {prompt_type}.{lang}")
 

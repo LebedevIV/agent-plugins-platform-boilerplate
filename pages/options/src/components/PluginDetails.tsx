@@ -137,8 +137,11 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t, globalAIK
     try {
       const typeSettings = pluginSettings[promptType] || {};
       const langSettings = typeSettings[language] || {};
-      return langSettings.custom_prompt || '';
-    } catch {
+      const customPrompt = langSettings.custom_prompt || '';
+      console.log(`[PROMPT_DEBUG] getCustomPrompt for ${promptType}.${language}:`, customPrompt);
+      return customPrompt;
+    } catch (error) {
+      console.error(`[PROMPT_DEBUG] Error getting custom prompt for ${promptType}.${language}:`, error);
       return '';
     }
   };
@@ -156,6 +159,7 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t, globalAIK
   const handleSave = () => {
     try {
       // Create the updated prompts structure to pass to onSave
+      // IMPORTANT: Save the actual custom prompt text, not file paths
       const updatedPrompts: PromptsStructure = {
         basic_analysis: {
           ru: promptType === 'basic_analysis' && language === 'ru' ? customPrompt : (pluginSettings.basic_analysis?.ru?.custom_prompt || ''),
@@ -169,7 +173,8 @@ const PromptsEditor = ({ value, manifest, disabled, onSave, locale, t, globalAIK
 
       // Call onSave to persist the changes through the hook
       onSave(updatedPrompts);
-      console.log('Custom prompt saved:', customPrompt);
+      console.log('[PROMPT_DEBUG] Custom prompt saved:', customPrompt);
+      console.log('[PROMPT_DEBUG] Updated prompts structure:', updatedPrompts);
     } catch (error) {
       console.error('Failed to save custom prompt:', error);
       // Можно добавить уведомление об ошибке
@@ -613,6 +618,7 @@ const PluginDetails = (props: PluginDetailsProps) => {
           updatedSettings.deep_analysis.ru.custom_prompt = promptsValue.deep_analysis.ru as unknown as string;
           updatedSettings.deep_analysis.en.custom_prompt = promptsValue.deep_analysis.en as unknown as string;
 
+          console.log('[PROMPT_DEBUG] Saving updated settings:', updatedSettings);
           await saveSettings(updatedSettings);
         } catch (error) {
           console.error(`Failed to update prompts setting:`, error);
