@@ -1582,6 +1582,13 @@ chrome.runtime.onMessage.addListener(
             
             const promptTypes = ['basic_analysis', 'deep_analysis'];
             const languages = ['ru', 'en'];
+            const promptDebugSummary: Array<{
+              promptType: string;
+              language: string;
+              storageLength: number;
+              finalPromptLength: number;
+              topLevelKeys: string[];
+            }> = [];
             
             for (const promptType of promptTypes) {
               const customPromptTypeSettings = customSettings[promptType];
@@ -1631,10 +1638,38 @@ chrome.runtime.onMessage.addListener(
                     };
                   }
                 }
+
+                const finalPromptValue = (enrichedPluginSettings.prompts as any)[promptType][language]?.custom_prompt ?? '';
+                promptDebugSummary.push({
+                  promptType,
+                  language,
+                  storageLength: customPrompt ? customPrompt.length : 0,
+                  finalPromptLength: finalPromptValue ? finalPromptValue.length : 0,
+                  topLevelKeys: Object.keys((enrichedPluginSettings as any)[promptType][language] || {}),
+                });
               }
             }
             
             console.log('[BACKGROUND] 📊 Final prompts after custom override:', JSON.stringify(enrichedPluginSettings.prompts, null, 2));
+            const promptLengthSnapshot = promptTypes.reduce((acc, type) => {
+              acc[type] = {} as Record<string, number>;
+              for (const language of languages) {
+                const value = (enrichedPluginSettings.prompts as any)[type]?.[language]?.custom_prompt;
+                acc[type][language] = typeof value === 'string' ? value.length : 0;
+              }
+              return acc;
+            }, {} as Record<string, Record<string, number>>);
+            const topLevelSnapshot = promptTypes.reduce((acc, type) => {
+              acc[type] = {} as Record<string, string[]>;
+              for (const language of languages) {
+                const topLevelEntry = (enrichedPluginSettings as any)[type]?.[language];
+                acc[type][language] = topLevelEntry ? Object.keys(topLevelEntry) : [];
+              }
+              return acc;
+            }, {} as Record<string, Record<string, string[]>>);
+            console.log('[LLM_PROMPT_DEBUG][BACKGROUND] Prompt override summary:', promptDebugSummary);
+            console.log('[LLM_PROMPT_DEBUG][BACKGROUND] Prompt length snapshot:', promptLengthSnapshot);
+            console.log('[LLM_PROMPT_DEBUG][BACKGROUND] Top-level snapshot:', topLevelSnapshot);
           } else {
             console.log('[BACKGROUND] ℹ️ No plugin-ozon-analyzer-settings found in localStorage, using manifest defaults only');
           }
@@ -1759,6 +1794,26 @@ chrome.runtime.onMessage.addListener(
 
         // Используем enrichedPluginSettings (с prompts из manifest.json) вместо обычных pluginSettings
         const settingsToSend = enrichedPluginSettings;
+
+        const llmPromptDebugSnapshot = {
+          promptLengths: ['basic_analysis', 'deep_analysis'].reduce((acc, type) => {
+            acc[type] = {} as Record<string, number>;
+            for (const lang of ['ru', 'en']) {
+              const value = (settingsToSend.prompts as any)?.[type]?.[lang]?.custom_prompt;
+              acc[type][lang] = typeof value === 'string' ? value.length : 0;
+            }
+            return acc;
+          }, {} as Record<string, Record<string, number>>),
+          topLevelKeys: ['basic_analysis', 'deep_analysis'].reduce((acc, type) => {
+            acc[type] = {} as Record<string, string[]>;
+            for (const lang of ['ru', 'en']) {
+              const entry = (settingsToSend as any)?.[type]?.[lang];
+              acc[type][lang] = entry ? Object.keys(entry) : [];
+            }
+            return acc;
+          }, {} as Record<string, Record<string, string[]>>),
+        };
+        console.log('[LLM_PROMPT_DEBUG][BACKGROUND] Settings snapshot before send:', llmPromptDebugSnapshot);
 
         // [API_KEY_FLOW] MARKER: BACKGROUND_PLUGIN_SETTINGS_PREPARATION_START
         console.log('[API_KEY_FLOW] MARKER: BACKGROUND_PLUGIN_SETTINGS_PREPARATION_START');
