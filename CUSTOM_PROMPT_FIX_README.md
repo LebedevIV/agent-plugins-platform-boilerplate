@@ -329,8 +329,8 @@ A: No. Custom prompts are stored in localStorage and never deleted by this code.
 | Aspect | Details |
 |--------|---------|
 | **Status** | ✅ Complete & Ready |
-| **Files Modified** | 1 (background/index.ts) |
-| **Lines Added** | 37 (lines 1574-1611) |
+| **Files Modified** | 1 code file (`background/index.ts`) + documentation updates |
+| **Lines Added** | ~60 code lines (lines 1574-1638) plus documentation |
 | **Breaking Changes** | None |
 | **Backward Compatible** | Yes |
 | **Tests Created** | 10+ scenarios |

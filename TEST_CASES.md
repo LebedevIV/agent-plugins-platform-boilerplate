@@ -59,6 +59,7 @@ chrome.storage.local.set({
 - ✅ Console shows: `[BACKGROUND] 🔍 Checking for custom prompts...`
 - ✅ Console shows: `[BACKGROUND] 📝 Found plugin-ozon-analyzer-settings in localStorage`
 - ✅ Console shows 4x: `[BACKGROUND] ✅ Using CUSTOM prompt for [type].[lang]`
+- ✅ Logs show top-level sections created (e.g., entries in `basic_analysis.ru` when inspecting plugin_settings)
 - ✅ Final log shows all custom_prompt values as set (not paths)
 - ✅ No fallback to manifest defaults used
 

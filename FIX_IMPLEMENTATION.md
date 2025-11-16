@@ -10,7 +10,7 @@ The background service worker (`chrome-extension/src/background/index.ts`) was l
 
 ### File Modified
 **File**: `/home/engine/project/chrome-extension/src/background/index.ts`
-**Lines**: 1574-1611 (inserted after line 1572)
+**Lines**: 1574-1638 (inserted after line 1572)
 
 ### Code Changes
 
@@ -24,7 +24,7 @@ console.log('[BACKGROUND] ✅ Prompts loaded from manifest.json:', JSON.stringif
 if (!enrichedPluginSettings.enabled) {
 ```
 
-#### After (Lines 1569-1611)
+#### After (Lines 1569-1638)
 ```typescript
 console.log('[BACKGROUND] ✅ Prompts loaded from manifest.json:', JSON.stringify(enrichedPluginSettings.prompts, null, 2));
 } else {
@@ -44,19 +44,48 @@ try {
     const languages = ['ru', 'en'];
     
     for (const promptType of promptTypes) {
-      if (!customSettings[promptType]) {
+      const customPromptTypeSettings = customSettings[promptType];
+      if (!customPromptTypeSettings || typeof customPromptTypeSettings !== 'object') {
         console.log(`[BACKGROUND] ℹ️ No settings for ${promptType}`);
         continue;
       }
+
+      if (!(enrichedPluginSettings as any)[promptType]) {
+        (enrichedPluginSettings as any)[promptType] = {};
+      }
+      if (!(enrichedPluginSettings.prompts as any)[promptType]) {
+        (enrichedPluginSettings.prompts as any)[promptType] = {};
+      }
       
       for (const language of languages) {
-        const customPrompt = customSettings[promptType]?.[language]?.custom_prompt;
+        const customLangSettings = customPromptTypeSettings?.[language];
+        const customPrompt = customLangSettings?.custom_prompt;
+
+        if (!(enrichedPluginSettings as any)[promptType][language]) {
+          (enrichedPluginSettings as any)[promptType][language] = {};
+        }
+
+        const existingPromptEntry = (enrichedPluginSettings.prompts as any)[promptType][language];
+        if (!existingPromptEntry || typeof existingPromptEntry !== 'object') {
+          (enrichedPluginSettings.prompts as any)[promptType][language] = { custom_prompt: '' };
+        }
         
         if (customPrompt && typeof customPrompt === 'string' && customPrompt.trim().length > 0) {
           (enrichedPluginSettings.prompts as any)[promptType][language].custom_prompt = customPrompt;
+          (enrichedPluginSettings as any)[promptType][language] = {
+            ...(enrichedPluginSettings as any)[promptType][language],
+            ...(customLangSettings && typeof customLangSettings === 'object' ? customLangSettings : {}),
+          };
           console.log(`[BACKGROUND] ✅ Using CUSTOM prompt for ${promptType}.${language} (length: ${customPrompt.length})`);
         } else {
           console.log(`[BACKGROUND] ℹ️ No custom prompt for ${promptType}.${language}, using manifest default`);
+
+          if (customLangSettings && typeof customLangSettings === 'object') {
+            (enrichedPluginSettings as any)[promptType][language] = {
+              ...(enrichedPluginSettings as any)[promptType][language],
+              ...customLangSettings,
+            };
+          }
         }
       }
     }
@@ -179,6 +208,7 @@ chrome.storage.local['plugin-ozon-analyzer-settings'] = {
 
 ### Final enrichedPluginSettings Structure (After Fix)
 ```javascript
+// Prompts map used by the background → worker pipeline
 enrichedPluginSettings.prompts = {
   basic_analysis: {
     ru: {
@@ -196,7 +226,19 @@ enrichedPluginSettings.prompts = {
       custom_prompt: "prompts/deep_analysis.en.default.txt" // ← KEPT FROM MANIFEST
     }
   }
-}
+};
+
+// Top-level structure expected by Pyodide (basic_analysis/deep_analysis)
+// includes both custom_prompt and LLM selection for each language
+enrichedPluginSettings.basic_analysis = {
+  ru: { llm: "gemini-flash-lite", custom_prompt: "Custom prompt text here..." },
+  en: { llm: "gemini-flash-lite", custom_prompt: "" }
+};
+
+enrichedPluginSettings.deep_analysis = {
+  ru: { llm: "gemini-pro", custom_prompt: "Another custom prompt..." },
+  en: { llm: "gemini-pro", custom_prompt: "" }
+};
 ```
 
 ## Testing Strategy

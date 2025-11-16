@@ -247,18 +247,42 @@ try {
     console.log('[BACKGROUND] 📝 Checking for custom prompts in localStorage...');
     
     for (const promptType of ['basic_analysis', 'deep_analysis']) {
-      if (!(promptType in (enrichedPluginSettings.prompts as any))) {
+      const customPromptTypeSettings = ozonSettings[promptType];
+      if (!customPromptTypeSettings || typeof customPromptTypeSettings !== 'object') {
+        console.log(`[BACKGROUND] ℹ️ No settings for ${promptType}`);
+        continue;
+      }
+
+      if (!(enrichedPluginSettings as any)[promptType]) {
+        (enrichedPluginSettings as any)[promptType] = {};
+      }
+      if (!(enrichedPluginSettings.prompts as any)[promptType]) {
         (enrichedPluginSettings.prompts as any)[promptType] = {};
       }
       
       for (const language of ['ru', 'en']) {
-        const customPrompt = ozonSettings?.[promptType]?.[language]?.custom_prompt;
+        const customLangSettings = customPromptTypeSettings?.[language];
+        const customPrompt = customLangSettings?.custom_prompt;
+
+        if (!(enrichedPluginSettings as any)[promptType][language]) {
+          (enrichedPluginSettings as any)[promptType][language] = {};
+        }
+        if (!((enrichedPluginSettings.prompts as any)[promptType][language])) {
+          (enrichedPluginSettings.prompts as any)[promptType][language] = { custom_prompt: '' };
+        }
         
         if (customPrompt && typeof customPrompt === 'string' && customPrompt.trim().length > 0) {
           (enrichedPluginSettings.prompts as any)[promptType][language].custom_prompt = customPrompt;
           console.log(`[BACKGROUND] ✅ Using CUSTOM prompt for ${promptType}.${language}`);
         } else {
           console.log(`[BACKGROUND] ℹ️ No custom prompt for ${promptType}.${language}, using manifest default`);
+        }
+
+        if (customLangSettings && typeof customLangSettings === 'object') {
+          (enrichedPluginSettings as any)[promptType][language] = {
+            ...(enrichedPluginSettings as any)[promptType][language],
+            ...customLangSettings,
+          };
         }
       }
     }
@@ -341,7 +365,7 @@ try {
 
 | Аспект | Детали |
 |--------|--------|
-| **Причина бага** | Background.ts загружает prompts ТОЛЬКО из manifest.json и НИКОГДА не проверяет `plugin-ozon-analyzer-settings` в localStorage |
+| **Причина бага** | Background.ts загружает prompts ТОЛЬКО из manifest.json и НИКОГДА не проверяет `plugin-ozon-analyzer-settings` в localStorage, а также не передаёт top-level `basic_analysis` / `deep_analysis` структуры, которые ожидает Pyodide |
 | **Где сохраняется custom prompt** | `chrome.storage.local['plugin-ozon-analyzer-settings'][promptType][language].custom_prompt` |
 | **Где загружается дефолтный** | `chrome-extension/src/background/index.ts` строки 1540-1572 |
 | **Главный файл для исправления** | `/home/engine/project/chrome-extension/src/background/index.ts` |

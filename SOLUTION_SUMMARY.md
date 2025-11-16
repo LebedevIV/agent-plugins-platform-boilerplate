@@ -62,7 +62,7 @@ A custom prompt is used if:
 
 ### Code Location
 **File**: `/home/engine/project/chrome-extension/src/background/index.ts`
-**Lines**: 1574-1611 (inserted after loading manifest prompts)
+**Lines**: 1574-1638 (inserted after loading manifest prompts)
 
 ### How It Works (4-Step Process)
 
@@ -87,18 +87,42 @@ if (customSettings && typeof customSettings === 'object') {
 }
 ```
 
-**Step 3**: Validate each custom prompt (ADDED)
+**Step 3**: Merge custom prompts + top-level structures (ADDED)
 ```typescript
-// Lines 1592-1602
+// Lines 1586-1633
 for (const promptType of promptTypes) {
+  const customPromptTypeSettings = customSettings[promptType];
+  if (!customPromptTypeSettings || typeof customPromptTypeSettings !== 'object') {
+    continue;
+  }
+
+  if (!(enrichedPluginSettings as any)[promptType]) {
+    (enrichedPluginSettings as any)[promptType] = {};
+  }
+  if (!(enrichedPluginSettings.prompts as any)[promptType]) {
+    (enrichedPluginSettings.prompts as any)[promptType] = {};
+  }
+
   for (const language of languages) {
-    const customPrompt = customSettings[promptType]?.[language]?.custom_prompt;
-    
-    // Validation: string + non-empty
+    const customLangSettings = customPromptTypeSettings?.[language];
+    const customPrompt = customLangSettings?.custom_prompt;
+
+    if (!(enrichedPluginSettings as any)[promptType][language]) {
+      (enrichedPluginSettings as any)[promptType][language] = {};
+    }
+    if (!((enrichedPluginSettings.prompts as any)[promptType][language])) {
+      (enrichedPluginSettings.prompts as any)[promptType][language] = { custom_prompt: '' };
+    }
+
     if (customPrompt && typeof customPrompt === 'string' && customPrompt.trim().length > 0) {
-      // Override with custom
-    } else {
-      // Keep manifest default
+      (enrichedPluginSettings.prompts as any)[promptType][language].custom_prompt = customPrompt;
+    }
+
+    if (customLangSettings && typeof customLangSettings === 'object') {
+      (enrichedPluginSettings as any)[promptType][language] = {
+        ...(enrichedPluginSettings as any)[promptType][language],
+        ...customLangSettings,
+      };
     }
   }
 }
@@ -106,7 +130,7 @@ for (const promptType of promptTypes) {
 
 **Step 4**: Error handling (ADDED)
 ```typescript
-// Lines 1608-1611
+// Lines 1639-1643
 catch (error) {
   console.warn('[BACKGROUND] ⚠️ Failed to load custom prompts from localStorage:', error);
   console.log('[BACKGROUND] ℹ️ Fallback: continuing with manifest defaults');
@@ -147,7 +171,8 @@ background/index.ts:1493 → Load manifest prompts
 ```
 background/index.ts:1493 → Load manifest prompts
                        → Check localStorage for custom_prompts [NEW]
-                       → Override manifest with custom [NEW]
+                       → Override manifest prompt map with custom text [NEW]
+                       → Populate top-level basic_analysis/deep_analysis structures with custom data [NEW]
                        → Pass to enrichedPluginSettings
                        → Send to worker with custom or manifest defaults
 ```
@@ -176,8 +201,13 @@ enrichedPluginSettings.prompts.basic_analysis.ru.custom_prompt =
 
 ### After Fix (What Is Sent to AI)
 ```javascript
+// Prompt map used by prompt loader
 enrichedPluginSettings.prompts.basic_analysis.ru.custom_prompt = 
-  'USER'S CUSTOM ANALYSIS PROMPT HERE...'  // ← NOW USES CUSTOM WHEN SET
+  "USER'S CUSTOM ANALYSIS PROMPT HERE...";  // ← NOW USES CUSTOM WHEN SET
+
+// Top-level structure consumed by mcp_server.py
+enrichedPluginSettings.basic_analysis.ru.custom_prompt = 
+  "USER'S CUSTOM ANALYSIS PROMPT HERE...";
 ```
 
 ---

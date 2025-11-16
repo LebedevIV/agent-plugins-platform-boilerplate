@@ -1584,19 +1584,52 @@ chrome.runtime.onMessage.addListener(
             const languages = ['ru', 'en'];
             
             for (const promptType of promptTypes) {
-              if (!customSettings[promptType]) {
+              const customPromptTypeSettings = customSettings[promptType];
+              if (!customPromptTypeSettings || typeof customPromptTypeSettings !== 'object') {
                 console.log(`[BACKGROUND] ℹ️ No settings for ${promptType}`);
                 continue;
               }
-              
+
+              // Ensure the top-level structure (basic_analysis/deep_analysis) expected by Pyodide exists
+              if (!(enrichedPluginSettings as any)[promptType]) {
+                (enrichedPluginSettings as any)[promptType] = {};
+              }
+
+              if (!(enrichedPluginSettings.prompts as any)[promptType]) {
+                (enrichedPluginSettings.prompts as any)[promptType] = {};
+              }
+
               for (const language of languages) {
-                const customPrompt = customSettings[promptType]?.[language]?.custom_prompt;
-                
+                const customPrompt = customPromptTypeSettings?.[language]?.custom_prompt;
+
+                if (!(enrichedPluginSettings as any)[promptType][language]) {
+                  (enrichedPluginSettings as any)[promptType][language] = {};
+                }
+
+                const existingPromptEntry = (enrichedPluginSettings.prompts as any)[promptType][language];
+                if (!existingPromptEntry || typeof existingPromptEntry !== 'object') {
+                  (enrichedPluginSettings.prompts as any)[promptType][language] = { custom_prompt: '' };
+                }
+
+                const customLangSettings = customPromptTypeSettings?.[language];
+
                 if (customPrompt && typeof customPrompt === 'string' && customPrompt.trim().length > 0) {
                   (enrichedPluginSettings.prompts as any)[promptType][language].custom_prompt = customPrompt;
+                  (enrichedPluginSettings as any)[promptType][language] = {
+                    ...(enrichedPluginSettings as any)[promptType][language],
+                    ...(customLangSettings && typeof customLangSettings === 'object' ? customLangSettings : {}),
+                  };
                   console.log(`[BACKGROUND] ✅ Using CUSTOM prompt for ${promptType}.${language} (length: ${customPrompt.length})`);
                 } else {
                   console.log(`[BACKGROUND] ℹ️ No custom prompt for ${promptType}.${language}, using manifest default`);
+
+                  // Preserve other language-specific settings (e.g., selected LLM) if they exist in storage
+                  if (customLangSettings && typeof customLangSettings === 'object') {
+                    (enrichedPluginSettings as any)[promptType][language] = {
+                      ...(enrichedPluginSettings as any)[promptType][language],
+                      ...customLangSettings,
+                    };
+                  }
                 }
               }
             }

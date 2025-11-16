@@ -312,6 +312,7 @@ Documents created:
 - ✅ Loads custom prompts from localStorage
 - ✅ Validates prompt data (type, non-empty)
 - ✅ Overrides manifest defaults when valid
+- ✅ Populates top-level `basic_analysis` / `deep_analysis` structures expected by Pyodide
 - ✅ Falls back to manifest if no custom
 - ✅ Handles storage errors gracefully
 - ✅ Comprehensive error logging
