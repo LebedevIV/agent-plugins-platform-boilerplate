@@ -1571,6 +1571,45 @@ chrome.runtime.onMessage.addListener(
           console.log('[BACKGROUND] ℹ️ No prompts defined in manifest.json for plugin:', msg.pluginId);
         }
 
+        // === CUSTOM PROMPT OVERRIDE: Load from localStorage if available ===
+        try {
+          console.log('[BACKGROUND] 🔍 Checking for custom prompts in plugin-specific settings...');
+          const result = await chrome.storage.local.get(['plugin-ozon-analyzer-settings']);
+          const customSettings = result['plugin-ozon-analyzer-settings'];
+          
+          if (customSettings && typeof customSettings === 'object') {
+            console.log('[BACKGROUND] 📝 Found plugin-ozon-analyzer-settings in localStorage');
+            
+            const promptTypes = ['basic_analysis', 'deep_analysis'];
+            const languages = ['ru', 'en'];
+            
+            for (const promptType of promptTypes) {
+              if (!customSettings[promptType]) {
+                console.log(`[BACKGROUND] ℹ️ No settings for ${promptType}`);
+                continue;
+              }
+              
+              for (const language of languages) {
+                const customPrompt = customSettings[promptType]?.[language]?.custom_prompt;
+                
+                if (customPrompt && typeof customPrompt === 'string' && customPrompt.trim().length > 0) {
+                  (enrichedPluginSettings.prompts as any)[promptType][language].custom_prompt = customPrompt;
+                  console.log(`[BACKGROUND] ✅ Using CUSTOM prompt for ${promptType}.${language} (length: ${customPrompt.length})`);
+                } else {
+                  console.log(`[BACKGROUND] ℹ️ No custom prompt for ${promptType}.${language}, using manifest default`);
+                }
+              }
+            }
+            
+            console.log('[BACKGROUND] 📊 Final prompts after custom override:', JSON.stringify(enrichedPluginSettings.prompts, null, 2));
+          } else {
+            console.log('[BACKGROUND] ℹ️ No plugin-ozon-analyzer-settings found in localStorage, using manifest defaults only');
+          }
+        } catch (error) {
+          console.warn('[BACKGROUND] ⚠️ Failed to load custom prompts from localStorage:', error);
+          console.log('[BACKGROUND] ℹ️ Fallback: continuing with manifest defaults');
+        }
+
         if (!enrichedPluginSettings.enabled) {
           console.log('[background][RUN_WORKFLOW][INFO] Plugin disabled');
           sendResponse({ error: 'Плагин отключен' });
