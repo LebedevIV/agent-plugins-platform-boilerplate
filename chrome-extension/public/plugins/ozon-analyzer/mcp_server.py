@@ -441,18 +441,23 @@ async def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> 
                 if custom_value and isinstance(custom_value, str) and len(custom_value.strip()) > 0:
                     custom_value_stripped = custom_value.strip()
 
-                    # Проверяем, является ли значение путем к файлу по умолчанию (из manifest.json)
-                    # Если это путь к файлу по умолчанию, значит кастомный промпт не задан
-                    is_default_file_path = (
-                        custom_value_stripped == f"prompts/{prompt_type}.{lang}.default.txt" or
-                        custom_value_stripped == lang_data.get('default', '') if 'lang_data' in locals() else False
-                    )
+                    # Проверяем, является ли значение путем к файлу (независимо от того, дефолтный или кастомный)
+                    # Если это путь к файлу, нужно его прочитать
+                    is_file_path = ('/' in custom_value_stripped or '.txt' in custom_value_stripped)
 
-                    if is_default_file_path:
-                        console_log(f"LLM_PROMPT_DEBUG: ℹ️ Найден путь к файлу по умолчанию, кастомный промпт не задан: {prompt_type}.{lang}")
-                        # Не используем этот "кастомный" промпт, он является путем к файлу по умолчанию
+                    if is_file_path:
+                        console_log(f"LLM_PROMPT_DEBUG: 📁 Обнаружен путь к файлу промпта: {custom_value_stripped}")
+                        console_log(f"LLM_PROMPT_DEBUG: 📁 Вызываем read_prompt_file с plugin_dir='{plugin_dir}', file_path='{custom_value_stripped}'")
+                        file_content = await read_prompt_file(plugin_dir, custom_value_stripped)
+                        console_log(f"LLM_PROMPT_DEBUG: 📁 read_prompt_file вернул: длина={len(file_content) if file_content else 0}")
+                        if file_content and len(file_content.strip()) > 0:
+                            prompts[prompt_type][lang] = file_content
+                            console_log(f"LLM_PROMPT_DEBUG: ✅ Загружен промпт из файла: {prompt_type}.{lang} (длина: {len(file_content)})")
+                            console_log(f"LLM_PROMPT_DEBUG: 📝 Содержимое промпта (первые 200 символов): '{file_content[:200]}'")
+                        else:
+                            console_log(f"LLM_PROMPT_DEBUG: ⚠️ Не удалось прочитать файл промпта: {custom_value_stripped}")
                     else:
-                        # Это настоящий кастомный промпт
+                        # Это настоящий кастомный промпт (текст, а не путь)
                         prompts[prompt_type][lang] = custom_value_stripped
                         console_log(f"LLM_PROMPT_DEBUG: ✅ Используем настоящий кастомный промпт: {prompt_type}.{lang} (длина: {len(custom_value_stripped)})")
                 else:
