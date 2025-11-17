@@ -1618,9 +1618,11 @@ chrome.runtime.onMessage.addListener(
           }
 
           console.log('[BACKGROUND] ✅ Prompts processing complete. Summary:');
-          for (const [promptType, langs] of Object.entries(enrichedPluginSettings.prompts)) {
-            for (const [lang, config] of Object.entries(langs as any)) {
-              console.log(`[BACKGROUND]   - ${promptType}.${lang}: source=${(config as any)._source}, length=${(config as any).custom_prompt?.length || 0}`);
+          if (enrichedPluginSettings.prompts && typeof enrichedPluginSettings.prompts === 'object') {
+            for (const [promptType, langs] of Object.entries(enrichedPluginSettings.prompts as Record<string, any>)) {
+              for (const [lang, config] of Object.entries(langs as any)) {
+                console.log(`[BACKGROUND]   - ${promptType}.${lang}: source=${(config as any)._source}, length=${(config as any).custom_prompt?.length || 0}`);
+              }
             }
           }
         } else {
