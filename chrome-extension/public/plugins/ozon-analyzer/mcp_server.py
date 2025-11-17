@@ -398,7 +398,7 @@ async def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> 
                         prompts_section = safe_dict_get(plugin_settings, 'prompts', {})
                         if isinstance(prompts_section, dict):
                             alt_custom_value = safe_dict_get(prompts_section, flat_key, None)
-                            console_log(f"LLM_PROMPT_DEBUG:   Проверка старой структуры prompts['{flat_key}']: {repr(alt_custom_value)}")
+                            console_log(f"LLM_PROMPT_DEBUG:   Проверка старой структуры prompts['{flat_key}']: {repr(alt_custom_value[:100] + '...' if alt_custom_value and len(alt_custom_value) > 100 else alt_custom_value)}")
                             if alt_custom_value and isinstance(alt_custom_value, str) and len(alt_custom_value.strip()) > 0:
                                 custom_value = alt_custom_value
                                 console_log(f"LLM_PROMPT_DEBUG:   ✅ Используем кастомный промпт из старой структуры prompts[flat_key]")
@@ -445,11 +445,11 @@ async def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> 
                                 console_log(f"LLM_PROMPT_DEBUG: 📁 Обнаружен путь к файлу: {file_path}, пытаемся прочитать...")
                                 console_log(f"LLM_PROMPT_DEBUG: Вызываем read_prompt_file с plugin_dir='{plugin_dir}', file_path='{file_path}'")
                                 file_content = await read_prompt_file(plugin_dir, file_path)
-                                console_log(f"LLM_PROMPT_DEBUG: read_prompt_file вернул: длина={len(file_content)}, content='{file_content}'")
+                                console_log(f"LLM_PROMPT_DEBUG: read_prompt_file вернул: длина={len(file_content)}, content='{file_content[:100]}{'...' if len(file_content) > 100 else ''}'")
                                 if file_content and len(file_content.strip()) > 0:
                                     prompts[prompt_type][lang] = file_content
                                     console_log(f"LLM_PROMPT_DEBUG: ✅ Загружен промпт из файла: {prompt_type}.{lang} (длина: {len(file_content)})")
-                                    console_log(f"LLM_PROMPT_DEBUG: Содержимое промпта: '{file_content}'")
+                                    console_log(f"LLM_PROMPT_DEBUG: Содержимое промпта: '{file_content[:100]}{'...' if len(file_content) > 100 else ''}'")
                                 else:
                                     console_log(f"LLM_PROMPT_DEBUG: ⚠️ Не удалось прочитать файл промпта: {file_path}")
                                     # Fallback к встроенным промптам
@@ -498,7 +498,7 @@ async def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> 
                 prompt_value = prompts[prompt_type][lang]
                 if prompt_value and len(prompt_value.strip()) > 0:
                     console_log(f"LLM_PROMPT_DEBUG:   ✅ {prompt_type}.{lang}: загружен ({len(prompt_value)} символов)")
-                    console_log(f"LLM_PROMPT_DEBUG:   📝 Содержимое: '{prompt_value}'")
+                    console_log(f"LLM_PROMPT_DEBUG:   📝 Содержимое: '{prompt_value[:100]}{'...' if len(prompt_value) > 100 else ''}'")
                 else:
                     console_log(f"LLM_PROMPT_DEBUG:   ❌ {prompt_type}.{lang}: НЕ загружен (пустой)")
 
@@ -4483,7 +4483,7 @@ async def _analyze_composition_vs_description(description: str, composition: str
         console_log(f"LLM_PROMPT_DEBUG: 🔍 ПОЛУЧЕНИЕ ПРОМПТА ДЛЯ basic_analysis.{content_language}:")
         console_log(f"LLM_PROMPT_DEBUG:   user_prompts: {user_prompts}")
         console_log(f"LLM_PROMPT_DEBUG:   user_prompts.get('basic_analysis', {{}}): {user_prompts.get('basic_analysis', {})}")
-        console_log(f"LLM_PROMPT_DEBUG:   basic_analysis_prompt: {repr(basic_analysis_prompt)}")
+        console_log(f"LLM_PROMPT_DEBUG:   basic_analysis_prompt: {repr(basic_analysis_prompt[:100] + '...' if basic_analysis_prompt and len(basic_analysis_prompt) > 100 else basic_analysis_prompt)}")
         console_log(f"LLM_PROMPT_DEBUG:   basic_analysis_prompt length: {len(basic_analysis_prompt) if basic_analysis_prompt else 0}")
 
         if not basic_analysis_prompt or len(basic_analysis_prompt.strip()) < 3:

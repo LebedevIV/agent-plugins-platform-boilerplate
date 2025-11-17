@@ -865,10 +865,30 @@ async function initializePyodide() {
 
           // 4. Подготовка данных для прямого запроса к Gemini API (для платформенных LLM)
           const promptText = jsOptions.prompt || jsOptions.message || JSON.stringify(jsOptions);
+          
+          // Helper function to truncate prompt text for logging
+          function truncatePromptForLogging(text, maxLength = 100) {
+            if (!text || typeof text !== 'string') {
+              return text;
+            }
+            if (text.length <= maxLength) {
+              return text;
+            }
+            return text.substring(0, maxLength) + '...';
+          }
+          
           console.log('[LLM_PROMPT_DEBUG] ===== PROMPT TEXT FOR GEMINI API =====');
-          console.log('[LLM_PROMPT_DEBUG] Full prompt text:', promptText);
-          console.log('[LLM_PROMPT_DEBUG] Prompt length:', promptText.length);
-          console.log('[LLM_PROMPT_DEBUG] Prompt source: jsOptions.prompt:', !!jsOptions.prompt, 'jsOptions.message:', !!jsOptions.message);
+          console.log('[LLM_PROMPT_DEBUG]', {
+            prompt_preview: truncatePromptForLogging(promptText),
+            prompt_full: promptText,
+            prompt_length: promptText.length,
+            prompt_source: {
+              has_prompt: !!jsOptions.prompt,
+              has_message: !!jsOptions.message
+            },
+            analysis_type: cleanedModelAlias,
+            model_name: finalModelName
+          });
           console.log('[LLM_PROMPT_DEBUG] ===== END PROMPT TEXT =====');
 
           const requestBody = {
