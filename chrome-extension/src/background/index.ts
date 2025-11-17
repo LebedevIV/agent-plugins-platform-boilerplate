@@ -1496,8 +1496,35 @@ chrome.runtime.onMessage.addListener(
         console.log('[BACKGROUND] 📝 Prompts loaded from manifest:', !!pluginSettings.prompts);
         console.log('[BACKGROUND] 📊 Все полученные настройки плагина:', JSON.stringify(pluginSettings, null, 2));
 
+        // ШАГ 5.1: ЗАГРУЗКА КАСТОМНЫХ ПРОМПТОВ ИЗ СПЕЦИАЛЬНОГО КЛЮЧА
+        // Для ozon-analyzer промпты хранятся отдельно в 'plugin-ozon-analyzer-settings'
+        let userCustomPromptsSettings: any = {};
+        if (msg.pluginId === 'ozon-analyzer') {
+          try {
+            const customPromptsKey = `plugin-${msg.pluginId}-settings`;
+            console.log(`[BACKGROUND] 📝 Загрузка кастомных промптов из ключа: ${customPromptsKey}`);
+            const customPromptsStorage = await chrome.storage.local.get([customPromptsKey]);
+            userCustomPromptsSettings = customPromptsStorage[customPromptsKey] || {};
+            console.log('[BACKGROUND] ✅ Кастомные промпты загружены:', {
+              hasBasicAnalysis: !!userCustomPromptsSettings.basic_analysis,
+              hasDeepAnalysis: !!userCustomPromptsSettings.deep_analysis,
+              keys: Object.keys(userCustomPromptsSettings)
+            });
+            if (userCustomPromptsSettings.basic_analysis) {
+              console.log('[BACKGROUND] 📋 basic_analysis промпты:', {
+                ru: userCustomPromptsSettings.basic_analysis.ru ? 
+                  `${userCustomPromptsSettings.basic_analysis.ru.custom_prompt?.substring(0, 50)}...` : 'не задан',
+                en: userCustomPromptsSettings.basic_analysis.en ? 
+                  `${userCustomPromptsSettings.basic_analysis.en.custom_prompt?.substring(0, 50)}...` : 'не задан'
+              });
+            }
+          } catch (error) {
+            console.warn('[BACKGROUND] ⚠️ Ошибка загрузки кастомных промптов:', error);
+          }
+        }
+
         // Load prompts from manifest.json for all plugins
-        let enrichedPluginSettings = { ...pluginSettings };
+        let enrichedPluginSettings = { ...pluginSettings, ...userCustomPromptsSettings };
         
         // Добавляем manifest в настройки для доступа в Python
         if (manifest) {
