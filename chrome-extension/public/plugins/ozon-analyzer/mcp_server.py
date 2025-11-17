@@ -365,21 +365,52 @@ async def get_user_prompts(plugin_settings: Optional[Dict[str, Any]] = None) -> 
                 # Правильно извлекаем промпт из nested структуры plugin_settings (UI сохраняет в prompts.basic_analysis.ru.custom_prompt)
                 console_log(f"LLM_PROMPT_DEBUG: 🔍 ДОСТУП К КАСТОМНЫМ ПРОМПТАМ:")
                 console_log(f"LLM_PROMPT_DEBUG:   plugin_settings keys: {list(plugin_settings.keys()) if isinstance(plugin_settings, dict) else 'not dict'}")
+                
+                # НОВОЕ: Проверяем промпты секцию напрямую для диагностики приоритета
+                if isinstance(plugin_settings, dict) and 'prompts' in plugin_settings:
+                    prompts_section = plugin_settings.get('prompts', {})
+                    if isinstance(prompts_section, dict):
+                        type_section = prompts_section.get(prompt_type, {})
+                        if isinstance(type_section, dict):
+                            lang_section = type_section.get(lang, {})
+                            if isinstance(lang_section, dict):
+                                prompt_value = lang_section.get('custom_prompt', '')
+                                prompt_source = lang_section.get('_source', 'unknown')
+                                console_log(f"LLM_PROMPT_DEBUG: 📋 prompts[{prompt_type}][{lang}]:")
+                                console_log(f"LLM_PROMPT_DEBUG:   - source: {prompt_source}")
+                                console_log(f"LLM_PROMPT_DEBUG:   - custom_prompt length: {len(prompt_value) if prompt_value else 0}")
+                                console_log(f"LLM_PROMPT_DEBUG:   - custom_prompt preview: {repr(prompt_value[:100]) if prompt_value else 'empty'}")
 
                 custom_value = ''
 
-                # ИСПРАВЛЕННАЯ СТРУКТУРА: plugin_settings[prompt_type][lang]['custom_prompt']
-                # Кастомные промпты хранятся напрямую в plugin_settings, а не в prompts секции
-                prompt_type_section = safe_dict_get(plugin_settings, prompt_type, {})
-                console_log(f"LLM_PROMPT_DEBUG:   prompt_type_section ({prompt_type}): {prompt_type_section is not None}")
-                if isinstance(prompt_type_section, dict):
-                    console_log(f"LLM_PROMPT_DEBUG:   prompt_type_section keys: {list(prompt_type_section.keys())}")
-                    lang_section = safe_dict_get(prompt_type_section, lang, {})
-                    console_log(f"LLM_PROMPT_DEBUG:   lang_section ({lang}): {lang_section is not None}")
-                    if isinstance(lang_section, dict):
-                        console_log(f"LLM_PROMPT_DEBUG:   lang_section keys: {list(lang_section.keys())}")
-                        custom_value = safe_dict_get(lang_section, 'custom_prompt', '')
-                        console_log(f"LLM_PROMPT_DEBUG:   ✅ Найден custom_prompt в исправленной структуре: {repr(custom_value[:50])}...")
+                # ПРИОРИТЕТ 1: Проверяем plugin_settings['prompts'][prompt_type][lang]['custom_prompt']
+                # Это основная структура после исправления в background/index.ts
+                if isinstance(plugin_settings, dict) and 'prompts' in plugin_settings:
+                    prompts_section = safe_dict_get(plugin_settings, 'prompts', {})
+                    if isinstance(prompts_section, dict):
+                        type_section = safe_dict_get(prompts_section, prompt_type, {})
+                        if isinstance(type_section, dict):
+                            lang_section = safe_dict_get(type_section, lang, {})
+                            if isinstance(lang_section, dict):
+                                custom_value = safe_dict_get(lang_section, 'custom_prompt', '')
+                                if custom_value and len(custom_value.strip()) > 0:
+                                    console_log(f"LLM_PROMPT_DEBUG:   ✅ Найден custom_prompt в prompts секции: {repr(custom_value[:50])}...")
+                                    console_log(f"LLM_PROMPT_DEBUG:   📊 Source: {lang_section.get('_source', 'unknown')}")
+
+                # ПРИОРИТЕТ 2: Проверяем старую структуру plugin_settings[prompt_type][lang]['custom_prompt']
+                # Для обратной совместимости (если промпты еще не прошли через background/index.ts)
+                if not custom_value or len(custom_value.strip()) == 0:
+                    prompt_type_section = safe_dict_get(plugin_settings, prompt_type, {})
+                    console_log(f"LLM_PROMPT_DEBUG:   prompt_type_section ({prompt_type}): {prompt_type_section is not None}")
+                    if isinstance(prompt_type_section, dict):
+                        console_log(f"LLM_PROMPT_DEBUG:   prompt_type_section keys: {list(prompt_type_section.keys())}")
+                        lang_section = safe_dict_get(prompt_type_section, lang, {})
+                        console_log(f"LLM_PROMPT_DEBUG:   lang_section ({lang}): {lang_section is not None}")
+                        if isinstance(lang_section, dict):
+                            console_log(f"LLM_PROMPT_DEBUG:   lang_section keys: {list(lang_section.keys())}")
+                            custom_value = safe_dict_get(lang_section, 'custom_prompt', '')
+                            if custom_value and len(custom_value.strip()) > 0:
+                                console_log(f"LLM_PROMPT_DEBUG:   ✅ Найден custom_prompt в старой структуре: {repr(custom_value[:50])}...")
 
                 # ДОПОЛНИТЕЛЬНЫЕ СТРУКТУРЫ (для обратной совместимости)
                 if not custom_value or len(custom_value.strip()) == 0:

@@ -1536,37 +1536,93 @@ chrome.runtime.onMessage.addListener(
           console.warn('[BACKGROUND] Failed to enrich api_keys for plugin', msg.pluginId, e);
         }
 
-        // Load prompts from manifest.json if available
+        // Load prompts from manifest.json if available, with priority for user custom prompts
         if (manifest?.options?.prompts) {
-          console.log('[BACKGROUND] 📝 Loading prompts from manifest.json for plugin:', msg.pluginId);
+          console.log('[BACKGROUND] 📝 Processing prompts for plugin:', msg.pluginId);
+          console.log('[BACKGROUND] 🔍 User settings structure:', {
+            hasBasicAnalysis: !!pluginSettings.basic_analysis,
+            hasDeepAnalysis: !!pluginSettings.deep_analysis,
+            basicAnalysisKeys: pluginSettings.basic_analysis ? Object.keys(pluginSettings.basic_analysis) : [],
+            deepAnalysisKeys: pluginSettings.deep_analysis ? Object.keys(pluginSettings.deep_analysis) : []
+          });
 
           const manifestPrompts = manifest.options.prompts;
-          enrichedPluginSettings.prompts = {};
+          enrichedPluginSettings.prompts = enrichedPluginSettings.prompts || {};
 
           // Process each prompt type (basic_analysis, deep_analysis, etc.)
           for (const [promptType, promptConfig] of Object.entries(manifestPrompts)) {
-            (enrichedPluginSettings.prompts as any)[promptType] = {};
+            (enrichedPluginSettings.prompts as any)[promptType] = (enrichedPluginSettings.prompts as any)[promptType] || {};
 
             // Process each language (ru, en, etc.)
             for (const [language, languageConfig] of Object.entries(promptConfig as any)) {
-              const defaultPrompt = (languageConfig as any).default;
+              const defaultPromptPath = (languageConfig as any).default;
               const llmConfig = (languageConfig as any).LLM;
+              const defaultLLM = llmConfig?.default;
 
               // Check if Default LLM is defined
-              const defaultLLM = llmConfig?.default;
               if (!defaultLLM) {
                 console.warn(`[BACKGROUND] ⚠️ WARNING: No Default LLM defined for ${promptType} in ${language} for plugin ${msg.pluginId}`);
                 console.warn(`[BACKGROUND] ⚠️ Request will be impossible without Default LLM configuration`);
               }
 
+              // 🔍 PRIORITY LOGIC: Check for user custom prompt in localStorage
+              // User prompts are stored in pluginSettings[promptType][language].custom_prompt
+              const userPromptSection = (pluginSettings as any)[promptType]?.[language];
+              const userCustomPrompt = userPromptSection?.custom_prompt;
+              const userLLM = userPromptSection?.llm;
+
+              console.log(`[BACKGROUND] 🔍 Checking custom prompt for ${promptType}.${language}:`, {
+                hasUserPromptSection: !!userPromptSection,
+                userCustomPromptType: typeof userCustomPrompt,
+                userCustomPromptLength: userCustomPrompt ? userCustomPrompt.length : 0,
+                userCustomPromptPreview: userCustomPrompt ? userCustomPrompt.substring(0, 50) : null,
+                isFilePath: userCustomPrompt ? userCustomPrompt.includes('.txt') : false,
+                defaultPromptPath
+              });
+
+              // Check if the user has set a real custom prompt (not just a file path from manifest)
+              const isUserCustomPrompt = (
+                userCustomPrompt &&
+                typeof userCustomPrompt === 'string' &&
+                userCustomPrompt.trim().length > 0 &&
+                !userCustomPrompt.includes('/') &&  // Not a file path
+                !userCustomPrompt.includes('.txt') &&  // Not a file reference
+                userCustomPrompt !== defaultPromptPath  // Not the default path
+              );
+
+              // Determine final prompt value with priority
+              let finalPrompt: string;
+              let promptSource: string;
+
+              if (isUserCustomPrompt) {
+                finalPrompt = userCustomPrompt;
+                promptSource = 'custom';
+                console.log(`[BACKGROUND] ✅ Using CUSTOM prompt for ${promptType}.${language} (length: ${finalPrompt.length})`);
+                console.log(`[BACKGROUND] 📝 Custom prompt preview: "${finalPrompt.substring(0, 100)}..."`);
+              } else {
+                finalPrompt = defaultPromptPath;
+                promptSource = 'default';
+                console.log(`[BACKGROUND] 📝 Using DEFAULT prompt path for ${promptType}.${language}: ${finalPrompt}`);
+                if (userCustomPrompt && userCustomPrompt.length > 0) {
+                  console.log(`[BACKGROUND] ℹ️ User custom prompt was ignored because it appears to be a file path or default value`);
+                }
+              }
+
+              // Save with correct priority
               (enrichedPluginSettings.prompts as any)[promptType][language] = {
-                custom_prompt: defaultPrompt,
-                llm: defaultLLM || null
+                custom_prompt: finalPrompt,
+                llm: userLLM || defaultLLM || null,
+                _source: promptSource  // Debug info
               };
             }
           }
 
-          console.log('[BACKGROUND] ✅ Prompts loaded from manifest.json:', JSON.stringify(enrichedPluginSettings.prompts, null, 2));
+          console.log('[BACKGROUND] ✅ Prompts processing complete. Summary:');
+          for (const [promptType, langs] of Object.entries(enrichedPluginSettings.prompts)) {
+            for (const [lang, config] of Object.entries(langs as any)) {
+              console.log(`[BACKGROUND]   - ${promptType}.${lang}: source=${(config as any)._source}, length=${(config as any).custom_prompt?.length || 0}`);
+            }
+          }
         } else {
           console.log('[BACKGROUND] ℹ️ No prompts defined in manifest.json for plugin:', msg.pluginId);
         }
