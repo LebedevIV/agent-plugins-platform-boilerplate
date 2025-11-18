@@ -1571,6 +1571,113 @@ chrome.runtime.onMessage.addListener(
           console.log('[BACKGROUND] ℹ️ No prompts defined in manifest.json for plugin:', msg.pluginId);
         }
 
+        // === CUSTOM PROMPT OVERRIDE: Load from localStorage if available ===
+        try {
+          console.log('[BACKGROUND] 🔍 Checking for custom prompts in plugin-specific settings...');
+          const result = await chrome.storage.local.get(['plugin-ozon-analyzer-settings']);
+          const customSettings = result['plugin-ozon-analyzer-settings'];
+          
+          if (customSettings && typeof customSettings === 'object') {
+            console.log('[BACKGROUND] 📝 Found plugin-ozon-analyzer-settings in localStorage');
+            
+            const promptTypes = ['basic_analysis', 'deep_analysis'];
+            const languages = ['ru', 'en'];
+            const promptDebugSummary: Array<{
+              promptType: string;
+              language: string;
+              storageLength: number;
+              finalPromptLength: number;
+              topLevelKeys: string[];
+            }> = [];
+            
+            for (const promptType of promptTypes) {
+              const customPromptTypeSettings = customSettings[promptType];
+              if (!customPromptTypeSettings || typeof customPromptTypeSettings !== 'object') {
+                console.log(`[BACKGROUND] ℹ️ No settings for ${promptType}`);
+                continue;
+              }
+
+              // Ensure the top-level structure (basic_analysis/deep_analysis) expected by Pyodide exists
+              if (!(enrichedPluginSettings as any)[promptType]) {
+                (enrichedPluginSettings as any)[promptType] = {};
+              }
+
+              if (!(enrichedPluginSettings.prompts as any)[promptType]) {
+                (enrichedPluginSettings.prompts as any)[promptType] = {};
+              }
+
+              for (const language of languages) {
+                const customPrompt = customPromptTypeSettings?.[language]?.custom_prompt;
+
+                if (!(enrichedPluginSettings as any)[promptType][language]) {
+                  (enrichedPluginSettings as any)[promptType][language] = {};
+                }
+
+                const existingPromptEntry = (enrichedPluginSettings.prompts as any)[promptType][language];
+                if (!existingPromptEntry || typeof existingPromptEntry !== 'object') {
+                  (enrichedPluginSettings.prompts as any)[promptType][language] = { custom_prompt: '' };
+                }
+
+                const customLangSettings = customPromptTypeSettings?.[language];
+
+                if (customPrompt && typeof customPrompt === 'string' && customPrompt.trim().length > 0) {
+                  (enrichedPluginSettings.prompts as any)[promptType][language].custom_prompt = customPrompt;
+                  (enrichedPluginSettings as any)[promptType][language] = {
+                    ...(enrichedPluginSettings as any)[promptType][language],
+                    ...(customLangSettings && typeof customLangSettings === 'object' ? customLangSettings : {}),
+                  };
+                  console.log(`[BACKGROUND] ✅ Using CUSTOM prompt for ${promptType}.${language} (length: ${customPrompt.length})`);
+                } else {
+                  console.log(`[BACKGROUND] ℹ️ No custom prompt for ${promptType}.${language}, using manifest default`);
+
+                  // Preserve other language-specific settings (e.g., selected LLM) if they exist in storage
+                  if (customLangSettings && typeof customLangSettings === 'object') {
+                    (enrichedPluginSettings as any)[promptType][language] = {
+                      ...(enrichedPluginSettings as any)[promptType][language],
+                      ...customLangSettings,
+                    };
+                  }
+                }
+
+                const finalPromptValue = (enrichedPluginSettings.prompts as any)[promptType][language]?.custom_prompt ?? '';
+                promptDebugSummary.push({
+                  promptType,
+                  language,
+                  storageLength: customPrompt ? customPrompt.length : 0,
+                  finalPromptLength: finalPromptValue ? finalPromptValue.length : 0,
+                  topLevelKeys: Object.keys((enrichedPluginSettings as any)[promptType][language] || {}),
+                });
+              }
+            }
+            
+            console.log('[BACKGROUND] 📊 Final prompts after custom override:', JSON.stringify(enrichedPluginSettings.prompts, null, 2));
+            const promptLengthSnapshot = promptTypes.reduce((acc, type) => {
+              acc[type] = {} as Record<string, number>;
+              for (const language of languages) {
+                const value = (enrichedPluginSettings.prompts as any)[type]?.[language]?.custom_prompt;
+                acc[type][language] = typeof value === 'string' ? value.length : 0;
+              }
+              return acc;
+            }, {} as Record<string, Record<string, number>>);
+            const topLevelSnapshot = promptTypes.reduce((acc, type) => {
+              acc[type] = {} as Record<string, string[]>;
+              for (const language of languages) {
+                const topLevelEntry = (enrichedPluginSettings as any)[type]?.[language];
+                acc[type][language] = topLevelEntry ? Object.keys(topLevelEntry) : [];
+              }
+              return acc;
+            }, {} as Record<string, Record<string, string[]>>);
+            console.log('[LLM_PROMPT_DEBUG][BACKGROUND] Prompt override summary:', promptDebugSummary);
+            console.log('[LLM_PROMPT_DEBUG][BACKGROUND] Prompt length snapshot:', promptLengthSnapshot);
+            console.log('[LLM_PROMPT_DEBUG][BACKGROUND] Top-level snapshot:', topLevelSnapshot);
+          } else {
+            console.log('[BACKGROUND] ℹ️ No plugin-ozon-analyzer-settings found in localStorage, using manifest defaults only');
+          }
+        } catch (error) {
+          console.warn('[BACKGROUND] ⚠️ Failed to load custom prompts from localStorage:', error);
+          console.log('[BACKGROUND] ℹ️ Fallback: continuing with manifest defaults');
+        }
+
         if (!enrichedPluginSettings.enabled) {
           console.log('[background][RUN_WORKFLOW][INFO] Plugin disabled');
           sendResponse({ error: 'Плагин отключен' });
@@ -1687,6 +1794,28 @@ chrome.runtime.onMessage.addListener(
 
         // Используем enrichedPluginSettings (с prompts из manifest.json) вместо обычных pluginSettings
         const settingsToSend = enrichedPluginSettings;
+        (settingsToSend as any).__debug_custom_prompt_override = 'custom-prompt-override-v2';
+
+        const llmPromptDebugSnapshot = {
+          promptLengths: ['basic_analysis', 'deep_analysis'].reduce((acc, type) => {
+            acc[type] = {} as Record<string, number>;
+            for (const lang of ['ru', 'en']) {
+              const value = (settingsToSend.prompts as any)?.[type]?.[lang]?.custom_prompt;
+              acc[type][lang] = typeof value === 'string' ? value.length : 0;
+            }
+            return acc;
+          }, {} as Record<string, Record<string, number>>),
+          topLevelKeys: ['basic_analysis', 'deep_analysis'].reduce((acc, type) => {
+            acc[type] = {} as Record<string, string[]>;
+            for (const lang of ['ru', 'en']) {
+              const entry = (settingsToSend as any)?.[type]?.[lang];
+              acc[type][lang] = entry ? Object.keys(entry) : [];
+            }
+            return acc;
+          }, {} as Record<string, Record<string, string[]>>),
+        };
+        console.log('[LLM_PROMPT_DEBUG][BACKGROUND] Settings snapshot before send:', llmPromptDebugSnapshot);
+        console.log('[LLM_PROMPT_DEBUG][BACKGROUND] Debug marker value:', (settingsToSend as any).__debug_custom_prompt_override);
 
         // [API_KEY_FLOW] MARKER: BACKGROUND_PLUGIN_SETTINGS_PREPARATION_START
         console.log('[API_KEY_FLOW] MARKER: BACKGROUND_PLUGIN_SETTINGS_PREPARATION_START');
