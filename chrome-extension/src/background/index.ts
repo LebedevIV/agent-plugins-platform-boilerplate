@@ -1794,6 +1794,7 @@ chrome.runtime.onMessage.addListener(
 
         // Используем enrichedPluginSettings (с prompts из manifest.json) вместо обычных pluginSettings
         const settingsToSend = enrichedPluginSettings;
+        (settingsToSend as any).__debug_custom_prompt_override = 'custom-prompt-override-v2';
 
         const llmPromptDebugSnapshot = {
           promptLengths: ['basic_analysis', 'deep_analysis'].reduce((acc, type) => {
@@ -1814,6 +1815,7 @@ chrome.runtime.onMessage.addListener(
           }, {} as Record<string, Record<string, string[]>>),
         };
         console.log('[LLM_PROMPT_DEBUG][BACKGROUND] Settings snapshot before send:', llmPromptDebugSnapshot);
+        console.log('[LLM_PROMPT_DEBUG][BACKGROUND] Debug marker value:', (settingsToSend as any).__debug_custom_prompt_override);
 
         // [API_KEY_FLOW] MARKER: BACKGROUND_PLUGIN_SETTINGS_PREPARATION_START
         console.log('[API_KEY_FLOW] MARKER: BACKGROUND_PLUGIN_SETTINGS_PREPARATION_START');
