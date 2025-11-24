@@ -491,6 +491,9 @@ code {
 .theme-light .plugin-details h3 {
   color: var(--color-heading-light);
 }
+.theme-light .plugin-info h3 {
+  color: var(--color-heading-light);
+}
 .theme-light .plugin-details p,
 .theme-light .plugin-details li {
   color: var(--color-text-light-secondary);
@@ -523,6 +526,9 @@ code {
 }
 .theme-dark .plugin-details h2,
 .theme-dark .plugin-details h3 {
+  color: var(--color-heading-dark);
+}
+.theme-dark .plugin-info h3 {
   color: var(--color-heading-dark);
 }
 .theme-dark .plugin-details p,
@@ -832,6 +838,10 @@ code {
 }
 
 /* Settings Dark Theme */
+.theme-light .settings-section h3 {
+  color: var(--color-heading-light);
+}
+
 .theme-dark .settings-section {
   background-color: #4a5568;
   border-color: #718096;
@@ -848,7 +858,15 @@ code {
   color: #e2e8f0;
 }
 
+.theme-light .ai-key-header h4 {
+  color: var(--color-heading-light);
+}
+
 .theme-dark .ai-key-item h4 {
+  color: #f7fafc;
+}
+
+.theme-dark .ai-key-header h4 {
   color: #f7fafc;
 }
 
@@ -866,6 +884,10 @@ code {
   background-color: #4a5568;
   border-color: #718096;
   color: #e2e8f0;
+}
+
+.theme-light .custom-keys-section h4 {
+  color: var(--color-heading-light);
 }
 
 .theme-dark .custom-keys-section {
@@ -936,6 +958,10 @@ code {
 
 .theme-dark select:focus {
   border-color: #63b3ed;
+}
+
+.theme-light .tab-content h2 {
+  color: var(--color-heading-light);
 }
 
 .theme-dark .tab-content h2 {
