@@ -983,6 +983,11 @@
   background: #64748b;
 }
 
+/* Fix for plugin-info h3 theme color issue */
+.plugin-control-panel .plugin-info h3 {
+  color: var(--text-color, #f8fafc) !important;
+}
+
 /* Force scrolling for plugin details content */
 .plugin-control-panel .panel-content .plugin-details .plugin-detail-content.active {
   display: block !important;
