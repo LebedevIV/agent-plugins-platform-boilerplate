@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Theme Fix Test</title>
+    <style>
+        /* Basic theme variables from Options.css */
+        :root {
+            --color-bg-light: #f7fafc;
+            --color-bg-light-alt: #e2e8f0;
+            --color-text-light: #1a202c;
+            --color-text-light-secondary: #4a5568;
+            --color-link-light: #2563eb;
+            --color-heading-light: #1a202c;
+
+            --color-bg-dark: #1a202c;
+            --color-bg-dark-alt: #2d3748;
+            --color-text-dark: #e2e8f0;
+            --color-text-dark-secondary: #a0aec0;
+            --color-link-dark: #63b3ed;
+            --color-heading-dark: #f7fafc;
+        }
+
+        /* Original problematic styles */
+        .plugin-info h3 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin: 0 0 0.5rem 0;
+            color: #1a202c; /* This is the problematic hardcoded color */
+        }
+
+        /* Plugin Control Panel styles */
+        .plugin-control-panel {
+            --bg-color: #0f172a;
+            --header-bg: #1e293b;
+            --text-color: #f8fafc;
+            --text-muted: #cbd5e1;
+            --border-color: #334155;
+        }
+
+        .plugin-control-panel .plugin-info h3 {
+            color: var(--text-color, #f8fafc) !important; /* Our fix */
+        }
+
+        /* Theme-aware styles from Options.css */
+        .theme-light .plugin-info h3 {
+            color: var(--color-heading-light);
+        }
+
+        .theme-dark .plugin-info h3 {
+            color: var(--color-heading-dark);
+        }
+
+        /* Test layout */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .theme-light {
+            background-color: var(--color-bg-light);
+            color: var(--color-text-light);
+        }
+
+        .theme-dark {
+            background-color: var(--color-bg-dark);
+            color: var(--color-text-dark);
+        }
+
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+        }
+
+        .theme-toggle {
+            padding: 10px 20px;
+            margin: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            background: #3b82f6;
+            color: white;
+        }
+
+        .theme-dark .theme-toggle {
+            background: #1e40af;
+        }
+
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .theme-preview {
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #333;
+        }
+
+        .light-preview {
+            background: var(--color-bg-light);
+            color: var(--color-text-light);
+        }
+
+        .dark-preview {
+            background: var(--color-bg-dark);
+            color: var(--color-text-dark);
+        }
+    </style>
+</head>
+<body class="theme-light">
+    <h1>Тест исправления цветовой темы для заголовков плагинов</h1>
+    
+    <button class="theme-toggle" onclick="toggleTheme()">Переключить тему</button>
+    <button class="theme-toggle" onclick="setSystemTheme()">Системная тема</button>
+
+    <div class="test-section">
+        <h2>Текущая тема: <span id="current-theme">Светлая</span></h2>
+        
+        <h3>Проблемный элемент (без исправлений):</h3>
+        <div class="plugin-info">
+            <h3>Ozon Analyzer (исходный стиль с color: #1a202c)</h3>
+            <p>Этот заголовок использует жестко прописанный цвет #1a202c и будет нечитаемым в темной теме.</p>
+        </div>
+
+        <h3>Исправленный элемент (Plugin Control Panel):</h3>
+        <div class="plugin-control-panel">
+            <div class="plugin-info">
+                <h3>Ozon Analyzer (исправленный стиль)</h3>
+                <p>Этот заголовок использует CSS переменные и корректно отображается в обеих темах.</p>
+            </div>
+        </div>
+
+        <h3>Исправленный элемент (Theme-aware):</h3>
+        <div class="plugin-info theme-aware">
+            <h3>Ozon Analyzer (с учетом темы)</h3>
+            <p>Этот заголовок также использует theme-aware стили.</p>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Сравнение тем:</h2>
+        <div class="comparison">
+            <div class="theme-preview light-preview">
+                <h4>Светлая тема</h4>
+                <div class="plugin-info">
+                    <h3>Ozon Analyzer</h3>
+                    <p>Заголовок в светлой теме</p>
+                </div>
+            </div>
+            <div class="theme-preview dark-preview">
+                <h4>Темная тема</h4>
+                <div class="plugin-info">
+                    <h3>Ozon Analyzer</h3>
+                    <p>Заголовок в темной теме</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentTheme = 'light';
+        
+        function toggleTheme() {
+            const body = document.body;
+            const themeSpan = document.getElementById('current-theme');
+            
+            if (body.classList.contains('theme-light')) {
+                body.classList.remove('theme-light');
+                body.classList.add('theme-dark');
+                themeSpan.textContent = 'Темная';
+                currentTheme = 'dark';
+            } else {
+                body.classList.remove('theme-dark');
+                body.classList.add('theme-light');
+                themeSpan.textContent = 'Светлая';
+                currentTheme = 'light';
+            }
+        }
+        
+        function setSystemTheme() {
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const body = document.body;
+            const themeSpan = document.getElementById('current-theme');
+            
+            body.classList.remove('theme-light', 'theme-dark');
+            body.classList.add(prefersDark ? 'theme-dark' : 'theme-light');
+            themeSpan.textContent = 'Системная (' + (prefersDark ? 'темная' : 'светлая') + ')';
+        }
+        
+        // Следим за системными предпочтениями
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+            if (document.body.classList.contains('theme-system')) {
+                setSystemTheme();
+            }
+        });
+    </script>
+</body>
+</html>
