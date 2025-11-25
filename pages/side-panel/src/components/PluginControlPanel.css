@@ -960,7 +960,9 @@
   --media-stop-bg: #dc2626;
   --media-close-bg: #6b7280;
   --media-close-hover-bg: #b91c1c;
-.theme-dark .plugin-detail-content.active::-webkit-scrollbar,
+  }
+
+  .theme-dark .plugin-detail-content.active::-webkit-scrollbar,
 .theme-dark .plugin-detail-content.active::-webkit-scrollbar {
   width: 6px;
 }
@@ -984,8 +986,19 @@
 }
 
 /* Fix for plugin-info h3 theme color issue */
+/* Light theme - explicit h3 color */
+.App.bg-slate-50 .plugin-control-panel .plugin-info h3 {
+   color: #1e293b;
+}
+
+/* Dark theme - explicit h3 color */
+.App.bg-gray-800 .plugin-control-panel .plugin-info h3 {
+   color: #f8fafc;
+}
+
+/* Fallback using CSS variable */
 .plugin-control-panel .plugin-info h3 {
-  color: var(--text-color, #f8fafc) !important;
+   color: var(--text-color, #f8fafc) !important;
 }
 
 /* Force scrolling for plugin details content */
@@ -997,5 +1010,4 @@
   max-height: calc(100vh - 200px) !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
-}
-}
+  }
