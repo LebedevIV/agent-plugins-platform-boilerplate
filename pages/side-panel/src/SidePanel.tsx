@@ -123,7 +123,8 @@ const SidePanel = () => {
 
   // Функции для работы с уведомлениями
 
-  // Функции для сохранения и восстановления состояния sidepanel
+  // Функции для сохранения и очистки состояния sidepanel
+  // Примечание: состояние сохраняется при клике на плагин, но не восстанавливается при загрузке sidepanel
   const savePanelState = async (pageKey: string, pluginId: string) => {
     const stateKey = `sidepanel_state_${pageKey}`;
     const state = {
@@ -142,36 +143,6 @@ const SidePanel = () => {
     await chrome.storage.local.remove(stateKey);
   };
 
-  const restorePanelState = async (pageKey: string, plugins: Plugin[]) => {
-    const stateKey = `sidepanel_state_${pageKey}`;
-    const result = await chrome.storage.local.get(stateKey);
-    const savedState = result[stateKey];
-
-    console.log('[SidePanel] Проверяем сохраненное состояние для страницы:', pageKey, savedState);
-
-    if (savedState && savedState.selectedPluginId) {
-      // Найти плагин по ID
-      const plugin = plugins.find(p => p.id === savedState.selectedPluginId);
-
-      if (plugin && isPluginAllowedOnHost(plugin)) {
-        console.log('[SidePanel] Восстанавливаем состояние чата для страницы:', pageKey, {
-          pluginId: plugin.id,
-          pluginName: plugin.name
-        });
-        setSelectedPlugin(plugin);
-        setShowControlPanel(true);
-        return true;
-      } else {
-        console.log('[SidePanel] Плагин из сохраненного состояния не найден или не разрешен:', {
-          pluginId: savedState.selectedPluginId,
-          pluginFound: !!plugin,
-          isAllowed: plugin ? isPluginAllowedOnHost(plugin) : false
-        });
-      }
-    }
-
-    return false;
-  };
   const removeToast = useCallback((id: string) => {
     setToasts(prev => prev.filter(toast => toast.id !== id));
   }, []);
@@ -719,32 +690,18 @@ const SidePanel = () => {
     };
   }, [selectedPlugin]);
 
-  // useEffect для восстановления состояния sidepanel при возвращении на страницу
+  // useEffect для проверки разрешений плагина при изменении URL
   useEffect(() => {
     console.log('[SidePanel] currentTabUrl изменился:', currentTabUrl);
 
-    const restoreState = async () => {
-      if (!currentTabUrl || plugins.length === 0) return;
-
-      const pageKey = getPageKey(currentTabUrl);
-      const restored = await restorePanelState(pageKey, plugins);
-
-      if (!restored) {
-        console.log('[SidePanel] Состояние не восстановлено, проверяем сброс плагина');
-
-        // Проверить, нужно ли сбросить состояние плагина
-        if (selectedPlugin && !isPluginAllowedOnHost(selectedPlugin)) {
-          console.log('[SidePanel] Плагин не разрешен для новой страницы, сбрасываем состояние');
-          setSelectedPlugin(null);
-          setShowControlPanel(false);
-          setRunningPlugin(null);
-          setPausedPlugin(null);
-        }
-      }
-    };
-
-    restoreState();
-  }, [currentTabUrl, plugins, selectedPlugin]);
+    if (currentTabUrl && selectedPlugin && !isPluginAllowedOnHost(selectedPlugin)) {
+      console.log('[SidePanel] Плагин не разрешен для новой страницы, закрываем панель и сбрасываем состояние');
+      setSelectedPlugin(null);
+      setShowControlPanel(false);
+      setRunningPlugin(null);
+      setPausedPlugin(null);
+    }
+  }, [currentTabUrl, selectedPlugin]);
 
   const isDark = theme === 'dark' || (theme === 'system' && !isLight);
 
