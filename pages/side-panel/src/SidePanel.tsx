@@ -31,13 +31,66 @@ type Plugin = {
   [key: string]: unknown;
 };
 
-// Функция для получения ключа страницы (без параметров URL)
-const getPageKey = (url: string): string => {
+// Per-tab state type
+type TabPanelState = {
+  showControlPanel: boolean;
+  selectedPluginId: string | null;
+  panelView: PanelView;
+};
+
+// Helper to get state storage key for a specific tab
+const getTabStateKey = (tabId: number): string => {
+  return `sidepanel_state_${tabId}`;
+};
+
+// Helper to load state from localStorage for a tab
+const loadTabState = async (tabId: number): Promise<TabPanelState | null> => {
   try {
-    const urlObj = new URL(url);
-    return `${urlObj.protocol}//${urlObj.hostname}${urlObj.pathname}`;
-  } catch {
-    return url;
+    if (tabId < 0) {
+      console.warn('[SidePanel] Cannot load state for invalid tab ID:', tabId);
+      return null;
+    }
+    const key = getTabStateKey(tabId);
+    const result = await chrome.storage.local.get(key);
+    const state = result[key];
+    if (state) {
+      console.log('[SidePanel] Loaded state for tab', tabId, ':', state);
+      return state as TabPanelState;
+    }
+    return null;
+  } catch (error) {
+    console.error('[SidePanel] Error loading tab state:', error);
+    return null;
+  }
+};
+
+// Helper to save state to localStorage for a tab
+const saveTabState = async (tabId: number, state: TabPanelState): Promise<void> => {
+  try {
+    if (tabId < 0) {
+      console.warn('[SidePanel] Cannot save state for invalid tab ID:', tabId);
+      return;
+    }
+    const key = getTabStateKey(tabId);
+    console.log('[SidePanel] Saving state for tab', tabId, ':', state);
+    await chrome.storage.local.set({ [key]: state });
+  } catch (error) {
+    console.error('[SidePanel] Error saving tab state:', error);
+  }
+};
+
+// Helper to clear state from localStorage for a tab
+const clearTabState = async (tabId: number): Promise<void> => {
+  try {
+    if (tabId < 0) {
+      console.warn('[SidePanel] Cannot clear state for invalid tab ID:', tabId);
+      return;
+    }
+    const key = getTabStateKey(tabId);
+    console.log('[SidePanel] Clearing state for tab', tabId);
+    await chrome.storage.local.remove(key);
+  } catch (error) {
+    console.error('[SidePanel] Error clearing tab state:', error);
   }
 };
 
@@ -50,8 +103,10 @@ const SidePanel = () => {
   const [pausedPlugin, setPausedPlugin] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [currentTabUrl, setCurrentTabUrl] = useState<string | null>(null);
+  const [currentTabId, setCurrentTabId] = useState<number>(-1);
   const [theme, setTheme] = useState<Theme>('system');
   const [isLight, setIsLight] = useState(true);
+  const [pluginsLoaded, setPluginsLoaded] = useState(false);
 
   useEffect(() => {
     const loadTheme = async () => {
@@ -123,26 +178,6 @@ const SidePanel = () => {
 
   // Функции для работы с уведомлениями
 
-  // Функции для сохранения и очистки состояния sidepanel
-  // Примечание: состояние сохраняется при клике на плагин, но не восстанавливается при загрузке sidepanel
-  const savePanelState = async (pageKey: string, pluginId: string) => {
-    const stateKey = `sidepanel_state_${pageKey}`;
-    const state = {
-      selectedPluginId: pluginId,
-      showControlPanel: true,
-      timestamp: Date.now()
-    };
-
-    console.log('[SidePanel] Сохраняем состояние panel для страницы:', pageKey, state);
-    await chrome.storage.local.set({ [stateKey]: state });
-  };
-
-  const clearPanelState = async (pageKey: string) => {
-    const stateKey = `sidepanel_state_${pageKey}`;
-    console.log('[SidePanel] Очищаем состояние panel для страницы:', pageKey);
-    await chrome.storage.local.remove(stateKey);
-  };
-
   const removeToast = useCallback((id: string) => {
     setToasts(prev => prev.filter(toast => toast.id !== id));
   }, []);
@@ -175,6 +210,51 @@ const SidePanel = () => {
     console.log('[SidePanel] useEffect вызван - загружаем плагины и URL');
     getCurrentTabUrl();
   }, []);
+
+  // Effect to restore saved panel state when tab changes or plugins load
+  useEffect(() => {
+    if (currentTabId <= 0 || !pluginsLoaded) {
+      return;
+    }
+
+    const restoreTabState = async () => {
+      console.log('[SidePanel] Attempting to restore state for tab', currentTabId);
+      const savedState = await loadTabState(currentTabId);
+
+      if (savedState) {
+        console.log('[SidePanel] Found saved state, attempting to restore:', savedState);
+
+        // Check if the saved plugin ID exists and is allowed on current URL
+        if (savedState.selectedPluginId) {
+          const savedPlugin = plugins.find(p => p.id === savedState.selectedPluginId);
+          if (savedPlugin && isPluginAllowedOnHost(savedPlugin)) {
+            console.log('[SidePanel] Restoring plugin:', savedPlugin.id);
+            setSelectedPlugin(savedPlugin);
+            setShowControlPanel(savedState.showControlPanel);
+            setPanelView(savedState.panelView);
+          } else {
+            console.warn('[SidePanel] Saved plugin not found or not allowed, clearing state');
+            await clearTabState(currentTabId);
+            setSelectedPlugin(null);
+            setShowControlPanel(false);
+            setPanelView('chat');
+          }
+        } else {
+          console.log('[SidePanel] No plugin ID in saved state');
+          setSelectedPlugin(null);
+          setShowControlPanel(false);
+          setPanelView('chat');
+        }
+      } else {
+        console.log('[SidePanel] No saved state found, showing plugins list');
+        setSelectedPlugin(null);
+        setShowControlPanel(false);
+        setPanelView('chat');
+      }
+    };
+
+    restoreTabState();
+  }, [currentTabId, pluginsLoaded, plugins]);
 
   // Heartbeat механизм для поддержания надежного соединения с retry логикой
   const pingWithRetry = useCallback(async (retries = 3, delay = 1000): Promise<boolean> => {
@@ -246,9 +326,11 @@ const SidePanel = () => {
         if (msg.type === 'GET_PLUGINS_RESPONSE' && msg.plugins && Array.isArray(msg.plugins)) {
           console.log('[SidePanel] Setting plugins from port message:', msg.plugins);
           setPlugins(msg.plugins);
+          setPluginsLoaded(true);
           console.log('[SidePanel] ✅ Plugins loaded successfully');
         } else if (msg.type === 'GET_PLUGINS_RESPONSE' && msg.error) {
           console.error('[SidePanel] Error from background script:', msg.error);
+          setPluginsLoaded(true);
           addToastWithDeps('Ошибка загрузки плагинов', 'error');
         }
       };
@@ -376,23 +458,25 @@ const SidePanel = () => {
   }, [reconnectPort, isPortReady, sendMessageViaPort, addToastWithDeps]);
 
   useEffect(() => {
-    // Функция для обновления URL
-    const updateUrl = () => getCurrentTabUrl();
+    // Функция для обновления URL и ID вкладки, затем загрузки сохраненного состояния
+    const updateTabAndLoadState = async () => {
+      await getCurrentTabUrl();
+    };
 
     // Слушатели событий Chrome
-    chrome.tabs.onActivated.addListener(updateUrl);
-    chrome.tabs.onUpdated.addListener(updateUrl);
+    chrome.tabs.onActivated.addListener(updateTabAndLoadState);
+    chrome.tabs.onUpdated.addListener(updateTabAndLoadState);
 
     // Очистка слушателей при размонтировании
     return () => {
-      chrome.tabs.onActivated.removeListener(updateUrl);
-      chrome.tabs.onUpdated.removeListener(updateUrl);
+      chrome.tabs.onActivated.removeListener(updateTabAndLoadState);
+      chrome.tabs.onUpdated.removeListener(updateTabAndLoadState);
     };
   }, []);
 
   const getCurrentTabUrl = async () => {
     try {
-      console.log('[SidePanel] Получение URL активной вкладки...');
+      console.log('[SidePanel] Получение URL и ID активной вкладки...');
 
       // Попробуем несколько способов получения активной вкладки
       let activeTab = null;
@@ -419,13 +503,16 @@ const SidePanel = () => {
         }
       }
 
-      // Способ 3: через background script
+      // Способ 3: через background script с GET_ACTIVE_TAB_INFO
       if (!activeTab) {
         try {
-          const response = await sendMessageWithRetry({ type: 'GET_ACTIVE_TAB_URL' });
-          console.log('[SidePanel] Способ 3 - ответ от background:', response);
+          const response = await sendMessageWithRetry({ type: 'GET_ACTIVE_TAB_INFO' });
+          console.log('[SidePanel] Способ 3 - ответ от background (GET_ACTIVE_TAB_INFO):', response);
           if (response?.url) {
             setCurrentTabUrl(response.url);
+            if (response.tabId && response.tabId > 0) {
+              setCurrentTabId(response.tabId);
+            }
             return;
           }
         } catch (error) {
@@ -434,15 +521,23 @@ const SidePanel = () => {
       }
 
       if (activeTab?.url) {
-        console.log('[SidePanel] Устанавливаем URL:', activeTab.url);
+        console.log('[SidePanel] Устанавливаем URL:', activeTab.url, 'и ID:', activeTab.id);
         setCurrentTabUrl(activeTab.url);
+        if (activeTab.id && activeTab.id > 0) {
+          setCurrentTabId(activeTab.id);
+        } else {
+          console.warn('[SidePanel] Tab ID missing or invalid:', activeTab.id);
+          setCurrentTabId(-1);
+        }
       } else {
         console.log('[SidePanel] URL не найден, activeTab:', activeTab);
         setCurrentTabUrl(null);
+        setCurrentTabId(-1);
       }
     } catch (error) {
       console.error('[SidePanel] Ошибка получения URL активной вкладки:', error);
       setCurrentTabUrl(null);
+      setCurrentTabId(-1);
     }
   };
 
@@ -507,10 +602,14 @@ const SidePanel = () => {
     setShowControlPanel(true);
     setPanelView('chat'); // По умолчанию открываем вкладку "Чат"
 
-    // Сохраняем состояние для текущей страницы
-    if (currentTabUrl) {
-      const pageKey = getPageKey(currentTabUrl);
-      await savePanelState(pageKey, plugin.id);
+    // Сохраняем состояние для текущей вкладки
+    if (currentTabId > 0) {
+      const newState: TabPanelState = {
+        showControlPanel: true,
+        selectedPluginId: plugin.id,
+        panelView: 'chat'
+      };
+      await saveTabState(currentTabId, newState);
     }
   };
 
@@ -573,15 +672,14 @@ const SidePanel = () => {
     }
   };
 
-  const handleClosePanel = () => {
+  const handleClosePanel = async () => {
     setShowControlPanel(false);
     setSelectedPlugin(null);
     setPanelView('chat'); // Сбрасываем на "Чат" при закрытии
 
-    // Очищаем сохраненное состояние для текущей страницы
-    if (currentTabUrl) {
-      const pageKey = getPageKey(currentTabUrl);
-      clearPanelState(pageKey);
+    // Очищаем сохраненное состояние для текущей вкладки
+    if (currentTabId > 0) {
+      await clearTabState(currentTabId);
     }
   };
 
@@ -689,6 +787,24 @@ const SidePanel = () => {
       console.log('[SidePanel] Handler для PYODIDE_MESSAGE удален');
     };
   }, [selectedPlugin]);
+
+  // Effect to persist state whenever UI state changes
+  useEffect(() => {
+    if (currentTabId <= 0) {
+      return;
+    }
+
+    const state: TabPanelState = {
+      showControlPanel,
+      selectedPluginId: selectedPlugin?.id || null,
+      panelView
+    };
+
+    console.log('[SidePanel] Persisting state for tab', currentTabId, ':', state);
+    saveTabState(currentTabId, state).catch(error => {
+      console.error('[SidePanel] Error persisting tab state:', error);
+    });
+  }, [showControlPanel, selectedPlugin, panelView, currentTabId]);
 
   // useEffect для проверки разрешений плагина при изменении URL
   useEffect(() => {
