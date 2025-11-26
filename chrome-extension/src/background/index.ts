@@ -27,6 +27,21 @@ interface ExtensionMessage {
   [key: string]: any;
 }
 
+/**
+ * Response for GET_ACTIVE_TAB_INFO and GET_ACTIVE_TAB_URL messages
+ * Contains information about the active tab including its URL and unique identifier
+ */
+interface ActiveTabInfo {
+  /** The URL of the active tab, or 'about:blank' if unavailable */
+  url: string;
+  /** The numeric ID of the active tab, or -1 if unavailable */
+  tabId: number;
+  /** Timestamp when the info was retrieved */
+  timestamp: number;
+  /** Error message if the tab info could not be retrieved */
+  error?: string;
+}
+
 console.log('[background] Starting Offscreen Document integration - REFACTORED BACKGROUND ARCHITECTURE');
 
 // Функция для отправки обновлений чата плагина
@@ -3069,6 +3084,77 @@ async function handleMessage(message: any, sender: any): Promise<any> {
       return settings;
     } catch (error: unknown) {
       return { error: (error as Error).message };
+    }
+  }
+
+  // Обработка GET_ACTIVE_TAB_INFO и GET_ACTIVE_TAB_URL сообщений (поддержка обоих для совместимости)
+  if (message.type === 'GET_ACTIVE_TAB_INFO' || message.type === 'GET_ACTIVE_TAB_URL') {
+    console.log(`[background][PORT][GET_ACTIVE_TAB_INFO] Processing ${message.type} request`);
+    
+    try {
+      // Запрашиваем активную вкладку в текущем окне
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      
+      // Логируем результат запроса
+      if (!tabs || tabs.length === 0) {
+        console.warn('[background][PORT][GET_ACTIVE_TAB_INFO] ⚠️ No active tab found by query');
+        // Возвращаем разумные значения по умолчанию
+        return {
+          url: 'about:blank',
+          tabId: -1,
+          timestamp: Date.now()
+        };
+      }
+      
+      const activeTab = tabs[0];
+      
+      if (!activeTab) {
+        console.warn('[background][PORT][GET_ACTIVE_TAB_INFO] ⚠️ Active tab is null or undefined');
+        return {
+          url: 'about:blank',
+          tabId: -1,
+          timestamp: Date.now()
+        };
+      }
+      
+      if (!activeTab.id) {
+        console.warn('[background][PORT][GET_ACTIVE_TAB_INFO] ⚠️ Active tab has no ID');
+        return {
+          url: activeTab.url || 'about:blank',
+          tabId: -1,
+          timestamp: Date.now()
+        };
+      }
+      
+      const tabInfo = {
+        url: activeTab.url || 'about:blank',
+        tabId: activeTab.id,
+        timestamp: Date.now()
+      };
+      
+      console.log('[background][PORT][GET_ACTIVE_TAB_INFO] ✅ Successfully retrieved active tab info:', {
+        tabId: tabInfo.tabId,
+        urlLength: tabInfo.url.length,
+        hasUrl: !!activeTab.url
+      });
+      
+      return tabInfo;
+      
+    } catch (error: unknown) {
+      console.error('[background][PORT][GET_ACTIVE_TAB_INFO] ❌ Error retrieving active tab info:', error);
+      console.error('[background][PORT][GET_ACTIVE_TAB_INFO] Error details:', {
+        message: (error as Error).message,
+        stack: (error as Error).stack,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Возвращаем разумные значения по умолчанию при ошибке
+      return {
+        url: 'about:blank',
+        tabId: -1,
+        error: (error as Error).message,
+        timestamp: Date.now()
+      };
     }
   }
 
